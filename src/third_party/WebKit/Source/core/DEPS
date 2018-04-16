@@ -1,0 +1,51 @@
+include_rules = [
+    "+base/atomic_sequence_num.h",
+    "+base/memory/scoped_refptr.h",
+    "+base/unguessable_token.h",
+    "+bindings/core",
+    "+build/mac",
+    "+build/win",
+    "+core",
+    "-bindings/modules",
+    "+gpu/config/gpu_feature_info.h",
+    "-inspector/v8",
+    "+inspector/v8/public",
+    "-modules",
+    "+mojo/public/cpp/bindings",
+    "+mojo/public/cpp/system",
+    "+public/common",
+    "+public/mojom",
+    "+public/public_features.h",
+    "+public/web",
+    "+services/metrics/public",
+    "+services/network/public/cpp/features.h",
+    "+services/network/public/mojom",
+    "+services/resource_coordinator/public/cpp/resource_coordinator_features.h",
+    "+services/service_manager/public",
+    "+services/ui/public/interfaces/ime/ime.mojom-shared.h",
+    "+skia/public/interfaces/bitmap_skbitmap_struct_traits.h",
+    "+third_party/skia/include",
+    "+ui/gfx/geometry",
+    "-web",
+    # We do not want any new dependencies into core/exported until we resolve
+    # controller layer.
+    "!core/exported",
+    # We do not want any new dependencies on Web(Local|Remote)FrameBase.h until
+    # we resolve the control layer.
+    "!core/frame/WebLocalFrameImpl.h",
+    "!core/frame/WebRemoteFrameImpl.h",
+]
+
+specific_include_rules = {
+    # Additional allowed includes for tests.
+    ".*Test\.cpp" : [
+        "+core/frame/WebLocalFrameImpl.h",
+        "+core/frame/WebRemoteFrameImpl.h",
+        "+gin"
+    ],
+
+    # Allow WebLocalFrameImplFindInPage.cpp to use WebLocalFrameImpl.h
+    "WebLocalFrameImplFindInPage.cpp" : [
+        "+core/frame/WebLocalFrameImpl.h",
+    ],
+}

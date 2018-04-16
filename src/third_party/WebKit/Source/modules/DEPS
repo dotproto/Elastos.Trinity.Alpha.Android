@@ -1,0 +1,16 @@
+include_rules = [
+    "+base/memory/scoped_refptr.h",
+    "+bindings",
+    "+core",
+    # We do not want any new dependencies on core/exported or
+    # core/frames/Web(Local|Remote)FrameImpl.h until we resolve the control
+    # layer.
+    "!core/exported",
+    "!core/frame/WebLocalFrameImpl.h",
+    "!core/frame/WebRemoteFrameImpl.h",
+    "+modules",
+    "+public/common",
+    "+public/web",
+    "+services/service_manager/public/mojom/interface_provider.mojom-blink.h",
+    "-web",
+]

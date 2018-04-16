@@ -1,0 +1,39 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+
+if (target_cpu == "arm") {
+  static_library("cygprofile") {
+    sources = [
+      "delayed_dumper.cc",
+      "lightweight_cygprofile.cc",
+      "lightweight_cygprofile.h",
+    ]
+    deps = [
+      "//base",
+    ]
+
+    configs -= [ "//build/config/android:default_cygprofile_instrumentation" ]
+    configs += [ "//build/config/android:no_cygprofile_instrumentation" ]
+  }
+
+  executable("cygprofile_perftests") {
+    testonly = true
+
+    sources = [
+      "lightweight_cygprofile_perftest.cc",
+    ]
+
+    configs -= [ "//build/config/android:default_cygprofile_instrumentation" ]
+    configs += [ "//build/config/android:no_cygprofile_instrumentation" ]
+
+    deps = [
+      ":cygprofile",
+      "//base",
+      "//testing/gtest",
+      "//testing/perf",
+    ]
+  }
+}
