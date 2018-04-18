@@ -103,7 +103,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'da89ac4c49013ce8d2d1d81e389cd37c0ee2ef27',
+  'pdfium_revision': '765d1ebe41defa659a703a2f0ff5284c0da96a95',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -345,7 +345,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '6f64a0522bb8b6d20686028768024ebce5cfbba9',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'ba51bb3c1274f5e8f7fef0ff6706d0e46e33864f',
 
   'src/third_party/devtools-node-modules':
     Var('chromium_git') + '/external/github.com/ChromeDevTools/devtools-node-modules' + '@' + Var('devtools_node_modules_revision'),

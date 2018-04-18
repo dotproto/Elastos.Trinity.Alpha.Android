@@ -367,13 +367,28 @@ public class LibraryLoader {
                 assert !mInitialized;
 
                 long startTime = SystemClock.uptimeMillis();
+                try {
+                    Log.i(TAG, "load elastos library ...");
+                    //System.loadLibrary("stlport");
+                    //System.loadLibrary("crypto");
+                    //System.loadLibrary("icuuc");
+                    //System.loadLibrary("elacommon");
+                    //System.loadLibrary("elacarrier");
+                    //System.loadLibrary("elasession");
+                    //System.loadLibrary("Elastos.CoreLibrary");
+                    //System.loadLibrary("Elastos.Runtime");
+                } catch (UnsatisfiedLinkError e) {
+                        Log.e(TAG, "load elastos library error! ");
+                        throw(e);
+                }
 
                 if (Linker.isUsed()) {
+                    Log.i(TAG, "Linker.isUsed()");
                     // Load libraries using the Chromium linker.
                     Linker linker = Linker.getInstance();
                     linker.prepareLibraryLoad();
-
                     for (String library : NativeLibraries.LIBRARIES) {
+                        Log.e(TAG, "debug to load library: " + library);
                         // Don't self-load the linker. This is because the build system is
                         // not clever enough to understand that all the libraries packaged
                         // in the final .apk don't need to be explicitly loaded.
@@ -417,12 +432,13 @@ public class LibraryLoader {
                     for (String library : NativeLibraries.LIBRARIES) {
                         try {
                             if (!Linker.isInZipFile()) {
+                                Log.e(TAG, "Linker.isInZipFile");
                                 System.loadLibrary(library);
                             } else {
                                 // Load directly from the APK.
                                 String zipFilePath = appContext.getApplicationInfo().sourceDir;
                                 String libraryName = makeLibraryPathInZipFile(library, zipFilePath);
-                                Log.i(TAG, "libraryName: " + libraryName);
+                                Log.e(TAG, "libraryName: " + zipFilePath + "," + libraryName);
                                 System.load(libraryName);
                             }
                         } catch (UnsatisfiedLinkError e) {

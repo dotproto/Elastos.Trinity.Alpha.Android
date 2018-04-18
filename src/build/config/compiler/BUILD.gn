@@ -342,6 +342,7 @@ config("compiler") {
       "-Wl,-z,noexecstack",
       "-Wl,-z,now",
       "-Wl,-z,relro",
+      "-ldl",
     ]
     if (!using_sanitizer) {
       ldflags += [ "-Wl,-z,defs" ]
@@ -2152,6 +2153,6 @@ config("default_fatal_linker_warnings") {
     # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
     # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
     # crbug.com/485542
-    ldflags += [ "-Wl,--fatal-warnings" ]
+    # ldflags += [ "-Wl,--fatal-warnings" ]
   }
 }

@@ -35,9 +35,16 @@ config("config") {
     cflags += [ "/wd4910" ]
   }
 
+  cflags += [
+    "-Wno-unused-result",
+    "-Wno-extern-c-compat",
+    "-Wno-header-hygiene",
+  ]
+
   if (is_chromecast) {
     defines += [ "BLINK_MEDIA_LOG=LOG(INFO)" ]
   }
+  defines += ["_GNUC", "_linux", "_UNDEFDLLEXP"]
 }
 
 config("core_include_dirs") {
@@ -48,6 +55,7 @@ config("core_include_dirs") {
   if (is_android && use_openmax_dl_fft) {
     include_dirs += [ "//third_party/openmax_dl" ]
   }
+  include_dirs += ["//third_party/elastos/inc"]
 }
 
 import("//build/config/pch.gni")

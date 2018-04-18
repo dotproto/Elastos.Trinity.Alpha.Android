@@ -61,6 +61,7 @@
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/Assertions.h"
 #include "v8/include/v8.h"
+#include "bindings/core/v8/ModuleManager.h"
 
 namespace blink {
 
@@ -345,7 +346,7 @@ void LocalWindowProxy::UpdateDocumentProperty() {
   v8::Local<v8::Value> document_wrapper =
       ToV8(GetFrame()->GetDocument(), context->Global(), GetIsolate());
   DCHECK(document_wrapper->IsObject());
-
+  ela::ModuleManager::initialize(context->GetIsolate());
   // Update the cached accessor for window.document.
   CHECK(V8PrivateProperty::GetWindowDocumentCachedAccessor(GetIsolate())
             .Set(context->Global(), document_wrapper));

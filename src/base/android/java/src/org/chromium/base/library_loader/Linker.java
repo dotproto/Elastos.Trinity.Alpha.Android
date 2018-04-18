@@ -150,7 +150,6 @@ public abstract class Linker {
 
     // Name of the library that contains our JNI code.
     private static final String LINKER_JNI_LIBRARY = "chromium_android_linker";
-
     // Constants used to control the behaviour of the browser process with
     // regards to the shared RELRO section.
     //   NEVER        -> The browser never uses it itself.

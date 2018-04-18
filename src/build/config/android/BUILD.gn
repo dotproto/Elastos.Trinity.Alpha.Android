@@ -132,6 +132,8 @@ config("runtime_library") {
     "-isystem" +
         rebase_path("$android_ndk_root/sources/android/support/include",
                     root_build_dir),
+    "-isystem" + rebase_path("../../third_party/elastos/inc",
+                    root_build_dir)
   ]
 
   defines = [
@@ -140,6 +142,7 @@ config("runtime_library") {
   ]
   ldflags = [ "-nostdlib" ]
   lib_dirs = [ android_libcpp_lib_dir ]
+  lib_dirs += [ "//third_party/elastos/lib" ]
 
   # The libc++ runtime library (must come first).
   # ASan needs to dynamically link to libc++ even in static builds so
@@ -152,6 +155,12 @@ config("runtime_library") {
   libs += [
     "c++abi",
     "android_support",
+    "c",
+    "stlport",
+    "crypto",
+    "icuuc",
+    "Elastos.CoreLibrary",
+    "Elastos.Runtime",
   ]
 
   # arm builds of libc++ starting in NDK r12 depend on unwind.
