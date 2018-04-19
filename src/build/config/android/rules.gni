@@ -2380,6 +2380,51 @@ if (enable_java_templates) {
             [ "//base/android/linker:chromium_android_linker" ]
       }
 
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libstlport.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:stlport" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libc++_shared.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:c++__shared" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libcrypto.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:crypto" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libelacommon.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:elacommon" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libelasession.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:elasession" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libelacarrier.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:elacarrier" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libicuuc.cr.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:icuuc.cr" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libElastos.CoreLibrary.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:Elastos.CoreLibrary" ]
+
+    _extra_native_libs += 
+        [ "//third_party/elastos/lib/libElastos.Runtime.so" ]
+    _extra_native_libs_deps +=
+        [ "//third_party/elastos:Elastos.Runtime" ]
+
       _create_stack_script_rule_name = "${_template_name}__stack_script"
       _final_deps += [ ":${_create_stack_script_rule_name}" ]
       stack_script(_create_stack_script_rule_name) {
