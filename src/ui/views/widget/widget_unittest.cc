@@ -51,6 +51,7 @@
 #include "ui/wm/core/base_focus_rules.h"
 #include "ui/wm/core/focus_controller.h"
 #include "ui/wm/core/shadow_controller.h"
+#include "ui/wm/core/shadow_controller_delegate.h"
 #endif
 
 namespace views {
@@ -3226,13 +3227,7 @@ class FullscreenAwareFrame : public views::NonClientFrameView {
 
 // Tests that frame Layout is called when a widget goes fullscreen without
 // changing its size or title.
-// Fails on Mac, but only on bots. http://crbug.com/607403.
-#if defined(OS_MACOSX)
-#define MAYBE_FullscreenFrameLayout DISABLED_FullscreenFrameLayout
-#else
-#define MAYBE_FullscreenFrameLayout FullscreenFrameLayout
-#endif
-TEST_F(WidgetTest, MAYBE_FullscreenFrameLayout) {
+TEST_F(WidgetTest, FullscreenFrameLayout) {
   WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
   FullscreenAwareFrame* frame = new FullscreenAwareFrame(widget.get());
   widget->non_client_view()->SetFrameView(frame);  // Owns |frame|.
@@ -3781,8 +3776,8 @@ class WidgetShadowTest : public WidgetTest {
 
     focus_controller_ =
         std::make_unique<wm::FocusController>(new TestFocusRules);
-    shadow_controller_ =
-        std::make_unique<wm::ShadowController>(focus_controller_.get());
+    shadow_controller_ = std::make_unique<wm::ShadowController>(
+        focus_controller_.get(), nullptr);
   }
 
   std::unique_ptr<wm::FocusController> focus_controller_;

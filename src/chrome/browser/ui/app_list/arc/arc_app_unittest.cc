@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
@@ -57,7 +58,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_constants.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -551,6 +551,7 @@ class ArcPlayStoreAppTest : public ArcDefaulAppTest {
     manifest.SetString(extensions::manifest_keys::kName,
                        "Play Store");
     manifest.SetString(extensions::manifest_keys::kVersion, "1");
+    manifest.SetInteger(extensions::manifest_keys::kManifestVersion, 2);
     manifest.SetString(extensions::manifest_keys::kDescription,
                        "Play Store for testing");
 
@@ -1943,6 +1944,23 @@ TEST_P(ArcDefaulAppTest, DefaultApps) {
     const std::string app_id = ArcAppTest::GetAppId(default_app);
     EXPECT_EQ(oem_states[app_id], prefs->IsOem(app_id));
   }
+}
+
+TEST_P(ArcAppLauncherForDefaulAppTest, AppIconUpdated) {
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
+
+  ASSERT_FALSE(fake_default_apps().empty());
+  const arc::mojom::AppInfo& app = fake_default_apps()[0];
+  const std::string app_id = ArcAppTest::GetAppId(app);
+
+  FakeAppIconLoaderDelegate icon_delegate;
+  ArcAppIconLoader icon_loader(profile(), app_list::kListIconSize,
+                               &icon_delegate);
+  icon_loader.FetchImage(app_id);
+
+  arc_test()->WaitForDefaultApps();
+  icon_delegate.WaitForIconUpdates(1);
 }
 
 TEST_P(ArcAppLauncherForDefaulAppTest, AppLauncherForDefaultApps) {

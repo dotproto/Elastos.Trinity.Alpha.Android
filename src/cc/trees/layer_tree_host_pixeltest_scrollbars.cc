@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/input/scrollbar.h"
 #include "cc/layers/painted_overlay_scrollbar_layer.h"
@@ -151,7 +150,8 @@ TEST_F(LayerTreeHostScrollbarsPixelTest, HugeTransformScale) {
   background->AddChild(layer);
 
   scoped_refptr<TestInProcessContextProvider> context(
-      new TestInProcessContextProvider(nullptr, false));
+      new TestInProcessContextProvider(/*enable_oop_rasterization=*/false,
+                                       /*support_gles2_interface=*/true));
   context->BindToCurrentThread();
   int max_texture_size = 0;
   context->ContextGL()->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);

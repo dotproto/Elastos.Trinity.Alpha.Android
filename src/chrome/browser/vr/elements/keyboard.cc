@@ -4,6 +4,7 @@
 
 #include "chrome/browser/vr/elements/keyboard.h"
 
+#include "chrome/browser/vr/frame_lifecycle.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 
 namespace vr {
@@ -97,15 +98,19 @@ void Keyboard::OnButtonUp(const gfx::PointF& position) {
   delegate_->OnButtonUp(position);
 }
 
-bool Keyboard::OnBeginFrame(const base::TimeTicks& time,
-                            const gfx::Transform& head_pose) {
+void Keyboard::AdvanceKeyboardFrameIfNeeded() {
+  // This is the keyboard's equivalent to OnBeginFrame(), but is separate
+  // because it must run on every frame - not just if the keyboard is visible.
   if (!delegate_)
-    return false;
+    return;
 
   delegate_->OnBeginFrame();
+}
+
+bool Keyboard::OnBeginFrame(const gfx::Transform& head_pose) {
   // We return false here because any visible changes to the keyboard, such as
   // hover effects and showing/hiding of the keyboard will be drawn by the
-  // controller's dirtyness, so it's safe to assume not visual changes here.
+  // controller's dirtyness, so it's safe to assume no visual changes here.
   return false;
 }
 

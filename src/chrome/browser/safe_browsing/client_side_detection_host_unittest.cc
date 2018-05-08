@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
@@ -34,6 +33,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "ipc/ipc_test_sink.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -100,21 +100,21 @@ ACTION(QuitUIMessageLoop) {
 }
 
 ACTION_P(InvokeDoneCallback, verdict) {
-  std::unique_ptr<ClientPhishingRequest> request(::std::tr1::get<1>(args));
+  std::unique_ptr<ClientPhishingRequest> request(std::get<1>(args));
   request->CopyFrom(*verdict);
-  ::std::tr1::get<2>(args).Run(true, std::move(request));
+  std::get<2>(args).Run(true, std::move(request));
 }
 
 ACTION_P(InvokeMalwareCallback, verdict) {
-  std::unique_ptr<ClientMalwareRequest> request(::std::tr1::get<1>(args));
+  std::unique_ptr<ClientMalwareRequest> request(std::get<1>(args));
   request->CopyFrom(*verdict);
-  ::std::tr1::get<2>(args).Run(true, std::move(request));
+  std::get<2>(args).Run(true, std::move(request));
 }
 
 class MockClientSideDetectionService : public ClientSideDetectionService {
  public:
   MockClientSideDetectionService() : ClientSideDetectionService(NULL) {}
-  virtual ~MockClientSideDetectionService() {}
+  ~MockClientSideDetectionService() override {}
 
   MOCK_METHOD3(SendClientReportPhishingRequest,
                void(ClientPhishingRequest*,
@@ -152,7 +152,7 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
   }
 
  protected:
-  virtual ~MockSafeBrowsingUIManager() { }
+  ~MockSafeBrowsingUIManager() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingUIManager);
@@ -167,7 +167,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
   MOCK_METHOD1(MatchMalwareIP, bool(const std::string& ip_address));
 
  protected:
-  virtual ~MockSafeBrowsingDatabaseManager() {}
+  ~MockSafeBrowsingDatabaseManager() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingDatabaseManager);
@@ -176,7 +176,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
 class MockTestingProfile : public TestingProfile {
  public:
   MockTestingProfile() {}
-  virtual ~MockTestingProfile() {}
+  ~MockTestingProfile() override {}
 
   MOCK_CONST_METHOD0(IsOffTheRecord, bool());
 };
@@ -187,7 +187,7 @@ class MockBrowserFeatureExtractor : public BrowserFeatureExtractor {
       WebContents* tab,
       ClientSideDetectionHost* host)
       : BrowserFeatureExtractor(tab, host) {}
-  virtual ~MockBrowserFeatureExtractor() {}
+  ~MockBrowserFeatureExtractor() override {}
 
   MOCK_METHOD3(ExtractFeatures,
                void(const BrowseInfo*,
@@ -1237,13 +1237,12 @@ TEST_F(ClientSideDetectionHostTest, TestPreClassificationCheckValidCached) {
 
 TEST_F(ClientSideDetectionHostTest,
        SubresourceResponseStartedSkipsMissingIPAddress) {
-  auto subresource_load_info = content::mojom::SubresourceLoadInfo::New();
-  subresource_load_info->url = GURL("http://host1.com");
-  subresource_load_info->referrer = GURL("http://host2.com");
-  subresource_load_info->method = "GET";
-  subresource_load_info->resource_type = content::RESOURCE_TYPE_SUB_FRAME;
-  subresource_load_info->cert_status = 0;
-  csd_host_->SubresourceResponseStarted(*subresource_load_info);
+  auto resource_load_info = content::mojom::ResourceLoadInfo::New();
+  resource_load_info->url = GURL("http://host1.com");
+  resource_load_info->referrer = GURL("http://host2.com");
+  resource_load_info->method = "GET";
+  resource_load_info->resource_type = content::RESOURCE_TYPE_SUB_FRAME;
+  csd_host_->ResourceLoadComplete(*resource_load_info, /*is_main_frame=*/false);
 
   EXPECT_EQ(0u, GetBrowseInfo()->ips.size());
 }

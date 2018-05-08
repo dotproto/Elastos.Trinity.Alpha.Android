@@ -620,8 +620,10 @@ TEST_F(TemplateURLServiceSyncTest, ResolveSyncKeywordConflict) {
   std::unique_ptr<TemplateURL> sync_turl(CreateTestTemplateURL(
       original_turl_keyword, "http://new.com", "remote", 8999));
   syncer::SyncChangeList changes;
-  EXPECT_FALSE(model()->ResolveSyncKeywordConflict(sync_turl.get(),
-                                                   original_turl, &changes));
+
+  test_util_a_->ResetObserverCount();
+  model()->ResolveSyncKeywordConflict(sync_turl.get(), original_turl, &changes);
+  EXPECT_EQ(0, test_util_a_->GetObserverCount());
   EXPECT_NE(original_turl_keyword, sync_turl->keyword());
   EXPECT_EQ(original_turl_keyword, original_turl->keyword());
   ASSERT_EQ(1U, changes.size());
@@ -640,8 +642,9 @@ TEST_F(TemplateURLServiceSyncTest, ResolveSyncKeywordConflict) {
   TemplateURLID original_id = original_turl->id();
   sync_turl = CreateTestTemplateURL(original_turl_keyword, "http://new.com",
                                     std::string(), 9001);
-  EXPECT_TRUE(model()->ResolveSyncKeywordConflict(sync_turl.get(),
-                                                  original_turl, &changes));
+  test_util_a_->ResetObserverCount();
+  model()->ResolveSyncKeywordConflict(sync_turl.get(), original_turl, &changes);
+  EXPECT_EQ(1, test_util_a_->GetObserverCount());
   EXPECT_EQ(original_turl_keyword, sync_turl->keyword());
   EXPECT_NE(original_turl_keyword, original_turl->keyword());
   EXPECT_FALSE(original_turl->safe_for_autoreplace());
@@ -659,8 +662,9 @@ TEST_F(TemplateURLServiceSyncTest, ResolveSyncKeywordConflict) {
       original_turl_keyword, "http://key1.com", "local2", 9000));
   sync_turl = CreateTestTemplateURL(original_turl_keyword, "http://new.com",
                                     std::string(), 9000);
-  EXPECT_TRUE(model()->ResolveSyncKeywordConflict(sync_turl.get(),
-                                                  original_turl, &changes));
+  test_util_a_->ResetObserverCount();
+  model()->ResolveSyncKeywordConflict(sync_turl.get(), original_turl, &changes);
+  EXPECT_EQ(1, test_util_a_->GetObserverCount());
   EXPECT_EQ(original_turl_keyword, sync_turl->keyword());
   EXPECT_NE(original_turl_keyword, original_turl->keyword());
   EXPECT_EQ(NULL, model()->GetTemplateURLForKeyword(original_turl_keyword));
@@ -677,8 +681,9 @@ TEST_F(TemplateURLServiceSyncTest, ResolveSyncKeywordConflict) {
                             std::string(), 9000, false, true));
   sync_turl = CreateTestTemplateURL(original_turl_keyword, "http://new.com",
                                     "remote2", 9999);
-  EXPECT_FALSE(model()->ResolveSyncKeywordConflict(sync_turl.get(),
-                                                   original_turl, &changes));
+  test_util_a_->ResetObserverCount();
+  model()->ResolveSyncKeywordConflict(sync_turl.get(), original_turl, &changes);
+  EXPECT_EQ(0, test_util_a_->GetObserverCount());
   EXPECT_NE(original_turl_keyword, sync_turl->keyword());
   EXPECT_EQ(original_turl_keyword, original_turl->keyword());
   EXPECT_EQ(NULL, model()->GetTemplateURLForKeyword(sync_turl->keyword()));
@@ -1794,6 +1799,46 @@ TEST_F(TemplateURLServiceSyncTest, SyncWithExtensionDefaultSearch) {
   EXPECT_EQ(expected_default, model()->GetDefaultSearchProvider());
 }
 
+TEST_F(TemplateURLServiceSyncTest, OverrideSyncPrefWithExtensionDefaultSearch) {
+  // Add third-party default search engine.
+  TemplateURL* user_dse = model()->Add(CreateTestTemplateURL(
+      ASCIIToUTF16("some_keyword"), "http://new.com/{searchTerms}", "guid"));
+  ASSERT_TRUE(user_dse);
+  model()->SetUserSelectedDefaultSearchProvider(user_dse);
+  EXPECT_EQ(user_dse, model()->GetDefaultSearchProvider());
+
+  // Change the default search provider to an extension one.
+  std::unique_ptr<TemplateURLData> extension =
+      GenerateDummyTemplateURLData("extensiondefault");
+  const TemplateURL* ext_dse =
+      test_util_a_->AddExtensionControlledTURL(std::make_unique<TemplateURL>(
+          *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext_id",
+          Time(), true));
+  EXPECT_EQ(ext_dse, model()->GetDefaultSearchProvider());
+
+  // Update the custom search engine that was default but now is hidden by
+  // |ext_dse|.
+  model()->ResetTemplateURL(user_dse, ASCIIToUTF16("New search engine"),
+                            ASCIIToUTF16("new_keyword"),
+                            "http://new.com/{searchTerms}");
+
+  // Change kSyncedDefaultSearchProviderGUID to point to an nonexisting entry.
+  // It can happen when the prefs are synced but the search engines are not.
+  // That step is importnt because otherwise RemoveExtensionControlledTURL below
+  // will not overwrite the GUID and won't trigger a recursion call.
+  profile_a()->GetTestingPrefService()->SetString(
+      prefs::kSyncedDefaultSearchProviderGUID, "remote_default_guid");
+
+  // The search engine is still the same.
+  EXPECT_EQ(ext_dse, model()->GetDefaultSearchProvider());
+
+  // Remove extension DSE. Ensure that the DSP changes to the existing search
+  // engine. It should not cause a crash.
+  test_util_a_->RemoveExtensionControlledTURL("ext_id");
+
+  EXPECT_EQ(user_dse, model()->GetDefaultSearchProvider());
+}
+
 // Check that keyword conflict between synced engine and extension engine is
 // resolved correctly.
 TEST_F(TemplateURLServiceSyncTest, ExtensionAndNormalEngineConflict) {
@@ -2185,9 +2230,10 @@ TEST_F(TemplateURLServiceSyncTest, MergeInSyncTemplateURL) {
 
     syncer::SyncChangeList change_list;
     syncer::SyncMergeResult merge_result(syncer::SEARCH_ENGINES);
-    EXPECT_TRUE(model()->MergeInSyncTemplateURL(sync_turl.get(), sync_data,
-                                                &change_list, &initial_data,
-                                                &merge_result));
+    test_util_a_->ResetObserverCount();
+    model()->MergeInSyncTemplateURL(sync_turl.get(), sync_data, &change_list,
+                                    &initial_data, &merge_result);
+    EXPECT_EQ(1, test_util_a_->GetObserverCount());
 
     // Verify the merge results were set appropriately.
     EXPECT_EQ(test_cases[i].merge_results[0], merge_result.num_items_added());

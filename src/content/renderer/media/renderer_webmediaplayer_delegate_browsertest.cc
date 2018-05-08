@@ -19,7 +19,7 @@
 #include "content/renderer/render_process.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 using testing::NiceMock;
 using testing::Return;
@@ -48,6 +48,7 @@ class MockWebMediaPlayerDelegateObserver
   MOCK_METHOD1(OnSeekBackward, void(double));
   MOCK_METHOD1(OnVolumeMultiplierUpdate, void(double));
   MOCK_METHOD1(OnBecamePersistentVideo, void(bool));
+  MOCK_METHOD0(OnPictureInPictureModeEnded, void());
 };
 
 class RendererWebMediaPlayerDelegateTest : public content::RenderViewTest {

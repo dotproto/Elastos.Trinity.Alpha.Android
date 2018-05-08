@@ -38,7 +38,7 @@ class MessageCenterTestSuite : public base::TestSuite {
     ui::RegisterPathProvider();
 
     base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+    ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
     ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
     base::DiscardableMemoryAllocator::SetInstance(
@@ -62,8 +62,7 @@ int main(int argc, char** argv) {
   MessageCenterTestSuite test_suite(argc, argv);
   mojo::edk::Init();
 
-  return base::LaunchUnitTests(
-      argc,
-      argv,
-      base::Bind(&MessageCenterTestSuite::Run, base::Unretained(&test_suite)));
+  return base::LaunchUnitTests(argc, argv,
+                               base::BindOnce(&MessageCenterTestSuite::Run,
+                                              base::Unretained(&test_suite)));
 }

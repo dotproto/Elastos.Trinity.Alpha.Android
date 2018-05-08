@@ -12,13 +12,13 @@
 #include "media/base/renderer_factory_selector.h"
 #include "media/base/routing_token_callback.h"
 #include "media/blink/url_index.h"
-#include "media/media_features.h"
-#include "media/mojo/features.h"
+#include "media/media_buildflags.h"
+#include "media/mojo/buildflags.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_media_player_source.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_set_sink_id_callbacks.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
 #include "media/mojo/interfaces/interface_factory.mojom.h"  // nogncheck
@@ -43,6 +43,7 @@ class CdmFactory;
 class DecoderFactory;
 class MediaLog;
 class MediaObserver;
+class RemotePlaybackClientWrapper;
 class RendererWebMediaPlayerDelegate;
 class SurfaceManager;
 class WebEncryptedMediaClientImpl;
@@ -112,6 +113,7 @@ class MediaFactory {
       media::MediaLog* media_log,
       bool use_media_player,
       media::DecoderFactory* decoder_factory,
+      std::unique_ptr<media::RemotePlaybackClientWrapper> client_wrapper,
       base::WeakPtr<media::MediaObserver>* out_media_observer);
 
   blink::WebMediaPlayer* CreateWebMediaPlayerForMediaStream(

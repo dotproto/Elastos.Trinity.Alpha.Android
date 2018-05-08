@@ -16,6 +16,7 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/command_buffer/common/swap_buffers_flags.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/gl/gl_utils.h"
@@ -71,6 +72,7 @@ void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
 void GpuBrowserCompositorOutputSurface::LatencyInfoCompleted(
     const std::vector<ui::LatencyInfo>& latency_info) {
   RenderWidgetHostImpl::OnGpuSwapBuffersCompleted(latency_info);
+  latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
 }
 
 void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
@@ -143,14 +145,18 @@ void GpuBrowserCompositorOutputSurface::SwapBuffers(
 
   set_draw_rectangle_for_frame_ = false;
 
+  uint32_t flags = gpu::SwapBuffersFlags::kVSyncParams;
+  if (frame.need_presentation_feedback)
+    flags |= gpu::SwapBuffersFlags::kPresentationFeedback;
   if (frame.sub_buffer_rect) {
     DCHECK(frame.content_bounds.empty());
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        *frame.sub_buffer_rect);
+        *frame.sub_buffer_rect, flags);
   } else if (!frame.content_bounds.empty()) {
-    context_provider_->ContextSupport()->SwapWithBounds(frame.content_bounds);
+    context_provider_->ContextSupport()->SwapWithBounds(frame.content_bounds,
+                                                        flags);
   } else {
-    context_provider_->ContextSupport()->Swap();
+    context_provider_->ContextSupport()->Swap(flags);
   }
 }
 
@@ -171,15 +177,6 @@ gfx::BufferFormat GpuBrowserCompositorOutputSurface::GetOverlayBufferFormat()
     const {
   return gfx::BufferFormat::RGBX_8888;
 }
-
-bool GpuBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
-}
-
-#if defined(OS_MACOSX)
-void GpuBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
-    bool suspended) {}
-#endif
 
 void GpuBrowserCompositorOutputSurface::SetDrawRectangle(
     const gfx::Rect& rect) {

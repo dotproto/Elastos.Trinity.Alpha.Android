@@ -53,6 +53,10 @@ class ASH_EXPORT LoginDataDispatcher {
     virtual void OnClickToUnlockEnabledForUserChanged(const AccountId& user,
                                                       bool enabled);
 
+    // Called when |user| must authenticate online (e.g. when OAuth refresh
+    // token is revoked).
+    virtual void OnForceOnlineSignInForUser(const AccountId& user);
+
     // Called when the lock screen note state changes.
     virtual void OnLockScreenNoteStateChanged(mojom::TrayActionState state);
 
@@ -81,6 +85,13 @@ class ASH_EXPORT LoginDataDispatcher {
         const std::string& default_locale,
         bool show_advanced_view);
 
+    // Called when public session keyboard layouts are changed for user with
+    // |account_id|.
+    virtual void OnPublicSessionKeyboardLayoutsChanged(
+        const AccountId& account_id,
+        const std::string& locale,
+        const std::vector<mojom::InputMethodItemPtr>& keyboard_layouts);
+
     // Called when the pairing status of detachable base changes - e.g. when the
     // base is attached or detached.
     virtual void OnDetachableBasePairingStatusChanged(
@@ -96,6 +107,7 @@ class ASH_EXPORT LoginDataDispatcher {
   void NotifyUsers(const std::vector<mojom::LoginUserInfoPtr>& users);
   void SetPinEnabledForUser(const AccountId& user, bool enabled);
   void SetClickToUnlockEnabledForUser(const AccountId& user, bool enabled);
+  void SetForceOnlineSignInForUser(const AccountId& user);
   void SetLockScreenNoteState(mojom::TrayActionState state);
   void ShowEasyUnlockIcon(const AccountId& user,
                           const mojom::EasyUnlockIconOptionsPtr& icon);
@@ -108,6 +120,10 @@ class ASH_EXPORT LoginDataDispatcher {
                                std::unique_ptr<base::ListValue> locales,
                                const std::string& default_locale,
                                bool show_advanced_view);
+  void SetPublicSessionKeyboardLayouts(
+      const AccountId& account_id,
+      const std::string& locale,
+      const std::vector<mojom::InputMethodItemPtr>& keyboard_layouts);
   void SetDetachableBasePairingStatus(
       DetachableBasePairingStatus pairing_status);
 

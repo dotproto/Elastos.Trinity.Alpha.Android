@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
@@ -42,6 +43,7 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
@@ -55,7 +57,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/url_constants.h"
 
@@ -316,8 +318,10 @@ class FakeFullscreenDelegate : public WebContentsDelegate {
   FakeFullscreenDelegate() : fullscreened_contents_(nullptr) {}
   ~FakeFullscreenDelegate() override {}
 
-  void EnterFullscreenModeForTab(WebContents* web_contents,
-                                 const GURL& origin) override {
+  void EnterFullscreenModeForTab(
+      WebContents* web_contents,
+      const GURL& origin,
+      const blink::WebFullscreenOptions& options) override {
     fullscreened_contents_ = web_contents;
   }
 
@@ -1485,8 +1489,8 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
   EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
-  orig_rfh->OnMessageReceived(
-      FrameHostMsg_ToggleFullscreen(orig_rfh->GetRoutingID(), true));
+  orig_rfh->OnMessageReceived(FrameHostMsg_EnterFullscreen(
+      orig_rfh->GetRoutingID(), blink::WebFullscreenOptions()));
   EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -1541,8 +1545,8 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
 
   for (int i = 0; i < 2; ++i) {
     // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-    orig_rfh->OnMessageReceived(
-        FrameHostMsg_ToggleFullscreen(orig_rfh->GetRoutingID(), true));
+    orig_rfh->OnMessageReceived(FrameHostMsg_EnterFullscreen(
+        orig_rfh->GetRoutingID(), blink::WebFullscreenOptions()));
     EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
     EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -1585,8 +1589,8 @@ TEST_F(WebContentsImplTest, CrashExitsFullscreen) {
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
   EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
-  main_test_rfh()->OnMessageReceived(FrameHostMsg_ToggleFullscreen(
-      main_test_rfh()->GetRoutingID(), true));
+  main_test_rfh()->OnMessageReceived(FrameHostMsg_EnterFullscreen(
+      main_test_rfh()->GetRoutingID(), blink::WebFullscreenOptions()));
   EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -2665,29 +2669,38 @@ TEST_F(WebContentsImplTest, FilterURLs) {
 // Test that if a pending contents is deleted before it is shown, we don't
 // crash.
 TEST_F(WebContentsImplTest, PendingContentsDestroyed) {
-  std::unique_ptr<TestWebContents> other_contents(
-      static_cast<TestWebContents*>(CreateTestWebContents()));
-  contents()->AddPendingContents(other_contents.get());
+  std::unique_ptr<WebContentsImpl> other_contents(
+      static_cast<WebContentsImpl*>(CreateTestWebContents()));
+  content::TestWebContents* raw_other_contents =
+      static_cast<TestWebContents*>(other_contents.get());
+  contents()->AddPendingContents(std::move(other_contents));
   RenderWidgetHost* widget =
-      other_contents->GetMainFrame()->GetRenderWidgetHost();
+      raw_other_contents->GetMainFrame()->GetRenderWidgetHost();
   int process_id = widget->GetProcess()->GetID();
   int widget_id = widget->GetRoutingID();
-  other_contents.reset();
+
+  // TODO(erikchen): Fix ownership semantics of WebContents. Nothing should be
+  // able to delete it beside from the owner. https://crbug.com/832879.
+  delete raw_other_contents;
   EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, widget_id));
 }
 
 TEST_F(WebContentsImplTest, PendingContentsShown) {
-  std::unique_ptr<TestWebContents> other_contents(
-      static_cast<TestWebContents*>(CreateTestWebContents()));
-  contents()->AddPendingContents(other_contents.get());
+  std::unique_ptr<WebContents> other_contents(
+      static_cast<WebContents*>(CreateTestWebContents()));
+  content::WebContents* raw_other_contents = other_contents.get();
+  content::TestWebContents* test_web_contents =
+      static_cast<content::TestWebContents*>(other_contents.get());
+  contents()->AddPendingContents(std::move(other_contents));
+
   RenderWidgetHost* widget =
-      other_contents->GetMainFrame()->GetRenderWidgetHost();
+      test_web_contents->GetMainFrame()->GetRenderWidgetHost();
   int process_id = widget->GetProcess()->GetID();
   int widget_id = widget->GetRoutingID();
 
   // The first call to GetCreatedWindow pops it off the pending list.
-  EXPECT_EQ(other_contents.get(),
-            contents()->GetCreatedWindow(process_id, widget_id));
+  EXPECT_EQ(raw_other_contents,
+            contents()->GetCreatedWindow(process_id, widget_id).get());
   // A second call should return nullptr, verifying that it's been forgotten.
   EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, widget_id));
 }
@@ -2735,78 +2748,119 @@ TEST_F(WebContentsImplTest, CapturerOverridesPreferredSize) {
   EXPECT_EQ(original_preferred_size, contents()->GetPreferredSize());
 }
 
-TEST_F(WebContentsImplTest, CapturerPreventsHiding) {
-  const gfx::Size original_preferred_size(1024, 768);
-  contents()->UpdatePreferredSize(original_preferred_size);
+TEST_F(WebContentsImplTest, UpdateWebContentsVisibility) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kWebContentsOcclusion);
 
   TestRenderWidgetHostView* view = static_cast<TestRenderWidgetHostView*>(
       main_test_rfh()->GetRenderViewHost()->GetWidget()->GetView());
+  TestWebContentsObserver observer(contents());
 
-  // With no capturers, setting and un-setting occlusion should change the
-  // view's occlusion state.
   EXPECT_FALSE(view->is_showing());
-  contents()->WasShown();
-  EXPECT_TRUE(view->is_showing());
-  contents()->WasHidden();
-  EXPECT_FALSE(view->is_showing());
-  contents()->WasShown();
-  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
 
-  // Add a capturer and try to hide the contents. The view will remain visible.
-  contents()->IncrementCapturerCount(gfx::Size());
-  contents()->WasHidden();
-  EXPECT_TRUE(view->is_showing());
-
-  // Remove the capturer, and the WasHidden should take effect.
-  contents()->DecrementCapturerCount();
+  // WebContents must be made visible once before it can be hidden.
+  contents()->UpdateWebContentsVisibility(Visibility::HIDDEN);
   EXPECT_FALSE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::VISIBLE);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents()->GetVisibility());
+
+  // Hiding/occluding/showing the WebContents should hide and show |view|.
+  contents()->UpdateWebContentsVisibility(Visibility::HIDDEN);
+  EXPECT_FALSE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::HIDDEN, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::VISIBLE);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::OCCLUDED);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_TRUE(view->is_occluded());
+  EXPECT_EQ(Visibility::OCCLUDED, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::VISIBLE);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::OCCLUDED);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_TRUE(view->is_occluded());
+  EXPECT_EQ(Visibility::OCCLUDED, contents()->GetVisibility());
+
+  contents()->UpdateWebContentsVisibility(Visibility::HIDDEN);
+  EXPECT_FALSE(view->is_showing());
+  EXPECT_EQ(Visibility::HIDDEN, contents()->GetVisibility());
 }
 
-TEST_F(WebContentsImplTest, CapturerPreventsOcclusion) {
-  const gfx::Size original_preferred_size(1024, 768);
-  contents()->UpdatePreferredSize(original_preferred_size);
+namespace {
 
+void HideOrOccludeWithCapturerTest(WebContentsImpl* contents,
+                                   Visibility hidden_or_occluded) {
   TestRenderWidgetHostView* view = static_cast<TestRenderWidgetHostView*>(
-      main_test_rfh()->GetRenderViewHost()->GetWidget()->GetView());
+      contents->GetRenderWidgetHostView());
 
-  // With no capturers, setting and un-setting occlusion should change the
-  // view's occlusion state.
-  EXPECT_FALSE(view->is_occluded());
-  contents()->WasOccluded();
-  EXPECT_TRUE(view->is_occluded());
-  contents()->WasUnOccluded();
-  EXPECT_FALSE(view->is_occluded());
-  contents()->WasOccluded();
-  EXPECT_TRUE(view->is_occluded());
+  EXPECT_FALSE(view->is_showing());
 
-  // Adding a capturer on an occluded WebContents should cause the view to be
-  // unoccluded. Removing the capturer should cause the view to be occluded
-  // again.
-  contents()->IncrementCapturerCount(gfx::Size());
+  // WebContents must be made visible once before it can be hidden.
+  contents->UpdateWebContentsVisibility(Visibility::VISIBLE);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents->GetVisibility());
+
+  // Add a capturer when the contents is visible and then hide the contents.
+  // |view| should remain visible.
+  contents->IncrementCapturerCount(gfx::Size());
+  contents->UpdateWebContentsVisibility(hidden_or_occluded);
+  EXPECT_TRUE(view->is_showing());
+  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(hidden_or_occluded, contents->GetVisibility());
+
+  // Remove the capturer when the contents is hidden/occluded. |view| should be
+  // hidden/occluded.
+  contents->DecrementCapturerCount();
+  if (hidden_or_occluded == Visibility::HIDDEN) {
+    EXPECT_FALSE(view->is_showing());
+  } else {
+    EXPECT_TRUE(view->is_showing());
+    EXPECT_TRUE(view->is_occluded());
+  }
+
+  // Add a capturer when the contents is hidden. |view| should be unoccluded.
+  contents->IncrementCapturerCount(gfx::Size());
   EXPECT_FALSE(view->is_occluded());
 
-  contents()->DecrementCapturerCount();
-  EXPECT_TRUE(view->is_occluded());
-
-  // Adding a capturer on an unoccluded WebContents should not change the
-  // occlusion state of the view. Calling WasOccluded() on an unoccluded
-  // WebContents() that has a capturer should not change the occlusion state of
-  // the view. Removing the capturer should cause the view to become occluded.
-  contents()->WasUnOccluded();
+  // Show the contents. The view should be visible.
+  contents->UpdateWebContentsVisibility(Visibility::VISIBLE);
+  EXPECT_TRUE(view->is_showing());
   EXPECT_FALSE(view->is_occluded());
-  contents()->IncrementCapturerCount(gfx::Size());
-  EXPECT_FALSE(view->is_occluded());
+  EXPECT_EQ(Visibility::VISIBLE, contents->GetVisibility());
 
-  contents()->WasOccluded();
+  // Remove the capturer when the contents is visible. The view should remain
+  // visible.
+  contents->DecrementCapturerCount();
+  EXPECT_TRUE(view->is_showing());
   EXPECT_FALSE(view->is_occluded());
+}
 
-  contents()->DecrementCapturerCount();
-  EXPECT_TRUE(view->is_occluded());
+}  // namespace
 
-  // Calling WasUnoccluded() on a WebContents with no capturers should cause the
-  // view to become unoccluded.
-  contents()->WasUnOccluded();
-  EXPECT_FALSE(view->is_occluded());
+TEST_F(WebContentsImplTest, HideWithCapturer) {
+  HideOrOccludeWithCapturerTest(contents(), Visibility::HIDDEN);
+}
+
+TEST_F(WebContentsImplTest, OccludeWithCapturer) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kWebContentsOcclusion);
+  HideOrOccludeWithCapturerTest(contents(), Visibility::OCCLUDED);
 }
 
 // Tests that GetLastActiveTime starts with a real, non-zero time and updates
@@ -3461,6 +3515,33 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
 
   EXPECT_EQ(SK_ColorGREEN, contents()->GetThemeColor());
   EXPECT_EQ(SK_ColorGREEN, observer.last_theme_color());
+}
+
+TEST_F(WebContentsImplTest, PictureInPictureMediaPlayerIdWasChanged) {
+  const int kPlayerVideoOnlyId = 30; /* arbitrary and used for tests */
+
+  MediaWebContentsObserver* observer =
+      contents()->media_web_contents_observer();
+  TestRenderFrameHost* rfh = main_test_rfh();
+  rfh->InitializeRenderFrameIfNeeded();
+
+  // If Picture-in-Picture was never triggered, the media player id would not be
+  // set.
+  EXPECT_FALSE(observer->GetPictureInPictureVideoMediaPlayerId().has_value());
+
+  rfh->OnMessageReceived(
+      MediaPlayerDelegateHostMsg_OnPictureInPictureSourceChanged(
+          rfh->GetRoutingID(), kPlayerVideoOnlyId));
+  EXPECT_TRUE(observer->GetPictureInPictureVideoMediaPlayerId().has_value());
+  EXPECT_EQ(kPlayerVideoOnlyId,
+            observer->GetPictureInPictureVideoMediaPlayerId()->second);
+
+  // Picture-in-Picture media player id should not be reset when the media is
+  // destroyed (e.g. video stops playing). This allows the Picture-in-Picture
+  // window to continue to control the media.
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaDestroyed(
+      rfh->GetRoutingID(), kPlayerVideoOnlyId));
+  EXPECT_TRUE(observer->GetPictureInPictureVideoMediaPlayerId().has_value());
 }
 
 TEST_F(WebContentsImplTest, ParseDownloadHeaders) {

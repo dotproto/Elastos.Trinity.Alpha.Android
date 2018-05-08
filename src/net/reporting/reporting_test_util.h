@@ -73,9 +73,10 @@ class TestReportingUploader : public ReportingUploader {
 
   void StartUpload(const GURL& url,
                    const std::string& json,
+                   int max_depth,
                    UploadCallback callback) override;
 
-  bool RequestIsUpload(const URLRequest& request) override;
+  int GetUploadDepth(const URLRequest& request) override;
 
  private:
   std::vector<std::unique_ptr<PendingUpload>> pending_uploads_;
@@ -139,7 +140,7 @@ class TestReportingDelegate : public ReportingDelegate {
 class TestReportingContext : public ReportingContext {
  public:
   TestReportingContext(base::Clock* clock,
-                       base::TickClock* tick_clock,
+                       const base::TickClock* tick_clock,
                        const ReportingPolicy& policy);
   ~TestReportingContext();
 

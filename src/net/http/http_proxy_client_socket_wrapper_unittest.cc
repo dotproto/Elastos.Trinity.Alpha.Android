@@ -136,6 +136,7 @@ class HttpProxyClientSocketWrapperTest
         allow_server_migration_, race_cert_verification_, estimate_initial_rtt_,
         client_headers_include_h2_stream_dependency_, connection_options_,
         client_connection_options_, /*enable_token_binding=*/false,
+        /*enable_channel_id=*/false,
         /*enable_socket_recv_optimization=*/false));
   }
 
@@ -250,12 +251,12 @@ TEST_P(HttpProxyClientSocketWrapperTest, QuicProxy) {
   ProofVerifyDetailsChromium verify_details = DefaultProofVerifyDetails();
   crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
 
-  mock_quic_data_.AddWrite(ConstructSettingsPacket(1));
-  mock_quic_data_.AddWrite(ConstructConnectRequestPacket(2));
-  mock_quic_data_.AddRead(ConstructServerConnectReplyPacket(1, !kFin));
+  mock_quic_data_.AddWrite(SYNCHRONOUS, ConstructSettingsPacket(1));
+  mock_quic_data_.AddWrite(SYNCHRONOUS, ConstructConnectRequestPacket(2));
+  mock_quic_data_.AddRead(ASYNC, ConstructServerConnectReplyPacket(1, !kFin));
   mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   mock_quic_data_.AddWrite(
-      ConstructAckAndRstPacket(3, QUIC_STREAM_CANCELLED, 1, 1, 1));
+      SYNCHRONOUS, ConstructAckAndRstPacket(3, QUIC_STREAM_CANCELLED, 1, 1, 1));
   mock_quic_data_.AddSocketDataToFactory(&socket_factory_);
 
   scoped_refptr<TransportSocketParams> transport_params =
@@ -299,12 +300,12 @@ TEST_P(HttpProxyClientSocketWrapperTest, QuicProxySocketTag) {
   ProofVerifyDetailsChromium verify_details = DefaultProofVerifyDetails();
   crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
 
-  mock_quic_data_.AddWrite(ConstructSettingsPacket(1));
-  mock_quic_data_.AddWrite(ConstructConnectRequestPacket(2));
-  mock_quic_data_.AddRead(ConstructServerConnectReplyPacket(1, !kFin));
+  mock_quic_data_.AddWrite(SYNCHRONOUS, ConstructSettingsPacket(1));
+  mock_quic_data_.AddWrite(SYNCHRONOUS, ConstructConnectRequestPacket(2));
+  mock_quic_data_.AddRead(ASYNC, ConstructServerConnectReplyPacket(1, !kFin));
   mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   mock_quic_data_.AddWrite(
-      ConstructAckAndRstPacket(3, QUIC_STREAM_CANCELLED, 1, 1, 1));
+      SYNCHRONOUS, ConstructAckAndRstPacket(3, QUIC_STREAM_CANCELLED, 1, 1, 1));
   mock_quic_data_.AddSocketDataToFactory(&socket_factory_);
 
   scoped_refptr<TransportSocketParams> transport_params =
@@ -347,7 +348,7 @@ TEST_P(HttpProxyClientSocketWrapperTest, QuicProxySocketTag) {
 #endif
 
 INSTANTIATE_TEST_CASE_P(
-    VersionIncludeStreamDependencySequnece,
+    VersionIncludeStreamDependencySequence,
     HttpProxyClientSocketWrapperTest,
     ::testing::Combine(::testing::ValuesIn(AllSupportedTransportVersions()),
                        ::testing::Bool()));

@@ -30,6 +30,7 @@ namespace content {
 class RenderWidgetHostViewBase;
 class RenderWidgetHostViewChildFrame;
 class WebCursor;
+struct FrameVisualProperties;
 
 //
 // FrameConnectorDelegate
@@ -72,34 +73,34 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       const blink::WebIntrinsicSizingInfo&) {}
 
   // Sends new resize parameters to the sub-frame's renderer.
-  void UpdateResizeParams(const gfx::Rect& screen_space_rect,
-                          const gfx::Size& local_frame_size,
-                          const ScreenInfo& screen_info,
-                          uint64_t sequence_number,
-                          const viz::SurfaceId& surface_id);
+  void SynchronizeVisualProperties(const viz::SurfaceId& surface_id,
+                                   const FrameVisualProperties& resize_params);
 
   // Return the size of the CompositorFrame to use in the child renderer.
-  const gfx::Size& local_frame_size_in_pixels() {
+  const gfx::Size& local_frame_size_in_pixels() const {
     return local_frame_size_in_pixels_;
   }
 
   // Return the size of the CompositorFrame to use in the child renderer in DIP.
   // This is used to set the layout size of the child renderer.
-  const gfx::Size& local_frame_size_in_dip() {
+  const gfx::Size& local_frame_size_in_dip() const {
     return local_frame_size_in_dip_;
   }
 
   // Return the rect in DIP that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& screen_space_rect_in_dip() {
+  const gfx::Rect& screen_space_rect_in_dip() const {
     return screen_space_rect_in_dip_;
   }
 
   // Return the rect in pixels that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& screen_space_rect_in_pixels() {
+  const gfx::Rect& screen_space_rect_in_pixels() const {
     return screen_space_rect_in_pixels_;
   }
+
+  // Return the latest capture sequence number of this delegate.
+  uint32_t capture_sequence_number() const { return capture_sequence_number_; }
 
   // Request that the platform change the mouse cursor when the mouse is
   // positioned over this view's content.
@@ -184,6 +185,14 @@ class CONTENT_EXPORT FrameConnectorDelegate {
     screen_info_ = screen_info;
   }
 
+  // Informs the parent the child will enter auto-resize mode, automatically
+  // resizing itself to the provided |min_size| and |max_size| constraints.
+  virtual void EnableAutoResize(const gfx::Size& min_size,
+                                const gfx::Size& max_size);
+
+  // Turns off auto-resize mode.
+  virtual void DisableAutoResize();
+
   // Determines whether the current view's content is inert, either because
   // an HTMLDialogElement is being modally displayed in a higher-level frame,
   // or because the inert attribute has been specified.
@@ -220,10 +229,11 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       ui::mojom::WindowTreeClientPtr window_tree_client) {}
 #endif
 
-  // Called by RenderWidgetHostViewChildFrame when the child frame has resized
-  // to |new_size| because auto-resize is enabled.
-  virtual void ResizeDueToAutoResize(const gfx::Size& new_size,
-                                     uint64_t sequence_number) {}
+  // Called by RenderWidgetHostViewChildFrame when the child frame has finished
+  // an auto-resize transaction. Provides the viz::LocalSurfaceId to use for
+  // the transaction.
+  virtual void ResizeDueToAutoResize(
+      const viz::LocalSurfaceId& child_allocated_surface_id) {}
 
   bool has_size() const { return has_size_; }
 
@@ -251,6 +261,8 @@ class CONTENT_EXPORT FrameConnectorDelegate {
 
   bool has_size_ = false;
   const bool use_zoom_for_device_scale_factor_;
+
+  uint32_t capture_sequence_number_ = 0u;
 
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewChildFrameZoomForDSFTest,
                            CompositorViewportPixelSize);

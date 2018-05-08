@@ -117,7 +117,7 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
 
   void SetMockTimeForTesting(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::TickClock* tick_clock);
+      const base::TickClock* tick_clock);
 
  private:
   // webrtc::DesktopCapturer::Callback interface.
@@ -166,7 +166,7 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
   // be returned to the caller directly then this is NULL.
   std::unique_ptr<webrtc::DesktopFrame> output_frame_;
 
-  base::TickClock* tick_clock_ = nullptr;
+  const base::TickClock* tick_clock_ = nullptr;
 
   // Timer used to capture the frame.
   std::unique_ptr<base::OneShotTimer> capture_timer_;
@@ -180,6 +180,10 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
   // True if the first capture call has returned. Used to log the first capture
   // result.
   bool first_capture_returned_;
+
+  // True if the first capture permanent error has been logged. Used to log the
+  // first capture permanent error.
+  bool first_permanent_error_logged;
 
   // The type of the capturer.
   DesktopMediaID::Type capturer_type_;
@@ -208,6 +212,7 @@ DesktopCaptureDevice::Core::Core(
       max_cpu_consumption_percentage_(GetMaximumCpuConsumptionPercentage()),
       capture_in_progress_(false),
       first_capture_returned_(false),
+      first_permanent_error_logged(false),
       capturer_type_(type),
       weak_factory_(this) {}
 
@@ -246,10 +251,14 @@ void DesktopCaptureDevice::Core::AllocateAndStart(
 
   DCHECK(!wake_lock_);
   // Gets a service_manager::Connector first, then request a wake lock.
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::UI, FROM_HERE, base::BindOnce(&GetServiceConnector),
-      base::BindOnce(&DesktopCaptureDevice::Core::RequestWakeLock,
-                     weak_factory_.GetWeakPtr()));
+  // TODO(https://crbug.com/823869): Fix DesktopCaptureDeviceTest and remove
+  // this conditional.
+  if (BrowserThread::IsThreadInitialized(BrowserThread::UI)) {
+    BrowserThread::PostTaskAndReplyWithResult(
+        BrowserThread::UI, FROM_HERE, base::BindOnce(&GetServiceConnector),
+        base::BindOnce(&DesktopCaptureDevice::Core::RequestWakeLock,
+                       weak_factory_.GetWeakPtr()));
+  }
 
   desktop_capturer_->Start(this);
   // Assume it will be always started successfully for now.
@@ -267,7 +276,7 @@ void DesktopCaptureDevice::Core::SetNotificationWindowId(
 
 void DesktopCaptureDevice::Core::SetMockTimeForTesting(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
   capture_timer_.reset(new base::OneShotTimer(tick_clock_));
   capture_timer_->SetTaskRunner(task_runner);
@@ -295,8 +304,17 @@ void DesktopCaptureDevice::Core::OnCaptureResult(
   }
 
   if (!success) {
-    if (result == webrtc::DesktopCapturer::Result::ERROR_PERMANENT)
+    if (result == webrtc::DesktopCapturer::Result::ERROR_PERMANENT) {
+      if (!first_permanent_error_logged) {
+        first_permanent_error_logged = true;
+        if (capturer_type_ == DesktopMediaID::TYPE_SCREEN) {
+          IncrementDesktopCaptureCounter(SCREEN_CAPTURER_PERMANENT_ERROR);
+        } else {
+          IncrementDesktopCaptureCounter(WINDOW_CAPTURER_PERMANENT_ERROR);
+        }
+      }
       client_->OnError(FROM_HERE, "The desktop capturer has failed.");
+    }
     return;
   }
   DCHECK(frame);
@@ -495,8 +513,7 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
           webrtc::DesktopCapturer::CreateScreenCapturer(options));
       if (screen_capturer && screen_capturer->SelectSource(source.id)) {
         capturer.reset(new webrtc::DesktopAndCursorComposer(
-            screen_capturer.release(),
-            webrtc::MouseCursorMonitor::CreateForScreen(options, source.id)));
+            std::move(screen_capturer), options));
         IncrementDesktopCaptureCounter(SCREEN_CAPTURER_CREATED);
         IncrementDesktopCaptureCounter(
             source.audio_share ? SCREEN_CAPTURER_CREATED_WITH_AUDIO
@@ -511,8 +528,7 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
       if (window_capturer && window_capturer->SelectSource(source.id)) {
         window_capturer->FocusOnSelectedSource();
         capturer.reset(new webrtc::DesktopAndCursorComposer(
-            window_capturer.release(),
-            webrtc::MouseCursorMonitor::CreateForWindow(options, source.id)));
+            std::move(window_capturer), options));
         IncrementDesktopCaptureCounter(WINDOW_CAPTURER_CREATED);
       }
       break;
@@ -562,8 +578,8 @@ DesktopCaptureDevice::DesktopCaptureDevice(
     std::unique_ptr<webrtc::DesktopCapturer> capturer,
     DesktopMediaID::Type type)
     : thread_("desktopCaptureThread") {
-#if defined(OS_WIN)
-  // On Windows the thread must be a UI thread.
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // On Windows/OSX the thread must be a UI thread.
   base::MessageLoop::Type thread_type = base::MessageLoop::TYPE_UI;
 #else
   base::MessageLoop::Type thread_type = base::MessageLoop::TYPE_DEFAULT;
@@ -576,7 +592,7 @@ DesktopCaptureDevice::DesktopCaptureDevice(
 
 void DesktopCaptureDevice::SetMockTimeForTesting(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   core_->SetMockTimeForTesting(task_runner, tick_clock);
 }
 

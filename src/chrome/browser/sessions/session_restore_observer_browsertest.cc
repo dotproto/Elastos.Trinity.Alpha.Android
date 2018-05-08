@@ -7,7 +7,6 @@
 #include <memory>
 #include <unordered_map>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
@@ -161,7 +160,13 @@ class SessionRestoreObserverTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SessionRestoreObserverTest);
 };
 
-IN_PROC_BROWSER_TEST_F(SessionRestoreObserverTest, SingleTabSessionRestore) {
+#if defined(OS_LINUX)
+#define MAYBE_SingleTabSessionRestore DISABLED_SingleTabSessionRestore
+#else
+#define MAYBE_SingleTabSessionRestore SingleTabSessionRestore
+#endif
+IN_PROC_BROWSER_TEST_F(SessionRestoreObserverTest,
+                       MAYBE_SingleTabSessionRestore) {
   ui_test_utils::NavigateToURL(browser(), GetTestURL());
   Browser* new_browser = QuitBrowserAndRestore(browser());
 

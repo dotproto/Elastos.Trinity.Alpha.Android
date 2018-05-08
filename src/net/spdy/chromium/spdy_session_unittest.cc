@@ -39,12 +39,12 @@
 #include "net/spdy/chromium/spdy_stream.h"
 #include "net/spdy/chromium/spdy_stream_test_util.h"
 #include "net/spdy/chromium/spdy_test_util_common.h"
-#include "net/spdy/core/spdy_test_utils.h"
-#include "net/spdy/platform/api/spdy_string.h"
-#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/third_party/spdy/core/spdy_test_utils.h"
+#include "net/third_party/spdy/platform/api/spdy_string.h"
+#include "net/third_party/spdy/platform/api/spdy_string_piece.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/platform_test.h"
@@ -52,6 +52,7 @@
 using net::test::IsError;
 using net::test::IsOk;
 using net::test::TestServerPushDelegate;
+using testing::_;
 
 namespace net {
 
@@ -84,7 +85,10 @@ base::TimeTicks InstantaneousReads() {
 
 class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
  public:
-  MOCK_METHOD1(IsCTRequiredForHost, CTRequirementLevel(const SpdyString& host));
+  MOCK_METHOD3(IsCTRequiredForHost,
+               CTRequirementLevel(const std::string& host,
+                                  const X509Certificate* chain,
+                                  const HashValueVector& hashes));
 };
 
 }  // namespace
@@ -2013,7 +2017,8 @@ TEST_F(SpdySessionTest, CancelPendingCreateStream) {
   ASSERT_TRUE(spdy_stream1);
 
   // Use unique_ptr to let us invalidate the memory when we want to, to trigger
-  // a valgrind error if the callback is invoked when it's not supposed to be.
+  // an error in memory corruption detectors if the callback is invoked when
+  // it's not supposed to be.
   auto callback = std::make_unique<TestCompletionCallback>();
 
   SpdyStreamRequest request;
@@ -6553,9 +6558,10 @@ TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
 
   MockRequireCTDelegate require_ct_delegate;
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org"))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("mail.example.org"))
+  EXPECT_CALL(require_ct_delegate,
+              IsCTRequiredForHost("mail.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::REQUIRED));
 
   TransportSecurityState tss;
@@ -6579,9 +6585,10 @@ TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
 
   MockRequireCTDelegate require_ct_delegate;
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org"))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("mail.example.org"))
+  EXPECT_CALL(require_ct_delegate,
+              IsCTRequiredForHost("mail.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
 
   TransportSecurityState tss;
@@ -6605,9 +6612,10 @@ TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
       ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
 
   MockRequireCTDelegate require_ct_delegate;
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org"))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("www.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost("mail.example.org"))
+  EXPECT_CALL(require_ct_delegate,
+              IsCTRequiredForHost("mail.example.org", _, _))
       .WillRepeatedly(Return(CTRequirementLevel::REQUIRED));
 
   TransportSecurityState tss;

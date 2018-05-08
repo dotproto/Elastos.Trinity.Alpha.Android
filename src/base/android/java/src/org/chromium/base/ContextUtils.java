@@ -21,7 +21,6 @@ import org.chromium.base.annotations.MainDex;
  * This class provides Android application context related utility methods.
  */
 @JNINamespace("base::android")
-@MainDex
 public class ContextUtils {
     private static final String TAG = "ContextUtils";
     private static Context sApplicationContext;
@@ -60,6 +59,7 @@ public class ContextUtils {
      *
      * @param appContext The application context.
      */
+    @MainDex // TODO(agrieve): Could add to whole class if not for ApplicationStatus.initialize().
     public static void initApplicationContext(Context appContext) {
         // Conceding that occasionally in tests, native is loaded before the browser process is
         // started, in which case the browser process re-sets the application context.
@@ -134,9 +134,6 @@ public class ContextUtils {
             throw new RuntimeException("Global application context cannot be set to null.");
         }
         sApplicationContext = appContext;
-
-        // TODO(agrieve): Remove when we stop supporting JB.
-        getProcessName(); // Prime the cache for getProcessName().
     }
 
     /**
@@ -171,6 +168,8 @@ public class ContextUtils {
 
     /** @return The name of the current process. E.g. "org.chromium.chrome:privileged_process0". */
     public static String getProcessName() {
+        // Once we drop support JB, this method can be simplified to not cache sProcessName and call
+        // ActivityThread.currentProcessName().
         if (sProcessName != null) {
             return sProcessName;
         }

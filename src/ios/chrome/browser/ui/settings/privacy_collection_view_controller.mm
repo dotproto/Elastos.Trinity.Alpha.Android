@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
 
-#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
@@ -12,6 +11,7 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/handoff/pref_names_ios.h"
 #include "components/metrics/metrics_pref_names.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -22,7 +22,6 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/prefs/pref_observer_bridge.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"

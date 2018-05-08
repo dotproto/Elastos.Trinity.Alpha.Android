@@ -56,8 +56,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
 
  protected:
   // Overridden from DesktopWindowTreeHost:
-  void Init(aura::Window* content_window,
-            const Widget::InitParams& params) override;
+  void Init(const Widget::InitParams& params) override;
   void OnNativeWidgetCreated(const Widget::InitParams& params) override;
   void OnActiveWindowChanged(bool active) override;
   void OnWidgetInitDone() override;
@@ -127,13 +126,16 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void ShowImpl() override;
   void HideImpl() override;
   gfx::Rect GetBoundsInPixels() const override;
-  void SetBoundsInPixels(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds,
+                         const viz::LocalSurfaceId& local_surface_id =
+                             viz::LocalSurfaceId()) override;
   gfx::Point GetLocationOnScreenInPixels() const override;
   void SetCapture() override;
   void ReleaseCapture() override;
   bool CaptureSystemKeyEventsImpl(
       base::Optional<base::flat_set<int>> keys_codes) override;
   void ReleaseSystemKeyEventCapture() override;
+  bool IsKeyLocked(int native_key_code) override;
   void SetCursorNative(gfx::NativeCursor cursor) override;
   void OnCursorVisibilityChangedNative(bool show) override;
   void MoveCursorToScreenLocationInPixels(
@@ -193,10 +195,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void HandleFrameChanged() override;
   void HandleNativeFocus(HWND last_focused_window) override;
   void HandleNativeBlur(HWND focused_window) override;
-  bool HandleMouseEvent(const ui::MouseEvent& event) override;
+  bool HandleMouseEvent(ui::MouseEvent* event) override;
   bool HandlePointerEvent(ui::PointerEvent* event) override;
   void HandleKeyEvent(ui::KeyEvent* event) override;
-  void HandleTouchEvent(const ui::TouchEvent& event) override;
+  void HandleTouchEvent(ui::TouchEvent* event) override;
   bool HandleIMEMessage(UINT message,
                         WPARAM w_param,
                         LPARAM l_param,
@@ -213,7 +215,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
                     LPARAM l_param,
                     LRESULT* result) override;
   void PostHandleMSG(UINT message, WPARAM w_param, LPARAM l_param) override;
-  bool HandleScrollEvent(const ui::ScrollEvent& event) override;
+  bool HandleScrollEvent(ui::ScrollEvent* event) override;
   bool HandleGestureEvent(ui::GestureEvent* event) override;
   void HandleWindowSizeChanging() override;
   void HandleWindowSizeUnchanged() override;
@@ -233,6 +235,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   // has changed, and, if so, inform the aura::WindowTreeHost.
   void CheckForMonitorChange();
 
+  // Accessor for DesktopNativeWidgetAura::content_window().
+  aura::Window* content_window();
+
   HMONITOR last_monitor_from_window_ = nullptr;
 
   std::unique_ptr<HWNDMessageHandler> message_handler_;
@@ -243,8 +248,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   internal::NativeWidgetDelegate* native_widget_delegate_;
 
   DesktopNativeWidgetAura* desktop_native_widget_aura_;
-
-  aura::Window* content_window_;
 
   // Owned by DesktopNativeWidgetAura.
   DesktopDragDropClientWin* drag_drop_client_;

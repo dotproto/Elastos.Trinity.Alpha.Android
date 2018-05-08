@@ -16,7 +16,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/ios/block_types.h"
-#include "base/ios/callback_counter.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
@@ -33,7 +32,9 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
+#include "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/url_formatter/url_formatter.h"
@@ -86,11 +87,11 @@
 #import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/net/cookie_util.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
+#import "ios/chrome/browser/passwords/passwords_directory_util.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher_factory.h"
 #import "ios/chrome/browser/payments/payment_request_constants.h"
 #include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/prefs/pref_observer_bridge.h"
 #import "ios/chrome/browser/reading_list/reading_list_download_service.h"
 #import "ios/chrome/browser/reading_list/reading_list_download_service_factory.h"
 #include "ios/chrome/browser/search_engines/search_engines_util.h"
@@ -112,12 +113,12 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/download/legacy_download_manager_controller.h"
 #import "ios/chrome/browser/ui/external_file_remover_factory.h"
 #import "ios/chrome/browser/ui/external_file_remover_impl.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
+#include "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_panel_view_controller.h"
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
 #import "ios/chrome/browser/ui/main/main_coordinator.h"
@@ -130,6 +131,7 @@
 #import "ios/chrome/browser/ui/stack_view/stack_view_controller.h"
 #include "ios/chrome/browser/ui/tab_grid/tab_grid_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_controller.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_mode.h"
 #import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -197,6 +199,9 @@ NSString* const kCheckForFirstPartyApps = @"CheckForFirstPartyApps";
 // Constants for deferred deletion of leftover user downloaded files.
 NSString* const kDeleteDownloads = @"DeleteDownloads";
 
+// Constants for deferred deletion of leftover temporary passwords files.
+NSString* const kDeleteTempPasswords = @"DeleteTempPasswords";
+
 // Constants for deferred sending of queued feedback.
 NSString* const kSendQueuedFeedback = @"SendQueuedFeedback";
 
@@ -224,17 +229,17 @@ void RegisterComponentsForUpdate() {
       GetApplicationContext()->GetComponentUpdateService();
   DCHECK(cus);
   base::FilePath path;
-  const bool success = PathService::Get(ios::DIR_USER_DATA, &path);
+  const bool success = base::PathService::Get(ios::DIR_USER_DATA, &path);
   DCHECK(success);
   // Clean up any legacy CRLSet on the local disk - CRLSet used to be shipped
   // as a component on iOS but is not anymore.
   component_updater::DeleteLegacyCRLSet(path);
 }
 
-// Used to update the current BVC mode if a new tab is added while the stack
-// view is being dimissed.  This is different than ApplicationMode in that it
-// can be set to |NONE| when not in use.
-enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
+// Used to update the current BVC mode if a new tab is added while the tab
+// switcher view is being dimissed.  This is different than ApplicationMode in
+// that it can be set to |NONE| when not in use.
+enum class TabSwitcherDismissalMode { NONE, NORMAL, INCOGNITO };
 
 // The delay, in seconds, for cleaning external files.
 const int kExternalFilesCleanupDelaySeconds = 60;
@@ -310,12 +315,12 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // TabSwitcher object -- the stack view, tablet switcher, etc.
   id<TabSwitcher> _tabSwitcher;
 
-  // YES while animating the dismissal of stack view.
-  BOOL _dismissingStackView;
+  // YES while animating the dismissal of tab switcher.
+  BOOL _dismissingTabSwitcher;
 
   // If not NONE, the current BVC should be switched to this BVC on completion
-  // of stack view dismissal.
-  StackViewDismissalMode _modeToDisplayOnStackViewDismissal;
+  // of tab switcher dismissal.
+  TabSwitcherDismissalMode _modeToDisplayOnTabSwitcherDismissal;
 
   // If YES, the tab switcher is currently active.
   BOOL _tabSwitcherIsActive;
@@ -370,8 +375,11 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // Cached launchOptions from -didFinishLaunchingWithOptions.
   NSDictionary* _launchOptions;
 
-  // View controller for displaying the history panel.
+  // View controller for displaying the legacy history panel.
   UIViewController* _historyPanelViewController;
+
+  // Coordinator for displaying history.
+  HistoryCoordinator* _historyCoordinator;
 
   // Variable backing metricsMediator property.
   __weak MetricsMediator* _metricsMediator;
@@ -410,7 +418,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 // Shows the tab switcher UI.
 - (void)showTabSwitcher;
 // Starts a voice search on the current BVC.
-- (void)startVoiceSearchInCurrentBVCWithOriginView:(UIView*)originView;
+- (void)startVoiceSearchInCurrentBVC;
 // Dismisses the tab switcher UI without animation into the given model.
 - (void)dismissTabSwitcherWithoutAnimationInModel:(TabModel*)tabModel;
 // Dismisses |signinInteractionCoordinator|.
@@ -426,7 +434,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 // to the current UI, based on the |dismissModals| flag:
 // - If a modal dialog is showing and |dismissModals| is NO, the selected tab of
 // the main tab model will change in the background, but the view won't change.
-// - Otherwise, any modal view will be dismissed, the stack view will animate
+// - Otherwise, any modal view will be dismissed, the tab switcher will animate
 // out if it is showing, the target BVC will become active, and the new tab will
 // be shown.
 // If the current tab in |targetMode| is a NTP, it can be reused to open URL.
@@ -445,12 +453,13 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
          tabOpenedCompletion:(ProceduralBlock)tabOpenedCompletion;
 // Returns whether the restore infobar should be displayed.
 - (bool)mustShowRestoreInfobar;
-// Begins the process of dismissing the stack view with the given current model,
-// switching which BVC is suspended if necessary, but not updating the UI.
-- (void)beginDismissingStackViewWithCurrentModel:(TabModel*)tabModel;
-// Completes the process of dismissing the stack view, removing it from the
+// Begins the process of dismissing the tab switcher with the given current
+// model, switching which BVC is suspended if necessary, but not updating the
+// UI.
+- (void)beginDismissingTabSwitcherWithCurrentModel:(TabModel*)tabModel;
+// Completes the process of dismissing the tab switcher, removing it from the
 // screen and showing the appropriate BVC.
-- (void)finishDismissingStackView;
+- (void)finishDismissingTabSwitcher;
 // Sets up self.currentBVC for testing by closing existing tabs.
 - (void)setUpCurrentBVCForTesting;
 // Opens an url from a link in the settings UI.
@@ -502,6 +511,9 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 // Schedules the deletion of user downloaded files that might be leftover
 // from the last time Chrome was run.
 - (void)scheduleDeleteDownloadsDirectory;
+// Schedule the deletion of the temporary passwords files that might
+// be left over from incomplete export operations.
+- (void)scheduleDeleteTempPasswordsDirectory;
 // Returns whether or not the app can launch in incognito mode.
 - (BOOL)canLaunchInIncognito;
 // Determines which UI should be shown on startup, and shows it.
@@ -835,15 +847,19 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)deleteIncognitoBrowserState {
   BOOL otrBVCIsCurrent = (self.currentBVC == self.otrBVC);
+  TabSwitcherMode mode = GetTabSwitcherMode();
 
-  // If the current BVC is the otr BVC, then the user should be in the card
-  // stack, this is not true for the iPad tab switcher.
-  DCHECK(IsIPadIdiom() || (!otrBVCIsCurrent || _tabSwitcherIsActive));
+  // If the stack view is in use, and the current BVC is the otr BVC, then the
+  // user should be in the tab switcher (the stack view).
+  DCHECK(mode != TabSwitcherMode::STACK ||
+         (!otrBVCIsCurrent || _tabSwitcherIsActive));
 
-  // We always clear the otr tab model on iPad.
+  // Always clear the OTR tab model for the tablet and grid switchers.
   // Notify the _tabSwitcher that its otrBVC will be destroyed.
-  if (IsIPadIdiom() || _tabSwitcherIsActive)
+  if (mode == TabSwitcherMode::TABLET_SWITCHER ||
+      mode == TabSwitcherMode::GRID || _tabSwitcherIsActive) {
     [_tabSwitcher setOtrTabModel:nil];
+  }
 
   [_browserViewWrangler deleteIncognitoTabModelState];
 
@@ -851,10 +867,12 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     [self activateBVCAndMakeCurrentBVCPrimary];
   }
 
-  // Always set the new otr tab model on iPad with tab switcher enabled.
+  // Always set the new otr tab model for the tablet or grid switcher.
   // Notify the _tabSwitcher with the new otrBVC.
-  if (IsIPadIdiom() || _tabSwitcherIsActive)
+  if (mode == TabSwitcherMode::TABLET_SWITCHER ||
+      mode == TabSwitcherMode::GRID || _tabSwitcherIsActive) {
     [_tabSwitcher setOtrTabModel:self.otrTabModel];
+  }
 }
 
 - (void)activateBVCAndMakeCurrentBVCPrimary {
@@ -888,7 +906,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   }
   if (!_mainCoordinator) {
     // Lazily create the main coordinator.
-    if (IsTabSwitcherTabGridEnabled()) {
+    if (GetTabSwitcherMode() == TabSwitcherMode::GRID) {
       TabGridCoordinator* tabGridCoordinator =
           [[TabGridCoordinator alloc] initWithWindow:self.window
                           applicationCommandEndpoint:self];
@@ -1108,25 +1126,19 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)initializeMailtoHandling {
   if (base::FeatureList::IsEnabled(kMailtoHandledWithGoogleUI)) {
+    __weak __typeof(self) weakSelf = self;
     [[DeferredInitializationRunner sharedInstance]
         enqueueBlockNamed:kMailtoHandlingInitialization
                     block:^{
+                      __strong __typeof(weakSelf) strongSelf = weakSelf;
+                      if (!strongSelf) {
+                        return;
+                      }
                       MailtoHandlerProvider* provider =
                           ios::GetChromeBrowserProvider()
                               ->GetMailtoHandlerProvider();
-                      ios::ChromeIdentityService* identityService =
-                          ios::GetChromeBrowserProvider()
-                              ->GetChromeIdentityService();
                       provider->PrepareMailtoHandling(
-                          ^ChromeIdentity* {
-                            // TODO:(crbug.com/810904) Replace with currently
-                            // signed-in user.
-                            return identityService->GetAllIdentities()
-                                .firstObject;
-                          },
-                          ^NSArray<ChromeIdentity*>* {
-                            return identityService->GetAllIdentities();
-                          });
+                          strongSelf->_mainBrowserState);
                     }];
   }
 }
@@ -1150,6 +1162,10 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [self sendQueuedFeedback];
   [self scheduleSpotlightResync];
   [self scheduleDeleteDownloadsDirectory];
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordExport)) {
+    [self scheduleDeleteTempPasswordsDirectory];
+  }
   [self scheduleStartupAttemptReset];
   [self startFreeMemoryMonitoring];
   [self scheduleAppDistributionPings];
@@ -1174,6 +1190,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
       enqueueBlockNamed:kDeleteDownloads
                   block:^{
                     DeleteDownloadsDirectory();
+                  }];
+}
+
+- (void)scheduleDeleteTempPasswordsDirectory {
+  [[DeferredInitializationRunner sharedInstance]
+      enqueueBlockNamed:kDeleteTempPasswords
+                  block:^{
+                    DeletePasswordsDirectory();
                   }];
 }
 
@@ -1238,6 +1262,15 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   // Lazy init of mainCoordinator.
   [self.mainCoordinator start];
+  if (GetTabSwitcherMode() == TabSwitcherMode::GRID) {
+    TabGridCoordinator* tabGridCoordinator =
+        base::mac::ObjCCastStrict<TabGridCoordinator>(self.mainCoordinator);
+    _tabSwitcher = tabGridCoordinator.tabSwitcher;
+    // Call -restoreInternalState so that the grid shows the correct panel.
+    [_tabSwitcher restoreInternalStateWithMainTabModel:self.mainTabModel
+                                           otrTabModel:self.otrTabModel
+                                        activeTabModel:self.currentTabModel];
+  }
 
   // Decide if the First Run UI needs to run.
   BOOL firstRun = (FirstRun::IsChromeFirstRun() ||
@@ -1386,9 +1419,9 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [self.currentBVC.dispatcher openNewTab:command];
 }
 
-- (void)startVoiceSearch:(StartVoiceSearchCommand*)command {
+- (void)startVoiceSearch {
   if (!_isProcessingTabSwitcherCommand) {
-    [self startVoiceSearchInCurrentBVCWithOriginView:command.originView];
+    [self startVoiceSearchInCurrentBVC];
     _isProcessingVoiceSearchCommand = YES;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
                                  kExpectedTransitionDurationInNanoSeconds),
@@ -1399,13 +1432,23 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 }
 
 - (void)showHistory {
-  _historyPanelViewController = [[HistoryPanelViewController alloc]
-      initWithLoader:self.currentBVC
-        browserState:_mainBrowserState
-          dispatcher:self.mainBVC.dispatcher];
-  [self.currentBVC presentViewController:_historyPanelViewController
-                                animated:YES
-                              completion:nil];
+  if (IsUIRefreshPhase1Enabled()) {
+    // New History UIReboot coordinator.
+    _historyCoordinator = [[HistoryCoordinator alloc]
+        initWithBaseViewController:self.currentBVC
+                      browserState:_mainBrowserState];
+    _historyCoordinator.loader = self.currentBVC;
+    _historyCoordinator.dispatcher = self.mainBVC.dispatcher;
+    [_historyCoordinator start];
+  } else {
+    _historyPanelViewController = [[HistoryPanelViewController alloc]
+        initWithLoader:self.currentBVC
+          browserState:_mainBrowserState
+            dispatcher:self.mainBVC.dispatcher];
+    [self.currentBVC presentViewController:_historyPanelViewController
+                                  animated:YES
+                                completion:nil];
+  }
 }
 
 - (void)closeSettingsUIAndOpenURL:(OpenUrlCommand*)command {
@@ -1636,15 +1679,15 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [self closeSettingsAnimated:YES completion:completion];
 }
 
-- (void)startVoiceSearchInCurrentBVCWithOriginView:(UIView*)originView {
+- (void)startVoiceSearchInCurrentBVC {
   // If the background (non-current) BVC is playing TTS audio, call
   // -startVoiceSearch on it to stop the TTS.
   BrowserViewController* backgroundBVC =
       self.mainBVC == self.currentBVC ? self.otrBVC : self.mainBVC;
   if (backgroundBVC.playingTTS)
-    [backgroundBVC startVoiceSearchWithOriginView:originView];
+    [backgroundBVC startVoiceSearch];
   else
-    [self.currentBVC startVoiceSearchWithOriginView:originView];
+    [self.currentBVC startVoiceSearch];
 }
 
 #pragma mark - Preferences Management
@@ -1716,7 +1759,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   DCHECK(_browserViewWrangler);
   [_browserViewWrangler setCurrentBVC:bvc storageSwitcher:self];
 
-  if (!_dismissingStackView)
+  if (!_dismissingTabSwitcher)
     [self displayCurrentBVC];
 
   // Tell the BVC that was made current that it can use the web.
@@ -1748,7 +1791,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     return;
   }
 
-  if (IsIPadIdiom()) {
+  if (GetTabSwitcherMode() == TabSwitcherMode::TABLET_SWITCHER) {
     [self showTabSwitcher];
   } else {
     self.currentBVC = self.mainBVC;
@@ -1804,9 +1847,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   return self.currentBVC.browserState;
 }
 
-// NOTE: If you change this function, it may have an effect on the performance
-// of opening the stack view. Please make sure you also change the corresponding
-// code in StackViewControllerPerfTest::MainControllerShowTabSwitcher().
 - (void)showTabSwitcher {
   BrowserViewController* currentBVC = self.currentBVC;
   Tab* currentTab = [[currentBVC tabModel] currentTab];
@@ -1833,25 +1873,31 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   if (!_tabSwitcher) {
     _tabSwitcher = [self newTabSwitcher];
   } else {
-    // The StackViewController is kept in memory to avoid the performance hit of
-    // loading from the nib on next showing, but clears out its card models to
-    // release memory.  The tab models are required to rebuild the card stacks.
+    // Tab switcher implementations may need to rebuild state before being
+    // displayed.
     [_tabSwitcher restoreInternalStateWithMainTabModel:self.mainTabModel
                                            otrTabModel:self.otrTabModel
                                         activeTabModel:self.currentTabModel];
   }
   _tabSwitcherIsActive = YES;
   [_tabSwitcher setDelegate:self];
-  if (IsIPadIdiom()) {
-    TabSwitcherTransitionContext* transitionContext =
-        [TabSwitcherTransitionContext
-            tabSwitcherTransitionContextWithCurrent:currentBVC
-                                            mainBVC:self.mainBVC
-                                             otrBVC:self.otrBVC];
-    [_tabSwitcher setTransitionContext:transitionContext];
-  } else {
-    // User interaction is disabled when the stack controller is dismissed.
-    [[_tabSwitcher viewController].view setUserInteractionEnabled:YES];
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::TABLET_SWITCHER: {
+      TabSwitcherTransitionContext* transitionContext =
+          [TabSwitcherTransitionContext
+              tabSwitcherTransitionContextWithCurrent:currentBVC
+                                              mainBVC:self.mainBVC
+                                               otrBVC:self.otrBVC];
+      [_tabSwitcher setTransitionContext:transitionContext];
+      break;
+    }
+    case TabSwitcherMode::STACK:
+      // User interaction is disabled when the stack controller is dismissed.
+      [[_tabSwitcher viewController].view setUserInteractionEnabled:YES];
+      break;
+    case TabSwitcherMode::GRID:
+      // Nothing to do in this case
+      break;
   }
 
   [self.viewControllerSwapper showTabSwitcher:_tabSwitcher completion:nil];
@@ -1902,14 +1948,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)dismissTabSwitcherWithoutAnimationInModel:(TabModel*)tabModel {
   DCHECK(_tabSwitcherIsActive);
-  DCHECK(!_dismissingStackView);
+  DCHECK(!_dismissingTabSwitcher);
   if ([_tabSwitcher respondsToSelector:@selector
                     (tabSwitcherDismissWithModel:animated:)]) {
     [self dismissModalDialogsWithCompletion:nil dismissOmnibox:YES];
     [_tabSwitcher tabSwitcherDismissWithModel:tabModel animated:NO];
   } else {
-    [self beginDismissingStackViewWithCurrentModel:tabModel];
-    [self finishDismissingStackView];
+    [self beginDismissingTabSwitcherWithCurrentModel:tabModel];
+    [self finishDismissingTabSwitcher];
   }
 }
 
@@ -1917,11 +1963,11 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)tabSwitcher:(id<TabSwitcher>)tabSwitcher
     shouldFinishWithActiveModel:(TabModel*)tabModel {
-  [self beginDismissingStackViewWithCurrentModel:tabModel];
+  [self beginDismissingTabSwitcherWithCurrentModel:tabModel];
 }
 
 - (void)tabSwitcherDismissTransitionDidEnd:(id<TabSwitcher>)tabSwitcher {
-  [self finishDismissingStackView];
+  [self finishDismissingTabSwitcher];
 }
 
 - (id<ToolbarOwner>)tabSwitcherTransitionToolbarOwner {
@@ -1933,26 +1979,29 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 #pragma mark - TabSwitcherDelegate helper methods
 
-- (void)beginDismissingStackViewWithCurrentModel:(TabModel*)tabModel {
+- (void)beginDismissingTabSwitcherWithCurrentModel:(TabModel*)tabModel {
   DCHECK(tabModel == self.mainTabModel || tabModel == self.otrTabModel);
 
-  _dismissingStackView = YES;
+  _dismissingTabSwitcher = YES;
   // Prevent wayward touches from wreaking havoc while the stack view is being
   // dismissed.
-  [[_tabSwitcher viewController].view setUserInteractionEnabled:NO];
+  if (GetTabSwitcherMode() == TabSwitcherMode::STACK) {
+    [[_tabSwitcher viewController].view setUserInteractionEnabled:NO];
+  }
+
   BrowserViewController* targetBVC =
       (tabModel == self.mainTabModel) ? self.mainBVC : self.otrBVC;
   self.currentBVC = targetBVC;
 
   // The call to set currentBVC above does not actually display the BVC, because
-  // _dismissingStackView is YES.  When the presentation experiment is enabled,
-  // force the BVC transition to start.
+  // _dismissingTabSwitcher is YES.  When the presentation experiment is
+  // enabled, force the BVC transition to start.
   if (TabSwitcherPresentsBVCEnabled()) {
     [self displayCurrentBVC];
   }
 }
 
-- (void)finishDismissingStackView {
+- (void)finishDismissingTabSwitcher {
   // The tab switcher presentation experiment modifies the app's VC hierarchy.
   // As a result, the "active" VC when the animation completes differs based on
   // the experiment state.
@@ -1970,18 +2019,17 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
               [_tabSwitcher viewController]);
   }
 
-  if (_modeToDisplayOnStackViewDismissal == StackViewDismissalMode::NORMAL) {
+  if (_modeToDisplayOnTabSwitcherDismissal ==
+      TabSwitcherDismissalMode::NORMAL) {
     self.currentBVC = self.mainBVC;
-  } else if (_modeToDisplayOnStackViewDismissal ==
-             StackViewDismissalMode::INCOGNITO) {
+  } else if (_modeToDisplayOnTabSwitcherDismissal ==
+             TabSwitcherDismissalMode::INCOGNITO) {
     self.currentBVC = self.otrBVC;
   }
 
-  _modeToDisplayOnStackViewDismissal = StackViewDismissalMode::NONE;
+  _modeToDisplayOnTabSwitcherDismissal = TabSwitcherDismissalMode::NONE;
 
-  // Displaying the current BVC dismisses the stack view.  When the tabswitcher
-  // presentation experiment is enabled, this call does nothing because the BVC
-  // is already presented.
+  // Displaying the current BVC dismisses the tab switcher.
   [self displayCurrentBVC];
 
   ProceduralBlock action = [self completionBlockForTriggeringAction:
@@ -1991,10 +2039,13 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     action();
   }
 
-  [_tabSwitcher setDelegate:nil];
+  // The tab grid is long-lived and its delegate should not be reset.
+  if (!IsUIRefreshPhase1Enabled()) {
+    [_tabSwitcher setDelegate:nil];
+  }
 
   _tabSwitcherIsActive = NO;
-  _dismissingStackView = NO;
+  _dismissingTabSwitcher = NO;
 }
 
 #pragma mark - BrowsingDataCommands
@@ -2139,7 +2190,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     case START_VOICE_SEARCH:
       if (@available(iOS 11, *)) {
         return ^{
-          [self startVoiceSearchInCurrentBVCWithOriginView:nil];
+          [self startVoiceSearchInCurrentBVC];
         };
       } else {
         return ^{
@@ -2155,8 +2206,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
           // TODO(crbug.com/766951): remove this workaround.
           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
                          dispatch_get_main_queue(), ^{
-                           [self
-                               startVoiceSearchInCurrentBVCWithOriginView:nil];
+                           [self startVoiceSearchInCurrentBVC];
                          });
 
         };
@@ -2204,14 +2254,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   Tab* tab = nil;
   if (_tabSwitcherIsActive) {
-    // If the stack view is already being dismissed, simply add the tab and
-    // note that when the stack view finishes dismissing, the current BVC should
-    // be switched to be the main BVC if necessary.
-    if (_dismissingStackView) {
-      _modeToDisplayOnStackViewDismissal =
+    // If the tab switcher is already being dismissed, simply add the tab and
+    // note that when the tab switcher finishes dismissing, the current BVC
+    // should be switched to be the main BVC if necessary.
+    if (_dismissingTabSwitcher) {
+      _modeToDisplayOnTabSwitcherDismissal =
           targetMode == ApplicationMode::NORMAL
-              ? StackViewDismissalMode::NORMAL
-              : StackViewDismissalMode::INCOGNITO;
+              ? TabSwitcherDismissalMode::NORMAL
+              : TabSwitcherDismissalMode::INCOGNITO;
       tab = [targetBVC addSelectedTabWithURL:url
                                      atIndex:tabIndex
                                   transition:transition
@@ -2260,6 +2310,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // ChromeIdentityService is responsible for the dialogs displayed by the
   // services it wraps.
   ios::GetChromeBrowserProvider()->GetChromeIdentityService()->DismissDialogs();
+
+  // MailtoHandlerProvider is responsible for the dialogs displayed by the
+  // services it wraps.
+  if (base::FeatureList::IsEnabled(kMailtoHandledWithGoogleUI)) {
+    ios::GetChromeBrowserProvider()
+        ->GetMailtoHandlerProvider()
+        ->DismissAllMailtoHandlerInterfaces();
+  }
 
   // Cancel interaction with SSO.
   // First, cancel the signin interaction.
@@ -2451,8 +2509,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   UIView* lastView = self.viewControllerSwapper.activeViewController.view;
   DCHECK(lastView);
   CGFloat scale = 0.0;
-  // For screenshots of the Stack View we need to use a scale of 1.0 to avoid
-  // spending too much time since the Stack View can have lots of subviews.
+  // For screenshots of the tab switcher we need to use a scale of 1.0 to avoid
+  // spending too much time since the tab switcher can have lots of subviews.
   if (_tabSwitcherIsActive)
     scale = 1.0;
   return CaptureView(lastView, scale);
@@ -2481,40 +2539,27 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 #pragma mark - Experimental flag
 
-// Creates and returns a tab switcher object according to the current
-// experimental flags and device idioms:
-// - If the tab grid experimental flag is enabled, the TabGridController's
-//   TabSwitcher is returned.
-// - If the current device is an iPad, a new TabSwitcherController is returned.
-// - Otherwise, a new StackViewController is returned.
+// Creates and returns a tab switcher object according to the tab switcher stye.
 - (id<TabSwitcher>)newTabSwitcher {
-  if (IsTabSwitcherTabGridEnabled()) {
-    DCHECK(_mainCoordinator)
-        << " Main coordinator not created when tab switcher needed.";
-    TabGridCoordinator* tabGridCoordinator =
-        base::mac::ObjCCastStrict<TabGridCoordinator>(self.mainCoordinator);
-    // Call -restoreInternalState so that the grid shows the correct panel.
-    [tabGridCoordinator.tabSwitcher
-        restoreInternalStateWithMainTabModel:self.mainTabModel
-                                 otrTabModel:self.otrTabModel
-                              activeTabModel:self.currentTabModel];
-    return tabGridCoordinator.tabSwitcher;
-  } else {
-    if (IsIPadIdiom()) {
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::GRID:
+      NOTREACHED() << "When the tab grid is enabled, the tab switcher should"
+                   << " have been assigned during app startup.";
+      return nil;
+    case TabSwitcherMode::TABLET_SWITCHER:
       return [[TabSwitcherController alloc]
                 initWithBrowserState:_mainBrowserState
                         mainTabModel:self.mainTabModel
                          otrTabModel:self.otrTabModel
                       activeTabModel:self.currentTabModel
           applicationCommandEndpoint:self];
-    } else {
+    case TabSwitcherMode::STACK:
       return
           [[StackViewController alloc] initWithMainTabModel:self.mainTabModel
                                                 otrTabModel:self.otrTabModel
                                              activeTabModel:self.currentTabModel
                                  applicationCommandEndpoint:self];
     }
-  }
 }
 
 @end
@@ -2547,7 +2592,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 }
 
 - (BOOL)dismissingTabSwitcher {
-  return _dismissingStackView;
+  return _dismissingTabSwitcher;
 }
 
 - (void)setStartupParametersWithURL:(const GURL&)launchURL {
@@ -2557,7 +2602,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
                      fromSourceApplication:sourceApplication];
 }
 
-- (void)setUpAsForegrounded {
+- (void)setUpAsForegroundedWithBrowserState:
+    (ios::ChromeBrowserState*)browserState {
   _isColdStart = NO;
   _browserInitializationStage = INITIALIZATION_STAGE_FOREGROUND;
   // Create a BrowserViewWrangler with a null browser state. This will trigger
@@ -2565,7 +2611,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // tabModel objects, but it will accept assignments to them.
   [_browserViewWrangler shutdown];
   _browserViewWrangler =
-      [[BrowserViewWrangler alloc] initWithBrowserState:nullptr
+      [[BrowserViewWrangler alloc] initWithBrowserState:browserState
                                        tabModelObserver:self
                              applicationCommandEndpoint:self];
   // This is a test utility method that bypasses the ususal setup steps, so

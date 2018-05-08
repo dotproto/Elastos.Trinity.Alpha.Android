@@ -15,7 +15,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/oom_intervention.mojom.h"
+#include "third_party/blink/public/platform/oom_intervention.mojom.h"
 
 namespace content {
 class WebContents;
@@ -77,6 +77,8 @@ class OomInterventionTabHelper
 
   void ResetInterventionState();
 
+  void ResetInterfaces();
+
   bool navigation_started_ = false;
   base::Optional<base::TimeTicks> near_oom_detected_time_;
   std::unique_ptr<NearOomMonitor::Subscription> subscription_;
@@ -101,6 +103,10 @@ class OomInterventionTabHelper
   InterventionState intervention_state_ = InterventionState::NOT_TRIGGERED;
 
   mojo::Binding<blink::mojom::OomInterventionHost> binding_;
+
+  // If memory workload in renderer is above this threshold, we assume that we
+  // are in a near-OOM situation.
+  uint64_t renderer_memory_workload_threshold_;
 
   base::WeakPtrFactory<OomInterventionTabHelper> weak_ptr_factory_;
 };

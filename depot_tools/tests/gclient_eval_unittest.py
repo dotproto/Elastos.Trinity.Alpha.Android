@@ -236,23 +236,26 @@ class EvaluateConditionTest(unittest.TestCase):
         str(cm.exception))
 
 
-class AddVarTest(unittest.TestCase):
+class VarTest(unittest.TestCase):
+  def assert_adds_var(self, before, after):
+    local_scope = gclient_eval.Exec('\n'.join(before))
+    gclient_eval.AddVar(local_scope, 'baz', 'lemur')
+    results = gclient_eval.RenderDEPSFile(local_scope)
+    self.assertEqual(results, '\n'.join(after))
+
   def test_adds_var(self):
-    local_scope = gclient_eval.Exec('\n'.join([
+    before = [
         'vars = {',
         '  "foo": "bar",',
         '}',
-    ]))
-
-    gclient_eval.AddVar(local_scope, 'baz', 'lemur')
-    result = gclient_eval.RenderDEPSFile(local_scope)
-
-    self.assertEqual(result, '\n'.join([
+    ]
+    after = [
         'vars = {',
         '  "baz": "lemur",',
         '  "foo": "bar",',
         '}',
-    ]))
+    ]
+    self.assert_adds_var(before, after)
 
   def test_adds_var_twice(self):
     local_scope = gclient_eval.Exec('\n'.join([
@@ -273,49 +276,15 @@ class AddVarTest(unittest.TestCase):
         '}',
     ]))
 
-  def test_preserves_formatting(self):
-    local_scope = gclient_eval.Exec('\n'.join([
-        '# Copyright stuff',
-        '# some initial comments',
-        '',
-        'vars = { ',
-        '  "foo": "bar",',
-        '  # Some commets.',
-        '  # More comments.',
-        '  # Even more comments.',
-        '  "v8_revision":   ',
-        '       "deadbeef",',
-        ' # Someone formatted this wrong',
-        '}',
-    ]))
-
-    gclient_eval.AddVar(local_scope, 'baz', 'lemur')
-    result = gclient_eval.RenderDEPSFile(local_scope)
-
-    self.assertEqual(result, '\n'.join([
-        '# Copyright stuff',
-        '# some initial comments',
-        '',
-        'vars = { ',
-        '  "baz": "lemur",',
-        '  "foo": "bar",',
-        '  # Some commets.',
-        '  # More comments.',
-        '  # Even more comments.',
-        '  "v8_revision":   ',
-        '       "deadbeef",',
-        ' # Someone formatted this wrong',
-        '}',
-    ]))
-
-
-class SetVarTest(unittest.TestCase):
-  def test_sets_var(self):
+  def test_gets_and_sets_var(self):
     local_scope = gclient_eval.Exec('\n'.join([
         'vars = {',
         '  "foo": "bar",',
         '}',
     ]))
+
+    result = gclient_eval.GetVar(local_scope, 'foo')
+    self.assertEqual(result, "bar")
 
     gclient_eval.SetVar(local_scope, 'foo', 'baz')
     result = gclient_eval.RenderDEPSFile(local_scope)
@@ -326,7 +295,41 @@ class SetVarTest(unittest.TestCase):
         '}',
     ]))
 
-  def test_preserves_formatting(self):
+  def test_add_preserves_formatting(self):
+    before = [
+        '# Copyright stuff',
+        '# some initial comments',
+        '',
+        'vars = { ',
+        '  # Some comments.',
+        '  "foo": "bar",',
+        '',
+        '  # More comments.',
+        '  # Even more comments.',
+        '  "v8_revision":   ',
+        '       "deadbeef",',
+        ' # Someone formatted this wrong',
+        '}',
+    ]
+    after = [
+        '# Copyright stuff',
+        '# some initial comments',
+        '',
+        'vars = { ',
+        '  "baz": "lemur",',
+        '  # Some comments.',
+        '  "foo": "bar",',
+        '',
+        '  # More comments.',
+        '  # Even more comments.',
+        '  "v8_revision":   ',
+        '       "deadbeef",',
+        ' # Someone formatted this wrong',
+        '}',
+    ]
+    self.assert_adds_var(before, after)
+
+  def test_set_preserves_formatting(self):
     local_scope = gclient_eval.Exec('\n'.join([
         'vars = {',
         '   # Comment with trailing space ',
@@ -345,8 +348,8 @@ class SetVarTest(unittest.TestCase):
     ]))
 
 
-class SetCipdTest(unittest.TestCase):
-  def test_sets_cipd(self):
+class CipdTest(unittest.TestCase):
+  def test_gets_and_sets_cipd(self):
     local_scope = gclient_eval.Exec('\n'.join([
         'deps = {',
         '    "src/cipd/package": {',
@@ -365,6 +368,10 @@ class SetCipdTest(unittest.TestCase):
         '    },',
         '}',
     ]))
+
+    result = gclient_eval.GetCIPD(
+        local_scope, 'src/cipd/package', 'another/cipd/package')
+    self.assertEqual(result, '5678')
 
     gclient_eval.SetCIPD(
         local_scope, 'src/cipd/package', 'another/cipd/package', '6.789')
@@ -390,13 +397,17 @@ class SetCipdTest(unittest.TestCase):
     ]))
 
 
-class SetRevisionTest(unittest.TestCase):
-  def assert_changes_revision(self, before, after):
+class RevisionTest(unittest.TestCase):
+  def assert_gets_and_sets_revision(self, before, after, rev_before='deadbeef'):
     local_scope = gclient_eval.Exec('\n'.join(before))
+
+    result = gclient_eval.GetRevision(local_scope, 'src/dep')
+    self.assertEqual(result, rev_before)
+
     gclient_eval.SetRevision(local_scope, 'src/dep', 'deadfeed')
     self.assertEqual('\n'.join(after), gclient_eval.RenderDEPSFile(local_scope))
 
-  def test_sets_revision(self):
+  def test_revision(self):
     before = [
         'deps = {',
         '  "src/dep": "https://example.com/dep.git@deadbeef",',
@@ -407,9 +418,9 @@ class SetRevisionTest(unittest.TestCase):
         '  "src/dep": "https://example.com/dep.git@deadfeed",',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
-  def test_sets_revision_new_line(self):
+  def test_revision_new_line(self):
     before = [
         'deps = {',
         '  "src/dep": "https://example.com/dep.git@"',
@@ -422,9 +433,9 @@ class SetRevisionTest(unittest.TestCase):
         '             + "deadfeed",',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
-  def test_sets_revision_inside_dict(self):
+  def test_revision_inside_dict(self):
     before = [
         'deps = {',
         '  "src/dep": {',
@@ -441,7 +452,7 @@ class SetRevisionTest(unittest.TestCase):
         '  },',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
   def test_follows_var_braces(self):
     before = [
@@ -460,7 +471,7 @@ class SetRevisionTest(unittest.TestCase):
         '  "src/dep": "https://example.com/dep.git@{dep_revision}",',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
   def test_follows_var_braces_newline(self):
     before = [
@@ -481,7 +492,7 @@ class SetRevisionTest(unittest.TestCase):
         '             + "@{dep_revision}",',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
   def test_follows_var_function(self):
     before = [
@@ -500,7 +511,21 @@ class SetRevisionTest(unittest.TestCase):
         '  "src/dep": "https://example.com/dep.git@" + Var("dep_revision"),',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
+
+  def test_pins_revision(self):
+    before = [
+        'deps = {',
+        '  "src/dep": "https://example.com/dep.git",',
+        '}',
+    ]
+    after = [
+        'deps = {',
+        '  "src/dep": "https://example.com/dep.git@deadfeed",',
+        '}',
+    ]
+    self.assert_gets_and_sets_revision(before, after, rev_before=None)
+
 
   def test_preserves_formatting(self):
     before = [
@@ -529,7 +554,7 @@ class SetRevisionTest(unittest.TestCase):
         ' },',
         '}',
     ]
-    self.assert_changes_revision(before, after)
+    self.assert_gets_and_sets_revision(before, after)
 
 
 class ParseTest(unittest.TestCase):

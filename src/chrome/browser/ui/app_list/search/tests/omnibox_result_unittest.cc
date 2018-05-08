@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
@@ -14,7 +15,6 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/search_engines/template_url.h"
-#include "ui/app_list/app_list_features.h"
 
 namespace app_list {
 namespace test {
@@ -22,7 +22,6 @@ namespace test {
 namespace {
 
 const char kFullQuery[] = "Hello World";
-const char kPartialQuery[] = "Hello Wo";
 const char kExampleDescription[] = "A website";
 const char kExampleUrl[] = "http://example.com/hello";
 const int kRelevance = 750;
@@ -87,53 +86,9 @@ TEST_F(OmniboxResultTest, Basic) {
   EXPECT_EQ(base::ASCIIToUTF16(kExampleDescription), result->title());
   EXPECT_EQ(base::ASCIIToUTF16(kFullQuery), result->details());
   EXPECT_EQ(kAppListRelevance, result->relevance());
-  EXPECT_FALSE(result->voice_result());
 
   result->Open(0);
   EXPECT_EQ(kExampleUrl, GetLastOpenedUrl().spec());
-}
-
-TEST_F(OmniboxResultTest, VoiceResult) {
-  // Searching for part of a word, and getting a HISTORY_URL result with that
-  // exact string in the title. Should not be automatically launchable as a
-  // voice result (because it is not a web search type result).
-  {
-    std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
-        kPartialQuery, kRelevance, kExampleUrl, kPartialQuery,
-        kExampleDescription, AutocompleteMatchType::HISTORY_URL,
-        kExampleKeyword);
-    EXPECT_FALSE(result->voice_result());
-  }
-
-  // Searching for part of a word, and getting a SEARCH_WHAT_YOU_TYPED result.
-  // Such a result should be promoted as a voice result.
-  {
-    std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
-        kPartialQuery, kRelevance, kExampleUrl, kPartialQuery,
-        kExampleDescription, AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-        kExampleKeyword);
-    EXPECT_TRUE(result->voice_result());
-  }
-
-  // Searching for part of a word, and getting a SEARCH_HISTORY result for that
-  // exact string. Such a result should be promoted as a voice result.
-  {
-    std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
-        kPartialQuery, kRelevance, kExampleUrl, kPartialQuery,
-        kExampleDescription, AutocompleteMatchType::SEARCH_HISTORY,
-        kExampleKeyword);
-    EXPECT_TRUE(result->voice_result());
-  }
-
-  // Searching for part of a word, and getting a SEARCH_HISTORY result for a
-  // different string. Should not be automatically launchable as a voice result
-  // (because it does not exactly match what you typed).
-  {
-    std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
-        kPartialQuery, kRelevance, kExampleUrl, kFullQuery, kExampleDescription,
-        AutocompleteMatchType::SEARCH_HISTORY, kExampleKeyword);
-    EXPECT_FALSE(result->voice_result());
-  }
 }
 
 }  // namespace test

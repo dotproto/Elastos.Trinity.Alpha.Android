@@ -6,21 +6,20 @@
 
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_service_impl.h"
-#include "chrome/browser/ui/app_list/app_list_view_delegate.h"
 #include "chrome/browser/ui/app_list/crostini/crostini_app_model_builder.h"
-#include "chrome/browser/ui/app_list/crostini/crostini_util.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/crx_file/id_util.h"
+#include "components/prefs/pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/window/dialog_client_view.h"
-
-namespace {
-constexpr char kCrostiniTerminalAppName[] = "Terminal";
-}  // namespace
 
 class CrostiniInstallerViewBrowserTest : public DialogBrowserTest {
  public:
@@ -29,16 +28,19 @@ class CrostiniInstallerViewBrowserTest : public DialogBrowserTest {
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
     AppListServiceImpl* service = test::GetAppListServiceImpl();
-    AppListViewDelegate* view_delegate = service->GetViewDelegate();
-    const std::string kCrostiniTerminalId =
-        crx_file::id_util::GenerateId(kCrostiniTerminalAppName);
-    view_delegate->ActivateItem(kCrostiniTerminalId, 0);
+    AppListClientImpl* client = service->GetAppListClient();
+    client->ActivateItem(kCrostiniTerminalId, 0);
   }
 
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
         features::kExperimentalCrostiniUI);
     DialogBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    browser()->profile()->GetPrefs()->SetBoolean(
+        crostini::prefs::kCrostiniEnabled, true);
   }
 
   CrostiniInstallerView* ActiveView() {

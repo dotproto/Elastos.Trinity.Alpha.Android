@@ -4,13 +4,16 @@
 
 package org.chromium.base.library_loader;
 
+import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ResourceExtractor;
 import org.chromium.base.annotations.AccessedByNative;
 
 import java.util.HashMap;
@@ -150,6 +153,7 @@ public abstract class Linker {
 
     // Name of the library that contains our JNI code.
     private static final String LINKER_JNI_LIBRARY = "chromium_android_linker";
+
     // Constants used to control the behaviour of the browser process with
     // regards to the shared RELRO section.
     //   NEVER        -> The browser never uses it itself.
@@ -445,13 +449,23 @@ public abstract class Linker {
     /**
      * Load the Linker JNI library. Throws UnsatisfiedLinkError on error.
      */
+    @SuppressLint({"UnsafeDynamicallyLoadedCode"})
     protected static void loadLinkerJniLibrary() {
         LibraryLoader.setEnvForNative();
-        String libName = "lib" + LINKER_JNI_LIBRARY + ".so";
         if (DEBUG) {
+            String libName = "lib" + LINKER_JNI_LIBRARY + ".so";
             Log.i(TAG, "Loading " + libName);
         }
-        System.loadLibrary(LINKER_JNI_LIBRARY);
+        try {
+            System.loadLibrary(LINKER_JNI_LIBRARY);
+            LibraryLoader.incrementRelinkerCountNotHitHistogram();
+        } catch (UnsatisfiedLinkError e) {
+            if (ResourceExtractor.PLATFORM_REQUIRES_NATIVE_FALLBACK_EXTRACTION) {
+                System.load(LibraryLoader.getExtractedLibraryPath(
+                        ContextUtils.getApplicationContext(), LINKER_JNI_LIBRARY));
+                LibraryLoader.incrementRelinkerCountHitHistogram();
+            }
+        }
     }
 
     /**

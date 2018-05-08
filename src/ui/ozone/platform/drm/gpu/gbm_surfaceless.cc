@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/presentation_feedback.h"
@@ -68,9 +67,10 @@ bool GbmSurfaceless::ScheduleOverlayPlane(int z_order,
                                           gfx::OverlayTransform transform,
                                           gl::GLImage* image,
                                           const gfx::Rect& bounds_rect,
-                                          const gfx::RectF& crop_rect) {
-  unsubmitted_frames_.back()->overlays.push_back(
-      gl::GLSurfaceOverlay(z_order, transform, image, bounds_rect, crop_rect));
+                                          const gfx::RectF& crop_rect,
+                                          bool enable_blend) {
+  unsubmitted_frames_.back()->overlays.push_back(gl::GLSurfaceOverlay(
+      z_order, transform, image, bounds_rect, crop_rect, enable_blend));
   return true;
 }
 
@@ -123,11 +123,11 @@ void GbmSurfaceless::SwapBuffersAsync(
   unsubmitted_frames_.back()->Flush();
 
   auto surface_swap_callback =
-      base::Bind(&GbmSurfaceless::SwapCompleted, weak_factory_.GetWeakPtr(),
-                 completion_callback, presentation_callback);
+      base::BindOnce(&GbmSurfaceless::SwapCompleted, weak_factory_.GetWeakPtr(),
+                     completion_callback, presentation_callback);
 
   PendingFrame* frame = unsubmitted_frames_.back().get();
-  frame->callback = surface_swap_callback;
+  frame->callback = std::move(surface_swap_callback);
   unsubmitted_frames_.push_back(std::make_unique<PendingFrame>());
 
   // TODO(dcastagna): Remove the following workaround once we get explicit sync
@@ -155,16 +155,16 @@ void GbmSurfaceless::SwapBuffersAsync(
     return;
   }
 
-  base::Closure fence_wait_task =
-      base::Bind(&WaitForFence, GetDisplay(), fence);
+  base::OnceClosure fence_wait_task =
+      base::BindOnce(&WaitForFence, GetDisplay(), fence);
 
-  base::Closure fence_retired_callback = base::Bind(
+  base::OnceClosure fence_retired_callback = base::BindOnce(
       &GbmSurfaceless::FenceRetired, weak_factory_.GetWeakPtr(), frame);
 
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      fence_wait_task, fence_retired_callback);
+      std::move(fence_wait_task), std::move(fence_retired_callback));
 }
 
 void GbmSurfaceless::PostSubBufferAsync(

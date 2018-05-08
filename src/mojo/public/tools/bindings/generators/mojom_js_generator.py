@@ -89,6 +89,80 @@ _kind_to_closure_type = {
   mojom.NULLABLE_SHAREDBUFFER: "mojo.MojoHandle",
 }
 
+_js_reserved_keywords = [
+    'arguments',
+    'await',
+    'break'
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'finally',
+    'for',
+    'function',
+    'if',
+    'implements',
+    'import',
+    'in',
+    'instanceof',
+    'interface',
+    'let',
+    'new',
+    'package',
+    'private',
+    'protected',
+    'public',
+    'return',
+    'static',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+    'yield',
+]
+
+_primitive_kind_to_fuzz_type = {
+  mojom.BOOL:                  "Bool",
+  mojom.INT8:                  "Int8",
+  mojom.UINT8:                 "Uint8",
+  mojom.INT16:                 "Int16",
+  mojom.UINT16:                "Uint16",
+  mojom.INT32:                 "Int32",
+  mojom.UINT32:                "Uint32",
+  mojom.FLOAT:                 "Float",
+  mojom.INT64:                 "Int64",
+  mojom.UINT64:                "Uint64",
+  mojom.DOUBLE:                "Double",
+  mojom.STRING:                "String",
+  mojom.NULLABLE_STRING:       "String",
+  mojom.HANDLE:                "Handle",
+  mojom.DCPIPE:                "DataPipeConsumer",
+  mojom.DPPIPE:                "DataPipeProducer",
+  mojom.MSGPIPE:               "MessagePipe",
+  mojom.SHAREDBUFFER:          "SharedBuffer",
+  mojom.NULLABLE_HANDLE:       "Handle",
+  mojom.NULLABLE_DCPIPE:       "DataPipeConsumer",
+  mojom.NULLABLE_DPPIPE:       "DataPipeProducer",
+  mojom.NULLABLE_MSGPIPE:      "MessagePipe",
+  mojom.NULLABLE_SHAREDBUFFER: "SharedBuffer",
+}
+
+
 def JavaScriptPayloadSize(packed):
   packed_fields = packed.packed_fields
   if not packed_fields:
@@ -159,6 +233,7 @@ class Generator(generator.Generator):
       "module": self.module,
       "structs": self.module.structs + self._GetStructsFromMethods(),
       "unions": self.module.unions,
+      "generate_fuzzing": self.generate_fuzzing,
     }
 
   @staticmethod
@@ -183,10 +258,12 @@ class Generator(generator.Generator):
       "is_bool_kind": mojom.IsBoolKind,
       "is_enum_kind": mojom.IsEnumKind,
       "is_any_handle_kind": mojom.IsAnyHandleKind,
+      "is_any_interface_kind": mojom.IsAnyInterfaceKind,
       "is_interface_kind": mojom.IsInterfaceKind,
       "is_interface_request_kind": mojom.IsInterfaceRequestKind,
       "is_map_kind": mojom.IsMapKind,
       "is_object_kind": mojom.IsObjectKind,
+      "is_reference_kind": mojom.IsReferenceKind,
       "is_string_kind": mojom.IsStringKind,
       "is_struct_kind": mojom.IsStructKind,
       "is_union_kind": mojom.IsUnionKind,
@@ -204,6 +281,12 @@ class Generator(generator.Generator):
       "validate_nullable_params": self._JavaScriptNullableParam,
       "validate_struct_params": self._JavaScriptValidateStructParams,
       "validate_union_params": self._JavaScriptValidateUnionParams,
+      "sanitize_identifier": self._JavaScriptSanitizeIdentifier,
+      "contains_handles_or_interfaces": mojom.ContainsHandlesOrInterfaces,
+      "fuzz_handle_name": self._FuzzHandleName,
+      "is_primitive_kind": self._IsPrimitiveKind,
+      "primitive_to_fuzz_type": self._PrimitiveToFuzzType,
+      "to_js_boolean": self._ToJsBoolean,
     }
     return js_filters
 
@@ -449,6 +532,12 @@ class Generator(generator.Generator):
     return "%s, %s, %s, %s" % \
         (nullable, keys_type, values_type, values_nullable)
 
+  def _JavaScriptSanitizeIdentifier(self, identifier):
+    if identifier in _js_reserved_keywords:
+      return identifier + '_'
+
+    return identifier
+
   def _TranslateConstants(self, token):
     if isinstance(token, (mojom.EnumValue, mojom.NamedValue)):
       # Both variable and enum constants are constructed like:
@@ -485,3 +574,37 @@ class Generator(generator.Generator):
         if method.response_param_struct is not None:
           result.append(method.response_param_struct)
     return result
+
+  def _FuzzHandleName(self, kind):
+    if mojom.IsInterfaceRequestKind(kind):
+      return '{0}.{1}Request'.format(kind.kind.module.namespace,
+                                     kind.kind.name)
+    elif mojom.IsInterfaceKind(kind):
+      return '{0}.{1}Ptr'.format(kind.module.namespace,
+                                 kind.name)
+    elif mojom.IsAssociatedInterfaceRequestKind(kind):
+      return '{0}.{1}AssociatedRequest'.format(kind.kind.module.namespace,
+                                               kind.kind.name)
+    elif mojom.IsAssociatedInterfaceKind(kind):
+      return '{0}.{1}AssociatedPtr'.format(kind.kind.module.namespace,
+                                           kind.kind.name)
+    elif mojom.IsSharedBufferKind(kind):
+      return 'handle<shared_buffer>'
+    elif mojom.IsDataPipeConsumerKind(kind):
+      return 'handle<data_pipe_consumer>'
+    elif mojom.IsDataPipeProducerKind(kind):
+      return 'handle<data_pipe_producer>'
+    elif mojom.IsMessagePipeKind(kind):
+      return 'handle<message_pipe>'
+
+  def _ToJsBoolean(self, value):
+    if value:
+      return 'true'
+
+    return 'false'
+
+  def _IsPrimitiveKind(self, kind):
+    return kind in mojom.PRIMITIVES
+
+  def _PrimitiveToFuzzType(self, kind):
+    return _primitive_kind_to_fuzz_type[kind]

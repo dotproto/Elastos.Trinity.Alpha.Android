@@ -30,9 +30,6 @@
 -MediaStreamManagerTest.MakeMediaAccessRequest
 -MediaStreamManagerTest.MakeMultipleRequests
 
-# Flaky: http://crbug.com/819924.
--WebMediaPlayerMSTest.*HardwareFrames*
-
 # Failing: https://crbug.com/771701.
 -IndexedDBFactoryTest.DataFormatVersion
 
@@ -58,10 +55,8 @@
 -WebContentsAudioInputStreamTest.MirroringOneStreamAfterTargetChange*
 
 # Flaky, https://crbug.com/802375 and https://crbug.com/776424.
+-RenderWidgetHostViewAuraOverscrollTest.GestureScrollDebounceOverscrolls
 -RenderWidgetHostViewAuraOverscrollTest.GestureScrollDebounceTimerOverscroll
 -RenderWidgetHostViewAuraOverscrollTest.TouchGestureEndDispatchedAfterOverscrollComplete
 -RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest.TimerBasedWheelEventPhaseInfo
 -RenderWidgetHostViewAuraAsyncWheelEventsEnabledTest.TimerBasedWheelEventPhaseInfo
-
-# Flaky, https://crbug.com/813795, https://crbug.com/800465.
--RTCRtpSenderTest.ReplaceTrack*

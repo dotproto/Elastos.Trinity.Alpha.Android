@@ -15,10 +15,13 @@
 #include "chrome/browser/vr/keyboard_ui_interface.h"
 #include "chrome/browser/vr/platform_controller.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
+#include "chrome/browser/vr/ui_test_input.h"
 
 namespace vr {
+
 class AudioDelegate;
 class BrowserUiInterface;
+class ContentElement;
 class ContentInputDelegate;
 class ContentInputForwarder;
 class KeyboardDelegate;
@@ -35,6 +38,8 @@ struct OmniboxSuggestions;
 struct ReticleModel;
 
 struct UiInitialState {
+  UiInitialState();
+  UiInitialState(const UiInitialState& other);
   bool in_cct = false;
   bool in_web_vr = false;
   bool web_vr_autopresentation_expected = false;
@@ -44,6 +49,7 @@ struct UiInitialState {
   bool assets_supported = false;
   bool supports_selection = true;
   bool needs_keyboard_update = false;
+  bool is_standalone_vr_device = false;
 };
 
 // This class manages all GLThread owned objects and GL rendering for VrShell.
@@ -77,7 +83,7 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
   base::WeakPtr<BrowserUiInterface> GetBrowserUiWeakPtr();
 
   // BrowserUiInterface
-  void SetWebVrMode(bool enabled, bool show_toast) override;
+  void SetWebVrMode(bool enabled) override;
   void SetFullscreen(bool enabled) override;
   void SetToolbarState(const ToolbarState& state) override;
   void SetIncognito(bool enabled) override;
@@ -85,11 +91,7 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
   void SetLoadProgress(float progress) override;
   void SetIsExiting() override;
   void SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) override;
-  void SetVideoCaptureEnabled(bool enabled) override;
-  void SetScreenCaptureEnabled(bool enabled) override;
-  void SetAudioCaptureEnabled(bool enabled) override;
-  void SetBluetoothConnected(bool enabled) override;
-  void SetLocationAccessEnabled(bool enabled) override;
+  void SetCapturingState(const CapturingStateModel& state) override;
   void ShowExitVrPrompt(UiUnsupportedMode reason) override;
   void SetSpeechRecognitionEnabled(bool enabled) override;
   void SetRecognitionResult(const base::string16& result) override;
@@ -100,6 +102,9 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
                       std::unique_ptr<Assets> assets,
                       const base::Version& component_version) override;
   void OnAssetsUnavailable() override;
+  void SetRegularTabsOpen(bool open) override;
+  void SetIncognitoTabsOpen(bool open) override;
+  void SetOverlayTextureEmpty(bool empty) override;
 
   // TODO(ymalik): We expose this to stop sending VSync to the WebVR page until
   // the splash screen has been visible for its minimum duration. The visibility
@@ -116,9 +121,13 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
 
   void SetAlertDialogEnabled(bool enabled,
                              ContentInputDelegate* delegate,
-                             int width,
-                             int height);
-  void SetAlertDialogSize(int width, int height);
+                             float width,
+                             float height);
+  void SetAlertDialogSize(float width, float height);
+  void SetDialogLocation(float x, float y);
+  void SetDialogFloating(bool floating);
+  void ShowPlatformToast(const base::string16& text);
+  void CancelPlatformToast();
   bool ShouldRenderWebVr();
 
   void OnGlInitialized(
@@ -130,8 +139,7 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
       bool use_ganesh);
 
   void OnAppButtonClicked();
-  void OnAppButtonGesturePerformed(
-      PlatformController::SwipeDirection direction);
+  void OnAppButtonSwipePerformed(PlatformController::SwipeDirection direction);
   void OnControllerUpdated(const ControllerModel& controller_model,
                            const ReticleModel& reticle_model);
   void OnProjMatrixChanged(const gfx::Transform& proj_matrix);
@@ -139,6 +147,7 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
   void OnWebVrTimedOut();
   void OnWebVrTimeoutImminent();
   bool IsControllerVisible() const;
+  bool IsAppButtonLongPressed() const;
   bool SkipsRedrawWhenNotDirty() const;
   void OnSwapContents(int new_content_id);
   void OnContentBoundsChanged(int width, int height);
@@ -162,10 +171,18 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
   void OnKeyboardHidden() override;
 
   void AcceptDoffPromptForTesting();
+  void PerformUiActionForTesting(UiTestInput test_input);
+
+  bool IsContentVisibleAndOpaque();
+  bool IsContentOverlayTextureEmpty();
+  void SetContentUsesQuadLayer(bool uses_quad_buffers);
+  gfx::Transform GetContentWorldSpaceTransform();
 
  private:
+  void OnSpeechRecognitionEnded();
   void InitializeModel(const UiInitialState& ui_initial_state);
   UiBrowserInterface* browser_;
+  ContentElement* GetContentElement();
 
   // This state may be further abstracted into a SkiaUi object.
   std::unique_ptr<UiScene> scene_;
@@ -175,6 +192,10 @@ class Ui : public BrowserUiInterface, public KeyboardUiInterface {
   std::unique_ptr<UiInputManager> input_manager_;
   std::unique_ptr<UiRenderer> ui_renderer_;
   std::unique_ptr<SkiaSurfaceProvider> provider_;
+
+  // Cache the content element so we don't have to get it multiple times per
+  // frame.
+  ContentElement* content_element_ = nullptr;
 
   AudioDelegate* audio_delegate_ = nullptr;
 

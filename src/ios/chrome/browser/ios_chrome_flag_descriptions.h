@@ -11,6 +11,27 @@ namespace flag_descriptions {
 extern const char kAutofillIOSDelayBetweenFieldsName[];
 extern const char kAutofillIOSDelayBetweenFieldsDescription[];
 
+// Title and description for the flag to controll the dynamic autofill.
+extern const char kAutofillDynamicFormsName[];
+extern const char kAutofillDynamicFormsDescription[];
+
+// Enforcing restrictions to enable/disable autofill small form support.
+extern const char kAutofillEnforceMinRequiredFieldsForHeuristicsName[];
+extern const char kAutofillEnforceMinRequiredFieldsForHeuristicsDescription[];
+extern const char kAutofillEnforceMinRequiredFieldsForQueryName[];
+extern const char kAutofillEnforceMinRequiredFieldsForQueryDescription[];
+extern const char kAutofillEnforceMinRequiredFieldsForUploadName[];
+extern const char kAutofillEnforceMinRequiredFieldsForUploadDescription[];
+
+// Title and description for the flag to restrict extraction of formless forms
+// to checkout flows.
+extern const char kAutofillRestrictUnownedFieldsToFormlessCheckoutName[];
+extern const char kAutofillRestrictUnownedFieldsToFormlessCheckoutDescription[];
+
+// Title and description for the flag to make browser container fullscreen.
+extern const char kBrowserContainerFullscreenName[];
+extern const char kBrowserContainerFullscreenDescription[];
+
 // Title and description for the flag to control redirection to the task
 // scheduler.
 extern const char kBrowserTaskScheduler[];
@@ -45,9 +66,16 @@ extern const char kNewClearBrowsingDataUIDescription[];
 extern const char kExternalSearchName[];
 extern const char kExternalSearchDescription[];
 
-// Title and description for the flag to enable use of FeedbackKit V2.
+// Title and description for the flags to enable use of FeedbackKit V2.
 extern const char kFeedbackKitV2Name[];
 extern const char kFeedbackKitV2Description[];
+extern const char kFeedbackKitV2WithSSOServiceName[];
+extern const char kFeedbackKitV2WithSSOServiceDescription[];
+
+// Title and description for the command line switch used to determine the
+// active fullscreen viewport adjustment mode.
+extern const char kFullscreenViewportAdjustmentExperimentName[];
+extern const char kFullscreenViewportAdjustmentExperimentDescription[];
 
 // Title and description for the flag to enable History batch filtering.
 extern const char kHistoryBatchUpdatesFilterName[];
@@ -57,6 +85,10 @@ extern const char kHistoryBatchUpdatesFilterDescription[];
 // demo mode.
 extern const char kInProductHelpDemoModeName[];
 extern const char kInProductHelpDemoModeDescription[];
+
+// Title and description for the flag to enable ITunes links store kit handling.
+extern const char kITunesLinksStoreKitHandlingName[];
+extern const char kITunesLinksStoreKitHandlingDescription[];
 
 // Title, description, and options for Google UI menu for handling mailto links.
 extern const char kMailtoHandlingWithGoogleUIName[];
@@ -114,13 +146,17 @@ extern const char kShowAutofillTypePredictionsDescription[];
 extern const char kTabSwitcherPresentsBVCName[];
 extern const char kTabSwitcherPresentsBVCDescription[];
 
-// Title and description for the flag to enable the TabGrid as the tab switcher.
-extern const char kTabSwitcherTabGridName[];
-extern const char kTabSwitcherTabGridDescription[];
+// Title and description for the flag to enable the UI Refresh location bar.
+extern const char kUIRefreshLocationBarName[];
+extern const char kUIRefreshLocationBarDescription[];
 
 // Title and description for the flag to enable the phase 1 UI Refresh.
 extern const char kUIRefreshPhase1Name[];
 extern const char kUIRefreshPhase1Description[];
+
+// Title and description for the flag to enable the unified consent.
+extern const char kUnifiedConsentName[];
+extern const char kUnifiedConsentDescription[];
 
 // Title and description for the flag to enable the ddljson Doodle API.
 extern const char kUseDdljsonApiName[];

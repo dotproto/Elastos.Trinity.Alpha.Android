@@ -52,7 +52,7 @@ Polymer({
    * @private
    */
   onLinkTap_: function(event) {
-    if (event.target.hasAttribute('href'))
+    if (event.target.matches('a:not(#extensionsLink)'))
       event.preventDefault();
   },
 
@@ -86,5 +86,11 @@ Polymer({
    * */
   arrowState_: function(opened) {
     return opened ? 'cr:arrow-drop-up' : 'cr:arrow-drop-down';
+  },
+
+  /** @private */
+  onExtensionsLinkClick_: function() {
+    chrome.metricsPrivate.recordUserAction(
+        'SettingsMenu_ExtensionsLinkClicked');
   },
 });

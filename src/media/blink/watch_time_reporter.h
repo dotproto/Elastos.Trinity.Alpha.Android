@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/power_monitor/power_observer.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/base/audio_codecs.h"
@@ -18,7 +19,7 @@
 #include "media/blink/media_blink_export.h"
 #include "media/mojo/interfaces/media_metrics_provider.mojom.h"
 #include "media/mojo/interfaces/watch_time_recorder.mojom.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/blink/public/platform/web_media_player.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/origin.h"
 
@@ -75,7 +76,8 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
   WatchTimeReporter(mojom::PlaybackPropertiesPtr properties,
                     GetMediaTimeCB get_media_time_cb,
                     mojom::MediaMetricsProvider* provider,
-                    scoped_refptr<base::SequencedTaskRunner> task_runner);
+                    scoped_refptr<base::SequencedTaskRunner> task_runner,
+                    const base::TickClock* tick_clock = nullptr);
   ~WatchTimeReporter() override;
 
   // These methods are used to ensure that watch time is only reported for media
@@ -156,7 +158,8 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
                     bool is_background,
                     GetMediaTimeCB get_media_time_cb,
                     mojom::MediaMetricsProvider* provider,
-                    scoped_refptr<base::SequencedTaskRunner> task_runner);
+                    scoped_refptr<base::SequencedTaskRunner> task_runner,
+                    const base::TickClock* tick_clock);
 
   // base::PowerObserver implementation.
   //

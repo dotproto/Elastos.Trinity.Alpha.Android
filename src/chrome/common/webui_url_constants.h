@@ -13,8 +13,8 @@
 #include "build/build_config.h"
 #include "chrome/common/buildflags.h"
 #include "content/public/common/url_constants.h"
-#include "media/media_features.h"
-#include "printing/features/features.h"
+#include "media/media_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 namespace chrome {
 
@@ -42,8 +42,6 @@ extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIConflictsHost[];
 extern const char kChromeUIConflictsURL[];
-extern const char kChromeUIConnectionHelpHost[];
-extern const char kChromeUIConnectionHelpURL[];
 extern const char kChromeUIConstrainedHTMLTestURL[];
 extern const char kChromeUIContentSettingsURL[];
 extern const char kChromeUICrashHost[];
@@ -122,6 +120,7 @@ extern const char kChromeUIPrintURL[];
 extern const char kChromeUIQuitHost[];
 extern const char kChromeUIQuitURL[];
 extern const char kChromeUIQuotaInternalsHost[];
+extern const char kChromeUIResetPasswordHost[];
 extern const char kChromeUIRestartHost[];
 extern const char kChromeUIRestartURL[];
 extern const char kChromeUISettingsHost[];
@@ -139,6 +138,7 @@ extern const char kChromeUISupervisedUserInternalsHost[];
 extern const char kChromeUISupervisedUserPassphrasePageHost[];
 extern const char kChromeUISyncConfirmationHost[];
 extern const char kChromeUISyncConfirmationURL[];
+extern const char kChromeUISyncConsentBumpURL[];
 extern const char kChromeUISyncFileSystemInternalsHost[];
 extern const char kChromeUISyncHost[];
 extern const char kChromeUISyncInternalsHost[];
@@ -196,6 +196,8 @@ extern const char kChromeUIKeyboardOverlayHost[];
 extern const char kChromeUIKeyboardOverlayURL[];
 extern const char kChromeUIMobileSetupHost[];
 extern const char kChromeUIMobileSetupURL[];
+extern const char kChromeUIMultiDeviceSetupHost[];
+extern const char kChromeUIMultiDeviceSetupUrl[];
 extern const char kChromeUINetworkHost[];
 extern const char kChromeUIOSCreditsHost[];
 extern const char kChromeUIOSCreditsURL[];

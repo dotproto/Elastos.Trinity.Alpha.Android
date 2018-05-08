@@ -5,7 +5,6 @@
 #include "services/ui/ws/gpu_host.h"
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -55,7 +54,9 @@ TestGpuService::TestGpuService(
                      nullptr /* watchdog_thread */,
                      std::move(io_runner),
                      gpu::GpuFeatureInfo(),
-                     gpu::GpuPreferences()) {}
+                     gpu::GpuPreferences(),
+                     base::nullopt,
+                     base::nullopt) {}
 
 }  // namespace
 

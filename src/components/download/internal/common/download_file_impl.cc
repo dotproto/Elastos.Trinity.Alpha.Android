@@ -9,17 +9,16 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/download/internal/common/parallel_download_utils.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_destination_observer.h"
 #include "components/download/public/common/download_interrupt_reasons_utils.h"
 #include "components/download/public/common/download_stats.h"
-#include "components/download/public/common/parallel_download_utils.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "mojo/public/c/system/types.h"
@@ -148,7 +147,7 @@ DownloadFileImpl::DownloadFileImpl(
       bytes_seen_without_parallel_streams_(0),
       is_paused_(false),
       download_id_(download_id),
-      main_task_runner_(base::MessageLoop::current()->task_runner()),
+      main_task_runner_(base::MessageLoopCurrent::Get()->task_runner()),
       observer_(observer),
       weak_factory_(this) {
   TRACE_EVENT_INSTANT0("download", "DownloadFileCreated",

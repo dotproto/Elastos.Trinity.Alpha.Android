@@ -5,6 +5,7 @@
 #include "content/browser/notifications/blink_notification_service_impl.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
@@ -18,7 +19,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/notification_resources.h"
 #include "content/public/common/platform_notification_data.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -141,8 +142,10 @@ void BlinkNotificationServiceImpl::CloseNonPersistentNotificationOnUIThread(
     const std::string& notification_id) {
   Service()->CloseNotification(browser_context_, notification_id);
 
+  // TODO(https://crbug.com/442141): Pass a callback here to focus the tab
+  // which created the notification, unless the event is canceled.
   NotificationEventDispatcherImpl::GetInstance()
-      ->DispatchNonPersistentCloseEvent(notification_id);
+      ->DispatchNonPersistentCloseEvent(notification_id, base::DoNothing());
 }
 
 blink::mojom::PermissionStatus
@@ -243,6 +246,66 @@ void BlinkNotificationServiceImpl::
           notification_resources));
 
   std::move(callback).Run(blink::mojom::PersistentNotificationError::NONE);
+}
+
+void BlinkNotificationServiceImpl::ClosePersistentNotification(
+    const std::string& notification_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (CheckPermissionStatus() != blink::mojom::PermissionStatus::GRANTED)
+    return;
+
+  // Using base::Unretained here is safe because Service() returns a singleton.
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&PlatformNotificationService::ClosePersistentNotification,
+                     base::Unretained(Service()), browser_context_,
+                     notification_id));
+
+  notification_context_->DeleteNotificationData(
+      notification_id, origin_.GetURL(), base::DoNothing());
+}
+
+void BlinkNotificationServiceImpl::GetNotifications(
+    int64_t service_worker_registration_id,
+    const std::string& filter_tag,
+    GetNotificationsCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (CheckPermissionStatus() != blink::mojom::PermissionStatus::GRANTED) {
+    // No permission has been granted for the given origin. It is harmless to
+    // try to get notifications without permission, so return empty vectors
+    // indicating that no (accessible) notifications exist at this time.
+    std::move(callback).Run(std::vector<std::string>(),
+                            std::vector<PlatformNotificationData>());
+    return;
+  }
+
+  notification_context_->ReadAllNotificationDataForServiceWorkerRegistration(
+      origin_.GetURL(), service_worker_registration_id,
+      base::AdaptCallbackForRepeating(base::BindOnce(
+          &BlinkNotificationServiceImpl::DidGetNotifications,
+          weak_ptr_factory_.GetWeakPtr(), filter_tag, std::move(callback))));
+}
+
+void BlinkNotificationServiceImpl::DidGetNotifications(
+    const std::string& filter_tag,
+    GetNotificationsCallback callback,
+    bool success,
+    const std::vector<NotificationDatabaseData>& notifications) {
+  std::vector<std::string> ids;
+  std::vector<PlatformNotificationData> datas;
+
+  for (const NotificationDatabaseData& database_data : notifications) {
+    // An empty filter tag matches all, else we need an exact match.
+    if (filter_tag.empty() ||
+        filter_tag == database_data.notification_data.tag) {
+      ids.push_back(database_data.notification_id);
+      datas.push_back(database_data.notification_data);
+    }
+  }
+
+  std::move(callback).Run(ids, datas);
 }
 
 }  // namespace content

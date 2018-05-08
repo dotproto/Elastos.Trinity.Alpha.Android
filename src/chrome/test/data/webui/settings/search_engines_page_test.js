@@ -4,6 +4,7 @@
 
 cr.define('settings_search_engines_page', function() {
   /**
+   * @param {number} id
    * @param {string} name
    * @param {boolean} canBeDefault
    * @param {boolean} canBeEdited
@@ -11,19 +12,20 @@ cr.define('settings_search_engines_page', function() {
    * @return {!SearchEngine}
    */
   function createSampleSearchEngine(
-      name, canBeDefault, canBeEdited, canBeRemoved) {
+      id, name, canBeDefault, canBeEdited, canBeRemoved) {
     return {
       canBeDefault: canBeDefault,
       canBeEdited: canBeEdited,
       canBeRemoved: canBeRemoved,
       default: false,
-      displayName: name + " displayName",
-      iconURL: "http://www.google.com/favicon.ico",
+      displayName: name + ' displayName',
+      iconURL: 'http://www.google.com/favicon.ico',
+      id: id,
       isOmniboxExtension: false,
       keyword: name,
       modelIndex: 0,
       name: name,
-      url: "https://" + name + ".com/search?p=%s",
+      url: 'https://' + name + '.com/search?p=%s',
       urlLocked: false,
     };
   }
@@ -35,17 +37,18 @@ cr.define('settings_search_engines_page', function() {
       canBeEdited: false,
       canBeRemoved: false,
       default: false,
-      displayName: "Omnibox extension displayName",
+      displayName: 'Omnibox extension displayName',
       extension: {
-        icon: "chrome://extension-icon/some-extension-icon",
-        id: "dummyextensionid",
-        name: "Omnibox extension"
+        icon: 'chrome://extension-icon/some-extension-icon',
+        id: 'dummyextensionid',
+        name: 'Omnibox extension'
       },
+      id: 0,
       isOmniboxExtension: true,
-      keyword: "oe",
+      keyword: 'oe',
       modelIndex: 6,
-      name: "Omnibox extension",
-      url: "chrome-extension://dummyextensionid/?q=%s",
+      name: 'Omnibox extension',
+      url: 'chrome-extension://dummyextensionid/?q=%s',
       urlLocked: false
     };
   }
@@ -99,7 +102,7 @@ cr.define('settings_search_engines_page', function() {
          * @param {string} inputId
          * @return {!Promise}
          */
-        const inputAndValidate = function(inputId) {
+        const inputAndValidate = inputId => {
           const inputElement = dialog.$[inputId];
           browserProxy.resetResolver('validateSearchEngineInput');
           inputElement.fire('input');
@@ -115,26 +118,48 @@ cr.define('settings_search_engines_page', function() {
         const actionButton = dialog.$.actionButton;
         assertTrue(actionButton.disabled);
 
-        return inputAndValidate('searchEngine').then(function() {
-          return inputAndValidate('keyword');
-        }).then(function() {
-          return inputAndValidate('queryUrl');
-        }).then(function() {
-          // Manually set the text to a non-empty string for all fields.
-          dialog.$.searchEngine.value = 'foo';
-          dialog.$.keyword.value = 'bar';
-          dialog.$.queryUrl.value = 'baz';
+        return inputAndValidate('searchEngine')
+            .then(() => inputAndValidate('keyword'))
+            .then(() => inputAndValidate('queryUrl'))
+            .then(() => {
+              // Manually set the text to a non-empty string for all fields.
+              dialog.$.searchEngine.value = 'foo';
+              dialog.$.keyword.value = 'bar';
+              dialog.$.queryUrl.value = 'baz';
 
-          return inputAndValidate('searchEngine');
-        }).then(function() {
-          // Assert that the action button has been enabled now that all input
-          // is valid and non-empty.
-          assertFalse(actionButton.disabled);
-          MockInteractions.tap(actionButton);
-          return browserProxy.whenCalled('searchEngineEditCompleted');
-        });
+              return inputAndValidate('searchEngine');
+            })
+            .then(() => {
+              // Assert that the action button has been enabled now that all
+              // input is valid and non-empty.
+              assertFalse(actionButton.disabled);
+              MockInteractions.tap(actionButton);
+              return browserProxy.whenCalled('searchEngineEditCompleted');
+            });
       });
 
+      test('DialogCloseWhenEnginesChangedModelEngineNotFound', function() {
+        dialog.set(
+            'model', createSampleSearchEngine(0, 'G', false, false, false));
+        cr.webUIListenerCallback('search-engines-changed', {
+          defaults: [],
+          others: [createSampleSearchEngine(1, 'H', false, false, false)],
+          extensions: [],
+        });
+        return browserProxy.whenCalled('searchEngineEditCancelled');
+      });
+
+      test('DialogValidateInputsWhenEnginesChanged', function() {
+        dialog.set(
+            'model', createSampleSearchEngine(0, 'G', false, false, false));
+        dialog.set('keyword_', 'G');
+        cr.webUIListenerCallback('search-engines-changed', {
+          defaults: [],
+          others: [createSampleSearchEngine(0, 'G', false, false, false)],
+          extensions: [],
+        });
+        return browserProxy.whenCalled('validateSearchEngineInput');
+      });
     });
   }
 
@@ -147,7 +172,7 @@ cr.define('settings_search_engines_page', function() {
       let browserProxy = null;
 
       /** @type {!SearchEngine} */
-      const searchEngine = createSampleSearchEngine('G', true, true, true);
+      const searchEngine = createSampleSearchEngine(0, 'G', true, true, true);
 
       setup(function() {
         browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
@@ -207,7 +232,7 @@ cr.define('settings_search_engines_page', function() {
             });
       });
 
-      // Test that clicking the "edit" button brings up a dialog.
+      // Test that clicking the "edit" fires edit event.
       test('Edit_Enabled', function() {
         // Open action menu.
         MockInteractions.tap(entry.$$('button'));
@@ -218,20 +243,16 @@ cr.define('settings_search_engines_page', function() {
         const editButton = entry.$.edit;
         assertTrue(!!editButton);
         assertFalse(editButton.hidden);
-        MockInteractions.tap(editButton);
-        return browserProxy.whenCalled('searchEngineEditStarted').then(
-            function(modelIndex) {
-              assertEquals(engine.modelIndex, modelIndex);
-              const dialog = entry.$$('settings-search-engine-dialog');
-              assertTrue(!!dialog);
 
-              // Check that the paper-input fields are pre-populated.
-              assertEquals(engine.name, dialog.$.searchEngine.value);
-              assertEquals(engine.keyword, dialog.$.keyword.value);
-              assertEquals(engine.url, dialog.$.queryUrl.value);
-
-              assertFalse(dialog.$.actionButton.disabled);
+        const promise =
+            test_util.eventToPromise('edit-search-engine', entry).then(e => {
+              assertEquals(engine, e.detail.engine);
+              assertEquals(
+                  entry.$$('paper-icon-button-light button'),
+                  e.detail.anchorElement);
             });
+        MockInteractions.tap(editButton);
+        return promise;
       });
 
       /**
@@ -249,25 +270,25 @@ cr.define('settings_search_engines_page', function() {
 
       test('Remove_Disabled', function() {
         testButtonDisabled(
-            createSampleSearchEngine('G', true, true, false), 'delete');
+            createSampleSearchEngine(0, 'G', true, true, false), 'delete');
       });
 
       test('MakeDefault_Disabled', function() {
         testButtonDisabled(
-            createSampleSearchEngine('G', false, true, true), 'makeDefault');
+            createSampleSearchEngine(0, 'G', false, true, true), 'makeDefault');
       });
 
       test('Edit_Disabled', function() {
         testButtonDisabled(
-            createSampleSearchEngine('G', true, false, true), 'edit');
+            createSampleSearchEngine(0, 'G', true, false, true), 'edit');
       });
 
       test('All_Disabled', function() {
-        entry.engine = createSampleSearchEngine('G', true, false, false);
+        entry.engine = createSampleSearchEngine(0, 'G', true, false, false);
         Polymer.dom.flush();
         assertTrue(entry.hasAttribute('show-dots_'));
 
-        entry.engine = createSampleSearchEngine('G', false, false, false);
+        entry.engine = createSampleSearchEngine(1, 'G', false, false, false);
         Polymer.dom.flush();
         assertFalse(entry.hasAttribute('show-dots_'));
       });
@@ -284,10 +305,10 @@ cr.define('settings_search_engines_page', function() {
       /** @type {!SearchEnginesInfo} */
       const searchEnginesInfo = {
         defaults: [createSampleSearchEngine(
-            'search_engine_G', false, false, false)],
+            0, 'search_engine_G', false, false, false)],
         others: [
-          createSampleSearchEngine('search_engine_B', false, false, false),
-          createSampleSearchEngine('search_engine_A', false, false, false),
+          createSampleSearchEngine(1, 'search_engine_B', false, false, false),
+          createSampleSearchEngine(2, 'search_engine_A', false, false, false),
         ],
         extensions: [createSampleOmniboxExtension()],
       };
@@ -361,7 +382,7 @@ cr.define('settings_search_engines_page', function() {
 
         cr.webUIListenerCallback('search-engines-changed', {
           defaults: [],
-          others: [createSampleSearchEngine('G', false, false, false)],
+          others: [createSampleSearchEngine(0, 'G', false, false, false)],
           extensions: [],
         });
         assertTrue(message.hasAttribute('hidden'));
@@ -377,6 +398,26 @@ cr.define('settings_search_engines_page', function() {
         MockInteractions.tap(addSearchEngineButton);
         Polymer.dom.flush();
         assertTrue(!!page.$$('settings-search-engine-dialog'));
+      });
+
+      test('EditSearchEngineDialog', function() {
+        const engine = searchEnginesInfo.others[0];
+        page.fire(
+            'edit-search-engine',
+            {engine, anchorElement: page.$.addSearchEngine});
+        return browserProxy.whenCalled('searchEngineEditStarted')
+            .then(modelIndex => {
+              assertEquals(engine.modelIndex, modelIndex);
+              const dialog = page.$$('settings-search-engine-dialog');
+              assertTrue(!!dialog);
+
+              // Check that the paper-input fields are pre-populated.
+              assertEquals(engine.name, dialog.$.searchEngine.value);
+              assertEquals(engine.keyword, dialog.$.keyword.value);
+              assertEquals(engine.url, dialog.$.queryUrl.value);
+
+              assertFalse(dialog.$.actionButton.disabled);
+            });
       });
 
       // Tests that filtering the three search engines lists works, and that the

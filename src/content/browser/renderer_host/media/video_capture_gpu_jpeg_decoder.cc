@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -176,10 +177,9 @@ void VideoCaptureGpuJpegDecoder::DecodeCapturedData(
       media::mojom::VideoFrameInfo::New();
   out_frame_info->timestamp = timestamp;
   out_frame_info->pixel_format = media::PIXEL_FORMAT_I420;
-  out_frame_info->storage_type = media::VideoPixelStorage::CPU;
   out_frame_info->coded_size = dimensions;
   out_frame_info->visible_rect = gfx::Rect(dimensions);
-  out_frame_info->metadata = out_frame->metadata()->CopyInternalValues();
+  out_frame_info->metadata = out_frame->metadata()->GetInternalValues().Clone();
 
   {
     base::AutoLock lock(lock_);
@@ -275,7 +275,7 @@ void VideoCaptureGpuJpegDecoder::DidReceiveGPUInfoOnIOThread(
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&VideoCaptureGpuJpegDecoder::FinishInitialization,
-                     weak_this, base::Passed(remote_decoder.PassInterface())));
+                     weak_this, remote_decoder.PassInterface()));
 }
 
 void VideoCaptureGpuJpegDecoder::FinishInitialization(

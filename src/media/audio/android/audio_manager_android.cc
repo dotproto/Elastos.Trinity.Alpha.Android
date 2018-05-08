@@ -12,7 +12,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "jni/AudioManagerAndroid_jni.h"
 #include "media/audio/android/audio_record_input.h"
@@ -337,7 +336,8 @@ AudioParameters AudioManagerAndroid::GetPreferredOutputStreamParameters(
     // AudioManager APIs for GetOptimalOutputFrameSize() don't support channel
     // layouts greater than stereo unless low latency audio is supported.
     if (input_params.channels() <= 2 ||
-        (base::android::BuildInfo::GetInstance()->sdk_int() >= 21 &&
+        (base::android::BuildInfo::GetInstance()->sdk_int() >=
+             base::android::SDK_VERSION_LOLLIPOP &&
          IsAudioLowLatencySupported())) {
       channel_layout = input_params.channel_layout();
     }

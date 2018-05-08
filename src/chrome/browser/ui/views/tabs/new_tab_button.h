@@ -79,11 +79,17 @@ class NewTabButton : public views::ImageButton,
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
+  // Returns whether this button should draw an incognito icon.
+  bool ShouldDrawIncognitoIcon() const;
+
   // Returns the gfx::Rect around the visible portion of the New Tab Button.
   // Note: This is different than the rect around the entire New Tab Button as
   // it extends to the top of the tabstrip for Fitts' Law interaction in a
   // maximized window. Used for anchoring the NewTabPromo.
   gfx::Rect GetVisibleBounds() const;
+
+  // Returns the radius to use for the button corners (in newer material UI).
+  int GetCornerRadius() const;
 
   // Computes a path corresponding to the button's outer border for a given
   // |scale| and stores it in |path|.  |button_y| is used as the y-coordinate
@@ -110,10 +116,19 @@ class NewTabButton : public views::ImageButton,
   // Returns the path for the touch-optimized new tab button for the given
   // |scale|. |button_y| is the button's top y-cordinate. If |for_fill| is true,
   // the path will be shrunk by 1px from all sides to allow room for the stroke
-  // to show up.
+  // to show up. If |extend_to_top| is true, the path is extended vertically to
+  // y = 0.
   SkPath GetTouchOptimizedButtonPath(float button_y,
                                      float scale,
+                                     bool extend_to_top,
                                      bool for_fill) const;
+
+  // Similar, but for the non-touch-optimized button.
+  SkPath GetNonTouchOptimizedButtonPath(int button_y,
+                                        int button_height,
+                                        float scale,
+                                        bool extend_to_top,
+                                        bool for_fill) const;
 
   void UpdateInkDropBaseColor();
 

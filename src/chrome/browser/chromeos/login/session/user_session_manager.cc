@@ -7,8 +7,10 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -77,11 +79,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
+#include "chrome/browser/ui/app_list/app_list_service_impl.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/common/channel_info.h"
@@ -125,8 +129,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/features/feature_session_type.h"
-#include "net/cert/sth_distributor.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -416,10 +420,20 @@ void UserSessionManager::MaybeAppendPolicySwitches(
       user_profile_prefs->FindPreference(prefs::kIsolateOrigins);
   bool site_per_process = site_per_process_pref->IsManaged() &&
                           site_per_process_pref->GetValue()->GetBool();
+
   std::string isolate_origins =
       isolate_origins_pref->IsManaged()
           ? isolate_origins_pref->GetValue()->GetString()
           : std::string();
+
+  // The admin should also be able to use these policies to override trials that
+  // will try to turn site isolation on per default.
+  // Note that disabling either SitePerProcess or IsolateOrigins via policy will
+  // disable both types of field trials.
+  bool disable_site_isolation_trials =
+      (site_per_process_pref->IsManaged() &&
+       !site_per_process_pref->GetValue()->GetBool()) ||
+      (isolate_origins_pref->IsManaged() && isolate_origins.empty());
 
   // Append sentinels indicating that these values originate from policy.
   // This is important, because only command-line switches between the
@@ -430,7 +444,8 @@ void UserSessionManager::MaybeAppendPolicySwitches(
   // We use the policy-style sentinels because these values originate from
   // policy, and because login_manager uses the same sentinels when adding the
   // login-screen site isolation flags.
-  bool use_policy_sentinels = site_per_process || !isolate_origins.empty();
+  bool use_policy_sentinels = site_per_process || !isolate_origins.empty() ||
+                              disable_site_isolation_trials;
   if (use_policy_sentinels)
     user_flags->AppendSwitch(chromeos::switches::kPolicySwitchesBegin);
 
@@ -444,6 +459,10 @@ void UserSessionManager::MaybeAppendPolicySwitches(
     user_flags->AppendSwitchASCII(
         ::switches::kIsolateOrigins,
         user_profile_prefs->GetString(prefs::kIsolateOrigins));
+  }
+
+  if (disable_site_isolation_trials) {
+    user_flags->AppendSwitch(::switches::kDisableSiteIsolationTrials);
   }
 
   if (use_policy_sentinels) {
@@ -858,10 +877,9 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
   // argv[0] is the program name |base::CommandLine::NO_PROGRAM|.
   flags.assign(user_flags.argv().begin() + 1, user_flags.argv().end());
   LOG(WARNING) << "Restarting to apply per-session flags...";
-  session_manager_client->SetFlagsForUser(
-      cryptohome::Identification(
-          user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()),
-      flags);
+  SetSwitchesForUser(
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId(),
+      CommandLineSwitchesType::kPolicyAndFlagsAndKioskControl, flags);
   attempt_restart_closure_.Run();
   return true;
 }
@@ -1178,11 +1196,17 @@ void UserSessionManager::InitProfilePreferences(
     // Make sure that the google service username is properly set (we do this
     // on every sign in, not just the first login, to deal with existing
     // profiles that might not have it set yet).
-    SigninManagerBase* signin_manager =
-        SigninManagerFactory::GetForProfile(profile);
-    signin_manager->SetAuthenticatedAccountInfo(
-        gaia_id, user_context.GetAccountId().GetUserEmail());
-    std::string account_id = signin_manager->GetAuthenticatedAccountId();
+    // TODO(https://crbug.com/814787): Change this flow to go through a
+    // mainstream Identity Service API once that API exists. Note that this
+    // might require supplying a valid refresh token here as opposed to an
+    // empty string.
+    identity::IdentityManager* identity_manager =
+        IdentityManagerFactory::GetForProfile(profile);
+    identity_manager->SetPrimaryAccountSynchronously(
+        gaia_id, user_context.GetAccountId().GetUserEmail(),
+        /*refresh_token=*/std::string());
+    std::string account_id =
+        identity_manager->GetPrimaryAccountInfo().account_id;
     const user_manager::User* user =
         user_manager::UserManager::Get()->FindUser(user_context.GetAccountId());
     bool is_child = user->GetType() == user_manager::USER_TYPE_CHILD;
@@ -1190,8 +1214,9 @@ void UserSessionManager::InitProfilePreferences(
            (user_context.GetUserType() == user_manager::USER_TYPE_CHILD));
     AccountTrackerServiceFactory::GetForProfile(profile)->SetIsChildAccount(
         account_id, is_child);
-    VLOG(1) << "Seed SigninManagerBase with the authenticated account info"
-            << ", success=" << signin_manager->IsAuthenticated();
+    VLOG(1) << "Seed IdentityManager and SigninManagerBase with the "
+            << "authenticated account info, success="
+            << SigninManagerFactory::GetForProfile(profile)->IsAuthenticated();
 
     // Backfill GAIA ID in user prefs stored in Local State.
     std::string tmp_gaia_id;
@@ -1961,6 +1986,9 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
     profile->GetPrefs()->ClearPref(prefs::kShowSyncSettingsOnSessionStart);
     chrome::ShowSettingsSubPageForProfile(profile, "syncSetup");
   }
+
+  // Associates AppListClient with the current active profile.
+  AppListServiceImpl::GetInstance()->GetAppListClient();
 }
 
 void UserSessionManager::RespectLocalePreferenceWrapper(
@@ -2060,6 +2088,27 @@ void UserSessionManager::Shutdown() {
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
   first_run::GoodiesDisplayer::Delete();
+}
+
+void UserSessionManager::SetSwitchesForUser(
+    const AccountId& account_id,
+    CommandLineSwitchesType switches_type,
+    const std::vector<std::string>& switches) {
+  // TODO(pmarko): Introduce a CHECK that |account_id| is the primary user
+  // (https://crbug.com/832857).
+  command_line_switches_[switches_type] = switches;
+
+  // Apply all command-line switch types in session manager as a flat list.
+  std::vector<std::string> all_switches;
+  for (const auto& pair : command_line_switches_) {
+    all_switches.insert(all_switches.end(), pair.second.begin(),
+                        pair.second.end());
+  }
+
+  SessionManagerClient* session_manager_client =
+      DBusThreadManager::Get()->GetSessionManagerClient();
+  session_manager_client->SetFlagsForUser(
+      cryptohome::Identification(account_id), all_switches);
 }
 
 void UserSessionManager::CreateTokenUtilIfMissing() {

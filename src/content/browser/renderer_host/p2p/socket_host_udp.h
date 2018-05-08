@@ -17,7 +17,6 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "content/browser/renderer_host/p2p/socket_host.h"
 #include "content/common/content_export.h"
 #include "content/common/p2p_socket_type.h"
@@ -102,6 +101,7 @@ class CONTENT_EXPORT P2PSocketHostUdp : public P2PSocketHost {
                         int32_t transport_sequence_number,
                         base::TimeTicks send_time,
                         int result);
+  int SetSocketDiffServCodePointInternal(net::DiffServCodePoint dscp);
   static std::unique_ptr<net::DatagramServerSocket> DefaultSocketFactory(
       net::NetLog* net_log);
 

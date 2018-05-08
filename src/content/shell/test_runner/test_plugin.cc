@@ -16,23 +16,24 @@
 #include "base/strings/stringprintf.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/texture_layer.h"
-#include "components/viz/common/resources/shared_bitmap_manager.h"
+#include "cc/resources/cross_thread_shared_bitmap.h"
+#include "components/viz/common/resources/bitmap_allocation.h"
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
-#include "third_party/WebKit/public/platform/WebCompositorSupport.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3DProvider.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/platform/WebThread.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
-#include "third_party/WebKit/public/platform/WebTouchPoint.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebPluginParams.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/platform/web_compositor_support.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_thread.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/platform/web_touch_point.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -177,7 +178,7 @@ bool TestPlugin::Initialize(blink::WebPluginContainer* container) {
   blink::Platform::GraphicsInfo gl_info;
   context_provider_ =
       blink::Platform::Current()->CreateOffscreenGraphicsContext3DProvider(
-          attrs, url, nullptr, &gl_info);
+          attrs, url, &gl_info);
   if (context_provider_ && !context_provider_->BindToCurrentThread())
     context_provider_ = nullptr;
   gl_ = context_provider_ ? context_provider_->ContextGL() : nullptr;
@@ -267,9 +268,17 @@ void TestPlugin::UpdateGeometry(
   } else {
     mailbox_ = gpu::Mailbox();
     sync_token_ = gpu::SyncToken();
-    shared_bitmap_ = delegate_->GetSharedBitmapManager()->AllocateSharedBitmap(
-        gfx::Rect(rect_).size(), viz::RGBA_8888);
-    DrawSceneSoftware(shared_bitmap_->pixels());
+
+    viz::SharedBitmapId id = viz::SharedBitmap::GenerateId();
+    std::unique_ptr<base::SharedMemory> shm =
+        viz::bitmap_allocation::AllocateMappedBitmap(gfx::Rect(rect_).size(),
+                                                     viz::RGBA_8888);
+    shared_bitmap_ = base::MakeRefCounted<cc::CrossThreadSharedBitmap>(
+        id, std::move(shm), gfx::Rect(rect_).size(), viz::RGBA_8888);
+    // The |shared_bitmap_|'s id will be registered when being given to the
+    // compositor.
+
+    DrawSceneSoftware(shared_bitmap_->shared_memory()->memory());
   }
 
   content_changed_ = true;
@@ -283,11 +292,15 @@ bool TestPlugin::IsPlaceholder() {
 static void IgnoreReleaseCallback(const gpu::SyncToken& sync_token, bool lost) {
 }
 
-static void ReleaseSharedMemory(std::unique_ptr<viz::SharedBitmap> bitmap,
-                                const gpu::SyncToken& sync_token,
-                                bool lost) {}
+// static
+void TestPlugin::ReleaseSharedMemory(
+    scoped_refptr<cc::CrossThreadSharedBitmap> shared_bitmap,
+    cc::SharedBitmapIdRegistration registration,
+    const gpu::SyncToken& sync_token,
+    bool lost) {}
 
 bool TestPlugin::PrepareTransferableResource(
+    cc::SharedBitmapIdRegistrar* bitmap_registrar,
     viz::TransferableResource* resource,
     std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
   if (!content_changed_)
@@ -298,11 +311,17 @@ bool TestPlugin::PrepareTransferableResource(
     *release_callback = viz::SingleReleaseCallback::Create(
         base::BindOnce(&IgnoreReleaseCallback));
   } else if (shared_bitmap_) {
+    // The |bitmap_data_| is only used for a single compositor frame, so we know
+    // the SharedBitmapId in it was not registered yet.
+    cc::SharedBitmapIdRegistration registration =
+        bitmap_registrar->RegisterSharedBitmapId(shared_bitmap_->id(),
+                                                 shared_bitmap_);
+
     *resource = viz::TransferableResource::MakeSoftware(
-        shared_bitmap_->id(), shared_bitmap_->sequence_number(),
-        gfx::Size(rect_.width, rect_.height), viz::RGBA_8888);
+        shared_bitmap_->id(), shared_bitmap_->size(), viz::RGBA_8888);
     *release_callback = viz::SingleReleaseCallback::Create(
-        base::BindOnce(&ReleaseSharedMemory, base::Passed(&shared_bitmap_)));
+        base::BindOnce(&ReleaseSharedMemory, std::move(shared_bitmap_),
+                       std::move(registration)));
   }
   content_changed_ = false;
   return true;

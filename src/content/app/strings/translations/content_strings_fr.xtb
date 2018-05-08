@@ -94,6 +94,7 @@
 <translation id="5034860022980953847">indicateur de progression</translation>
 <translation id="5117590920725113268">Afficher le mois suivant</translation>
 <translation id="512758898067543763">en-tête de ligne</translation>
+<translation id="5153163864850940242">Cette vidéo est diffusée en mode PIP (Picture-in-Picture)</translation>
 <translation id="5164977714490026579">Cette valeur doit être supérieure ou égale à <ph name="MINIMUM" />.</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> Po</translation>
 <translation id="5307600278924710095">Veuillez saisir la partie manquante avant le caractère "<ph name="ATSIGN" />". L'adresse "<ph name="INVALIDADDRESS" />" est incomplète.</translation>
@@ -124,7 +125,6 @@
 <translation id="6404546809543547843">curseur durée audio</translation>
 <translation id="648732519525291180">outil de sélection de l'heure</translation>
 <translation id="6550675742724504774">Options</translation>
-<translation id="6564313821541007458">Mode PIP (Picture-in-Picture) activé</translation>
 <translation id="658823671542763450">activer le mode plein écran</translation>
 <translation id="663493177488814956">flux</translation>
 <translation id="6637586476836377253">journal</translation>

@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
@@ -142,6 +142,8 @@ TEST_F(TrayRotationLockTest, CreateSecondaryTrayView) {
 
   SetUpForStatusAreaWidget(
       StatusAreaWidgetTestHelper::GetSecondaryStatusAreaWidget());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(tray_view());
   EXPECT_FALSE(tray_view()->visible());
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   EXPECT_FALSE(tray_view()->visible());

@@ -31,18 +31,20 @@ class QueryManager;
 namespace gles2 {
 class ContextGroup;
 class ErrorState;
+class FeatureInfo;
 class GpuFenceManager;
 class GLES2Util;
-struct ContextState;
-class FeatureInfo;
+class ImageManager;
 class Logger;
+class Texture;
+struct ContextState;
 }  // namespace gles2
 
 namespace raster {
 
 class MockRasterDecoder : public RasterDecoder {
  public:
-  MockRasterDecoder(CommandBufferServiceBase* command_buffer_service);
+  explicit MockRasterDecoder(CommandBufferServiceBase* command_buffer_service);
   ~MockRasterDecoder() override;
 
   base::WeakPtr<DecoderContext> AsWeakPtr() override;
@@ -70,6 +72,9 @@ class MockRasterDecoder : public RasterDecoder {
   MOCK_METHOD0(PerformIdleWork, void());
   MOCK_CONST_METHOD0(HasPollingWork, bool());
   MOCK_METHOD0(PerformPollingWork, void());
+  MOCK_CONST_METHOD0(RestoreGlobalState, void());
+  MOCK_CONST_METHOD0(ClearAllAttributes, void());
+  MOCK_CONST_METHOD0(RestoreAllAttributes, void());
   MOCK_METHOD1(RestoreState, void(const gles2::ContextState* prev_state));
   MOCK_CONST_METHOD0(RestoreActiveTexture, void());
   MOCK_CONST_METHOD1(RestoreAllTextureUnitAndSamplerBindings,
@@ -89,6 +94,8 @@ class MockRasterDecoder : public RasterDecoder {
   MOCK_METHOD0(GetQueryManager, QueryManager*());
   MOCK_METHOD0(GetGpuFenceManager, gpu::gles2::GpuFenceManager*());
   MOCK_METHOD1(SetIgnoreCachedStateForTest, void(bool ignore));
+  MOCK_METHOD0(GetImageManagerForTest, gles2::ImageManager*());
+  MOCK_METHOD0(GetTransferCacheForTest, ServiceTransferCache*());
   MOCK_METHOD4(DoCommands,
                error::Error(unsigned int num_commands,
                             const volatile void* buffer,
@@ -108,6 +115,36 @@ class MockRasterDecoder : public RasterDecoder {
                     uint32_t texture_target,
                     gl::GLImage* image,
                     bool can_bind_to_sampler));
+  MOCK_METHOD1(IsCompressedTextureFormat, bool(unsigned format));
+  MOCK_METHOD9(ClearLevel,
+               bool(gles2::Texture* texture,
+                    unsigned target,
+                    int level,
+                    unsigned format,
+                    unsigned type,
+                    int xoffset,
+                    int yoffset,
+                    int width,
+                    int height));
+  MOCK_METHOD6(ClearCompressedTextureLevel,
+               bool(gles2::Texture* texture,
+                    unsigned target,
+                    int level,
+                    unsigned format,
+                    int width,
+                    int height));
+  MOCK_METHOD8(ClearLevel3D,
+               bool(gles2::Texture* texture,
+                    unsigned target,
+                    int level,
+                    unsigned format,
+                    unsigned type,
+                    int width,
+                    int height,
+                    int depth));
+  MOCK_METHOD1(SetCopyTextureResourceManagerForTest,
+               void(gles2::CopyTextureCHROMIUMResourceManager*
+                        copy_texture_resource_manager));
 
  private:
   base::WeakPtrFactory<MockRasterDecoder> weak_ptr_factory_;

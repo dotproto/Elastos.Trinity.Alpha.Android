@@ -85,6 +85,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // candidates received in OnFaviconUrlUpdated.
   void OnNavigationFinished(web::NavigationContext* context);
 
+  // Called when current window's canGoBack / canGoForward state was changed.
+  void OnBackForwardStateChanged();
+
   // Called when page title was changed.
   void OnTitleChanged();
 
@@ -202,7 +205,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
   void ExecuteJavaScript(const base::string16& javascript) override;
   void ExecuteJavaScript(const base::string16& javascript,
-                         const JavaScriptResultCallback& callback) override;
+                         JavaScriptResultCallback callback) override;
   void ExecuteUserJavaScript(NSString* javaScript) override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;

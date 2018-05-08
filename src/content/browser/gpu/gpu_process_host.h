@@ -84,7 +84,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                               BufferCreationStatus status)>;
 
   using RequestGPUInfoCallback = base::Callback<void(const gpu::GPUInfo&)>;
-  using RequestHDRStatusCallback = base::Callback<void(bool)>;
+  using RequestHDRStatusCallback = base::RepeatingCallback<void(bool)>;
 
   static int GetGpuCrashCount();
 
@@ -182,6 +182,10 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   static bool ValidateHost(GpuProcessHost* host);
 
+  // Increments the given crash count. Also, for each hour passed since the
+  // previous crash, removes an old crash from the count.
+  static void IncrementCrashCount(int* crash_count);
+
   GpuProcessHost(int host_id, GpuProcessKind kind);
   ~GpuProcessHost() override;
 
@@ -199,8 +203,12 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void OnProcessCrashed(int exit_code) override;
 
   // viz::mojom::GpuHost:
-  void DidInitialize(const gpu::GPUInfo& gpu_info,
-                     const gpu::GpuFeatureInfo& gpu_feature_info) override;
+  void DidInitialize(
+      const gpu::GPUInfo& gpu_info,
+      const gpu::GpuFeatureInfo& gpu_feature_info,
+      const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+      const base::Optional<gpu::GpuFeatureInfo>&
+          gpu_feature_info_for_hardware_gpu) override;
   void DidFailInitialize() override;
   void DidCreateContextSuccessfully() override;
   void DidCreateOffscreenContext(const GURL& url) override;
@@ -269,7 +277,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // of a separate GPU process.
   bool in_process_;
 
-  bool swiftshader_rendering_;
   GpuProcessKind kind_;
 
   // Whether we actually launched a GPU process.
@@ -280,16 +287,13 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Time Init started.  Used to log total GPU process startup time to UMA.
   base::TimeTicks init_start_time_;
 
-  // Master switch for enabling/disabling GPU acceleration for the current
-  // browser session.
-  static bool gpu_enabled_;
-
-  static bool hardware_gpu_enabled_;
-
   static base::subtle::Atomic32 gpu_crash_count_;
   static int gpu_recent_crash_count_;
   static bool crashed_before_;
   static int swiftshader_crash_count_;
+  static int swiftshader_recent_crash_count_;
+  static int display_compositor_crash_count_;
+  static int display_compositor_recent_crash_count_;
 
   // Here the bottom-up destruction order matters:
   // The GPU thread depends on its host so stop the host last.

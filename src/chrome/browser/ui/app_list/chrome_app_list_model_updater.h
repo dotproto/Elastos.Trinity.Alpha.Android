@@ -10,17 +10,12 @@
 #include <string>
 #include <vector>
 
-#include "ash/public/interfaces/app_list.mojom.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 
 namespace app_list {
 class SearchModel;
 }  // namespace app_list
-
-namespace ui {
-class MenuModel;
-}  // namespace ui
 
 class ChromeAppListItem;
 
@@ -50,7 +45,7 @@ class ChromeAppListModelUpdater : public AppListModelUpdater {
   void UpdateSearchBox(const base::string16& text,
                        bool initiated_by_user) override;
   void PublishSearchResults(
-      std::vector<std::unique_ptr<app_list::SearchResult>> results) override;
+      std::vector<std::unique_ptr<ChromeSearchResult>> results) override;
 
   // Methods only used by ChromeAppListItem that talk to ash directly.
   void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) override;
@@ -82,13 +77,15 @@ class ChromeAppListModelUpdater : public AppListModelUpdater {
   bool SearchEngineIsGoogle() override;
   void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
   size_t BadgedItemCount() override;
-  ui::MenuModel* GetContextMenuModel(const std::string& id) override;
+  void GetContextMenuModel(const std::string& id,
+                           GetMenuModelCallback callback) override;
   void ContextMenuItemSelected(const std::string& id,
                                int command_id,
                                int event_flags) override;
-  app_list::SearchResult* FindSearchResult(
-      const std::string& result_id) override;
-  app_list::SearchResult* GetResultByTitle(const std::string& title) override;
+  void GetSearchResultContextMenuModel(const std::string& result_id,
+                                       GetMenuModelCallback callback) override;
+  ChromeSearchResult* FindSearchResult(const std::string& result_id) override;
+  ChromeSearchResult* GetResultByTitle(const std::string& title) override;
 
   // Methods for AppListSyncableService:
   void AddItemToOemFolder(

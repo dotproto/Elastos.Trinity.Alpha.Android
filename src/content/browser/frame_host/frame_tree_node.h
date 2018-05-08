@@ -20,8 +20,8 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
-#include "third_party/WebKit/public/common/frame/frame_policy.h"
-#include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -125,6 +125,8 @@ class CONTENT_EXPORT FrameTreeNode {
   size_t child_count() const {
     return children_.size();
   }
+
+  unsigned int depth() const { return depth_; }
 
   FrameTreeNode* parent() const { return parent_; }
 
@@ -410,6 +412,9 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // The parent node of this frame. |nullptr| if this node is the root.
   FrameTreeNode* const parent_;
+
+  // Number of edges from this node to the root. 0 if this is the root.
+  const unsigned int depth_;
 
   // The frame that opened this frame, if any.  Will be set to null if the
   // opener is closed, or if this frame disowns its opener by setting its

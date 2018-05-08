@@ -9,7 +9,6 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -35,7 +34,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/cert/symantec_certs.h"
-#include "net/cert/x509_util.h"
 #include "net/http/http_response_headers.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
@@ -72,6 +70,8 @@ void PopulateResourceResponse(
       response_info.alpn_negotiated_protocol;
   response->head.connection_info = response_info.connection_info;
   response->head.socket_address = response_info.socket_address;
+  response->head.was_fetched_via_proxy = request->was_fetched_via_proxy();
+  response->head.network_accessed = response_info.network_accessed;
   const content::ResourceRequestInfo* request_info =
       content::ResourceRequestInfo::ForRequest(request);
   if (request_info) {
@@ -116,25 +116,9 @@ void PopulateResourceResponse(
         (!net::IsCertStatusError(response->head.cert_status) ||
          net::IsCertStatusMinorError(response->head.cert_status)) &&
         net::IsLegacySymantecCert(request->ssl_info().public_key_hashes);
-    if (info->ShouldReportRawHeaders()) {
-      // Only pass these members when the network panel of the DevTools is open,
-      // i.e. ShouldReportRawHeaders() is set. These data are used to populate
-      // the requests in the security panel too.
-      response->head.ssl_connection_status =
-          request->ssl_info().connection_status;
-      response->head.ssl_key_exchange_group =
-          request->ssl_info().key_exchange_group;
-      response->head.signed_certificate_timestamps =
-          request->ssl_info().signed_certificate_timestamps;
-      response->head.certificate.emplace_back(
-          net::x509_util::CryptoBufferAsStringPiece(
-              request->ssl_info().cert->cert_buffer()));
-      for (const auto& cert :
-           request->ssl_info().cert->intermediate_buffers()) {
-        response->head.certificate.emplace_back(
-            net::x509_util::CryptoBufferAsStringPiece(cert.get()));
-      }
-    }
+
+    if (info->ShouldReportRawHeaders())
+      response->head.ssl_info = request->ssl_info();
   } else {
     // We should not have any SSL state.
     DCHECK(!request->ssl_info().cert_status);
@@ -231,7 +215,6 @@ ResourceLoader::ResourceLoader(std::unique_ptr<net::URLRequest> request,
       request_(std::move(request)),
       handler_(std::move(handler)),
       delegate_(delegate),
-      is_transferring_(false),
       times_cancelled_before_request_start_(0),
       started_request_(false),
       times_cancelled_after_request_start_(0),
@@ -288,46 +271,6 @@ void ResourceLoader::CancelWithError(int error_code) {
   TRACE_EVENT_WITH_FLOW0("loading", "ResourceLoader::CancelWithError", this,
                          TRACE_EVENT_FLAG_FLOW_IN);
   CancelRequestInternal(error_code, false);
-}
-
-void ResourceLoader::MarkAsTransferring(
-    const base::Closure& on_transfer_complete_callback) {
-  CHECK(IsResourceTypeFrame(GetRequestInfo()->GetResourceType()))
-      << "Can only transfer for navigations";
-  is_transferring_ = true;
-  on_transfer_complete_callback_ = on_transfer_complete_callback;
-
-  int child_id = GetRequestInfo()->GetChildID();
-  AppCacheInterceptor::PrepareForCrossSiteTransfer(request(), child_id);
-  ServiceWorkerRequestHandler* handler =
-      ServiceWorkerRequestHandler::GetHandler(request());
-  if (handler)
-    handler->PrepareForCrossSiteTransfer(child_id);
-}
-
-void ResourceLoader::CompleteTransfer() {
-  // Although NavigationResourceThrottle defers at WillProcessResponse
-  // (DEFERRED_READ), it may be seeing a replay of events via
-  // MimeTypeResourceHandler, and so the request itself is actually deferred at
-  // a later read stage.
-  DCHECK(DEFERRED_READ == deferred_stage_ ||
-         DEFERRED_RESPONSE_COMPLETE == deferred_stage_);
-  DCHECK(is_transferring_);
-  DCHECK(!on_transfer_complete_callback_.is_null());
-
-  // In some cases, a process transfer doesn't really happen and the
-  // request is resumed in the original process. Real transfers to a new process
-  // are completed via ResourceDispatcherHostImpl::UpdateRequestForTransfer.
-  int child_id = GetRequestInfo()->GetChildID();
-  AppCacheInterceptor::MaybeCompleteCrossSiteTransferInOldProcess(
-      request(), child_id);
-  ServiceWorkerRequestHandler* handler =
-      ServiceWorkerRequestHandler::GetHandler(request());
-  if (handler)
-    handler->MaybeCompleteCrossSiteTransferInOldProcess(child_id);
-
-  is_transferring_ = false;
-  base::ResetAndReturn(&on_transfer_complete_callback_).Run();
 }
 
 ResourceRequestInfoImpl* ResourceLoader::GetRequestInfo() {
@@ -561,8 +504,6 @@ void ResourceLoader::CancelCertificateSelection() {
 }
 
 void ResourceLoader::Resume(bool called_from_resource_controller) {
-  DCHECK(!is_transferring_);
-
   DeferredStage stage = deferred_stage_;
   deferred_stage_ = DEFERRED_NONE;
   switch (stage) {

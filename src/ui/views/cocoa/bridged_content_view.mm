@@ -14,6 +14,7 @@
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_mac.h"
+#include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
@@ -46,17 +47,6 @@ namespace {
 
 NSString* const kFullKeyboardAccessChangedNotification =
     @"com.apple.KeyboardUIModeDidChange";
-
-// Returns true if all four corners of |rect| are contained inside |path|.
-bool IsRectInsidePath(NSRect rect, NSBezierPath* path) {
-  return [path containsPoint:rect.origin] &&
-         [path containsPoint:NSMakePoint(rect.origin.x + rect.size.width,
-                                         rect.origin.y)] &&
-         [path containsPoint:NSMakePoint(rect.origin.x,
-                                         rect.origin.y + rect.size.height)] &&
-         [path containsPoint:NSMakePoint(rect.origin.x + rect.size.width,
-                                         rect.origin.y + rect.size.height)];
-}
 
 // Convert a |point| in |source_window|'s AppKit coordinate system (origin at
 // the bottom left of the window) to |target_window|'s content rect, with the
@@ -274,7 +264,6 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 @synthesize hostedView = hostedView_;
 @synthesize textInputClient = textInputClient_;
 @synthesize drawMenuBackgroundForBlur = drawMenuBackgroundForBlur_;
-@synthesize mouseDownCanMoveWindow = mouseDownCanMoveWindow_;
 
 - (id)initWithView:(views::View*)viewToHost {
   DCHECK(viewToHost);
@@ -321,6 +310,16 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   [self removeTrackingArea:cursorTrackingArea_.get()];
 }
 
+// If the point is classified as HTCAPTION (background, draggable), return nil
+// so that it can lead to a window drag or double-click in the title bar.
+- (NSView*)hitTest:(NSPoint)point {
+  gfx::Point flippedPoint(point.x, NSHeight(self.superview.bounds) - point.y);
+  int component = hostedView_->GetWidget()->GetNonClientComponent(flippedPoint);
+  if (component == HTCAPTION)
+    return nil;
+  return [super hitTest:point];
+}
+
 - (void)processCapturedMouseEvent:(NSEvent*)theEvent {
   if (!hostedView_)
     return;
@@ -357,30 +356,6 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
     std::swap(newTooltipText, lastTooltipText_);
     [self setToolTipAtMousePoint:base::SysUTF16ToNSString(lastTooltipText_)];
   }
-}
-
-- (void)updateWindowMask {
-  DCHECK(![self inLiveResize]);
-  DCHECK(base::mac::IsOS10_9());
-  DCHECK(hostedView_);
-
-  views::Widget* widget = hostedView_->GetWidget();
-  if (!widget->non_client_view())
-    return;
-
-  const NSRect frameRect = [self bounds];
-  gfx::Path mask;
-  widget->non_client_view()->GetWindowMask(gfx::Size(frameRect.size), &mask);
-  if (mask.isEmpty())
-    return;
-
-  windowMask_.reset([gfx::CreateNSBezierPathFromSkPath(mask) retain]);
-
-  // Convert to AppKit coordinate system.
-  NSAffineTransform* flipTransform = [NSAffineTransform transform];
-  [flipTransform translateXBy:0.0 yBy:frameRect.size.height];
-  [flipTransform scaleXBy:1.0 yBy:-1.0];
-  [windowMask_ transformUsingAffineTransform:flipTransform];
 }
 
 - (void)updateFullKeyboardAccess {
@@ -614,11 +589,16 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 
 // NSView implementation.
 
-// Always refuse first responder. Note this does not prevent the view becoming
-// first responder via -[NSWindow makeFirstResponder:] when invoked during Init
-// or by FocusManager.
+// Refuse first responder, unless we are already first responder. Note this does
+// not prevent the view becoming first responder via -[NSWindow
+// makeFirstResponder:] when invoked during Init or by FocusManager.
+//
+// The condition is to work around an AppKit quirk. When a window is being
+// ordered front, if its current first responder returns |NO| for this method,
+// it resigns it if it can find another responder in the key loop that replies
+// |YES|.
 - (BOOL)acceptsFirstResponder {
-  return NO;
+  return [[self window] firstResponder] == self;
 }
 
 - (BOOL)becomeFirstResponder {
@@ -658,67 +638,6 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
     return;
 
   hostedView_->SetSize(gfx::Size(newSize.width, newSize.height));
-}
-
-- (void)viewDidEndLiveResize {
-  [super viewDidEndLiveResize];
-
-  // We prevent updating the window mask and clipping the border around the
-  // view, during a live resize. Hence update the window mask and redraw the
-  // view after resize has completed.
-  if (base::mac::IsOS10_9()) {
-    [self updateWindowMask];
-    [self setNeedsDisplay:YES];
-  }
-}
-
-- (void)drawRect:(NSRect)dirtyRect {
-  // Note that BridgedNativeWidget uses -[NSWindow setAutodisplay:NO] to
-  // suppress calls to this when the window is known to be hidden.
-  if (!hostedView_)
-    return;
-
-  if (drawMenuBackgroundForBlur_) {
-    const CGFloat radius = views::MenuConfig::instance().corner_radius;
-    [skia::SkColorToSRGBNSColor(0x01000000) set];
-    [[NSBezierPath bezierPathWithRoundedRect:[self bounds]
-                                     xRadius:radius
-                                     yRadius:radius] fill];
-  }
-
-  // On OS versions earlier than Yosemite, to generate a drop shadow, we set an
-  // opaque background. This causes windows with non rectangular shapes to have
-  // square corners. To get around this, fill the path outside the window
-  // boundary with clearColor and tell Cococa to regenerate drop shadow. See
-  // crbug.com/543671.
-  if (windowMask_ && ![self inLiveResize] &&
-      !IsRectInsidePath(dirtyRect, windowMask_)) {
-    DCHECK(base::mac::IsOS10_9());
-    gfx::ScopedNSGraphicsContextSaveGState state;
-
-    // The outer rectangular path corresponding to the window.
-    NSBezierPath* outerPath = [NSBezierPath bezierPathWithRect:[self bounds]];
-
-    [outerPath appendBezierPath:windowMask_];
-    [outerPath setWindingRule:NSEvenOddWindingRule];
-    [[NSGraphicsContext currentContext]
-        setCompositingOperation:NSCompositeCopy];
-    [[NSColor clearColor] set];
-
-    // Fill the region between windowMask_ and its outer rectangular path
-    // with clear color. This causes the window to have the shape described
-    // by windowMask_.
-    [outerPath fill];
-    // Regerate drop shadow around the window boundary.
-    [[self window] invalidateShadow];
-  }
-
-  // If there's a layer, painting occurs in BridgedNativeWidget::OnPaintLayer().
-  if (hostedView_->GetWidget()->GetLayer())
-    return;
-
-  // TODO(tapted): Add a NOTREACHED() here.  At the moment, low-level
-  // BridgedNativeWidget unit tests may not have a ui::Layer.
 }
 
 - (BOOL)isOpaque {
@@ -811,6 +730,11 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 }
 
 - (void)keyUp:(NSEvent*)theEvent {
+  ui::KeyEvent event(theEvent);
+  [self handleKeyEvent:&event];
+}
+
+- (void)flagsChanged:(NSEvent*)theEvent {
   ui::KeyEvent event(theEvent);
   [self handleKeyEvent:&event];
 }
@@ -1430,16 +1354,16 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   composition.text = base::SysNSStringToUTF16(text);
   composition.selection = gfx::Range(selectedRange);
 
-  // Add a black underline with a transparent background to the composition
-  // text. TODO(karandeepb): On Cocoa textfields, the target clause of the
-  // composition has a thick underlines. The composition text also has
+  // Add an underline with text color and a transparent background to the
+  // composition text. TODO(karandeepb): On Cocoa textfields, the target clause
+  // of the composition has a thick underlines. The composition text also has
   // discontinous underlines for different clauses. This is also supported in
   // the Chrome renderer. Add code to extract underlines from |text| once our
   // render text implementation supports thick underlines and discontinous
   // underlines for consecutive characters. See http://crbug.com/612675.
-  composition.ime_text_spans.push_back(ui::ImeTextSpan(
-      ui::ImeTextSpan::Type::kComposition, 0, [text length], SK_ColorBLACK,
-      ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, [text length],
+                      ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT));
   textInputClient_->SetCompositionText(composition);
   hasUnhandledKeyDownEvent_ = NO;
 }

@@ -103,12 +103,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "components_perftests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "components_unittests"
       },
       {
@@ -188,12 +182,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "gpu_ipc_service_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "gpu_unittests"
       },
       {
@@ -237,6 +225,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -250,6 +244,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mojo_core_unittests"
       },
       {
         "swarming": {
@@ -507,12 +507,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "components_perftests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "components_unittests"
       },
       {
@@ -592,12 +586,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "gpu_ipc_service_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "gpu_unittests"
       },
       {
@@ -641,6 +629,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -654,6 +648,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mojo_core_unittests"
       },
       {
         "swarming": {
@@ -864,16 +864,6 @@
         "test": "ash_unittests"
       },
       {
-        "args": [
-          "--enable-features=Mus"
-        ],
-        "name": "mus_ash_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ash_unittests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -908,19 +898,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "hard_timeout": 1800,
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--enable-features=Mus",
-          "--ozone-platform=headless",
-          "--override-use-software-gl-for-tests"
-        ],
-        "name": "mus_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
           "shards": 10
         },
         "test": "browser_tests"
@@ -977,12 +954,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "components_perftests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "components_unittests"
       },
       {
@@ -992,17 +963,6 @@
         "test": "compositor_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 2
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=Mus"
-        ],
-        "name": "mus_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 2
@@ -1022,16 +982,6 @@
         "test": "content_browsertests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_unittests"
-      },
-      {
-        "args": [
-          "--enable-features=Mus"
-        ],
-        "name": "mus_content_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1118,12 +1068,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "gpu_ipc_service_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "gpu_unittests"
       },
       {
@@ -1192,6 +1136,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mojo_core_unittests"
       },
       {
         "swarming": {
@@ -1338,16 +1288,6 @@
         "test": "unit_tests"
       },
       {
-        "args": [
-          "--enable-features=Mus"
-        ],
-        "name": "mus_unit_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "unit_tests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1394,42 +1334,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "wtf_unittests"
-      }
-    ],
-    "isolated_scripts": [
-      {
-        "args": [
-          "--browser=exact",
-          "--browser-executable=./test_chrome",
-          "--xvfb",
-          "--skip=benchmarks.benchmark_smoke_unittest.BenchmarkSmokeTest.v8.runtime_stats.top_25",
-          "--skip=scripts_smoke_unittest.ScriptsSmokeTest.testRunTelemetryBenchmarkAsGoogletest"
-        ],
-        "isolate_name": "telemetry_perf_unittests",
-        "name": "telemetry_perf_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "hard_timeout": 960,
-          "shards": 12
-        }
-      },
-      {
-        "args": [
-          "--browser=exact",
-          "--browser-executable=./test_chrome",
-          "--jobs=1",
-          "--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForElement",
-          "--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForElementWithWrongText",
-          "--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForJavaScriptCondition",
-          "--skip=telemetry.internal.actions.key_event_unittest.KeyPressActionTest.testPressEndAndHome",
-          "--skip=telemetry.page.page_run_end_to_end_unittest.ActualPageRunEndToEndTests.testTrafficSettings"
-        ],
-        "isolate_name": "telemetry_unittests",
-        "name": "telemetry_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 4
-        }
       }
     ]
   }

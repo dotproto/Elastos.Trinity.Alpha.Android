@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -25,7 +24,7 @@
 #include "ipc/ipc_platform_file.h"
 #include "media/audio/audio_debug_recording_session.h"
 #include "media/audio/audio_manager.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "services/audio/public/cpp/debug_recording_session_factory.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
@@ -441,9 +440,9 @@ void WebRTCInternals::SendUpdate(const char* command,
   }
 }
 
-void WebRTCInternals::RenderProcessExited(RenderProcessHost* host,
-                                          base::TerminationStatus status,
-                                          int exit_code) {
+void WebRTCInternals::RenderProcessExited(
+    RenderProcessHost* host,
+    const ChildProcessTerminationInfo& info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   OnRendererExit(host->GetID());
   render_process_id_set_.erase(host->GetID());

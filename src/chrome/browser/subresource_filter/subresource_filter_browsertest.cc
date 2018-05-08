@@ -14,7 +14,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_piece.h"
@@ -49,6 +48,7 @@
 #include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_state.h"
+#include "components/subresource_filter/core/common/common_features.h"
 #include "components/subresource_filter/core/common/scoped_timers.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
@@ -710,7 +710,10 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, LazyRulesetValidation) {
-  // The ruleset shouldn't be validated until it's used.
+  // The ruleset shouldn't be validated until it's used, unless ad tagging is
+  // enabled.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(subresource_filter::kAdTagging);
   SetRulesetToDisallowURLsWithPathSuffix("included_script.js");
   RulesetVerificationStatus dealer_status = GetRulesetVerification();
   EXPECT_EQ(RulesetVerificationStatus::NOT_VERIFIED, dealer_status);
@@ -940,8 +943,14 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
                        ExpectHistogramsNotRecordedWhenFilteringNotActivated) {
+  // This test only makes sense when AdTagging is disabled.
+  base::test::ScopedFeatureList scoped_tagging;
+  scoped_tagging.InitAndDisableFeature(kAdTagging);
   ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
       "suffix-that-does-not-match-anything"));
+  ResetConfigurationToEnableOnPhishingSites(
+      true /* measure_performance */, false /* whitelist_site_on_reload */);
+
   const GURL url = GetTestUrl(kTestFrameSetPath);
   // Note: The |url| is not configured to be fishing.
 

@@ -52,7 +52,7 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // GaiaView:
   void MaybePreloadAuthExtension() override;
   void DisableRestrictiveProxyCheckForTest() override;
-  void ShowGaiaAsync() override;
+  void ShowGaiaAsync(const base::Optional<AccountId>& account_id) override;
 
  private:
   // TODO (xiaoyinh): remove this dependency.
@@ -107,7 +107,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
                                     const std::string& password,
                                     const std::string& auth_code,
                                     bool using_saml,
-                                    const std::string& gaps_cookie);
+                                    const std::string& gaps_cookie,
+                                    const ::login::StringList& services);
   void HandleCompleteLogin(const std::string& gaia_id,
                            const std::string& typed_email,
                            const std::string& password,

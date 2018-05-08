@@ -11,15 +11,12 @@
 
 namespace switches {
 
+extern const char kDisableBackgroundTasks[];
 extern const char kDisableBreakpad[];
 extern const char kDisableFeatures[];
 extern const char kDisableLowEndDeviceMode[];
 extern const char kEnableCrashReporter[];
 extern const char kEnableFeatures[];
-extern const char kEnableHeapProfiling[];
-extern const char kEnableHeapProfilingModePseudo[];
-extern const char kEnableHeapProfilingModeNative[];
-extern const char kEnableHeapProfilingTaskProfiler[];
 extern const char kEnableLowEndDeviceMode[];
 extern const char kForceFieldTrials[];
 extern const char kFullMemoryCrashReport[];
@@ -47,6 +44,8 @@ extern const char kEnableCrashReporterForTesting[];
 
 #if defined(OS_ANDROID)
 extern const char kOrderfileMemoryOptimization[];
+extern const char kForceNativePrefetch[];
+extern const char kNativePrefetchOrderedOnly[];
 #endif
 
 }  // namespace switches

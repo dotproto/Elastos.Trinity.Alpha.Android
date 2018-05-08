@@ -10,6 +10,7 @@
 
 #include "base/big_endian.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -17,10 +18,10 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
-
-// TODO(crbug.com/775415): Block remote-bound logging on mobile devices.
 
 const size_t kMaxRemoteLogFileMetadataSizeBytes = 0xffffu;  // 65535
 static_assert(kMaxRemoteLogFileMetadataSizeBytes <= 0xFFFFFFu,
@@ -31,6 +32,9 @@ static_assert(kMaxRemoteLogFileMetadataSizeBytes <= 0xFFFFFFu,
 const size_t kMaxRemoteLogFileSizeBytes = 50000000u;
 
 namespace {
+const base::TimeDelta kDefaultProactivePruningDelta =
+    base::TimeDelta::FromMinutes(5);
+
 const base::FilePath::CharType kRemoteBoundLogSubDirectory[] =
     FILE_PATH_LITERAL("webrtc_event_logs");
 
@@ -44,29 +48,55 @@ void DiscardLogFile(base::File* file, const base::FilePath& file_path) {
 }
 
 bool AreLogParametersValid(size_t max_file_size_bytes,
-                           const std::string& metadata) {
+                           const std::string& metadata,
+                           std::string* error_message) {
   if (max_file_size_bytes == kWebRtcEventLogManagerUnlimitedFileSize) {
     LOG(WARNING) << "Unlimited file sizes not allowed for remote-bound logs.";
+    *error_message = kStartRemoteLoggingFailureUnlimitedSizeDisallowed;
     return false;
   }
 
   if (max_file_size_bytes > kMaxRemoteLogFileSizeBytes) {
     LOG(WARNING) << "File size exceeds maximum allowed.";
+    *error_message = kStartRemoteLoggingFailureMaxSizeTooLarge;
     return false;
   }
 
   if (metadata.length() > kMaxRemoteLogFileMetadataSizeBytes) {
     LOG(ERROR) << "Excessively long metadata.";
+    *error_message = kStartRemoteLoggingFailureMetadaTooLong;
     return false;
   }
 
   if (metadata.size() + kRemoteBoundLogFileHeaderSizeBytes >=
       max_file_size_bytes) {
     LOG(ERROR) << "Max file size and metadata must leave room for event log.";
+    *error_message = kStartRemoteLoggingFailureMaxSizeTooSmall;
     return false;
   }
 
   return true;
+}
+
+base::Optional<base::TimeDelta> GetProactivePruningDelta() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kWebRtcRemoteEventLogProactivePruningDelta)) {
+    const std::string delta_seconds_str =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            ::switches::kWebRtcRemoteEventLogProactivePruningDelta);
+    int64_t seconds;
+    if (base::StringToInt64(delta_seconds_str, &seconds) && seconds >= 0) {
+      // A delta of 0 seconds is used to signal the intention of disabling
+      // proactive pruning altogether. (From the command line. Past the command
+      // line, we use an unset optional to signal that.)
+      return (seconds == 0) ? base::Optional<base::TimeDelta>()
+                            : base::TimeDelta::FromSeconds(seconds);
+    } else {
+      LOG(WARNING) << "Proactive pruning delta could not be parsed.";
+    }
+  }
+
+  return kDefaultProactivePruningDelta;
 }
 }  // namespace
 
@@ -88,10 +118,18 @@ const size_t kRemoteBoundLogFileHeaderSizeBytes = sizeof(uint32_t);
 
 WebRtcRemoteEventLogManager::WebRtcRemoteEventLogManager(
     WebRtcRemoteEventLogsObserver* observer)
-    : observer_(observer),
+    : upload_suppression_disabled_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              ::switches::kWebRtcRemoteEventLogUploadNoSuppression)),
+      proactive_prune_scheduling_delta_(GetProactivePruningDelta()),
+      proactive_prune_scheduling_started_(false),
+      observer_(observer),
       uploader_factory_(new WebRtcEventLogUploaderImpl::Factory) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DETACH_FROM_SEQUENCE(io_task_sequence_checker_);
+  // Proactive pruning would not do anything at the moment; it will be started
+  // with the first enabled browser context. This will all have the benefit
+  // of doing so on io_task_sequence_checker_ rather than the UI thread.
 }
 
 WebRtcRemoteEventLogManager::~WebRtcRemoteEventLogManager() {
@@ -118,6 +156,12 @@ void WebRtcRemoteEventLogManager::EnableForBrowserContext(
   AddPendingLogs(browser_context_id, remote_bound_logs_dir);
 
   enabled_browser_contexts_.insert(browser_context_id);
+
+  if (proactive_prune_scheduling_delta_.has_value() &&
+      !proactive_prune_scheduling_started_) {
+    proactive_prune_scheduling_started_ = true;
+    RecurringPendingLogsPrune();
+  }
 }
 
 // TODO(crbug.com/775415): Add unit tests.
@@ -186,20 +230,28 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
     const std::string& peer_connection_id,
     const base::FilePath& browser_context_dir,
     size_t max_file_size_bytes,
-    const std::string& metadata) {
+    const std::string& metadata,
+    std::string* error_message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
+  DCHECK(error_message);
+  DCHECK(error_message->empty());
 
-  if (!AreLogParametersValid(max_file_size_bytes, metadata)) {
+  if (!AreLogParametersValid(max_file_size_bytes, metadata, error_message)) {
+    // |error_message| will have been set by AreLogParametersValid().
+    DCHECK(!error_message->empty()) << "AreLogParametersValid() reported an "
+                                       "error without an error message.";
     return false;
   }
 
   if (!BrowserContextEnabled(browser_context_id)) {
+    *error_message = kStartRemoteLoggingFailureGeneric;
     return false;
   }
 
   PeerConnectionKey key;
   if (!FindPeerConnection(render_process_id, peer_connection_id, &key)) {
-    return false;  // Peer connection is either unknown or no longer active.
+    *error_message = kStartRemoteLoggingFailureUnknownOrInactivePeerConnection;
+    return false;
   }
 
   // May not restart active remote logs.
@@ -207,6 +259,7 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   if (it != active_logs_.end()) {
     LOG(ERROR) << "Remote logging already underway for ("
                << key.render_process_id << ", " << key.lid << ").";
+    *error_message = kStartRemoteLoggingFailureAlreadyLogging;
     return false;
   }
 
@@ -215,11 +268,16 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   PrunePendingLogs();
 
   if (!AdditionalActiveLogAllowed(key.browser_context_id)) {
+    // Intentionally use a generic error, so as to not leak information such
+    // as this being an incognito session (rejected elsewhere with the same
+    // error), or there being too many other peer connections on other tabs
+    // that might also be logging.
+    *error_message = kStartRemoteLoggingFailureGeneric;
     return false;
   }
 
   return StartWritingLog(key, browser_context_dir, max_file_size_bytes,
-                         metadata);
+                         metadata, error_message);
 }
 
 bool WebRtcRemoteEventLogManager::EventLogWrite(const PeerConnectionKey& key,
@@ -231,6 +289,14 @@ bool WebRtcRemoteEventLogManager::EventLogWrite(const PeerConnectionKey& key,
     return false;
   }
   return WriteToLogFile(it, message);
+}
+
+void WebRtcRemoteEventLogManager::ClearCacheForBrowserContext(
+    BrowserContextId browser_context_id,
+    const base::Time& delete_begin,
+    const base::Time& delete_end) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
+  RemovePendingLogs(delete_begin, delete_end, browser_context_id);
 }
 
 void WebRtcRemoteEventLogManager::RenderProcessHostExitedDestroyed(
@@ -372,7 +438,8 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
     const PeerConnectionKey& key,
     const base::FilePath& browser_context_dir,
     size_t max_file_size_bytes,
-    const std::string& metadata) {
+    const std::string& metadata,
+    std::string* error_message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
 
   // WriteAtCurrentPos() only allows writing up to max-int at a time. We could
@@ -381,6 +448,7 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
   if (metadata.length() >
       static_cast<size_t>(std::numeric_limits<int>::max())) {
     LOG(WARNING) << "Metadata too long to be written in one go.";
+    *error_message = kStartRemoteLoggingFailureMetadaTooLong;
     return false;
   }
 
@@ -400,6 +468,9 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
   base::File file(file_path, file_flags);
   if (!file.IsValid() || !file.created()) {
     LOG(WARNING) << "Couldn't create and/or open remote WebRTC event log file.";
+    // Intentionally using a generic error; look for other places where it's
+    // set for an explanation why.
+    *error_message = kStartRemoteLoggingFailureGeneric;
     return false;
   }
 
@@ -414,6 +485,9 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
   if (written != arraysize(header)) {
     LOG(WARNING) << "Failed to write header to log file.";
     DiscardLogFile(&file, file_path);
+    // Intentionally using a generic error; look for other places where it's
+    // set for an explanation why.
+    *error_message = kStartRemoteLoggingFailureGeneric;
     return false;
   }
 
@@ -422,6 +496,9 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
   if (written != metadata_length) {
     LOG(WARNING) << "Failed to write metadata to log file.";
     DiscardLogFile(&file, file_path);
+    // Intentionally using a generic error; look for other places where it's
+    // set for an explanation why.
+    *error_message = kStartRemoteLoggingFailureGeneric;
     return false;
   }
 
@@ -467,15 +544,44 @@ void WebRtcRemoteEventLogManager::MaybeStopRemoteLogging(
 
 void WebRtcRemoteEventLogManager::PrunePendingLogs() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
-  const base::Time oldest_non_expired_timestamp =
-      base::Time::Now() - kRemoteBoundWebRtcEventLogsMaxRetention;
+  RemovePendingLogs(
+      base::Time::Min(),
+      base::Time::Now() - kRemoteBoundWebRtcEventLogsMaxRetention);
+}
+
+void WebRtcRemoteEventLogManager::RecurringPendingLogsPrune() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
+  DCHECK(proactive_prune_scheduling_delta_.has_value());
+  DCHECK_GT(*proactive_prune_scheduling_delta_, base::TimeDelta());
+  DCHECK(proactive_prune_scheduling_started_);
+
+  PrunePendingLogs();
+
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&WebRtcRemoteEventLogManager::RecurringPendingLogsPrune,
+                     base::Unretained(this)),
+      *proactive_prune_scheduling_delta_);
+}
+
+void WebRtcRemoteEventLogManager::RemovePendingLogs(
+    const base::Time& delete_begin,
+    const base::Time& delete_end,
+    base::Optional<BrowserContextId> browser_context_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
   for (auto it = pending_logs_.begin(); it != pending_logs_.end();) {
-    if (it->last_modified < oldest_non_expired_timestamp) {
+    const bool relevant_browser_content =
+        !browser_context_id || it->browser_context_id == browser_context_id;
+    if (relevant_browser_content &&
+        (delete_begin.is_null() || delete_begin <= it->last_modified) &&
+        (delete_end.is_null() || it->last_modified < delete_end)) {
+      DVLOG(1) << "Removing " << it->path << ".";
       if (!base::DeleteFile(it->path, /*recursive=*/false)) {
         LOG(ERROR) << "Failed to delete " << it->path << ".";
       }
       it = pending_logs_.erase(it);
     } else {
+      DVLOG(1) << "Keeping " << it->path << " on disk.";
       ++it;
     }
   }
@@ -507,7 +613,7 @@ bool WebRtcRemoteEventLogManager::AdditionalActiveLogAllowed(
 
 bool WebRtcRemoteEventLogManager::UploadingAllowed() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(io_task_sequence_checker_);
-  return active_peer_connections_.empty();
+  return upload_suppression_disabled_ || active_peer_connections_.empty();
 }
 
 void WebRtcRemoteEventLogManager::MaybeStartUploading() {

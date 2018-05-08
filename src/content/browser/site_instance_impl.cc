@@ -9,16 +9,15 @@
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "content/browser/browsing_instance.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
-#include "content/browser/site_isolation_policy.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host_factory.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -28,6 +27,9 @@
 namespace content {
 
 int32_t SiteInstanceImpl::next_site_instance_id_ = 1;
+
+using CheckOriginLockResult =
+    ChildProcessSecurityPolicyImpl::CheckOriginLockResult;
 
 SiteInstanceImpl::SiteInstanceImpl(BrowsingInstance* browsing_instance)
     : id_(next_site_instance_id_++),
@@ -534,9 +536,9 @@ void SiteInstanceImpl::RenderProcessWillExit(RenderProcessHost* host) {
     observer.RenderProcessGone(this);
 }
 
-void SiteInstanceImpl::RenderProcessExited(RenderProcessHost* host,
-                                           base::TerminationStatus status,
-                                           int exit_code) {
+void SiteInstanceImpl::RenderProcessExited(
+    RenderProcessHost* host,
+    const ChildProcessTerminationInfo& info) {
   for (auto& observer : observers_)
     observer.RenderProcessGone(this);
 }
@@ -565,7 +567,7 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
     CHECK(!process_->IsForGuestsOnly());
 
     switch (lock_state) {
-      case ChildProcessSecurityPolicyImpl::CheckOriginLockResult::NO_LOCK: {
+      case CheckOriginLockResult::NO_LOCK: {
         // TODO(nick): When all sites are isolated, this operation provides
         // strong protection. If only some sites are isolated, we need
         // additional logic to prevent the non-isolated sites from requesting
@@ -573,8 +575,7 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
         policy->LockToOrigin(process_->GetID(), site_);
         break;
       }
-      case ChildProcessSecurityPolicyImpl::CheckOriginLockResult::
-          HAS_WRONG_LOCK:
+      case CheckOriginLockResult::HAS_WRONG_LOCK:
         // We should never attempt to reassign a different origin lock to a
         // process.
         base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
@@ -586,8 +587,7 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
                      << " but the process is already locked to "
                      << policy->GetOriginLock(process_->GetID());
         break;
-      case ChildProcessSecurityPolicyImpl::CheckOriginLockResult::
-          HAS_EQUAL_LOCK:
+      case CheckOriginLockResult::HAS_EQUAL_LOCK:
         // Process already has the right origin lock assigned.  This case will
         // happen for commits to |site_| after the first one.
         break;
@@ -598,15 +598,16 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
     // If the site that we've just committed doesn't require a dedicated
     // process, make sure we aren't putting it in a process for a site that
     // does.
-    base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
-                                   site_.spec());
-    base::debug::SetCrashKeyString(
-        bad_message::GetKilledProcessOriginLockKey(),
-        policy->GetOriginLock(process_->GetID()).spec());
-    CHECK_EQ(lock_state,
-             ChildProcessSecurityPolicyImpl::CheckOriginLockResult::NO_LOCK)
-        << "Trying to commit non-isolated site " << site_
-        << " in process locked to " << policy->GetOriginLock(process_->GetID());
+    if (lock_state != CheckOriginLockResult::NO_LOCK) {
+      base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
+                                     site_.spec());
+      base::debug::SetCrashKeyString(
+          bad_message::GetKilledProcessOriginLockKey(),
+          policy->GetOriginLock(process_->GetID()).spec());
+      CHECK(false) << "Trying to commit non-isolated site " << site_
+                   << " in process locked to "
+                   << policy->GetOriginLock(process_->GetID());
+    }
   }
 }
 

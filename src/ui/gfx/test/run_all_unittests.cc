@@ -48,7 +48,7 @@ class GfxTestSuite : public base::TestSuite {
     ui::RegisterPathProvider();
 
     base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+    ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
     ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
 #if defined(OS_WIN)
@@ -94,7 +94,6 @@ int main(int argc, char** argv) {
 #endif
 
   return base::LaunchUnitTests(
-      argc,
-      argv,
-      base::Bind(&GfxTestSuite::Run, base::Unretained(&test_suite)));
+      argc, argv,
+      base::BindOnce(&GfxTestSuite::Run, base::Unretained(&test_suite)));
 }

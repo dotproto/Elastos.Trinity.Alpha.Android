@@ -44,18 +44,32 @@ struct HttpResponseInfoIOBuffer;
 // this class also performs the "byte-for-byte" comparison for updating the
 // worker. If the script is identical, the load succeeds but no script is
 // written, and ServiceWorkerVersion is told to terminate startup.
+//
+// NOTE: To load a script, this class uses |non_network_loader_factory| when the
+// URL has a non-http(s) scheme, e.g., a chrome-extension:// URL. Regardless,
+// that is still called a "network" request in comments and naming. "network" is
+// meant to distinguish from the load this URLLoader does for its client:
+// client:
+//     "network" <------> SWNewScriptLoader <------> client
 class CONTENT_EXPORT ServiceWorkerNewScriptLoader
     : public network::mojom::URLLoader,
       public network::mojom::URLLoaderClient {
  public:
+  // |loader_factory_getter| is used to get the network factory when the script
+  // URL has an http(s) scheme.
+  //
+  // |non_network_loader_factory| is non-null when the script URL has a
+  // non-http(s) scheme (e.g., a chrome-extension:// URL). It is used in that
+  // case since the network factory can't be used.
   ServiceWorkerNewScriptLoader(
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
-      const network::ResourceRequest& resource_request,
+      const network::ResourceRequest& original_request,
       network::mojom::URLLoaderClientPtr client,
       scoped_refptr<ServiceWorkerVersion> version,
       scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
+      network::mojom::URLLoaderFactoryPtr non_network_loader_factory,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
   ~ServiceWorkerNewScriptLoader() override;
 
@@ -70,7 +84,6 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader
   // network::mojom::URLLoaderClient for the network load:
   void OnReceiveResponse(
       const network::ResourceResponseHead& response_head,
-      const base::Optional<net::SSLInfo>& ssl_info,
       network::mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
@@ -120,13 +133,16 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader
 
   // This is the last method that is called on this class. Notifies the final
   // result to |client_| and clears all mojo connections etc.
-  void CommitCompleted(const network::URLLoaderCompletionStatus& status);
+  void CommitCompleted(const network::URLLoaderCompletionStatus& status,
+                       const std::string& status_message);
 
   const GURL request_url_;
 
   // This is RESOURCE_TYPE_SERVICE_WORKER for the main script or
   // RESOURCE_TYPE_SCRIPT for an imported script.
   const ResourceType resource_type_;
+
+  std::unique_ptr<network::ResourceRequest> resource_request_;
 
   scoped_refptr<ServiceWorkerVersion> version_;
 
@@ -138,6 +154,10 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader
   mojo::ScopedDataPipeConsumerHandle network_consumer_;
   mojo::SimpleWatcher network_watcher_;
   bool network_load_completed_ = false;
+  // |non_network_loader_factory_| is non-null when the script URL is
+  // non-http(s). It is used to make the "network" request because the usual
+  // network factory can't be used in that case. See class comments.
+  network::mojom::URLLoaderFactoryPtr non_network_loader_factory_;
 
   // Used for responding with the fetched script to this loader's client.
   network::mojom::URLLoaderClientPtr client_;

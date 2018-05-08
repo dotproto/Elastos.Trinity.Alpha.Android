@@ -29,6 +29,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_table_info.h"
 
 #import "ui/accessibility/platform/ax_platform_node_mac.h"
 
@@ -69,12 +70,14 @@ NSString* const NSAccessibilityDropEffectsAttribute = @"AXDropEffects";
 NSString* const NSAccessibilityEditableAncestorAttribute =
     @"AXEditableAncestor";
 NSString* const NSAccessibilityGrabbedAttribute = @"AXGrabbed";
+NSString* const NSAccessibilityHasPopupAttribute = @"AXHasPopup";
 NSString* const NSAccessibilityHighestEditableAncestorAttribute =
     @"AXHighestEditableAncestor";
 NSString* const NSAccessibilityInvalidAttribute = @"AXInvalid";
 NSString* const NSAccessibilityIsMultiSelectableAttribute =
     @"AXIsMultiSelectable";
 NSString* const NSAccessibilityLoadingProgressAttribute = @"AXLoadingProgress";
+NSString* const NSAccessibilityOwnsAttribute = @"AXOwns";
 NSString* const
     NSAccessibilityUIElementCountForSearchPredicateParameterizedAttribute =
         @"AXUIElementCountForSearchPredicate";
@@ -583,6 +586,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
       {NSAccessibilityFocusedAttribute, @"focused"},
       {NSAccessibilityGrabbedAttribute, @"grabbed"},
       {NSAccessibilityHeaderAttribute, @"header"},
+      {NSAccessibilityHasPopupAttribute, @"hasPopup"},
       {NSAccessibilityHelpAttribute, @"help"},
       {NSAccessibilityHighestEditableAncestorAttribute,
        @"highestEditableAncestor"},
@@ -598,6 +602,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
       {NSAccessibilityMinValueAttribute, @"minValue"},
       {NSAccessibilityNumberOfCharactersAttribute, @"numberOfCharacters"},
       {NSAccessibilityOrientationAttribute, @"orientation"},
+      {NSAccessibilityOwnsAttribute, @"owns"},
       {NSAccessibilityParentAttribute, @"parent"},
       {NSAccessibilityPlaceholderValueAttribute, @"placeholderValue"},
       {NSAccessibilityPositionAttribute, @"position"},
@@ -862,19 +867,36 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     return nil;
 
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32_t>& uniqueCellIds =
-      table->GetIntListAttribute(ax::mojom::IntListAttribute::kUniqueCellIds);
-  for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
-    int id = uniqueCellIds[i];
-    BrowserAccessibility* cell =
-        browserAccessibility_->manager()->GetFromID(id);
-    if (cell && cell->GetRole() == ax::mojom::Role::kColumnHeader) {
-      // Expose all column headers on table object.
-      // Expose only relevant column headers on cell object.
-      if (is_table_like || [self isColumnHeaderForCurrentCell:cell])
+
+  if (is_table_like) {
+    // If this is a table, return all column headers.
+    std::set<int32_t> headerIds;
+    for (int i = 0; i < table->GetTableColCount(); i++) {
+      std::vector<int32_t> colHeaderIds = table->GetColHeaderNodeIds(i);
+      std::copy(colHeaderIds.begin(), colHeaderIds.end(),
+                std::inserter(headerIds, headerIds.end()));
+    }
+    for (int32_t id : headerIds) {
+      BrowserAccessibility* cell =
+          browserAccessibility_->manager()->GetFromID(id);
+      if (cell)
+        [ret addObject:ToBrowserAccessibilityCocoa(cell)];
+    }
+  } else {
+    // Otherwise this is a cell, return the column headers for this cell.
+    int column = -1;
+    browserAccessibility_->GetIntAttribute(
+        ax::mojom::IntAttribute::kTableCellColumnIndex, &column);
+
+    std::vector<int32_t> colHeaderIds = table->GetColHeaderNodeIds(column);
+    for (int32_t id : colHeaderIds) {
+      BrowserAccessibility* cell =
+          browserAccessibility_->manager()->GetFromID(id);
+      if (cell)
         [ret addObject:ToBrowserAccessibilityCocoa(cell)];
     }
   }
+
   return [ret count] ? ret : nil;
 }
 
@@ -1106,6 +1128,13 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     return [NSNumber numberWithBool:YES];
 
   return [NSNumber numberWithBool:NO];
+}
+
+- (NSNumber*)hasPopup {
+  if (![self instanceActive])
+    return nil;
+  return browserAccessibility_->HasState(ax::mojom::State::kHaspopup) ? @YES
+                                                                      : @NO;
 }
 
 - (id)header {
@@ -1358,6 +1387,40 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     return NSAccessibilityHorizontalOrientationValue;
 
   return @"";
+}
+
+- (id)owns {
+  if (![self instanceActive])
+    return nil;
+
+  //
+  // If the active descendant points to an element in a container with
+  // selectable children, add the "owns" relationship to point to that
+  // container. That's the only way activeDescendant is actually
+  // supported with VoiceOver.
+  //
+
+  int activeDescendantId;
+  if (!browserAccessibility_->GetIntAttribute(
+          ax::mojom::IntAttribute::kActivedescendantId, &activeDescendantId))
+    return nil;
+
+  BrowserAccessibilityManager* manager = browserAccessibility_->manager();
+  BrowserAccessibility* activeDescendant =
+      manager->GetFromID(activeDescendantId);
+  if (!activeDescendant)
+    return nil;
+
+  BrowserAccessibility* container = activeDescendant->PlatformGetParent();
+  while (container &&
+         !ui::IsContainerWithSelectableChildrenRole(container->GetRole()))
+    container = container->PlatformGetParent();
+  if (!container)
+    return nil;
+
+  NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
+  [ret addObject:ToBrowserAccessibilityCocoa(container)];
+  return ret;
 }
 
 - (NSNumber*)numberOfCharacters {
@@ -1723,6 +1786,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
 - (NSArray*)rowHeaders {
   if (![self instanceActive])
     return nil;
+
   bool is_cell_or_table_header =
       ui::IsCellOrTableHeaderRole(browserAccessibility_->GetRole());
   bool is_table_like = ui::IsTableLikeRole(browserAccessibility_->GetRole());
@@ -1733,17 +1797,36 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     return nil;
 
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32_t>& uniqueCellIds =
-      table->GetIntListAttribute(ax::mojom::IntListAttribute::kUniqueCellIds);
-  for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
-    int id = uniqueCellIds[i];
-    BrowserAccessibility* cell =
-        browserAccessibility_->manager()->GetFromID(id);
-    if (cell && cell->GetRole() == ax::mojom::Role::kRowHeader) {
-      if (is_table_like || [self isRowHeaderForCurrentCell:cell])
+
+  if (is_table_like) {
+    // If this is a table, return all row headers.
+    std::set<int32_t> headerIds;
+    for (int i = 0; i < table->GetTableRowCount(); i++) {
+      std::vector<int32_t> rowHeaderIds = table->GetRowHeaderNodeIds(i);
+      for (int32_t id : rowHeaderIds)
+        headerIds.insert(id);
+    }
+    for (int32_t id : headerIds) {
+      BrowserAccessibility* cell =
+          browserAccessibility_->manager()->GetFromID(id);
+      if (cell)
+        [ret addObject:ToBrowserAccessibilityCocoa(cell)];
+    }
+  } else {
+    // Otherwise this is a cell, return the row headers for this cell.
+    int row = -1;
+    browserAccessibility_->GetIntAttribute(
+        ax::mojom::IntAttribute::kTableCellRowIndex, &row);
+
+    std::vector<int32_t> rowHeaderIds = table->GetRowHeaderNodeIds(row);
+    for (int32_t id : rowHeaderIds) {
+      BrowserAccessibility* cell =
+          browserAccessibility_->manager()->GetFromID(id);
+      if (cell)
         [ret addObject:ToBrowserAccessibilityCocoa(cell)];
     }
   }
+
   return [ret count] ? ret : nil;
 }
 
@@ -1837,7 +1920,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   for (uint32_t index = 0; index < childCount; ++index) {
     BrowserAccessibility* child =
       browserAccessibility_->PlatformGetChild(index);
-    if (child->HasState(ax::mojom::State::kSelected))
+    if (child->GetBoolAttribute(ax::mojom::BoolAttribute::kSelected))
       [ret addObject:ToBrowserAccessibilityCocoa(child)];
   }
 
@@ -2112,7 +2195,8 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
         value = 2;
         break;
       default:
-        value = GetState(browserAccessibility_, ax::mojom::State::kSelected)
+        value = browserAccessibility_->GetBoolAttribute(
+                    ax::mojom::BoolAttribute::kSelected)
                     ? 1
                     : 0;
         break;
@@ -2162,12 +2246,16 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
 - (NSArray*)visibleCells {
   if (![self instanceActive])
     return nil;
+
+  ui::AXTableInfo* table_info =
+      browserAccessibility_->manager()->ax_tree()->GetTableInfo(
+          browserAccessibility_->node());
+  if (!table_info)
+    return nil;
+
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32_t>& uniqueCellIds =
-      browserAccessibility_->GetIntListAttribute(
-          ax::mojom::IntListAttribute::kUniqueCellIds);
-  for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
-    int id = uniqueCellIds[i];
+  for (size_t i = 0; i < table_info->unique_cell_ids.size(); ++i) {
+    int id = table_info->unique_cell_ids[i];
     BrowserAccessibility* cell =
         browserAccessibility_->manager()->GetFromID(id);
     if (cell)
@@ -2983,6 +3071,10 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     [ret addObjectsFromArray:@[ NSAccessibilityGrabbedAttribute ]];
   }
 
+  if (browserAccessibility_->HasState(ax::mojom::State::kHaspopup)) {
+    [ret addObjectsFromArray:@[ NSAccessibilityHasPopupAttribute ]];
+  }
+
   // Add expanded attribute only if it has expanded or collapsed state.
   if (GetState(browserAccessibility_, ax::mojom::State::kExpanded) ||
       GetState(browserAccessibility_, ax::mojom::State::kCollapsed)) {
@@ -3006,6 +3098,12 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   if (browserAccessibility_->HasStringAttribute(
           ax::mojom::StringAttribute::kLanguage)) {
     [ret addObjectsFromArray:@[ NSAccessibilityLanguageAttribute ]];
+  }
+
+  if ([self internalRole] == ax::mojom::Role::kTextFieldWithComboBox) {
+    [ret addObjectsFromArray:@[
+      NSAccessibilityOwnsAttribute,
+    ]];
   }
 
   // Title UI Element.

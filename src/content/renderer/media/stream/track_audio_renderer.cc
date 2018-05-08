@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/stream/track_audio_renderer.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -72,7 +74,6 @@ void TrackAudioRenderer::OnRenderError() {
 // content::MediaStreamAudioSink implementation
 void TrackAudioRenderer::OnData(const media::AudioBus& audio_bus,
                                 base::TimeTicks reference_time) {
-  DCHECK(audio_thread_checker_.CalledOnValidThread());
   DCHECK(!reference_time.is_null());
 
   TRACE_EVENT1("audio", "TrackAudioRenderer::OnData", "reference time (ms)",
@@ -96,10 +97,6 @@ void TrackAudioRenderer::OnData(const media::AudioBus& audio_bus,
 
 void TrackAudioRenderer::OnSetFormat(const media::AudioParameters& params) {
   DVLOG(1) << "TrackAudioRenderer::OnSetFormat()";
-  // If the source is restarted, we might have changed to another capture
-  // thread.
-  audio_thread_checker_.DetachFromThread();
-  DCHECK(audio_thread_checker_.CalledOnValidThread());
 
   // If the parameters changed, the audio in the AudioShifter is invalid and
   // should be dropped.
@@ -123,8 +120,7 @@ TrackAudioRenderer::TrackAudioRenderer(
     const blink::WebMediaStreamTrack& audio_track,
     int playout_render_frame_id,
     int session_id,
-    const std::string& device_id,
-    const url::Origin& security_origin)
+    const std::string& device_id)
     : audio_track_(audio_track),
       playout_render_frame_id_(playout_render_frame_id),
       session_id_(session_id),
@@ -132,7 +128,6 @@ TrackAudioRenderer::TrackAudioRenderer(
       num_samples_rendered_(0),
       playing_(false),
       output_device_id_(device_id),
-      security_origin_(security_origin),
       volume_(0.0),
       sink_started_(false) {
   DCHECK(MediaStreamAudioTrack::From(audio_track_));
@@ -156,7 +151,7 @@ void TrackAudioRenderer::Start() {
   DCHECK(!sink_);
   sink_ = AudioDeviceFactory::NewAudioRendererSink(
       AudioDeviceFactory::kSourceNonRtcAudioTrack, playout_render_frame_id_,
-      session_id_, output_device_id_, security_origin_);
+      session_id_, output_device_id_);
 
   base::AutoLock auto_lock(thread_lock_);
   prior_elapsed_render_time_ = base::TimeDelta();
@@ -246,7 +241,6 @@ bool TrackAudioRenderer::IsLocalRenderer() const {
 
 void TrackAudioRenderer::SwitchOutputDevice(
     const std::string& device_id,
-    const url::Origin& security_origin,
     const media::OutputDeviceStatusCB& callback) {
   DVLOG(1) << "TrackAudioRenderer::SwitchOutputDevice()";
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -259,17 +253,17 @@ void TrackAudioRenderer::SwitchOutputDevice(
   scoped_refptr<media::AudioRendererSink> new_sink =
       AudioDeviceFactory::NewAudioRendererSink(
           AudioDeviceFactory::kSourceNonRtcAudioTrack, playout_render_frame_id_,
-          session_id_, device_id, security_origin);
+          session_id_, device_id);
 
   media::OutputDeviceStatus new_sink_status =
       new_sink->GetOutputDeviceInfo().device_status();
   if (new_sink_status != media::OUTPUT_DEVICE_STATUS_OK) {
+    new_sink->Stop();
     callback.Run(new_sink_status);
     return;
   }
 
   output_device_id_ = device_id;
-  security_origin_ = security_origin;
   bool was_sink_started = sink_started_;
 
   if (sink_)
@@ -350,7 +344,7 @@ void TrackAudioRenderer::ReconfigureSink(const media::AudioParameters& params) {
   sink_started_ = false;
   sink_ = AudioDeviceFactory::NewAudioRendererSink(
       AudioDeviceFactory::kSourceNonRtcAudioTrack, playout_render_frame_id_,
-      session_id_, output_device_id_, security_origin_);
+      session_id_, output_device_id_);
   MaybeStartSink();
 }
 

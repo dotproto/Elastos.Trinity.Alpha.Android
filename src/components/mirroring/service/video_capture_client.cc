@@ -100,15 +100,15 @@ void VideoCaptureClient::OnStateChanged(media::mojom::VideoCaptureState state) {
   }
 }
 
-void VideoCaptureClient::OnBufferCreated(
+void VideoCaptureClient::OnNewBuffer(
     int32_t buffer_id,
-    mojo::ScopedSharedBufferHandle handle) {
+    media::mojom::VideoBufferHandlePtr buffer_handle) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(handle.is_valid());
   DVLOG(3) << __func__ << ": buffer_id=" << buffer_id;
+  DCHECK(buffer_handle->is_shared_buffer_handle());
 
-  const auto insert_result =
-      client_buffers_.emplace(std::make_pair(buffer_id, std::move(handle)));
+  const auto insert_result = client_buffers_.emplace(std::make_pair(
+      buffer_id, std::move(buffer_handle->get_shared_buffer_handle())));
   DCHECK(insert_result.second);
 }
 
@@ -118,13 +118,11 @@ void VideoCaptureClient::OnBufferReady(int32_t buffer_id,
   DVLOG(3) << __func__ << ": buffer_id=" << buffer_id;
 
   bool consume_buffer = !frame_deliver_callback_.is_null();
-  if ((info->pixel_format != media::PIXEL_FORMAT_I420 &&
-       info->pixel_format != media::PIXEL_FORMAT_Y16) ||
-      info->storage_type != media::VideoPixelStorage::CPU) {
+  if (info->pixel_format != media::PIXEL_FORMAT_I420 &&
+      info->pixel_format != media::PIXEL_FORMAT_Y16) {
     consume_buffer = false;
-    LOG(DFATAL) << "Wrong pixel format or storage, got pixel format:"
-                << VideoPixelFormatToString(info->pixel_format)
-                << ", storage:" << static_cast<int>(info->storage_type);
+    LOG(DFATAL) << "Wrong pixel format, got pixel format:"
+                << VideoPixelFormatToString(info->pixel_format);
   }
   if (!consume_buffer) {
     video_capture_host_->ReleaseBuffer(kDeviceId, buffer_id, -1.0);
@@ -133,7 +131,7 @@ void VideoCaptureClient::OnBufferReady(int32_t buffer_id,
 
   base::TimeTicks reference_time;
   media::VideoFrameMetadata frame_metadata;
-  frame_metadata.MergeInternalValuesFrom(*info->metadata);
+  frame_metadata.MergeInternalValuesFrom(info->metadata);
   const bool success = frame_metadata.GetTimeTicks(
       media::VideoFrameMetadata::REFERENCE_TIME, &reference_time);
   DCHECK(success);
@@ -201,9 +199,9 @@ void VideoCaptureClient::OnBufferReady(int32_t buffer_id,
       base::BindOnce(&VideoCaptureClient::DidFinishConsumingFrame,
                      frame->metadata(), std::move(buffer_finished_callback)));
 
-  frame->metadata()->MergeInternalValuesFrom(*info->metadata);
+  frame->metadata()->MergeInternalValuesFrom(info->metadata);
 
-  frame_deliver_callback_.Run(frame, reference_time);
+  frame_deliver_callback_.Run(frame);
 }
 
 void VideoCaptureClient::OnBufferDestroyed(int32_t buffer_id) {

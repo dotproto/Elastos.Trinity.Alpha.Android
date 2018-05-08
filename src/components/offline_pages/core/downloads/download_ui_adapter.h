@@ -27,6 +27,8 @@ using OfflineContentAggregator =
     offline_items_collection::OfflineContentAggregator;
 
 namespace offline_pages {
+class ThumbnailDecoder;
+
 // C++ side of the UI Adapter. Mimics DownloadManager/Item/History (since we
 // share UI with Downloads).
 // An instance of this class is owned by OfflinePageModel and is shared between
@@ -64,9 +66,12 @@ class DownloadUIAdapter : public OfflineContentProvider,
     virtual void OpenItem(const OfflineItem& item, int64_t offline_id) = 0;
   };
 
+  // Create the adapter. thumbnail_decoder may be null, in which case,
+  // thumbnails will not be provided through GetVisualsForItem.
   DownloadUIAdapter(OfflineContentAggregator* aggregator,
                     OfflinePageModel* model,
                     RequestCoordinator* coordinator,
+                    std::unique_ptr<ThumbnailDecoder> thumbnail_decoder,
                     std::unique_ptr<Delegate> delegate);
   ~DownloadUIAdapter() override;
 
@@ -77,7 +82,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
 
   int64_t GetOfflineIdByGuid(const std::string& guid) const;
 
-  // OfflineContentProvider implmentation.
+  // OfflineContentProvider implementation.
   void OpenItem(const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
@@ -89,7 +94,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
   void GetAllItems(
       OfflineContentProvider::MultipleItemCallback callback) override;
   void GetVisualsForItem(const ContentId& id,
-                         const VisualsCallback& callback) override{};
+                         const VisualsCallback& callback) override;
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -99,6 +104,8 @@ class DownloadUIAdapter : public OfflineContentProvider,
                         const OfflinePageItem& added_page) override;
   void OfflinePageDeleted(
       const OfflinePageModel::DeletedPageInfo& page_info) override;
+  void ThumbnailAdded(OfflinePageModel* model,
+                      const OfflinePageThumbnail& thumbnail) override;
 
   // RequestCoordinator::Observer
   void OnAdded(const SavePageRequest& request) override;
@@ -152,6 +159,8 @@ class DownloadUIAdapter : public OfflineContentProvider,
   };
 
   typedef std::map<std::string, std::unique_ptr<ItemInfo>> OfflineItems;
+  using VisualResultCallback = base::OnceCallback<void(
+      std::unique_ptr<offline_items_collection::OfflineItemVisuals>)>;
 
   void LoadCache();
   void ClearCache();
@@ -167,6 +176,8 @@ class DownloadUIAdapter : public OfflineContentProvider,
       const std::string& guid,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
   void OnOfflinePagesLoaded(const MultipleOfflinePageItemResult& pages);
+  void OnThumbnailLoaded(VisualResultCallback callback,
+                         std::unique_ptr<OfflinePageThumbnail> thumbnail);
   void OnRequestsLoaded(std::vector<std::unique_ptr<SavePageRequest>> requests);
 
   void OnDeletePagesDone(DeletePageResult result);
@@ -190,6 +201,9 @@ class DownloadUIAdapter : public OfflineContentProvider,
 
   // Always valid, a service.
   RequestCoordinator* request_coordinator_;
+
+  // May be null if thumbnails are not required.
+  std::unique_ptr<ThumbnailDecoder> thumbnail_decoder_;
 
   // A delegate, supplied at construction.
   std::unique_ptr<Delegate> delegate_;

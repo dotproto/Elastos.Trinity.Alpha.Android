@@ -24,8 +24,8 @@
 #include "content/public/browser/presentation_service_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/frame_navigate_params.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -57,7 +57,7 @@ class CONTENT_EXPORT PresentationServiceImpl
  public:
   using NewPresentationCallback =
       base::OnceCallback<void(const base::Optional<PresentationInfo>&,
-                              const base::Optional<PresentationError>&)>;
+                              blink::mojom::PresentationErrorPtr)>;
 
   // Creates a PresentationServiceImpl using the given RenderFrameHost.
   static std::unique_ptr<PresentationServiceImpl> Create(
@@ -146,7 +146,7 @@ class CONTENT_EXPORT PresentationServiceImpl
     ~NewPresentationCallbackWrapper();
 
     void Run(const base::Optional<PresentationInfo>& presentation_info,
-             const base::Optional<PresentationError>& error);
+             blink::mojom::PresentationErrorPtr error);
 
    private:
     NewPresentationCallback callback_;
@@ -188,7 +188,7 @@ class CONTENT_EXPORT PresentationServiceImpl
   bool RunAndEraseReconnectPresentationMojoCallback(
       int request_id,
       const base::Optional<PresentationInfo>& presentation_info,
-      const base::Optional<PresentationError>& error);
+      blink::mojom::PresentationErrorPtr error);
 
   // Removes all listeners and resets default presentation URL on this instance
   // and informs the PresentationServiceDelegate of such.
@@ -199,12 +199,14 @@ class CONTENT_EXPORT PresentationServiceImpl
   // invocation.
   void OnStartPresentationSucceeded(int request_id,
                                     const PresentationInfo& presentation_info);
-  void OnStartPresentationError(int request_id, const PresentationError& error);
+  void OnStartPresentationError(int request_id,
+                                const blink::mojom::PresentationError& error);
   void OnReconnectPresentationSucceeded(
       int request_id,
       const PresentationInfo& presentation_info);
-  void OnReconnectPresentationError(int request_id,
-                                    const PresentationError& error);
+  void OnReconnectPresentationError(
+      int request_id,
+      const blink::mojom::PresentationError& error);
 
   // Calls to |delegate_| to start listening for state changes for |connection|.
   // State changes will be returned via |OnConnectionStateChanged|.
@@ -238,6 +240,10 @@ class CONTENT_EXPORT PresentationServiceImpl
 
   // Returns true if this object is associated with |render_frame_host|.
   bool FrameMatches(content::RenderFrameHost* render_frame_host) const;
+
+  // Invoked on Mojo connection error. Closes all Mojo message pipes held by
+  // |this|.
+  void OnConnectionError();
 
   // Returns |controller_delegate| if current frame is controller frame; Returns
   // |receiver_delegate| if current frame is receiver frame.
@@ -279,8 +285,8 @@ class CONTENT_EXPORT PresentationServiceImpl
   base::hash_map<int, linked_ptr<NewPresentationCallbackWrapper>>
       pending_reconnect_presentation_cbs_;
 
-  // RAII binding of |this| to PresentationService requests.
-  mojo::BindingSet<blink::mojom::PresentationService> bindings_;
+  // RAII binding of |this| to PresentationService request.
+  mojo::Binding<blink::mojom::PresentationService> binding_;
 
   // ID of the RenderFrameHost this object is associated with.
   int render_process_id_;

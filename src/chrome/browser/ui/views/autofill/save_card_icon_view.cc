@@ -25,7 +25,6 @@ SaveCardIconView::SaveCardIconView(CommandUpdater* command_updater,
       browser_(browser) {
   DCHECK(delegate);
   set_id(VIEW_ID_SAVE_CREDIT_CARD_BUTTON);
-  SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_SAVE_CREDIT_CARD));
 }
 
 SaveCardIconView::~SaveCardIconView() {}
@@ -59,6 +58,10 @@ void SaveCardIconView::OnExecuting(
 
 const gfx::VectorIcon& SaveCardIconView::GetVectorIcon() const {
   return kCreditCardIcon;
+}
+
+base::string16 SaveCardIconView::GetTextForTooltipAndAccessibleName() const {
+  return l10n_util::GetStringUTF16(IDS_TOOLTIP_SAVE_CREDIT_CARD);
 }
 
 SaveCardBubbleControllerImpl* SaveCardIconView::GetController() const {

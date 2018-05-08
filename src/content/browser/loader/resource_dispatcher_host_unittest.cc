@@ -13,8 +13,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,7 +57,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_navigation_url_loader_delegate.h"
-#include "mojo/common/data_pipe_utils.h"
+#include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/load_flags.h"
@@ -82,7 +80,7 @@
 #include "services/network/test/test_url_loader_client.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 
 // TODO(eroman): Write unit tests for SafeBrowsing that exercise
 //               SafeBrowsingResourceHandler.
@@ -672,8 +670,8 @@ class ResourceDispatcherHostTest : public testing::Test {
     HandleScheme("test");
     scoped_refptr<SiteInstance> site_instance =
         SiteInstance::Create(browser_context_.get());
-    web_contents_.reset(
-        WebContents::Create(WebContents::CreateParams(browser_context_.get())));
+    web_contents_ =
+        WebContents::Create(WebContents::CreateParams(browser_context_.get()));
     web_contents_filter_ = new TestFilterSpecifyingChild(
         browser_context_->GetResourceContext(),
         web_contents_->GetMainFrame()->GetProcess()->GetID());
@@ -813,12 +811,13 @@ class ResourceDispatcherHostTest : public testing::Test {
             false /* is_form_submission */, GURL() /* searchable_form_url */,
             std::string() /* searchable_form_encoding */,
             url::Origin::Create(url), GURL() /* client_side_redirect_url */,
-            nullptr /* devtools_initiator_info */);
+            base::nullopt /* devtools_initiator_info */);
     CommonNavigationParams common_params;
     common_params.url = url;
     std::unique_ptr<NavigationRequestInfo> request_info(
         new NavigationRequestInfo(common_params, std::move(begin_params), url,
-                                  true, false, false, -1, false, false, false));
+                                  true, false, false, -1, false, false, false,
+                                  nullptr));
     std::unique_ptr<NavigationURLLoader> test_loader =
         NavigationURLLoader::Create(
             browser_context_->GetResourceContext(),
@@ -962,7 +961,7 @@ void CheckSuccessfulRequest(network::TestURLLoaderClient* client,
     ASSERT_TRUE(body.is_valid());
 
     std::string actual;
-    EXPECT_TRUE(mojo::common::BlockingCopyToString(std::move(body), &actual));
+    EXPECT_TRUE(mojo::BlockingCopyToString(std::move(body), &actual));
     EXPECT_EQ(reference_data, actual);
   }
   client->RunUntilComplete();

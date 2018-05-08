@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -204,7 +203,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   void SetOnRedirectCallback(
       const OnRedirectCallback& on_redirect_callback) override;
   void SetOnResponseStartedCallback(
-      const OnResponseStartedCallback& on_response_started_callback) override;
+      OnResponseStartedCallback on_response_started_callback) override;
   void SetAllowPartialResults(bool allow_partial_results) override;
   void SetAllowHttpErrorResults(bool allow_http_error_results) override;
   void AttachStringForUpload(const std::string& upload_data,
@@ -270,7 +269,6 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
 
   // mojom::URLLoaderClient implementation;
   void OnReceiveResponse(const ResourceResponseHead& response_head,
-                         const base::Optional<net::SSLInfo>& ssl_info,
                          mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const ResourceResponseHead& response_head) override;
@@ -689,7 +687,7 @@ class SaveToFileBodyHandler : public BodyHandler {
     // destructor.
     FileWriter::Destroy(std::move(file_writer_));
 
-    std::move(download_to_file_complete_callback_).Run(path_);
+    std::move(download_to_file_complete_callback_).Run(std::move(path_));
   }
 
   void PrepareToRetry(base::OnceClosure retry_callback) override {
@@ -1095,8 +1093,8 @@ void SimpleURLLoaderImpl::SetOnRedirectCallback(
 }
 
 void SimpleURLLoaderImpl::SetOnResponseStartedCallback(
-    const OnResponseStartedCallback& on_response_started_callback) {
-  on_response_started_callback_ = on_response_started_callback;
+    OnResponseStartedCallback on_response_started_callback) {
+  on_response_started_callback_ = std::move(on_response_started_callback);
 }
 
 void SimpleURLLoaderImpl::SetAllowPartialResults(bool allow_partial_results) {
@@ -1304,7 +1302,6 @@ void SimpleURLLoaderImpl::Retry() {
 
 void SimpleURLLoaderImpl::OnReceiveResponse(
     const ResourceResponseHead& response_head,
-    const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (request_state_->response_info) {
@@ -1335,7 +1332,7 @@ void SimpleURLLoaderImpl::OnReceiveResponse(
     // Copy |final_url_| to a stack allocated GURL so it remains valid even if
     // the callback deletes |this|.
     GURL final_url = final_url_;
-    on_response_started_callback_.Run(final_url, response_head);
+    std::move(on_response_started_callback_).Run(final_url, response_head);
     // If deleted by the callback, bail now.
     if (!weak_this)
       return;

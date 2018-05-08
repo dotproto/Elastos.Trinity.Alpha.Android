@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/memory/shared_memory_handle.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/browser/browser_thread.h"
@@ -68,6 +69,21 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     content::RenderFrameHost* render_frame_host,
     int document_cookie,
     const PrintHostMsg_DidPrintContent_Params& params) {
+  auto* outer_contents = web_contents()->GetOuterWebContents();
+  if (outer_contents) {
+    // When the printed content belongs to an extension or app page, the print
+    // composition needs to be handled by its outer content.
+    // TODO(weili): so far, we don't have printable web contents nested in more
+    // than one level. In the future, especially after PDF plugin is moved to
+    // OOPIF-based webview, we should check whether we need to handle web
+    // contents nested in multiple layers.
+    auto* outer_client = PrintCompositeClient::FromWebContents(outer_contents);
+    DCHECK(outer_client);
+    outer_client->OnDidPrintFrameContent(render_frame_host, document_cookie,
+                                         params);
+    return;
+  }
+
   // Content in |params| is sent from untrusted source; only minimal processing
   // is done here. Most of it will be directly forwarded to pdf compositor
   // service.
@@ -185,19 +201,34 @@ void PrintCompositeClient::DoCompositeDocumentToPdf(
 void PrintCompositeClient::OnDidCompositePageToPdf(
     printing::mojom::PdfCompositor::CompositePageToPdfCallback callback,
     printing::mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
-  std::move(callback).Run(status, std::move(handle));
+    base::ReadOnlySharedMemoryRegion region) {
+  // Due to https://crbug.com/742517, we can not add and use COUNT for enums in
+  // mojo.
+  UMA_HISTOGRAM_ENUMERATION(
+      "CompositePageToPdf.Status", status,
+      static_cast<int32_t>(
+          printing::mojom::PdfCompositor::Status::COMPOSTING_FAILURE) +
+          1);
+  std::move(callback).Run(status, std::move(region));
 }
 
 void PrintCompositeClient::OnDidCompositeDocumentToPdf(
     int document_cookie,
     printing::mojom::PdfCompositor::CompositeDocumentToPdfCallback callback,
     printing::mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
+    base::ReadOnlySharedMemoryRegion region) {
   RemoveCompositeRequest(document_cookie);
   // Clear all stored printed subframes.
   printed_subframes_.erase(document_cookie);
-  std::move(callback).Run(status, std::move(handle));
+
+  // Due to https://crbug.com/742517, we can not add and use COUNT for enums in
+  // mojo.
+  UMA_HISTOGRAM_ENUMERATION(
+      "CompositeDocToPdf.Status", status,
+      static_cast<int32_t>(
+          printing::mojom::PdfCompositor::Status::COMPOSTING_FAILURE) +
+          1);
+  std::move(callback).Run(status, std::move(region));
 }
 
 ContentToFrameMap PrintCompositeClient::ConvertContentInfoMap(
@@ -252,6 +283,7 @@ mojom::PdfCompositorPtr PrintCompositeClient::CreateCompositeRequest() {
   }
   mojom::PdfCompositorPtr compositor;
   connector_->BindInterface(mojom::kServiceName, &compositor);
+  compositor->SetWebContentsURL(web_contents()->GetLastCommittedURL());
   return compositor;
 }
 

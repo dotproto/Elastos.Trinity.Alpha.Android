@@ -30,6 +30,22 @@ AwURLLoaderThrottleProvider::AwURLLoaderThrottleProvider(
   }
 }
 
+AwURLLoaderThrottleProvider::AwURLLoaderThrottleProvider(
+    const AwURLLoaderThrottleProvider& other)
+    : type_(other.type_) {
+  DETACH_FROM_THREAD(thread_checker_);
+  if (other.safe_browsing_)
+    other.safe_browsing_->Clone(mojo::MakeRequest(&safe_browsing_info_));
+}
+
+std::unique_ptr<content::URLLoaderThrottleProvider>
+AwURLLoaderThrottleProvider::Clone() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (safe_browsing_info_)
+    safe_browsing_.Bind(std::move(safe_browsing_info_));
+  return base::WrapUnique(new AwURLLoaderThrottleProvider(*this));
+}
+
 AwURLLoaderThrottleProvider::~AwURLLoaderThrottleProvider() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
@@ -37,7 +53,7 @@ AwURLLoaderThrottleProvider::~AwURLLoaderThrottleProvider() {
 std::vector<std::unique_ptr<content::URLLoaderThrottle>>
 AwURLLoaderThrottleProvider::CreateThrottles(
     int render_frame_id,
-    const blink::WebURL& url,
+    const blink::WebURLRequest& request,
     content::ResourceType resource_type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 

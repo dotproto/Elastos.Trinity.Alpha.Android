@@ -16,6 +16,7 @@ import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.View.OnTouchListener;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.PopupWindow;
 import android.widget.PopupWindow.OnDismissListener;
 
@@ -151,6 +152,7 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
     private boolean mPositionToLeft;
     private boolean mVerticalOverlapAnchor;
     private boolean mHorizontalOverlapAnchor;
+    private boolean mUpdateOrientationOnChange;
 
     /**
      * Constructs an {@link AnchoredPopupWindow} instance.
@@ -165,7 +167,7 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
             View contentView, RectProvider anchorRectProvider) {
         mContext = context;
         mRootView = rootView.getRootView();
-        mPopupWindow = new PopupWindow(mContext);
+        mPopupWindow = UiWidgetFactory.getInstance().createPopupWindow(mContext);
         mHandler = new Handler();
         mRectProvider = anchorRectProvider;
 
@@ -185,7 +187,7 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
         mRectProvider.startObserving(this);
 
         updatePopupLayout();
-        mPopupWindow.showAtLocation(mRootView, Gravity.TOP | Gravity.START, mX, mY);
+        showPopupWindow();
     }
 
     /**
@@ -246,6 +248,19 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
     }
 
     /**
+     * If set to true, popup will be notified when an outside touch happens.
+     * It is not the equivalent of closing the popup on all touch events. The user can
+     * still interact with the popup by sending inside touch events.
+     * If set to false, the popup won't be notified about the outside touch event.
+     *
+     * @param touchable Whether or not to notify the popup when an outside touch
+     *                  happens. The default is {@code false}.
+     */
+    public void setOutsideTouchable(boolean touchable) {
+        mPopupWindow.setOutsideTouchable(touchable);
+    }
+
+    /**
      * Sets the preferred vertical orientation of the popup with respect to the anchor Rect such as
      * above or below the anchor.  This should be called before the popup is shown.
      * @param orientation The vertical orientation preferred.
@@ -269,6 +284,14 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
      */
     public void setAnimationStyle(int animationStyleId) {
         mPopupWindow.setAnimationStyle(animationStyleId);
+    }
+
+    /**
+     * If set to true, orientation will be updated everytime that the {@link OnRectChanged} is
+     * called.
+     */
+    public void setUpdateOrientationOnChange(boolean updateOrientationOnChange) {
+        mUpdateOrientationOnChange = updateOrientationOnChange;
     }
 
     /**
@@ -342,7 +365,7 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
         // Determine the size of the text popup.
         boolean currentPositionBelow = mPositionBelow;
         boolean currentPositionToLeft = mPositionToLeft;
-        boolean preferCurrentOrientation = mPopupWindow.isShowing();
+        boolean preferCurrentOrientation = mPopupWindow.isShowing() && !mUpdateOrientationOnChange;
 
         mPopupWindow.getBackground().getPadding(mCachedPaddingRect);
         int paddingX = mCachedPaddingRect.left + mCachedPaddingRect.right;
@@ -435,7 +458,7 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
             try {
                 mIgnoreDismissal = true;
                 mPopupWindow.dismiss();
-                mPopupWindow.showAtLocation(mRootView, Gravity.TOP | Gravity.START, mX, mY);
+                showPopupWindow();
             } finally {
                 mIgnoreDismissal = false;
             }
@@ -533,5 +556,14 @@ public class AnchoredPopupWindow implements OnTouchListener, RectProvider.Observ
             value = max;
         }
         return value;
+    }
+
+    private void showPopupWindow() {
+        try {
+            mPopupWindow.showAtLocation(mRootView, Gravity.TOP | Gravity.START, mX, mY);
+        } catch (WindowManager.BadTokenException e) {
+            // Intentionally ignore BadTokenException. This can happen in a real edge case where
+            // parent.getWindowToken is not valid. See http://crbug.com/826052.
+        }
     }
 }

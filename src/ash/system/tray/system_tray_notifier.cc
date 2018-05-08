@@ -5,10 +5,8 @@
 #include "ash/system/tray/system_tray_notifier.h"
 
 #include "ash/system/bluetooth/bluetooth_observer.h"
-#include "ash/system/date/clock_observer.h"
 #include "ash/system/ime/ime_observer.h"
 #include "ash/system/network/network_observer.h"
-#include "ash/system/network/network_portal_detector_observer.h"
 #include "ash/system/screen_security/screen_capture_observer.h"
 #include "ash/system/screen_security/screen_share_observer.h"
 #include "ash/system/system_tray_focus_observer.h"
@@ -37,34 +35,6 @@ void SystemTrayNotifier::NotifyRefreshBluetooth() {
 void SystemTrayNotifier::NotifyBluetoothDiscoveringChanged() {
   for (auto& observer : bluetooth_observers_)
     observer.OnBluetoothDiscoveringChanged();
-}
-
-void SystemTrayNotifier::AddClockObserver(ClockObserver* observer) {
-  clock_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveClockObserver(ClockObserver* observer) {
-  clock_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyRefreshClock() {
-  for (auto& observer : clock_observers_)
-    observer.Refresh();
-}
-
-void SystemTrayNotifier::NotifyDateFormatChanged() {
-  for (auto& observer : clock_observers_)
-    observer.OnDateFormatChanged();
-}
-
-void SystemTrayNotifier::NotifySystemClockTimeUpdated() {
-  for (auto& observer : clock_observers_)
-    observer.OnSystemClockTimeUpdated();
-}
-
-void SystemTrayNotifier::NotifySystemClockCanSetTimeChanged(bool can_set_time) {
-  for (auto& observer : clock_observers_)
-    observer.OnSystemClockCanSetTimeChanged(can_set_time);
 }
 
 void SystemTrayNotifier::AddIMEObserver(IMEObserver* observer) {
@@ -96,22 +66,6 @@ void SystemTrayNotifier::RemoveNetworkObserver(NetworkObserver* observer) {
 void SystemTrayNotifier::NotifyRequestToggleWifi() {
   for (auto& observer : network_observers_)
     observer.RequestToggleWifi();
-}
-
-void SystemTrayNotifier::AddNetworkPortalDetectorObserver(
-    NetworkPortalDetectorObserver* observer) {
-  network_portal_detector_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveNetworkPortalDetectorObserver(
-    NetworkPortalDetectorObserver* observer) {
-  network_portal_detector_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyOnCaptivePortalDetected(
-    const std::string& guid) {
-  for (auto& observer : network_portal_detector_observers_)
-    observer.OnCaptivePortalDetected(guid);
 }
 
 void SystemTrayNotifier::AddScreenCaptureObserver(
@@ -170,19 +124,6 @@ void SystemTrayNotifier::RemoveSystemTrayFocusObserver(
 void SystemTrayNotifier::NotifyFocusOut(bool reverse) {
   for (auto& observer : system_tray_focus_observers_)
     observer.OnFocusLeavingSystemTray(reverse);
-}
-
-void SystemTrayNotifier::AddTracingObserver(TracingObserver* observer) {
-  tracing_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveTracingObserver(TracingObserver* observer) {
-  tracing_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyTracingModeChanged(bool value) {
-  for (auto& observer : tracing_observers_)
-    observer.OnTracingModeChanged(value);
 }
 
 void SystemTrayNotifier::AddVirtualKeyboardObserver(

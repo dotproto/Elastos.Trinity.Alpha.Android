@@ -22,14 +22,27 @@ aggregate_vector_icons("views_vector_icons") {
   icons = [
     "checkbox_active.icon",
     "checkbox_normal.icon",
-    "menu_check.1x.icon",
+    "close.icon",
+    "ic_close.icon",
+    "info.icon",
+    "launch.icon",
     "menu_check.icon",
     "menu_radio_empty.icon",
     "menu_radio_selected.icon",
+    "new_incognito_window.icon",
+    "new_tab.icon",
+    "new_window.icon",
+    "open.icon",
+    "options.icon",
+    "picture_in_picture_close.icon",
+    "picture_in_picture_pause.icon",
+    "picture_in_picture_play.icon",
+    "pin.icon",
     "radio_button_active.icon",
     "radio_button_normal.icon",
-    "submenu_arrow.1x.icon",
     "submenu_arrow.icon",
+    "uninstall.icon",
+    "unpin.icon",
   ]
 }
 
@@ -110,6 +123,7 @@ jumbo_component("views") {
     "controls/label.h",
     "controls/link.h",
     "controls/link_listener.h",
+    "controls/menu/menu_closure_animation_mac.h",
     "controls/menu/menu_config.h",
     "controls/menu/menu_controller.h",
     "controls/menu/menu_controller_delegate.h",
@@ -307,6 +321,7 @@ jumbo_component("views") {
     "controls/label.cc",
     "controls/link.cc",
     "controls/menu/display_change_listener_mac.cc",
+    "controls/menu/menu_closure_animation_mac.mm",
     "controls/menu/menu_config.cc",
     "controls/menu/menu_config_chromeos.cc",
     "controls/menu/menu_config_linux.cc",
@@ -406,6 +421,7 @@ jumbo_component("views") {
     "views_touch_selection_controller_factory_mac.cc",
     "widget/drop_helper.cc",
     "widget/native_widget_mac.mm",
+    "widget/native_widget_private.cc",
     "widget/root_view.cc",
     "widget/root_view_targeter.cc",
     "widget/tooltip_manager.cc",
@@ -626,6 +642,7 @@ jumbo_component("views") {
     deps += [
       "//services/ui/public/interfaces",
       "//ui/aura",
+      "//ui/platform_window",
       "//ui/touch_selection",
       "//ui/wm",
       "//ui/wm/public",
@@ -683,6 +700,11 @@ jumbo_component("views") {
         ]
       }
     }
+  }
+
+  if (is_linux) {
+    sources += [ "widget/desktop_aura/desktop_window_tree_host_platform.cc" ]
+    public += [ "widget/desktop_aura/desktop_window_tree_host_platform.h" ]
   }
 
   if (is_mac) {
@@ -783,6 +805,8 @@ jumbo_source_set("test_support_internal") {
     "test/views_test_helper_mac.mm",
     "test/widget_test.cc",
     "test/widget_test.h",
+    "test/widget_test_api.cc",
+    "test/widget_test_api.h",
     "test/widget_test_mac.mm",
     "test/x11_property_change_waiter.cc",
     "test/x11_property_change_waiter.h",
@@ -1202,6 +1226,6 @@ test("views_perftests") {
 
   data_deps = [
     "//ui/resources:ui_test_pak_data",
-    "//testing:run_gtest_perf_test",
+    "//testing:run_perf_test",
   ]
 }

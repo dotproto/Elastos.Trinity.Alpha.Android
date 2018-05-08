@@ -39,6 +39,9 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
     // fail if a hander for lock screen apps focus has not been set.
     virtual bool HandleFocusLockScreenApps(bool reverse) = 0;
     virtual void HandleLoginAsGuest() = 0;
+    virtual void HandleLaunchPublicSession(const AccountId& account_id,
+                                           const std::string& locale,
+                                           const std::string& input_method) = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Delegate);
@@ -73,17 +76,29 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   void LoginAsGuest() override;
   void OnMaxIncorrectPasswordAttempted(const AccountId& account_id) override;
   void FocusLockScreenApps(bool reverse) override;
-  void ShowGaiaSignin() override;
+  void ShowGaiaSignin(const base::Optional<AccountId>& account_id) override;
   void OnRemoveUserWarningShown() override;
   void RemoveUser(const AccountId& account_id) override;
+  void LaunchPublicSession(const AccountId& account_id,
+                           const std::string& locale,
+                           const std::string& input_method) override;
+  void RequestPublicSessionKeyboardLayouts(const AccountId& account_id,
+                                           const std::string& locale) override;
 
  private:
+  void SetPublicSessionKeyboardLayout(
+      const AccountId& account_id,
+      const std::string& locale,
+      std::unique_ptr<base::ListValue> keyboard_layouts);
+
   // Lock screen mojo service in ash.
   ash::mojom::LoginScreenPtr login_screen_;
 
   // Binds this object to the client interface.
   mojo::Binding<ash::mojom::LoginScreenClient> binding_;
   Delegate* delegate_ = nullptr;
+
+  base::WeakPtrFactory<LoginScreenClient> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginScreenClient);
 };

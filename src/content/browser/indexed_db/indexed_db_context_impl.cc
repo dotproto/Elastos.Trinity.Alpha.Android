@@ -12,7 +12,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -36,7 +35,7 @@
 #include "content/public/common/content_switches.h"
 #include "storage/browser/database/database_util.h"
 #include "storage/common/database/database_identifier.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "url/origin.h"
 
@@ -178,13 +177,15 @@ base::ListValue* IndexedDBContextImpl::GetAllOriginsDetails() {
     info->SetString("url", origin.Serialize());
     info->SetString("size", ui::FormatBytes(GetOriginDiskUsage(origin)));
     info->SetDouble("last_modified", GetOriginLastModified(origin).ToJsTime());
+
+    auto paths = std::make_unique<base::ListValue>();
     if (!is_incognito()) {
-      std::unique_ptr<base::ListValue> paths(
-          std::make_unique<base::ListValue>());
       for (const base::FilePath& path : GetStoragePaths(origin))
         paths->AppendString(path.value());
-      info->Set("paths", std::move(paths));
+    } else {
+      paths->AppendString("N/A");
     }
+    info->Set("paths", std::move(paths));
     info->SetDouble("connection_count", GetConnectionCount(origin));
 
     // This ends up being O(n^2) since we iterate over all open databases
@@ -293,15 +294,25 @@ int IndexedDBContextImpl::GetOriginBlobFileCount(const Origin& origin) {
 
 int64_t IndexedDBContextImpl::GetOriginDiskUsage(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
     return 0;
+
   EnsureDiskUsageCacheInitialized(origin);
   return origin_size_map_[origin];
 }
 
 base::Time IndexedDBContextImpl::GetOriginLastModified(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
+    return base::Time();
+
+  if (is_incognito()) {
+    if (!factory_)
+      return base::Time();
+    return factory_->GetLastModified(origin);
+  }
+
+  if (data_path_.empty())
     return base::Time();
   base::FilePath idb_directory = GetLevelDBPath(origin);
   base::File::Info file_info;
@@ -396,7 +407,7 @@ void IndexedDBContextImpl::ForceClose(const Origin origin,
 
 size_t IndexedDBContextImpl::GetConnectionCount(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
     return 0;
 
   if (!factory_.get())
@@ -556,8 +567,12 @@ base::FilePath IndexedDBContextImpl::GetLevelDBPath(
 }
 
 int64_t IndexedDBContextImpl::ReadUsageFromDisk(const Origin& origin) const {
-  if (data_path_.empty())
-    return 0;
+  if (is_incognito()) {
+    if (!factory_)
+      return 0;
+    return factory_->GetInMemoryDBSize(origin);
+  }
+
   int64_t total_size = 0;
   for (const base::FilePath& path : GetStoragePaths(origin))
     total_size += base::ComputeDirectorySize(path);

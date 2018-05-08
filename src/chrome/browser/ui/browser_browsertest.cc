@@ -931,6 +931,11 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NullOpenerRedirectForksProcess) {
 // http://www.google.com/chrome/intl/en/webmasters-faq.html#newtab will not
 // fork a new renderer process.
 IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
+  // TODO(lukasza): https://crbug.com/824962: Investigate why this test fails
+  // with --site-per-process.
+  if (content::AreAllSitesIsolatedForTesting())
+    return;
+
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
 
@@ -1009,14 +1014,14 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, RenderIdleTime) {
       browser(), ui_test_utils::GetTestUrl(
                      base::FilePath(base::FilePath::kCurrentDirectory),
                      base::FilePath(kTitle1File)));
-  content::RenderProcessHost::iterator it(
-      content::RenderProcessHost::AllHostsIterator());
-  for (; !it.IsAtEnd(); it.Advance()) {
-    base::TimeDelta renderer_td =
-        it.GetCurrentValue()->GetChildProcessIdleTime();
-    base::TimeDelta browser_td = base::TimeTicks::Now() - start;
-    EXPECT_TRUE(browser_td >= renderer_td);
-  }
+  base::TimeDelta renderer_td = browser()
+                                    ->tab_strip_model()
+                                    ->GetActiveWebContents()
+                                    ->GetMainFrame()
+                                    ->GetProcess()
+                                    ->GetChildProcessIdleTime();
+  base::TimeDelta browser_td = base::TimeTicks::Now() - start;
+  EXPECT_TRUE(browser_td >= renderer_td);
 }
 
 // Test RenderView correctly send back favicon url for web page that redirects
@@ -1078,15 +1083,15 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_TabClosingWhenRemovingExtension) {
 
   ui_test_utils::NavigateToURL(browser(), url);
 
-  WebContents* app_contents = WebContents::Create(
-      WebContents::CreateParams(browser()->profile()));
-  extensions::TabHelper::CreateForWebContents(app_contents);
+  std::unique_ptr<WebContents> app_contents =
+      WebContents::Create(WebContents::CreateParams(browser()->profile()));
+  extensions::TabHelper::CreateForWebContents(app_contents.get());
   extensions::TabHelper* extensions_tab_helper =
-      extensions::TabHelper::FromWebContents(app_contents);
+      extensions::TabHelper::FromWebContents(app_contents.get());
   extensions_tab_helper->SetExtensionApp(extension_app);
 
-  model->AddWebContents(app_contents, 0, ui::PageTransitionFromInt(0),
-                        TabStripModel::ADD_NONE);
+  model->AddWebContents(std::move(app_contents), 0,
+                        ui::PageTransitionFromInt(0), TabStripModel::ADD_NONE);
   model->SetTabPinned(0, true);
   ui_test_utils::NavigateToURL(browser(), url);
 
@@ -2044,11 +2049,7 @@ IN_PROC_BROWSER_TEST_F(RunInBackgroundTest, RunInBackgroundBasicTest) {
   // running.
   Profile* profile = browser()->profile();
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::Source<Browser>(browser()));
-  chrome::CloseWindow(browser());
-  observer.Wait();
+  CloseBrowserSynchronously(browser());
   EXPECT_EQ(0u, chrome::GetTotalBrowserCount());
 
   ui_test_utils::BrowserAddedObserver browser_added_observer;

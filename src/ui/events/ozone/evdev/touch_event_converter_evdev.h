@@ -60,7 +60,7 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
 
   // Sets callback to enable/disable palm suppression.
   void SetPalmSuppressionCallback(
-      const base::Callback<void(bool)>& callback) override;
+      const base::RepeatingCallback<void(bool)>& callback) override;
 
   // Unsafe part of initialization.
   virtual void Initialize(const EventDeviceInfo& info);
@@ -68,7 +68,7 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
  private:
   friend class MockTouchEventConverterEvdev;
 
-  // Overidden from base::MessagePumpLibevent::Watcher.
+  // Overidden from base::MessagePumpLibevent::FdWatcher.
   void OnFileCanReadWithoutBlocking(int fd) override;
 
   virtual void Reinitialize();
@@ -164,7 +164,7 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
   TouchEventLogEvdev touch_evdev_debug_buffer_;
 
   // Callback to enable/disable palm suppression.
-  base::Callback<void(bool)> enable_palm_suppression_callback_;
+  base::RepeatingCallback<void(bool)> enable_palm_suppression_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchEventConverterEvdev);
 };

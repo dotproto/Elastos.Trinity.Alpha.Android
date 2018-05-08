@@ -7,11 +7,11 @@
 #include <algorithm>
 
 #include "ash/app_list/model/app_list_folder_item.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/views/app_list_folder_view.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -28,13 +28,17 @@ namespace app_list {
 namespace {
 
 constexpr int kMaxFolderNameWidth = 204;
-constexpr SkColor kFolderNameColor = SkColorSetARGBMacro(138, 0, 0, 0);
+constexpr SkColor kFolderNameColor = SkColorSetARGB(138, 0, 0, 0);
 
 }  // namespace
 
 class FolderHeaderView::FolderNameView : public views::Textfield {
  public:
-  FolderNameView() { SetBorder(views::CreateEmptyBorder(1, 1, 1, 1)); }
+  explicit FolderNameView(FolderHeaderView* folder_header_view)
+      : folder_header_view_(folder_header_view) {
+    DCHECK(folder_header_view_);
+    SetBorder(views::CreateEmptyBorder(1, 1, 1, 1));
+  }
 
   ~FolderNameView() override = default;
 
@@ -43,13 +47,23 @@ class FolderHeaderView::FolderNameView : public views::Textfield {
     Textfield::OnFocus();
   }
 
+  void OnBlur() override {
+    // Collapse whitespace when FolderNameView loses focus.
+    SetText(base::CollapseWhitespace(text(), false));
+    folder_header_view_->ContentsChanged(this, text());
+    Textfield::OnBlur();
+  }
+
  private:
+  // The parent FolderHeaderView, owns this.
+  FolderHeaderView* folder_header_view_;
+
   DISALLOW_COPY_AND_ASSIGN(FolderNameView);
 };
 
 FolderHeaderView::FolderHeaderView(FolderHeaderViewDelegate* delegate)
     : folder_item_(nullptr),
-      folder_name_view_(new FolderNameView),
+      folder_name_view_(new FolderNameView(this)),
       folder_name_placeholder_text_(
           ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
               IDS_APP_LIST_FOLDER_NAME_PLACEHOLDER)),

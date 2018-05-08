@@ -8,7 +8,6 @@
 #include <set>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -100,10 +99,6 @@ bool KioskModeInfo::IsValidPlatformVersion(const std::string& version_string) {
 }
 
 KioskModeHandler::KioskModeHandler() {
-  supported_keys_.push_back(keys::kKiosk);
-  supported_keys_.push_back(keys::kKioskEnabled);
-  supported_keys_.push_back(keys::kKioskOnly);
-  supported_keys_.push_back(keys::kKioskSecondaryApps);
 }
 
 KioskModeHandler::~KioskModeHandler() {
@@ -215,8 +210,11 @@ bool KioskModeHandler::Parse(Extension* extension, base::string16* error) {
   return true;
 }
 
-const std::vector<std::string> KioskModeHandler::Keys() const {
-  return supported_keys_;
+base::span<const char* const> KioskModeHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kKiosk, keys::kKioskEnabled,
+                                          keys::kKioskOnly,
+                                          keys::kKioskSecondaryApps};
+  return kKeys;
 }
 
 }  // namespace extensions

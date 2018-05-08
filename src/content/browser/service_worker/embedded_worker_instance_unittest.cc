@@ -10,7 +10,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -29,8 +28,8 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -63,6 +62,8 @@ class ProviderHostEndpoints : public mojom::ServiceWorkerContainerHost {
         blink::mojom::ServiceWorkerRegistrationOptions::New();
     registration_object_host_request_ =
         mojo::MakeRequest(&(provider_info->registration->host_ptr_info));
+    provider_info->registration->request =
+        mojo::MakeRequest(&registration_object_ptr_);
     binding_.Bind(mojo::MakeRequest(&provider_info->host_ptr_info));
     provider_info->client_request = mojo::MakeRequest(&client_);
     mojo::MakeRequest(&provider_info->interface_provider);
@@ -87,17 +88,21 @@ class ProviderHostEndpoints : public mojom::ServiceWorkerContainerHost {
       GetRegistrationForReadyCallback callback) override {
     NOTIMPLEMENTED();
   }
-  void GetControllerServiceWorker(
-      mojom::ControllerServiceWorkerRequest request) override {
+  void EnsureControllerServiceWorker(
+      mojom::ControllerServiceWorkerRequest request,
+      mojom::ControllerServiceWorkerPurpose purpose) override {
     NOTIMPLEMENTED();
   }
   void CloneForWorker(
       mojom::ServiceWorkerContainerHostRequest request) override {
     NOTIMPLEMENTED();
   }
+  void Ping(PingCallback callback) override { NOTIMPLEMENTED(); }
 
   mojom::ServiceWorkerContainerAssociatedPtr client_;
   mojo::AssociatedBinding<mojom::ServiceWorkerContainerHost> binding_;
+  blink::mojom::ServiceWorkerRegistrationObjectAssociatedPtr
+      registration_object_ptr_;
   blink::mojom::ServiceWorkerRegistrationObjectHostAssociatedRequest
       registration_object_host_request_;
 
@@ -202,7 +207,8 @@ class EmbeddedWorkerInstanceTest : public testing::Test,
   }
 
   mojom::ServiceWorkerProviderInfoForStartWorkerPtr CreateProviderInfo(
-      int /* process_id */) {
+      int /* process_id */,
+      network::mojom::URLLoaderFactoryPtr /* non_network_loader_factory */) {
     provider_host_endpoints_.emplace_back(
         std::make_unique<ProviderHostEndpoints>());
     return provider_host_endpoints_.back()->CreateProviderInfoPtr();
@@ -231,7 +237,8 @@ class EmbeddedWorkerInstanceTest : public testing::Test,
   ServiceWorkerStatusCode SimulateSendStartWorker(
       EmbeddedWorkerInstance* worker,
       mojom::EmbeddedWorkerStartParamsPtr params) {
-    return worker->SendStartWorker(std::move(params));
+    return worker->SendStartWorker(std::move(params),
+                                   nullptr /* non_network_loader_factory */);
   }
 
   blink::mojom::ServiceWorkerInstalledScriptsInfoPtr
@@ -849,11 +856,9 @@ TEST_F(EmbeddedWorkerInstanceTest, FailToSendStartIPC) {
   base::RunLoop().RunUntilIdle();
 
   // Worker should handle the failure of binding on the remote side as detach.
-  ASSERT_EQ(3u, events_.size());
-  EXPECT_EQ(PROCESS_ALLOCATED, events_[0].type);
-  EXPECT_EQ(START_WORKER_MESSAGE_SENT, events_[1].type);
-  EXPECT_EQ(DETACHED, events_[2].type);
-  EXPECT_EQ(EmbeddedWorkerStatus::STARTING, events_[2].status);
+  ASSERT_EQ(1u, events_.size());
+  EXPECT_EQ(DETACHED, events_[0].type);
+  EXPECT_EQ(EmbeddedWorkerStatus::STARTING, events_[0].status);
   EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, worker->status());
 }
 

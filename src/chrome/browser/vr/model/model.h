@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_VR_MODEL_MODEL_H_
 #define CHROME_BROWSER_VR_MODEL_MODEL_H_
 
+#include <memory>
+
 #include "chrome/browser/vr/model/capturing_state_model.h"
 #include "chrome/browser/vr/model/color_scheme.h"
 #include "chrome/browser/vr/model/controller_model.h"
+#include "chrome/browser/vr/model/hosted_platform_ui.h"
 #include "chrome/browser/vr/model/modal_prompt_type.h"
-#include "chrome/browser/vr/model/native_ui_model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
+#include "chrome/browser/vr/model/platform_toast.h"
 #include "chrome/browser/vr/model/reticle_model.h"
 #include "chrome/browser/vr/model/speech_recognition_model.h"
 #include "chrome/browser/vr/model/text_input_info.h"
@@ -33,6 +36,7 @@ struct Model {
   bool incognito = false;
   bool in_cct = false;
   bool can_navigate_back = false;
+  bool can_navigate_forward = false;
   ToolbarState toolbar_state;
   std::vector<OmniboxSuggestion> omnibox_suggestions;
   SpeechRecognitionModel speech;
@@ -40,16 +44,19 @@ struct Model {
   gfx::Transform projection_matrix;
   unsigned int content_texture_id = 0;
   unsigned int content_overlay_texture_id = 0;
+  bool content_overlay_texture_non_empty = false;
   UiElementRenderer::TextureLocation content_location =
       UiElementRenderer::kTextureLocationLocal;
   UiElementRenderer::TextureLocation content_overlay_location =
       UiElementRenderer::kTextureLocationLocal;
-  bool update_ready_snackbar_enabled = false;
   bool waiting_for_background = false;
   bool background_loaded = false;
   bool supports_selection = true;
   bool needs_keyboard_update = false;
   bool overflow_menu_enabled = false;
+  bool regular_tabs_open = false;
+  bool incognito_tabs_open = false;
+  bool standalone_vr_device = false;
 
   // WebVR state.
   WebVrModel web_vr;
@@ -59,6 +66,7 @@ struct Model {
   void pop_mode();
   void pop_mode(UiMode mode);
   void toggle_mode(UiMode mode);
+  UiMode get_mode() const;
   UiMode get_last_opaque_mode() const;
   bool has_mode_in_stack(UiMode mode) const;
   bool browsing_enabled() const;
@@ -70,6 +78,7 @@ struct Model {
   bool web_vr_enabled() const;
   bool web_vr_autopresentation_enabled() const;
   bool reposition_window_enabled() const;
+  bool reposition_window_permitted() const;
 
   // Focused text state.
   bool editing_input = false;
@@ -88,7 +97,9 @@ struct Model {
   bool experimental_features_enabled = false;
   bool skips_redraw_when_not_dirty = false;
   bool exiting_vr = false;
-  NativeUiModel native_ui;
+  HostedPlatformUi hosted_platform_ui;
+
+  std::unique_ptr<const PlatformToast> platform_toast;
 };
 
 }  // namespace vr

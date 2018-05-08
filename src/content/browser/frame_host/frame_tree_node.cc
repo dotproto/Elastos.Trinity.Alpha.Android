@@ -11,7 +11,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -24,7 +23,7 @@
 #include "content/common/frame_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "third_party/WebKit/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/common/frame/sandbox_flags.h"
 
 namespace content {
 
@@ -146,6 +145,7 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
                       manager_delegate),
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
+      depth_(parent ? parent->depth_ + 1 : 0u),
       opener_(nullptr),
       original_opener_(nullptr),
       has_committed_real_load_(false),
@@ -262,9 +262,6 @@ void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
 }
 
 void FrameTreeNode::ResetForNewProcess() {
-  current_frame_host()->SetLastCommittedUrl(GURL());
-  blame_context_.TakeSnapshot();
-
   // Remove child nodes from the tree, then delete them. This destruction
   // operation will notify observers.
   std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);

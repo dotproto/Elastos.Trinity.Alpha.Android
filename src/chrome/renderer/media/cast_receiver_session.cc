@@ -14,9 +14,9 @@
 #include "media/base/audio_capturer_source.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video_capturer_source.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
 
 // This is a render thread object.
 class CastReceiverSession::AudioCapturerSource :
@@ -25,8 +25,7 @@ class CastReceiverSession::AudioCapturerSource :
   AudioCapturerSource(
       const scoped_refptr<CastReceiverSession> cast_receiver_session);
   void Initialize(const media::AudioParameters& params,
-                  CaptureCallback* callback,
-                  int session_id) override;
+                  CaptureCallback* callback) override;
   void Start() override;
   void Stop() override;
   void SetVolume(double volume) override;
@@ -146,8 +145,7 @@ CastReceiverSession::AudioCapturerSource::~AudioCapturerSource() {
 
 void CastReceiverSession::AudioCapturerSource::Initialize(
     const media::AudioParameters& params,
-    CaptureCallback* callback,
-    int session_id) {
+    CaptureCallback* callback) {
   // TODO(hubbe): Consider converting the audio to whatever the caller wants.
   if (params.sample_rate() !=
       cast_receiver_session_->audio_config_.rtp_timebase ||

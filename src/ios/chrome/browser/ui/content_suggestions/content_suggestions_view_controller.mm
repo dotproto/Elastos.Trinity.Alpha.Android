@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 
-#include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -19,7 +18,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout_handset.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recording.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
@@ -37,6 +35,7 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 const CGFloat kMaxCardWidth = 416;
 const CGFloat kStandardSpacing = 8;
 const CGFloat kMostVisitedBottomMargin = 13;
+const CGFloat kCardBorderRadius = 11;
 
 // Returns whether the cells should be displayed using the full width.
 BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
@@ -73,12 +72,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 #pragma mark - Lifecycle
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style {
-  UICollectionViewLayout* layout = nil;
-  if (IsIPadIdiom()) {
-    layout = [[ContentSuggestionsLayout alloc] init];
-  } else {
-    layout = [[ContentSuggestionsLayoutHandset alloc] init];
-  }
+  UICollectionViewLayout* layout = [[ContentSuggestionsLayout alloc] init];
   self = [super initWithLayout:layout style:style];
   if (self) {
     _collectionUpdater = [[ContentSuggestionsCollectionUpdater alloc] init];
@@ -220,15 +214,14 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  if (@available(iOS 10, *)) {
-    self.collectionView.prefetchingEnabled = NO;
-  }
+  self.collectionView.prefetchingEnabled = NO;
   if (@available(iOS 11, *)) {
-    // Use automatic behavior as each element takes the safe area into account
-    // separately and the overscroll action does not work well with content
-    // offset.
+    // Overscroll action does not work well with content offset, so set this
+    // to never and internally offset the UI to account for safe area insets.
     self.collectionView.contentInsetAdjustmentBehavior =
-        UIScrollViewContentInsetAdjustmentAutomatic;
+        IsUIRefreshPhase1Enabled()
+            ? UIScrollViewContentInsetAdjustmentNever
+            : UIScrollViewContentInsetAdjustmentAutomatic;
   }
   self.collectionView.accessibilityIdentifier =
       [[self class] collectionAccessibilityIdentifier];
@@ -241,6 +234,8 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
     self.styler.cellStyle = MDCCollectionViewCellStyleGrouped;
   } else {
     self.styler.cellStyle = MDCCollectionViewCellStyleCard;
+    if (IsUIRefreshPhase1Enabled())
+      self.styler.cardBorderRadius = kCardBorderRadius;
   }
   self.automaticallyAdjustsScrollViewInsets = NO;
   self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -254,12 +249,19 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
   longPressRecognizer.delegate = self;
   [self.collectionView addGestureRecognizer:longPressRecognizer];
 
-  if (!IsIPadIdiom()) {
-    self.overscrollActionsController = [[OverscrollActionsController alloc]
-        initWithScrollView:self.collectionView];
-    [self.overscrollActionsController
-        setStyle:OverscrollStyle::NTP_NON_INCOGNITO];
-    self.overscrollActionsController.delegate = self.overscrollDelegate;
+  self.overscrollActionsController = [[OverscrollActionsController alloc]
+      initWithScrollView:self.collectionView];
+  [self.overscrollActionsController
+      setStyle:OverscrollStyle::NTP_NON_INCOGNITO];
+  self.overscrollActionsController.delegate = self.overscrollDelegate;
+  [self updateOverscrollActionsState];
+}
+
+- (void)updateOverscrollActionsState {
+  if (IsRegularXRegularSizeClass(self)) {
+    [self.overscrollActionsController disableOverscrollActions];
+  } else {
+    [self.overscrollActionsController enableOverscrollActions];
   }
 }
 
@@ -312,6 +314,17 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
   } else {
     self.styler.cellStyle = MDCCollectionViewCellStyleCard;
   }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  [self correctMissingSafeArea];
+  [self updateOverscrollActionsState];
+}
+
+- (void)viewSafeAreaInsetsDidChange {
+  [super viewSafeAreaInsetsDidChange];
+  [self correctMissingSafeArea];
 }
 
 #pragma mark - UICollectionViewDelegate
@@ -627,8 +640,8 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
   CGFloat toolbarHeight = ntp_header::ToolbarHeight();
   CGFloat targetY = targetContentOffset->y;
 
-  if (IsIPadIdiom() || targetY <= 0 || targetY >= toolbarHeight ||
-      !self.containsToolbar)
+  if (content_suggestions::IsRegularXRegularSizeClass(self) || targetY <= 0 ||
+      targetY >= toolbarHeight || !self.containsToolbar)
     return;
 
   CGFloat xOffset = self.collectionView.contentOffset.x;
@@ -682,6 +695,25 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
 #pragma mark - Private
 
+// TODO(crbug.com/826369) Remove this when the NTP is conatined by the BVC
+// and removed from native content.  As a part of native content, the NTP is
+// contained by a view controller that is inset from safeArea.top.  Even
+// though content suggestions appear under the top safe area, they are blocked
+// by the browser container view controller.
+- (void)correctMissingSafeArea {
+  if (IsUIRefreshPhase1Enabled()) {
+    if (@available(iOS 11, *)) {
+      UIEdgeInsets missingTop = UIEdgeInsetsZero;
+      // During the new tab animation the browser container view controller
+      // actually matches the browser view controller frame, so safe area does
+      // work, so be sure to check the parent view controller offset.
+      if (self.parentViewController.view.frame.origin.y == StatusBarHeight())
+        missingTop = UIEdgeInsetsMake(StatusBarHeight(), 0, 0, 0);
+      self.additionalSafeAreaInsets = missingTop;
+    }
+  }
+}
+
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gestureRecognizer {
   if (self.editor.editing ||
       gestureRecognizer.state != UIGestureRecognizerStateBegan) {
@@ -727,7 +759,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
       break;
   }
 
-  if (IsIPadIdiom())
+  if (content_suggestions::IsRegularXRegularSizeClass(self))
     [self.headerSynchronizer unfocusOmnibox];
 }
 

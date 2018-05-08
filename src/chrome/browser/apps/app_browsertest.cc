@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/chrome_switches.h"
@@ -45,7 +46,6 @@
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -60,7 +60,7 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
@@ -471,9 +471,6 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, DisallowStorage) {
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, Restrictions) {
-  // Flaky with NavigationMojoResponse. See https://crbug.com/822650.
-  if (content::IsNavigationMojoResponseEnabled())
-    return;
   ASSERT_TRUE(RunPlatformAppTest("platform_apps/restrictions")) << message_;
 }
 
@@ -1176,7 +1173,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 }
 
 // This test currently only passes on OS X (on other platforms the print preview
-// dialog's size is limited by the size of the window being printed).
+// dialog's size is limited by the size of the window being printed). It also
+// doesn't pass in Views mode on OS X.
 #if !defined(OS_MACOSX)
 #define MAYBE_PrintPreviewShouldNotBeTooSmall \
     DISABLED_PrintPreviewShouldNotBeTooSmall
@@ -1187,6 +1185,10 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
                        MAYBE_PrintPreviewShouldNotBeTooSmall) {
+#if defined(OS_MACOSX)
+  if (!views_mode_controller::IsViewsBrowserCocoa())
+    return;
+#endif
   // Print preview dialogs with widths less than 410 pixels will have preview
   // areas that are too small, and ones with heights less than 191 pixels will
   // have vertical scrollers for their controls that are too small.
@@ -1385,7 +1387,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppsIgnoreDefaultZoom) {
   // made it through.
   ExtensionTestMessageListener launched_listener("Launched", false);
   LaunchPlatformApp(extension);
-  launched_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(launched_listener.WaitUntilSatisfied());
 
   // Now check that the app window's default zoom, and actual zoom level,
   // have not been changed from the default.
@@ -1401,6 +1403,19 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppsIgnoreDefaultZoom) {
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppWindowIframe) {
   LoadAndLaunchPlatformApp("app_window_send_message",
                            "APP_WINDOW_CREATE_CALLBACK");
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, NewWindowWithNonExistingFile) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("platform_apps/new_window_with_non_existing_file"));
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, SandboxedLocalFile) {
+  ASSERT_TRUE(RunPlatformAppTest("platform_apps/sandboxed_local_file"));
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, NewWindowAboutBlank) {
+  ASSERT_TRUE(RunPlatformAppTest("platform_apps/new_window_about_blank"));
 }
 
 }  // namespace extensions

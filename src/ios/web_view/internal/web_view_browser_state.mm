@@ -9,7 +9,6 @@
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -23,6 +22,7 @@
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "ios/web/public/web_thread.h"
+#include "ios/web_view/cwv_web_view_features.h"
 #include "ios/web_view/internal/autofill/web_view_personal_data_manager_factory.h"
 #include "ios/web_view/internal/content_settings/web_view_cookie_settings_factory.h"
 #include "ios/web_view/internal/content_settings/web_view_host_content_settings_map_factory.h"
@@ -70,7 +70,7 @@ WebViewBrowserState::WebViewBrowserState(
   // ChromeWebView is not predetermined, so IO access is temporarily allowed.
   bool wasIOAllowed = base::ThreadRestrictions::SetIOAllowed(true);
 
-  CHECK(PathService::Get(base::DIR_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
 
   request_context_getter_ = new WebViewURLRequestContextGetter(
       GetStatePath(),
@@ -96,7 +96,9 @@ WebViewBrowserState::WebViewBrowserState(
 
   base::ThreadRestrictions::SetIOAllowed(wasIOAllowed);
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
   ActiveStateManager::FromBrowserState(this)->SetActive(true);
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
 
   BrowserStateDependencyManager::GetInstance()->CreateBrowserStateServices(
       this);
@@ -106,7 +108,9 @@ WebViewBrowserState::~WebViewBrowserState() {
   BrowserStateDependencyManager::GetInstance()->DestroyBrowserStateServices(
       this);
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
   ActiveStateManager::FromBrowserState(this)->SetActive(false);
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
 }
 
 PrefService* WebViewBrowserState::GetPrefs() {
@@ -151,25 +155,34 @@ void WebViewBrowserState::RegisterPrefs(
                                     l10n_util::GetLocaleOverride());
   pref_registry->RegisterBooleanPref(prefs::kOfferTranslateEnabled, true);
   translate::TranslatePrefs::RegisterProfilePrefs(pref_registry);
+
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
   autofill::AutofillManager::RegisterProfilePrefs(pref_registry);
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
   // Instantiate all factories to setup dependency graph for pref registration.
+  WebViewLanguageModelFactory::GetInstance();
+  WebViewTranslateRankerFactory::GetInstance();
+  WebViewUrlLanguageHistogramFactory::GetInstance();
+  WebViewTranslateAcceptLanguagesFactory::GetInstance();
+
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
+  WebViewPersonalDataManagerFactory::GetInstance();
+  WebViewWebDataServiceWrapperFactory::GetInstance();
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
+
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
   WebViewCookieSettingsFactory::GetInstance();
   WebViewHostContentSettingsMapFactory::GetInstance();
   WebViewAccountFetcherServiceFactory::GetInstance();
   WebViewAccountTrackerServiceFactory::GetInstance();
   WebViewGaiaCookieManagerServiceFactory::GetInstance();
-  WebViewLanguageModelFactory::GetInstance();
   WebViewOAuth2TokenServiceFactory::GetInstance();
   WebViewSigninClientFactory::GetInstance();
   WebViewSigninErrorControllerFactory::GetInstance();
   WebViewSigninManagerFactory::GetInstance();
-  WebViewTranslateRankerFactory::GetInstance();
-  WebViewUrlLanguageHistogramFactory::GetInstance();
-  WebViewPersonalDataManagerFactory::GetInstance();
   WebViewIdentityManagerFactory::GetInstance();
-  WebViewTranslateAcceptLanguagesFactory::GetInstance();
-  WebViewWebDataServiceWrapperFactory::GetInstance();
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
 
   BrowserStateDependencyManager::GetInstance()
       ->RegisterBrowserStatePrefsForServices(this, pref_registry);

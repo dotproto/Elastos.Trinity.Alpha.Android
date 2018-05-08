@@ -172,42 +172,54 @@ void WriteNodesToResponse(const AudioNodeList& node_list,
     entry_writer.AppendString(cras::kIsInputProperty);
     entry_writer.AppendVariantOfBool(node_list[i].is_input);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kIdProperty);
     entry_writer.AppendVariantOfUint64(node_list[i].id);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kDeviceNameProperty);
     entry_writer.AppendVariantOfString(node_list[i].device_name);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kTypeProperty);
     entry_writer.AppendVariantOfString(node_list[i].type);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kNameProperty);
     entry_writer.AppendVariantOfString(node_list[i].name);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kActiveProperty);
     entry_writer.AppendVariantOfBool(node_list[i].active);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kPluggedTimeProperty);
     entry_writer.AppendVariantOfUint64(node_list[i].plugged_time);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kMicPositionsProperty);
     entry_writer.AppendVariantOfString(node_list[i].mic_positions);
     sub_writer.CloseContainer(&entry_writer);
+
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(cras::kStableDeviceIdProperty);
     entry_writer.AppendVariantOfUint64(node_list[i].stable_device_id_v1);
+    sub_writer.CloseContainer(&entry_writer);
+
     if (node_list[i].has_v2_stable_device_id) {
+      sub_writer.OpenDictEntry(&entry_writer);
       entry_writer.AppendString(cras::kStableDeviceIdNewProperty);
       entry_writer.AppendVariantOfUint64(node_list[i].stable_device_id_v2);
+      sub_writer.CloseContainer(&entry_writer);
     }
-    sub_writer.CloseContainer(&entry_writer);
+
     writer->CloseContainer(&sub_writer);
   }
 }

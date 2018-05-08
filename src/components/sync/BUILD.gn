@@ -220,6 +220,8 @@ jumbo_static_library("sync") {
     "engine/sync_engine.h",
     "engine/sync_engine_host.cc",
     "engine/sync_engine_host.h",
+    "engine/sync_engine_switches.cc",
+    "engine/sync_engine_switches.h",
     "engine/sync_manager.cc",
     "engine/sync_manager.h",
     "engine/sync_manager_factory.cc",
@@ -368,8 +370,6 @@ jumbo_static_library("sync") {
     "engine_impl/update_handler.h",
     "engine_impl/uss_migrator.cc",
     "engine_impl/uss_migrator.h",
-    "engine_impl/worker_entity_tracker.cc",
-    "engine_impl/worker_entity_tracker.h",
     "js/js_backend.h",
     "js/js_controller.h",
     "js/js_event_details.cc",
@@ -489,8 +489,6 @@ jumbo_static_library("sync") {
     "syncable/scoped_kernel_lock.h",
     "syncable/scoped_parent_child_index_updater.cc",
     "syncable/scoped_parent_child_index_updater.h",
-    "syncable/sync_db_util.cc",
-    "syncable/sync_db_util.h",
     "syncable/syncable_base_transaction.cc",
     "syncable/syncable_base_transaction.h",
     "syncable/syncable_base_write_transaction.cc",
@@ -561,6 +559,7 @@ jumbo_static_library("sync") {
     "//components/version_info",
     "//crypto",
     "//google_apis",
+    "//services/identity/public/cpp",
     "//sql",
     "//third_party/cacheinvalidation",
     "//third_party/crc32c",
@@ -619,6 +618,7 @@ static_library("test_support_base") {
     "test/mock_invalidation.h",
     "test/mock_invalidation_tracker.cc",
     "test/mock_invalidation_tracker.h",
+    "test/test_matchers.h",
     "test/trackable_mock_invalidation.cc",
     "test/trackable_mock_invalidation.h",
   ]
@@ -783,6 +783,7 @@ static_library("test_support_driver") {
   deps = [
     ":sync",
     ":test_support_engine",
+    "//components/signin/core/browser:account_info",
     "//components/sync_preferences:test_support",
     "//components/version_info",
     "//google_apis",
@@ -824,6 +825,7 @@ source_set("unit_tests") {
     "driver/model_type_controller_unittest.cc",
     "driver/shared_change_processor_unittest.cc",
     "driver/startup_controller_unittest.cc",
+    "driver/sync_service_utils_unittest.cc",
     "driver/sync_stopped_reporter_unittest.cc",
     "driver/sync_util_unittest.cc",
     "engine/cycle/sync_cycle_snapshot_unittest.cc",
@@ -852,6 +854,7 @@ source_set("unit_tests") {
     "engine_impl/model_type_registry_unittest.cc",
     "engine_impl/model_type_worker_unittest.cc",
     "engine_impl/net/sync_server_connection_manager_unittest.cc",
+    "engine_impl/non_blocking_type_commit_contribution_unittest.cc",
     "engine_impl/sync_encryption_handler_impl_unittest.cc",
     "engine_impl/sync_manager_impl_unittest.cc",
     "engine_impl/sync_scheduler_impl_unittest.cc",
@@ -859,7 +862,6 @@ source_set("unit_tests") {
     "engine_impl/syncer_unittest.cc",
     "engine_impl/syncer_util_unittest.cc",
     "engine_impl/uss_migrator_unittest.cc",
-    "engine_impl/worker_entity_tracker_unittest.cc",
     "js/js_event_details_unittest.cc",
     "js/sync_js_controller_unittest.cc",
     "model/entity_data_unittest.cc",
@@ -1062,7 +1064,6 @@ if (is_android) {
     deps = [
       ":test_support_proto_java_prepare",
     ]
-    generate_lite = true
   }
 
   android_library("sync_java_test_support") {

@@ -32,7 +32,7 @@ uint32_t ModifyFlag(uint32_t bitfield, uint32_t flag, bool set) {
 std::string StateBitfieldToString(uint32_t state) {
   std::string str;
   for (uint32_t i = static_cast<uint32_t>(ax::mojom::State::kNone) + 1;
-       i <= static_cast<uint32_t>(ax::mojom::State::kLast); ++i) {
+       i <= static_cast<uint32_t>(ax::mojom::State::kMaxValue); ++i) {
     if (IsFlagSet(state, i))
       str += " " +
              base::ToUpperASCII(ui::ToString(static_cast<ax::mojom::State>(i)));
@@ -43,7 +43,7 @@ std::string StateBitfieldToString(uint32_t state) {
 std::string ActionsBitfieldToString(uint32_t actions) {
   std::string str;
   for (uint32_t i = static_cast<uint32_t>(ax::mojom::Action::kNone) + 1;
-       i <= static_cast<uint32_t>(ax::mojom::Action::kLast); ++i) {
+       i <= static_cast<uint32_t>(ax::mojom::Action::kMaxValue); ++i) {
     if (IsFlagSet(actions, i)) {
       str += ui::ToString(static_cast<ax::mojom::Action>(i));
       actions = ModifyFlag(actions, i, false);
@@ -159,14 +159,12 @@ bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr) {
 // to be mapped when renumbering the ids in a combined tree.
 bool IsNodeIdIntListAttribute(ax::mojom::IntListAttribute attr) {
   switch (attr) {
-    case ax::mojom::IntListAttribute::kCellIds:
     case ax::mojom::IntListAttribute::kControlsIds:
     case ax::mojom::IntListAttribute::kDescribedbyIds:
     case ax::mojom::IntListAttribute::kFlowtoIds:
     case ax::mojom::IntListAttribute::kIndirectChildIds:
     case ax::mojom::IntListAttribute::kLabelledbyIds:
     case ax::mojom::IntListAttribute::kRadioGroupIds:
-    case ax::mojom::IntListAttribute::kUniqueCellIds:
       return true;
 
     // Note: all of the attributes are included here explicitly,
@@ -1001,6 +999,9 @@ std::string AXNodeData::ToString() const {
       case ax::mojom::BoolAttribute::kClipsChildren:
         result += " clips_children=" + value;
         break;
+      case ax::mojom::BoolAttribute::kSelected:
+        result += " selected=" + value;
+        break;
       case ax::mojom::BoolAttribute::kNone:
         break;
     }
@@ -1066,12 +1067,6 @@ std::string AXNodeData::ToString() const {
         break;
       case ax::mojom::IntListAttribute::kMarkerEnds:
         result += " marker_ends=" + IntVectorToString(values);
-        break;
-      case ax::mojom::IntListAttribute::kCellIds:
-        result += " cell_ids=" + IntVectorToString(values);
-        break;
-      case ax::mojom::IntListAttribute::kUniqueCellIds:
-        result += " unique_cell_ids=" + IntVectorToString(values);
         break;
       case ax::mojom::IntListAttribute::kCharacterOffsets:
         result += " character_offsets=" + IntVectorToString(values);

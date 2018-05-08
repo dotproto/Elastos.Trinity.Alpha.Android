@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
@@ -164,7 +165,7 @@ void NetExportFileWriter::Initialize(
 void NetExportFileWriter::StartNetLog(
     const base::FilePath& log_path,
     net::NetLogCaptureMode capture_mode,
-    size_t max_file_size,
+    uint64_t max_file_size,
     const base::CommandLine::StringType& command_line_string,
     const std::string& channel_string,
     const URLRequestContextGetterList& context_getters) {

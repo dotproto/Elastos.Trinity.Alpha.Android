@@ -20,8 +20,8 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
-#include "components/subresource_filter/core/common/tools/filter_tool.h"
-#include "components/subresource_filter/core/common/tools/indexing_tool.h"
+#include "components/subresource_filter/tools/filter_tool.h"
+#include "components/subresource_filter/tools/indexing_tool.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 
@@ -35,7 +35,7 @@ class IndexedRulesetPerftest : public testing::Test {
 
   void SetUp() override {
     base::FilePath dir_path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &dir_path);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &dir_path);
     base::FilePath request_path = dir_path.AppendASCII(
         "components/subresource_filter/core/common/perftests/"
         "/data/httparchive_request_corpus.csv");

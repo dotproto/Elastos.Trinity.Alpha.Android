@@ -164,13 +164,13 @@ void BeginRasterCHROMIUM(GLuint texture_id,
                          GLuint sk_color,
                          GLuint msaa_sample_count,
                          GLboolean can_use_lcd_text,
-                         GLboolean use_distance_field_text,
-                         GLint color_type) {
+                         GLint color_type,
+                         GLuint color_space_transfer_cache_id) {
   raster::cmds::BeginRasterCHROMIUM* c =
       GetCmdSpace<raster::cmds::BeginRasterCHROMIUM>();
   if (c) {
     c->Init(texture_id, sk_color, msaa_sample_count, can_use_lcd_text,
-            use_distance_field_text, color_type);
+            color_type, color_space_transfer_cache_id);
   }
 }
 
@@ -251,6 +251,21 @@ void ProduceTextureDirectImmediate(GLuint texture, const GLbyte* mailbox) {
           raster::cmds::ProduceTextureDirectImmediate>(size);
   if (c) {
     c->Init(texture, mailbox);
+  }
+}
+
+void CreateAndConsumeTextureINTERNALImmediate(GLuint texture_id,
+                                              bool use_buffer,
+                                              gfx::BufferUsage buffer_usage,
+                                              viz::ResourceFormat format,
+                                              const GLbyte* mailbox) {
+  const uint32_t size =
+      raster::cmds::CreateAndConsumeTextureINTERNALImmediate::ComputeSize();
+  raster::cmds::CreateAndConsumeTextureINTERNALImmediate* c =
+      GetImmediateCmdSpaceTotalSize<
+          raster::cmds::CreateAndConsumeTextureINTERNALImmediate>(size);
+  if (c) {
+    c->Init(texture_id, use_buffer, buffer_usage, format, mailbox);
   }
 }
 

@@ -8,9 +8,12 @@
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
@@ -21,8 +24,26 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_dialog_factory.h"
+#include "ui/shell_dialogs/select_file_policy.h"
+
+namespace {
+
+const base::FilePath::CharType kPolicyToolSessionsDir[] =
+    FILE_PATH_LITERAL("Policy sessions");
+
+const base::FilePath::CharType kPolicyToolDefaultSessionName[] =
+    FILE_PATH_LITERAL("policy");
+
+const base::FilePath::CharType kPolicyToolSessionExtension[] =
+    FILE_PATH_LITERAL("json");
+
+}  // namespace
 
 class PolicyToolUITest : public InProcessBrowserTest {
  public:
@@ -30,8 +51,6 @@ class PolicyToolUITest : public InProcessBrowserTest {
   ~PolicyToolUITest() override;
 
  protected:
-  // InProcessBrowserTest implementation.
-  void SetUpInProcessBrowserTestFixture() override;
   void SetUp() override;
 
   base::FilePath GetSessionsDir();
@@ -53,6 +72,13 @@ class PolicyToolUITest : public InProcessBrowserTest {
 
   void CreateMultipleSessionFiles(int count);
 
+  void SetPolicyValue(const std::string& policy_name,
+                      const std::string& policy_value);
+
+  bool CheckPolicyStatus(const std::string& policy_name,
+                         const std::string& policy_value,
+                         const std::string& expected_status);
+
   // Check if the error message that replaces the element is shown correctly.
   // Returns 1 if error message is shown, -1 if the error message is not shown,
   // and 0 if the displaying is incorrect (e.g. both error message and the
@@ -70,15 +96,15 @@ base::FilePath PolicyToolUITest::GetSessionsDir() {
   base::FilePath profile_dir;
   EXPECT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &profile_dir));
   return profile_dir.AppendASCII(TestingProfile::kTestUserProfileDir)
-      .Append(PolicyToolUIHandler::kPolicyToolSessionsDir);
+      .Append(kPolicyToolSessionsDir);
 }
 
 base::FilePath::StringType PolicyToolUITest::GetDefaultSessionName() {
-  return PolicyToolUIHandler::kPolicyToolDefaultSessionName;
+  return kPolicyToolDefaultSessionName;
 }
 
 base::FilePath::StringType PolicyToolUITest::GetSessionExtension() {
-  return PolicyToolUIHandler::kPolicyToolSessionExtension;
+  return kPolicyToolSessionExtension;
 }
 
 base::FilePath PolicyToolUITest::GetSessionPath(
@@ -91,8 +117,6 @@ base::FilePath PolicyToolUITest::GetSessionPath(
 PolicyToolUITest::PolicyToolUITest() {}
 
 PolicyToolUITest::~PolicyToolUITest() {}
-
-void PolicyToolUITest::SetUpInProcessBrowserTestFixture() {}
 
 void PolicyToolUITest::SetUp() {
   scoped_feature_list_.InitAndEnableFeature(features::kPolicyTool);
@@ -128,6 +152,53 @@ void PolicyToolUITest::RenameSession(const std::string& session_name,
   EXPECT_TRUE(content::ExecuteScript(
       browser()->tab_strip_model()->GetActiveWebContents(), javascript));
   content::RunAllTasksUntilIdle();
+}
+
+// Set |policy_value| as a value of |policy_name|, this function will
+// run all the tasks until idle because editing a policy value will post
+// tasks in the TaskScheduler.
+void PolicyToolUITest::SetPolicyValue(const std::string& policy_name,
+                                      const std::string& policy_value) {
+  std::string javascript =
+      "document.getElementById('show-unset').click();"
+      "var policies = document.querySelectorAll("
+      "    'section.policy-table-section > * > tbody');"
+      "var policyEntry;"
+      "for (var i = 0; i < policies.length; ++i) {"
+      "  if (policies[i].getElementsByClassName('name')[0].textContent == '" +
+      policy_name +
+      "') {"
+      "    policyEntry = policies[i];"
+      "    break;"
+      "  }"
+      "}"
+      "policyEntry.getElementsByClassName('edit-button')[0].click();"
+      "policyEntry.getElementsByClassName('value-edit-field')[0].value = '" +
+      policy_value +
+      "';"
+      "policyEntry.getElementsByClassName('save-button')[0].click();"
+      "document.getElementById('show-unset').click();"
+      "var name = policyEntry.getElementsByClassName('name-column')[0]"
+      "                      .getElementsByTagName('div')[0].textContent;";
+  EXPECT_TRUE(content::ExecuteScript(
+      browser()->tab_strip_model()->GetActiveWebContents(), javascript));
+  content::RunAllTasksUntilIdle();
+}
+
+// Check the status of |policy_name| after set |policy_value| as a value.
+// Return |true| if the status is equal to |expected_status| and |false|
+// otherwise.
+bool PolicyToolUITest::CheckPolicyStatus(const std::string& policy_name,
+                                         const std::string& policy_value,
+                                         const std::string& expected_status) {
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://policy-tool"));
+  // Wait until the current session load.
+  content::RunAllTasksUntilIdle();
+  // SetPolicyValue waits until all the tasks finish.
+  SetPolicyValue(policy_name, policy_value);
+  std::unique_ptr<base::DictionaryValue> page = ExtractPolicyValues(true);
+  return base::Value(expected_status) ==
+         *page->FindPath({"chromePolicies", policy_name, "status"});
 }
 
 std::unique_ptr<base::DictionaryValue> PolicyToolUITest::ExtractPolicyValues(
@@ -248,7 +319,92 @@ std::string PolicyToolUITest::ExtractSinglePolicyValue(
   return value->GetString();
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyToolUITest, CreatingSessionFiles) {
+class PolicyToolUIExportTest : public PolicyToolUITest {
+ public:
+  PolicyToolUIExportTest();
+  ~PolicyToolUIExportTest() override;
+
+ protected:
+  // InProcessBrowserTest implementation.
+  void SetUpInProcessBrowserTestFixture() override;
+
+  // The temporary directory and file path for policy saving.
+  base::ScopedTempDir export_policies_test_dir_;
+  base::FilePath export_policies_test_file_path_;
+};
+
+PolicyToolUIExportTest::PolicyToolUIExportTest() {}
+
+PolicyToolUIExportTest::~PolicyToolUIExportTest() {}
+
+void PolicyToolUIExportTest::SetUpInProcessBrowserTestFixture() {
+  ASSERT_TRUE(export_policies_test_dir_.CreateUniqueTempDir());
+  const std::string filename = "policy.json";
+  export_policies_test_file_path_ =
+      export_policies_test_dir_.GetPath().AppendASCII(filename);
+}
+
+// An artificial SelectFileDialog that immediately returns the location of test
+// file instead of showing the UI file picker.
+class TestSelectFileDialogPolicyTool : public ui::SelectFileDialog {
+ public:
+  TestSelectFileDialogPolicyTool(ui::SelectFileDialog::Listener* listener,
+                                 std::unique_ptr<ui::SelectFilePolicy> policy,
+                                 const base::FilePath& default_selected_path)
+      : ui::SelectFileDialog(listener, std::move(policy)) {
+    default_path_ = default_selected_path;
+  }
+
+  void SelectFileImpl(Type type,
+                      const base::string16& title,
+                      const base::FilePath& default_path,
+                      const FileTypeInfo* file_types,
+                      int file_type_index,
+                      const base::FilePath::StringType& default_extension,
+                      gfx::NativeWindow owning_window,
+                      void* params) override {
+    listener_->FileSelected(default_path_, /*index=*/0, /*params=*/nullptr);
+  }
+
+  bool IsRunning(gfx::NativeWindow owning_window) const override {
+    return false;
+  }
+
+  void ListenerDestroyed() override {}
+
+  bool HasMultipleFileTypeChoicesImpl() override { return false; }
+
+ private:
+  ~TestSelectFileDialogPolicyTool() override {}
+  base::FilePath default_path_;
+};
+
+// A factory associated with the artificial file picker.
+class TestSelectFileDialogFactoryPolicyTool
+    : public ui::SelectFileDialogFactory {
+ public:
+  TestSelectFileDialogFactoryPolicyTool(
+      const base::FilePath& default_selected_path) {
+    default_path_ = default_selected_path;
+  }
+
+ private:
+  base::FilePath default_path_;
+  ui::SelectFileDialog* Create(
+      ui::SelectFileDialog::Listener* listener,
+      std::unique_ptr<ui::SelectFilePolicy> policy) override {
+    return new TestSelectFileDialogPolicyTool(listener, std::move(policy),
+                                              default_path_);
+  }
+};
+
+// Flaky on Win buildbots. See crbug.com/832673.
+#if defined(OS_WIN)
+#define MAYBE_CreatingSessionFiles DISABLED_CreatingSessionFiles
+#else
+#define MAYBE_CreatingSessionFiles CreatingSessionFiles
+#endif
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest, MAYBE_CreatingSessionFiles) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   // Check that the directory is not created yet.
   EXPECT_FALSE(PathExists(GetSessionsDir()));
@@ -353,6 +509,8 @@ IN_PROC_BROWSER_TEST_F(PolicyToolUITest, InvalidSessionName) {
   EXPECT_FALSE(IsInvalidSessionNameErrorMessageDisplayed());
   LoadSession("../test");
   EXPECT_TRUE(IsInvalidSessionNameErrorMessageDisplayed());
+  LoadSession("/full_path");
+  EXPECT_TRUE(IsInvalidSessionNameErrorMessageDisplayed());
   LoadSession("policy");
   EXPECT_FALSE(IsInvalidSessionNameErrorMessageDisplayed());
 }
@@ -381,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(PolicyToolUITest, SavingToDiskError) {
   EXPECT_EQ(GetElementDisabledState("session-choice", "saving"), 1);
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyToolUITest, DefaultSession) {
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest, DISABLED_DefaultSession) {
   // Navigate to the tool to make sure the sessions directory is created.
   ui_test_utils::NavigateToURL(browser(), GURL("chrome://policy-tool"));
 
@@ -493,7 +651,12 @@ IN_PROC_BROWSER_TEST_F(PolicyToolUITest, RenameSessionWithExistingSessionName) {
   EXPECT_EQ(expected, *ExtractSessionsList());
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyToolUITest, RenameSessionInvalidName) {
+#if defined(OS_WIN)
+#define MAYBE_RenameSessionInvalidName DISABLED_RenameSessionInvalidName
+#else
+#define MAYBE_RenameSessionInvalidName RenameSessionInvalidName
+#endif
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest, MAYBE_RenameSessionInvalidName) {
   CreateMultipleSessionFiles(3);
   ui_test_utils::NavigateToURL(browser(), GURL("chrome://policy-tool"));
   EXPECT_EQ("2", ExtractSinglePolicyValue("SessionId"));
@@ -505,4 +668,109 @@ IN_PROC_BROWSER_TEST_F(PolicyToolUITest, RenameSessionInvalidName) {
   expected.GetList().push_back(base::Value("1"));
   expected.GetList().push_back(base::Value("0"));
   EXPECT_EQ(expected, *ExtractSessionsList());
+
+  // Check that full path is not allowed
+  RenameSession("2", "/full_path");
+  EXPECT_TRUE(IsSessionRenameErrorMessageDisplayed());
+  EXPECT_EQ(expected, *ExtractSessionsList());
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUIExportTest, ExportSessionPolicyToLinux) {
+  CreateMultipleSessionFiles(3);
+  // Set SelectFileDialog to use our factory.
+  ui::SelectFileDialog::SetFactory(new TestSelectFileDialogFactoryPolicyTool(
+      export_policies_test_file_path_));
+
+  // Test if the current session policy is successfully exported.
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://policy-tool"));
+  content::RunAllTasksUntilIdle();
+
+  std::string edit_and_export_js =
+      "$('show-unset').click();"
+      "var policyEntry = document.querySelectorAll("
+      "    'section.policy-table-section > * > tbody')[0];"
+      "policyEntry.getElementsByClassName('edit-button')[0].click();"
+      "policyEntry.getElementsByClassName('value-edit-field')[0].value ="
+      "                                                           'test';"
+      "policyEntry.getElementsByClassName('save-button')[0].click();"
+      "$('export-policies-linux').click()";
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScript(contents, edit_and_export_js));
+  // Wait until the posted tasks (Edit session, export to Linux) finish.
+  content::RunAllTasksUntilIdle();
+
+  // Because we created 3 session policies (with paths {0, 1, 2}), the last one
+  // is the current active session policy.
+  EXPECT_TRUE(base::ContentsEqual(export_policies_test_file_path_,
+                                  GetSessionPath(FILE_PATH_LITERAL("2"))));
+
+  // Test if after an export action, we can continue exporting.
+  std::string change_session_js =
+      "$('session-name-field').value = '1';"
+      "$('load-session-button').click();";
+  EXPECT_TRUE(
+      content::ExecuteScript(contents, change_session_js + edit_and_export_js));
+  // Wait until the posted tasks (Edit session, export to Linux) finish.
+  content::RunAllTasksUntilIdle();
+
+  EXPECT_TRUE(base::ContentsEqual(export_policies_test_file_path_,
+                                  GetSessionPath(FILE_PATH_LITERAL("1"))));
+  TestSelectFileDialogPolicyTool::SetFactory(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeCorrectBooleanTypeValidation) {
+  EXPECT_TRUE(CheckPolicyStatus("AllowDinosaurEasterEgg", "true",
+                                l10n_util::GetStringUTF8(IDS_POLICY_OK)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeIncorrectBooleanTypeValidation) {
+  EXPECT_TRUE(CheckPolicyStatus(
+      "AllowDinosaurEasterEgg", "string",
+      l10n_util::GetStringUTF8(IDS_POLICY_TOOL_INVALID_TYPE)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeCorrectListTypeValidation) {
+  EXPECT_TRUE(CheckPolicyStatus("ImagesAllowedForUrls", "[\"a\", \"b\"]",
+                                l10n_util::GetStringUTF8(IDS_POLICY_OK)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeBoolAsListTypeValidation) {
+  EXPECT_TRUE(CheckPolicyStatus(
+      "ImagesAllowedForUrls", "true",
+      l10n_util::GetStringUTF8(IDS_POLICY_TOOL_INVALID_TYPE)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeWrongElementTypesInListValidation) {
+  EXPECT_TRUE(CheckPolicyStatus(
+      "ImagesAllowedForUrls", "[1, 2]",
+      l10n_util::GetStringUTF8(IDS_POLICY_TOOL_INVALID_TYPE)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeMalformedListValidation) {
+  EXPECT_TRUE(CheckPolicyStatus(
+      "ImagesAllowedForUrls", "[\"a\"",
+      l10n_util::GetStringUTF8(IDS_POLICY_TOOL_INVALID_TYPE)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeValidDictionaryTypeValidation) {
+  EXPECT_TRUE(
+      CheckPolicyStatus("ManagedBookmarks",
+                        R"([{"toplevel_name": "My managed bookmarks folder"},)"
+                        R"({"url": "google.com", "name": "Google"}])",
+                        l10n_util::GetStringUTF8(IDS_POLICY_OK)));
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyToolUITest,
+                       CheckPolicyTypeWrongAttributesTypeValidation) {
+  EXPECT_TRUE(CheckPolicyStatus(
+      "ManagedBookmarks", "[{\"attribute\": \"value\"}]",
+      l10n_util::GetStringUTF8(IDS_POLICY_TOOL_INVALID_TYPE)));
 }

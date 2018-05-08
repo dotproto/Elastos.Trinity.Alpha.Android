@@ -42,9 +42,6 @@ class AppBannerService;
 
 namespace content {
 
-class LeakDetector;
-struct LeakDetectionResult;
-
 // This is the renderer side of the webkit test runner.
 // TODO(lukasza): Rename to LayoutTestRenderViewObserver for consistency with
 // LayoutTestRenderFrameObserver.
@@ -145,7 +142,6 @@ class BlinkTestRunner : public RenderViewObserver,
       blink::WebMediaStream* stream) override;
   bool AddMediaStreamAudioSourceAndTrack(
       blink::WebMediaStream* stream) override;
-  viz::SharedBitmapManager* GetSharedBitmapManager() override;
   void DispatchBeforeInstallPromptEvent(
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) override;
@@ -166,18 +162,16 @@ class BlinkTestRunner : public RenderViewObserver,
   // also resets additional state, like the main frame's name and opener.
   void Reset(bool for_new_test);
 
-  void ReportLeakDetectionResult(const LeakDetectionResult& result);
-
   // Message handlers forwarded by LayoutTestRenderFrameObserver.
   void OnSetTestConfiguration(mojom::ShellTestConfigurationPtr params);
   void OnReplicateTestConfiguration(mojom::ShellTestConfigurationPtr params);
   void OnSetupSecondaryRenderer();
+  void CaptureDump(mojom::LayoutTestControl::CaptureDumpCallback callback);
 
  private:
   // Message handlers.
   void OnReset();
   void OnTestFinishedInSecondaryRenderer();
-  void OnTryLeakDetection();
   void OnReplyBluetoothManualChooserEvents(
       const std::vector<std::string>& events);
 
@@ -195,11 +189,13 @@ class BlinkTestRunner : public RenderViewObserver,
 
   // After finishing the test, retrieves the audio, text, and pixel dumps from
   // the TestRunner library and sends them to the browser process.
-  void CaptureDump();
   void OnLayoutDumpCompleted(std::string completed_layout_dump);
-  void CaptureDumpContinued();
   void OnPixelsDumpCompleted(const SkBitmap& snapshot);
   void CaptureDumpComplete();
+  void CaptureLocalAudioDump();
+  void CaptureLocalLayoutDump();
+  // Returns true if the browser should capture pixels instead.
+  bool CaptureLocalPixelsDump();
 
   mojom::LayoutTestBluetoothFakeAdapterSetter&
   GetBluetoothFakeAdapterSetter();
@@ -218,7 +214,10 @@ class BlinkTestRunner : public RenderViewObserver,
 
   std::unique_ptr<test_runner::AppBannerService> app_banner_service_;
 
-  std::unique_ptr<LeakDetector> leak_detector_;
+  mojom::LayoutTestControl::CaptureDumpCallback dump_callback_;
+  mojom::LayoutTestDumpPtr dump_result_;
+  bool waiting_for_layout_dump_results_ = false;
+  bool waiting_for_pixels_dump_result_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(BlinkTestRunner);
 };

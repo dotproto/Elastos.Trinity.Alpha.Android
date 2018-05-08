@@ -98,13 +98,13 @@ const char kSyncPasswordChromeSettingsHistogram[] =
 
 PasswordProtectionService::PasswordProtectionService(
     const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     HistoryService* history_service,
     HostContentSettingsMap* host_content_settings_map)
     : stored_verdict_count_password_on_focus_(-1),
       stored_verdict_count_password_entry_(-1),
       database_manager_(database_manager),
-      request_context_getter_(request_context_getter),
+      url_loader_factory_(url_loader_factory),
       history_service_observer_(this),
       content_settings_(host_content_settings_map),
       weak_factory_(this) {
@@ -168,11 +168,6 @@ bool PasswordProtectionService::ShouldShowModalWarning(
                kGoogleBrandedPhishingWarning, "warn_on_low_reputation",
                false))) &&
          IsWarningEnabled();
-}
-
-bool PasswordProtectionService::ShouldShowSofterWarning() {
-  return base::GetFieldTrialParamByFeatureAsBool(kGoogleBrandedPhishingWarning,
-                                                 "softer_warning", false);
 }
 
 // We cache both types of pings under the same content settings type (
@@ -349,6 +344,7 @@ void PasswordProtectionService::CleanUpExpiredVerdicts() {
     if (cache_dictionary->size() == 0u) {
       content_settings_->ClearSettingsForOneTypeWithPredicate(
           CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, base::Time(),
+          base::Time::Max(),
           base::Bind(&OriginMatchPrimaryPattern, primary_pattern_url));
     } else if (has_expired_password_on_focus_entry ||
                has_expired_password_reuse_entry) {
@@ -388,8 +384,9 @@ void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
     const GURL& password_form_action,
     const GURL& password_form_frame_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RequestOutcome reason;
   if (CanSendPing(LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE,
-                  main_frame_url, false)) {
+                  main_frame_url, false, &reason)) {
     StartRequest(web_contents, main_frame_url, password_form_action,
                  password_form_frame_url,
                  false, /* matches_sync_password: not used for this type */
@@ -405,26 +402,35 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
     const std::vector<std::string>& matching_domains,
     bool password_field_exists) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RequestOutcome reason;
   if (CanSendPing(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
-                  main_frame_url, matches_sync_password)) {
+                  main_frame_url, matches_sync_password, &reason)) {
     StartRequest(web_contents, main_frame_url, GURL(), GURL(),
                  matches_sync_password, matching_domains,
                  LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
                  password_field_exists);
+  } else {
+    MaybeLogPasswordReuseLookupEvent(web_contents, reason, nullptr);
+    if (reason == PASSWORD_ALERT_MODE && matches_sync_password) {
+      OnPolicySpecifiedPasswordReuseDetected(main_frame_url,
+                                             /*is_phishing_url=*/false);
+      // TODO(jialiul): Show chrome://reset-password page.
+    }
   }
 }
 
 bool PasswordProtectionService::CanSendPing(
     LoginReputationClientRequest::TriggerType trigger_type,
     const GURL& main_frame_url,
-    bool matches_sync_password) {
-  RequestOutcome request_outcome = URL_NOT_VALID_FOR_REPUTATION_COMPUTING;
-  if (IsPingingEnabled(trigger_type, &request_outcome) &&
-      !IsURLWhitelistedForPasswordEntry(main_frame_url, &request_outcome) &&
+    bool matches_sync_password,
+    RequestOutcome* reason) {
+  *reason = URL_NOT_VALID_FOR_REPUTATION_COMPUTING;
+  if (IsPingingEnabled(trigger_type, reason) &&
+      !IsURLWhitelistedForPasswordEntry(main_frame_url, reason) &&
       CanGetReputationOfURL(main_frame_url)) {
     return true;
   }
-  RecordNoPingingReason(trigger_type, request_outcome, matches_sync_password);
+  RecordNoPingingReason(trigger_type, *reason, matches_sync_password);
   return false;
 }
 
@@ -605,7 +611,7 @@ void PasswordProtectionService::RemoveContentSettingsOnURLsDeleted(
             url_key, LoginReputationClientRequest::PASSWORD_REUSE_EVENT);
     content_settings_->ClearSettingsForOneTypeWithPredicate(
         CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, base::Time(),
-        base::Bind(&OriginMatchPrimaryPattern, url_key));
+        base::Time::Max(), base::Bind(&OriginMatchPrimaryPattern, url_key));
   }
 }
 
@@ -841,16 +847,12 @@ bool PasswordProtectionService::IsModalWarningShowingInWebContents(
 
 bool PasswordProtectionService::IsWarningEnabled() {
   return base::FeatureList::IsEnabled(kGoogleBrandedPhishingWarning) &&
-         GetSyncAccountType() !=
-             LoginReputationClientRequest::PasswordReuseEvent::NOT_SIGNED_IN &&
          GetPasswordProtectionTriggerPref(
              prefs::kPasswordProtectionWarningTrigger) == PHISHING_REUSE;
 }
 
 bool PasswordProtectionService::IsEventLoggingEnabled() {
   return base::FeatureList::IsEnabled(kGaiaPasswordReuseReporting) &&
-         GetSyncAccountType() !=
-             LoginReputationClientRequest::PasswordReuseEvent::NOT_SIGNED_IN &&
          GetPasswordProtectionTriggerPref(
              prefs::kPasswordProtectionRiskTrigger) == PHISHING_REUSE;
 }

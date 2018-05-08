@@ -11,9 +11,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/vr/elements/ui_element.h"
-#include "chrome/browser/vr/elements/ui_element_iterator.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
 #include "chrome/browser/vr/keyboard_delegate.h"
+#include "chrome/browser/vr/sequence.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
@@ -30,6 +30,8 @@ class UiElement;
 
 class UiScene {
  public:
+  typedef base::RepeatingCallback<void()> PerFrameCallback;
+
   UiScene();
   ~UiScene();
 
@@ -55,10 +57,12 @@ class UiScene {
   UiElement* GetUiElementByName(UiElementName name) const;
 
   typedef std::vector<const UiElement*> Elements;
+  typedef std::vector<UiElement*> MutableElements;
 
-  Elements GetVisibleElementsToDraw() const;
-  Elements GetVisibleWebVrOverlayElementsToDraw() const;
-  Elements GetPotentiallyVisibleElements() const;
+  std::vector<UiElement*>& GetAllElements();
+  Elements GetElementsToHitTest();
+  Elements GetElementsToDraw();
+  Elements GetWebVrOverlayElementsToDraw();
 
   float background_distance() const { return background_distance_; }
   void set_background_distance(float d) { background_distance_ = d; }
@@ -67,10 +71,18 @@ class UiScene {
 
   void OnGlInitialized(SkiaSurfaceProvider* provider);
 
+  // The callback to call on every new frame. This is used for things we want to
+  // do every frame regardless of element or subtree visibility.
+  void AddPerFrameCallback(PerFrameCallback callback);
+
+  void AddSequence(std::unique_ptr<Sequence> sequence);
+
   SkiaSurfaceProvider* SurfaceProviderForTesting() { return provider_; }
 
  private:
   void InitializeElement(UiElement* element);
+
+  MutableElements GetVisibleElementsMutable();
 
   std::unique_ptr<UiElement> root_element_;
 
@@ -84,6 +96,11 @@ class UiScene {
   // easily compute dirtiness.
   bool is_dirty_ = false;
 
+  std::vector<UiElement*> all_elements_;
+
+  std::vector<PerFrameCallback> per_frame_callback_;
+
+  std::vector<std::unique_ptr<Sequence>> scheduled_tasks_;
   SkiaSurfaceProvider* provider_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);

@@ -11,6 +11,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/test/test_views.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -58,7 +59,6 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
         new TestWidgetDelegate(maximize_allowed == MAXIMIZE_ALLOWED,
                                minimize_allowed == MINIMIZE_ALLOWED);
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    params.context = CurrentContext();
     widget->Init(params);
     return widget;
   }
@@ -67,7 +67,7 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
   // size to the buttons in |container|.
   void InitContainer(FrameCaptionButtonContainerView* container) {
     container->SetButtonSize(
-        GetAshLayoutSize(AshLayoutSize::NON_BROWSER_CAPTION_BUTTON));
+        GetAshLayoutSize(AshLayoutSize::kNonBrowserCaption));
     for (int icon = 0; icon < CAPTION_BUTTON_ICON_COUNT; ++icon) {
       container->SetButtonImage(static_cast<CaptionButtonIcon>(icon),
                                 ash::kWindowControlCloseIcon);
@@ -152,8 +152,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   // Add an extra button to the left of the size button to verify that it is
   // repositioned similarly to the minimize button. This simulates the PWA menu
   // button being added to the left of the minimize button.
-  FrameCaptionButton* extra_button =
-      new FrameCaptionButton(&container, CAPTION_BUTTON_ICON_BACK);
+  views::View* extra_button = new views::StaticSizedView(gfx::Size(32, 32));
   container.AddChildViewAt(extra_button, 0);
 
   InitContainer(&container);
@@ -176,7 +175,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   // Hidden size button should result in minimize button animating to the
   // right. The size button should not be visible, but should not have moved.
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
-  container.UpdateSizeButtonVisibility();
+  container.UpdateCaptionButtonState(false /*=animate*/);
   test.EndAnimations();
   // Parent needs to layout in response to size change.
   container.Layout();
@@ -197,7 +196,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   // Revealing the size button should cause the minimize button to return to its
   // original position.
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
-  container.UpdateSizeButtonVisibility();
+  container.UpdateCaptionButtonState(false /*=animate*/);
   // Calling code needs to layout in response to size change.
   container.Layout();
   test.EndAnimations();

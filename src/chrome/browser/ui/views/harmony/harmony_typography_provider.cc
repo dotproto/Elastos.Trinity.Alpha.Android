@@ -142,7 +142,7 @@ const gfx::FontList& HarmonyTypographyProvider::GetFont(int context,
 
   // Use a bold style for emphasized text in body contexts, and ignore |style|
   // otherwise.
-  if (style == STYLE_EMPHASIZED) {
+  if (style == STYLE_EMPHASIZED || style == STYLE_EMPHASIZED_SECONDARY) {
     switch (context) {
       case CONTEXT_BODY_TEXT_SMALL:
       case CONTEXT_BODY_TEXT_LARGE:
@@ -194,6 +194,7 @@ SkColor HarmonyTypographyProvider::GetColor(const views::View& view,
     case views::style::STYLE_LINK:
       return gfx::kGoogleBlue700;
     case STYLE_SECONDARY:
+    case STYLE_EMPHASIZED_SECONDARY:
     case STYLE_HINT:
       return SkColorSetRGB(0x75, 0x75, 0x75);
     case STYLE_RED:
@@ -202,7 +203,8 @@ SkColor HarmonyTypographyProvider::GetColor(const views::View& view,
       return gfx::kGoogleGreen700;
   }
 
-  return SkColorSetRGB(0x21, 0x21, 0x21);  // Primary for everything else.
+  // Use GoogleGrey900 as primary color for everything else.
+  return gfx::kGoogleGrey900;
 }
 
 int HarmonyTypographyProvider::GetLineHeight(int context, int style) const {

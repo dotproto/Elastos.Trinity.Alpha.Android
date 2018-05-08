@@ -16,6 +16,11 @@
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/aura/window_observer.h"
+
+namespace {
+class HostedAppNonClientFrameViewAshTest;
+}
 
 class HostedAppButtonContainer;
 class TabIconView;
@@ -33,7 +38,8 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                                      public TabletModeClientObserver,
                                      public TabIconViewModel,
                                      public CommandObserver,
-                                     public ash::mojom::SplitViewObserver {
+                                     public ash::mojom::SplitViewObserver,
+                                     public aura::WindowObserver {
  public:
   BrowserNonClientFrameViewAsh(BrowserFrame* frame, BrowserView* browser_view);
   ~BrowserNonClientFrameViewAsh() override;
@@ -86,6 +92,14 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
   void OnSplitViewStateChanged(
       ash::mojom::SplitViewState current_state) override;
 
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
+
+  HostedAppButtonContainer* GetHostedAppButtonContainerForTesting() const;
+
  protected:
   // BrowserNonClientFrameView:
   AvatarButtonStyle GetAvatarButtonStyle() const override;
@@ -101,12 +115,18 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                            AvatarDisplayOnTeleportedWindow);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            HeaderVisibilityInOverviewAndSplitview);
-  FRIEND_TEST_ALL_PREFIXES(HostedAppNonClientFrameViewAshTest, HostedAppFrame);
+  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+                           HeaderHeightForSnappedBrowserInSplitView);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshBackButtonTest,
                            V1BackButton);
+  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+                           ToggleTabletModeOnMinimizedWindow);
+  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+                           RestoreMinimizedBrowserUpdatesCaption);
   FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshHostedAppBrowserTest,
                            FrameLayout);
 
+  friend class HostedAppNonClientFrameViewAshTest;
   friend class BrowserFrameHeaderAsh;
 
   // Distance between the right edge of the NonClientFrameView and the tab

@@ -14,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -26,8 +25,10 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/browser_main_loop.h"
 #include "content/browser/histogram_controller.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/service_manager/service_manager_context.h"
@@ -81,14 +82,18 @@ void NotifyProcessHostDisconnected(const ChildProcessData& data) {
     observer.BrowserChildProcessHostDisconnected(data);
 }
 
-void NotifyProcessCrashed(const ChildProcessData& data, int exit_code) {
+#if !defined(OS_ANDROID)
+void NotifyProcessCrashed(const ChildProcessData& data,
+                          const ChildProcessTerminationInfo& info) {
   for (auto& observer : g_browser_child_process_observers.Get())
-    observer.BrowserChildProcessCrashed(data, exit_code);
+    observer.BrowserChildProcessCrashed(data, info);
 }
+#endif
 
-void NotifyProcessKilled(const ChildProcessData& data, int exit_code) {
+void NotifyProcessKilled(const ChildProcessData& data,
+                         const ChildProcessTerminationInfo& info) {
   for (auto& observer : g_browser_child_process_observers.Get())
-    observer.BrowserChildProcessKilled(data, exit_code);
+    observer.BrowserChildProcessKilled(data, info);
 }
 
 }  // namespace
@@ -209,6 +214,29 @@ void BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(
       switches::kDisableFeatures, cmd_line);
 }
 
+// static
+void BrowserChildProcessHostImpl::CopyTraceStartupFlags(
+    base::CommandLine* cmd_line) {
+  if (tracing::TraceStartupConfig::GetInstance()->IsEnabled()) {
+    const auto trace_config =
+        tracing::TraceStartupConfig::GetInstance()->GetTraceConfig();
+    if (!trace_config.IsArgumentFilterEnabled()) {
+      // The only trace option that we can pass through switches is the record
+      // mode. Other trace options should have the default value.
+      //
+      // TODO(chiniforooshan): Add other trace options to switches if, for
+      // example, they are used in a telemetry test that needs startup trace
+      // events from renderer processes.
+      cmd_line->AppendSwitchASCII(switches::kTraceStartup,
+                                  trace_config.ToCategoryFilterString());
+      cmd_line->AppendSwitchASCII(
+          switches::kTraceStartupRecordMode,
+          base::trace_event::TraceConfig::TraceRecordModeToStr(
+              trace_config.GetTraceRecordMode()));
+    }
+  }
+}
+
 void BrowserChildProcessHostImpl::Launch(
     std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
     std::unique_ptr<base::CommandLine> cmd_line,
@@ -222,6 +250,7 @@ void BrowserChildProcessHostImpl::Launch(
       *base::CommandLine::ForCurrentProcess();
   static const char* const kForwardSwitches[] = {
       service_manager::switches::kDisableInProcessStackTraces,
+      switches::kDisableBackgroundTasks,
       switches::kDisableLogging,
       switches::kEnableLogging,
       switches::kIPCConnectionTimeout,
@@ -318,13 +347,16 @@ void BrowserChildProcessHostImpl::HistogramBadMessageTerminated(
                             PROCESS_TYPE_MAX);
 }
 
-base::TerminationStatus BrowserChildProcessHostImpl::GetTerminationStatus(
-    bool known_dead, int* exit_code) {
+ChildProcessTerminationInfo BrowserChildProcessHostImpl::GetTerminationInfo(
+    bool known_dead) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!child_process_)  // If the delegate doesn't use Launch() helper.
-    return base::GetTerminationStatus(data_.handle, exit_code);
-  return child_process_->GetChildTerminationStatus(known_dead,
-                                                   exit_code);
+  if (!child_process_) {
+    // If the delegate doesn't use Launch() helper.
+    ChildProcessTerminationInfo info;
+    info.status = base::GetTerminationStatus(data_.handle, &info.exit_code);
+    return info;
+  }
+  return child_process_->GetChildTerminationInfo(known_dead);
 }
 
 bool BrowserChildProcessHostImpl::OnMessageReceived(
@@ -384,7 +416,7 @@ void BrowserChildProcessHostImpl::TerminateOnBadMessageReceived(
   // what the bad message was.
   base::debug::DumpWithoutCrashing();
 
-  child_process_->GetProcess().Terminate(RESULT_CODE_KILLED_BAD_MESSAGE, false);
+  child_process_->Terminate(RESULT_CODE_KILLED_BAD_MESSAGE);
 }
 
 void BrowserChildProcessHostImpl::OnChannelInitialized(IPC::Channel* channel) {
@@ -399,32 +431,33 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
   early_exit_watcher_.StopWatching();
 #endif
   if (child_process_.get() || data_.handle) {
-    int exit_code;
-    base::TerminationStatus status = GetTerminationStatus(
-        true /* known_dead */, &exit_code);
-    switch (status) {
+    ChildProcessTerminationInfo info =
+        GetTerminationInfo(true /* known_dead */);
+#if defined(OS_ANDROID)
+    delegate_->OnProcessCrashed(info.exit_code);
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(&NotifyProcessKilled, data_, info));
+#else  // OS_ANDROID
+    switch (info.status) {
       case base::TERMINATION_STATUS_PROCESS_CRASHED:
       case base::TERMINATION_STATUS_ABNORMAL_TERMINATION: {
-        delegate_->OnProcessCrashed(exit_code);
+        delegate_->OnProcessCrashed(info.exit_code);
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::BindOnce(&NotifyProcessCrashed, data_, exit_code));
+            base::BindOnce(&NotifyProcessCrashed, data_, info));
         UMA_HISTOGRAM_ENUMERATION("ChildProcess.Crashed2",
                                   static_cast<ProcessType>(data_.process_type),
                                   PROCESS_TYPE_MAX);
         break;
       }
-#if defined(OS_ANDROID)
-      case base::TERMINATION_STATUS_OOM_PROTECTED:
-#endif
 #if defined(OS_CHROMEOS)
       case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
       case base::TERMINATION_STATUS_PROCESS_WAS_KILLED: {
-        delegate_->OnProcessCrashed(exit_code);
+        delegate_->OnProcessCrashed(info.exit_code);
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::BindOnce(&NotifyProcessKilled, data_, exit_code));
+            base::BindOnce(&NotifyProcessKilled, data_, info));
         // Report that this child process was killed.
         UMA_HISTOGRAM_ENUMERATION("ChildProcess.Killed2",
                                   static_cast<ProcessType>(data_.process_type),
@@ -440,11 +473,12 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
       default:
         break;
     }
+#endif  // OS_ANDROID
     UMA_HISTOGRAM_ENUMERATION("ChildProcess.Disconnected2",
                               static_cast<ProcessType>(data_.process_type),
                               PROCESS_TYPE_MAX);
 #if defined(OS_CHROMEOS)
-    if (status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM) {
+    if (info.status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM) {
       UMA_HISTOGRAM_ENUMERATION("ChildProcess.Killed2.OOM",
                                 static_cast<ProcessType>(data_.process_type),
                                 PROCESS_TYPE_MAX);
@@ -606,8 +640,7 @@ void BrowserChildProcessHostImpl::OnMojoError(
   base::debug::ScopedCrashKeyString scoped_error_key(
       bad_message::GetMojoErrorCrashKey(), error);
   base::debug::DumpWithoutCrashing();
-  process->child_process_->GetProcess().Terminate(
-      RESULT_CODE_KILLED_BAD_MESSAGE, false);
+  process->child_process_->Terminate(RESULT_CODE_KILLED_BAD_MESSAGE);
 }
 
 #if defined(OS_WIN)

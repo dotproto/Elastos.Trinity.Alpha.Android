@@ -68,12 +68,13 @@ void WindowPortLocal::OnPreInit(Window* window) {}
 void WindowPortLocal::OnDeviceScaleFactorChanged(
     float old_device_scale_factor,
     float new_device_scale_factor) {
-  if (last_device_scale_factor_ != new_device_scale_factor &&
-      local_surface_id_.is_valid()) {
+  if (!window_->IsRootWindow() &&
+      last_device_scale_factor_ != new_device_scale_factor &&
+      GetCurrentLocalSurfaceId().is_valid()) {
     last_device_scale_factor_ = new_device_scale_factor;
-    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
+    parent_local_surface_id_allocator_.GenerateId();
     if (frame_sink_)
-      frame_sink_->SetLocalSurfaceId(local_surface_id_);
+      frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
   }
 
   ScopedCursorHider hider(window_);
@@ -94,11 +95,12 @@ void WindowPortLocal::OnVisibilityChanged(bool visible) {}
 
 void WindowPortLocal::OnDidChangeBounds(const gfx::Rect& old_bounds,
                                         const gfx::Rect& new_bounds) {
-  if (last_size_ != new_bounds.size() && local_surface_id_.is_valid()) {
+  if (!window_->IsRootWindow() && last_size_ != new_bounds.size() &&
+      GetCurrentLocalSurfaceId().is_valid()) {
     last_size_ = new_bounds.size();
-    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
+    parent_local_surface_id_allocator_.GenerateId();
     if (frame_sink_)
-      frame_sink_->SetLocalSurfaceId(local_surface_id_);
+      frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
   }
 }
 
@@ -133,11 +135,8 @@ WindowPortLocal::CreateLayerTreeFrameSink() {
 }
 
 void WindowPortLocal::AllocateLocalSurfaceId() {
-  last_device_scale_factor_ = ui::GetScaleFactorForNativeView(window_);
-  last_size_ = window_->bounds().size();
-  local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
-  if (frame_sink_)
-    frame_sink_->SetLocalSurfaceId(local_surface_id_);
+  parent_local_surface_id_allocator_.GenerateId();
+  UpdateLocalSurfaceId();
 }
 
 bool WindowPortLocal::IsLocalSurfaceIdAllocationSuppressed() const {
@@ -150,17 +149,24 @@ viz::ScopedSurfaceIdAllocator WindowPortLocal::GetSurfaceIdAllocator(
                                        std::move(allocation_task));
 }
 
+void WindowPortLocal::UpdateLocalSurfaceIdFromEmbeddedClient(
+    const viz::LocalSurfaceId& embedded_client_local_surface_id) {
+  parent_local_surface_id_allocator_.UpdateFromChild(
+      embedded_client_local_surface_id);
+  UpdateLocalSurfaceId();
+}
+
 const viz::LocalSurfaceId& WindowPortLocal::GetLocalSurfaceId() {
-  if (!local_surface_id_.is_valid())
+  if (!GetCurrentLocalSurfaceId().is_valid())
     AllocateLocalSurfaceId();
-  return local_surface_id_;
+  return GetCurrentLocalSurfaceId();
 }
 
 void WindowPortLocal::OnEventTargetingPolicyChanged() {}
 
 void WindowPortLocal::OnSurfaceChanged(const viz::SurfaceInfo& surface_info) {
   DCHECK_EQ(surface_info.id().frame_sink_id(), window_->GetFrameSinkId());
-  DCHECK_EQ(surface_info.id().local_surface_id(), local_surface_id_);
+  DCHECK_EQ(surface_info.id().local_surface_id(), GetCurrentLocalSurfaceId());
   window_->layer()->SetShowPrimarySurface(
       surface_info.id(), window_->bounds().size(), SK_ColorWHITE,
       cc::DeadlinePolicy::UseDefaultDeadline(),
@@ -170,6 +176,17 @@ void WindowPortLocal::OnSurfaceChanged(const viz::SurfaceInfo& surface_info) {
 
 bool WindowPortLocal::ShouldRestackTransientChildren() {
   return true;
+}
+
+void WindowPortLocal::UpdateLocalSurfaceId() {
+  last_device_scale_factor_ = ui::GetScaleFactorForNativeView(window_);
+  last_size_ = window_->bounds().size();
+  if (frame_sink_)
+    frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
+}
+
+const viz::LocalSurfaceId& WindowPortLocal::GetCurrentLocalSurfaceId() const {
+  return parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId();
 }
 
 }  // namespace aura

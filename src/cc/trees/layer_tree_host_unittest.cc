@@ -11,7 +11,6 @@
 
 #include "base/auto_reset.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
@@ -564,7 +563,8 @@ class LayerTreeHostFreesWorkerContextResourcesOnZeroMemoryLimitSynchronous
   }
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(
+// Android Webview only runs in multi-threaded compositing mode.
+MULTI_THREAD_TEST_F(
     LayerTreeHostFreesWorkerContextResourcesOnZeroMemoryLimitSynchronous);
 
 // Test if the LTH successfully frees main and worker resources when the
@@ -1232,9 +1232,12 @@ class LayerTreeHostTestEarlyDamageCheckStops : public LayerTreeHostTest {
     }
   }
 
+  void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
+    PostSetNeedsCommitToMainThread();
+  }
+
   void DidInvalidateLayerTreeFrameSink(LayerTreeHostImpl* impl) override {
     int frame_number = impl->active_tree()->source_frame_number();
-
     // Frames 0 and 1 invalidate because the early damage check is not enabled
     // during this setup. But frames 1 and 2 are not damaged, so the early
     // check should prevent frame 2 from invalidating.
@@ -1251,8 +1254,6 @@ class LayerTreeHostTestEarlyDamageCheckStops : public LayerTreeHostTest {
       EndTest();
       return;
     }
-
-    PostSetNeedsCommitToMainThread();
   }
 
   void AfterTest() override {
@@ -1268,12 +1269,9 @@ class LayerTreeHostTestEarlyDamageCheckStops : public LayerTreeHostTest {
   int damaged_frame_limit_;
 };
 
-// Flaky on Win7 Tests (dbg)(1). https://crbug.com/813578
-#if !defined(OS_WIN)
 // This behavior is specific to Android WebView, which only uses
 // multi-threaded compositor.
 MULTI_THREAD_TEST_F(LayerTreeHostTestEarlyDamageCheckStops);
-#endif
 
 // Verify CanDraw() is false until first commit.
 class LayerTreeHostTestCantDrawBeforeCommit : public LayerTreeHostTest {
@@ -3813,7 +3811,6 @@ class OnDrawLayerTreeFrameSink : public viz::TestLayerTreeFrameSink {
   OnDrawLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
-      viz::SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
       base::SingleThreadTaskRunner* task_runner,
@@ -3822,7 +3819,6 @@ class OnDrawLayerTreeFrameSink : public viz::TestLayerTreeFrameSink {
       base::Closure invalidate_callback)
       : TestLayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
-                               shared_bitmap_manager,
                                gpu_memory_buffer_manager,
                                renderer_settings,
                                task_runner,
@@ -3864,8 +3860,8 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
         base::Unretained(this));
     auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
-        ImplThreadTaskRunner(), false /* synchronous_composite */, refresh_rate,
+        gpu_memory_buffer_manager(), renderer_settings, ImplThreadTaskRunner(),
+        false /* synchronous_composite */, refresh_rate,
         std::move(on_draw_callback));
     layer_tree_frame_sink_ = frame_sink.get();
     return std::move(frame_sink);
@@ -5712,19 +5708,22 @@ class LayerTreeHostTestBreakSwapPromiseForVisibility
 
   void SetVisibleFalseAndQueueSwapPromise() {
     layer_tree_host()->SetVisible(false);
-    std::unique_ptr<SwapPromise> swap_promise(
-        new TestSwapPromise(&swap_promise_result_));
+    auto swap_promise =
+        std::make_unique<TestSwapPromise>(&swap_promise_result_);
     layer_tree_host()->GetSwapPromiseManager()->QueueSwapPromise(
         std::move(swap_promise));
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
                                   const viz::BeginFrameArgs& args) override {
-    MainThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&LayerTreeHostTestBreakSwapPromiseForVisibility::
-                           SetVisibleFalseAndQueueSwapPromise,
-                       base::Unretained(this)));
+    if (!sent_queue_request_) {
+      sent_queue_request_ = true;
+      MainThreadTaskRunner()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&LayerTreeHostTestBreakSwapPromiseForVisibility::
+                             SetVisibleFalseAndQueueSwapPromise,
+                         base::Unretained(this)));
+    }
   }
 
   void BeginMainFrameAbortedOnThread(LayerTreeHostImpl* host_impl,
@@ -5744,11 +5743,10 @@ class LayerTreeHostTestBreakSwapPromiseForVisibility
   }
 
   TestSwapPromiseResult swap_promise_result_;
+  bool sent_queue_request_ = false;
 };
 
-// Flaky: https://crbug.com/657910
-// SINGLE_AND_MULTI_THREAD_TEST_F(
-//     LayerTreeHostTestBreakSwapPromiseForVisibility);
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestBreakSwapPromiseForVisibility);
 
 class SimpleSwapPromiseMonitor : public SwapPromiseMonitor {
  public:
@@ -5897,41 +5895,43 @@ class LayerTreeHostTestHighResRequiredAfterEvictingUIResources
     LayerTreeHostTest::SetupTree();
     ui_resource_ =
         FakeScopedUIResource::Create(layer_tree_host()->GetUIResourceManager());
-    client_.set_bounds(layer_tree_host()->root_layer()->bounds());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    if (TestEnded())
+      return;
+
     host_impl->EvictAllUIResources();
     // Existence of evicted UI resources will trigger NEW_CONTENT_TAKES_PRIORITY
     // mode. Active tree should require high-res to draw after entering this
     // mode to ensure that high-res tiles are also required for a pending tree
     // to be activated.
     EXPECT_TRUE(host_impl->RequiresHighResToDraw());
+
+    MainThreadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LayerTreeHostTestHighResRequiredAfterEvictingUIResources::
+                DeleteResourceAndEndTest,
+            base::Unretained(this)));
   }
 
-  void DidCommit() override {
-    int frame = layer_tree_host()->SourceFrameNumber();
-    switch (frame) {
-      case 1:
-        PostSetNeedsCommitToMainThread();
-        break;
-      case 2:
-        ui_resource_ = nullptr;
-        EndTest();
-        break;
-    }
+  void DeleteResourceAndEndTest() {
+    // This must be destroyed before the test ends and tears down the
+    // LayerTreeHost. It causes another commit+activation though, which
+    // may run before the test exits.
+    ui_resource_ = nullptr;
+    EndTest();
   }
 
   void AfterTest() override {}
 
-  FakeContentLayerClient client_;
   std::unique_ptr<FakeScopedUIResource> ui_resource_;
 };
 
-// This test is flaky, see http://crbug.com/386199
-// MULTI_THREAD_TEST_F(LayerTreeHostTestHighResRequiredAfterEvictingUIResources)
+MULTI_THREAD_TEST_F(LayerTreeHostTestHighResRequiredAfterEvictingUIResources);
 
 class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
  protected:
@@ -6595,9 +6595,8 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     return std::make_unique<viz::TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
-        ImplThreadTaskRunner(), synchronous_composite, disable_display_vsync,
-        refresh_rate);
+        gpu_memory_buffer_manager(), renderer_settings, ImplThreadTaskRunner(),
+        synchronous_composite, disable_display_vsync, refresh_rate);
   }
 
   void BeginTest() override {
@@ -8087,7 +8086,7 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
 
     GrContext* gr_context = context_provider->GrContext();
     ASSERT_TRUE(gr_context);
-    const uint32_t max_texture_size = gr_context->caps()->maxTextureSize();
+    const uint32_t max_texture_size = gr_context->maxTextureSize();
     ASSERT_GT(static_cast<uint32_t>(large_image_size_.width()),
               max_texture_size);
   }
@@ -8156,15 +8155,12 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
     viz::RenderPass* child_pass =
         AddRenderPass(&frame->render_passes, 2, gfx::Rect(3, 3, 10, 10),
                       gfx::Transform(), FilterOperations());
-    gpu::SyncToken mailbox_sync_token;
-    AddOneOfEveryQuadType(child_pass, host_impl->resource_provider(), 0,
-                          &mailbox_sync_token);
+    AddOneOfEveryQuadType(child_pass, host_impl->resource_provider(), 0);
 
     viz::RenderPass* pass =
         AddRenderPass(&frame->render_passes, 1, gfx::Rect(3, 3, 10, 10),
                       gfx::Transform(), FilterOperations());
-    AddOneOfEveryQuadType(pass, host_impl->resource_provider(), child_pass->id,
-                          &mailbox_sync_token);
+    AddOneOfEveryQuadType(pass, host_impl->resource_provider(), child_pass->id);
     return draw_result;
   }
 

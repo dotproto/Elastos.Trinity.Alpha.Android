@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/atomicops.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/power_monitor/power_monitor_source.h"
@@ -29,9 +28,14 @@ namespace device {
 class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
  public:
   PowerMonitorBroadcastSource(
-      service_manager::Connector* connector,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~PowerMonitorBroadcastSource() override;
+
+  // Completes initialization by setting up the connection with the Device
+  // Service. Split out from the constructor in order to enable the client to
+  // ensure that the process-wide PowerMonitor instance is initialized before
+  // the Mojo connection is set up.
+  void Init(service_manager::Connector* connector);
 
  private:
   friend class PowerMonitorBroadcastSourceTest;
@@ -47,16 +51,21 @@ class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
     ~Client() override;
 
     void Init(std::unique_ptr<service_manager::Connector> connector);
-    bool last_reported_battery_power_state();
 
+    bool last_reported_on_battery_power_state() const {
+      return last_reported_on_battery_power_state_;
+    }
+
+    // device::mojom::PowerMonitorClient implementation
     void PowerStateChange(bool on_battery_power) override;
     void Suspend() override;
     void Resume() override;
 
    private:
-    volatile base::subtle::AtomicWord last_reported_battery_power_state_;
     std::unique_ptr<service_manager::Connector> connector_;
     mojo::Binding<device::mojom::PowerMonitorClient> binding_;
+
+    bool last_reported_on_battery_power_state_ = false;
 
     DISALLOW_COPY_AND_ASSIGN(Client);
   };
@@ -64,12 +73,12 @@ class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
   // This constructor is used by test code to mock the Client class.
   PowerMonitorBroadcastSource(
       std::unique_ptr<Client> client,
-      service_manager::Connector* connector,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   Client* client_for_testing() const { return client_.get(); }
 
   bool IsOnBatteryPowerImpl() override;
+
   std::unique_ptr<Client> client_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

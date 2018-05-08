@@ -902,6 +902,11 @@ base::Optional<std::string> DecodeDMTokenSwitchValue(
 bool StoreDMToken(const std::string& token) {
   DCHECK(install_static::IsSystemInstall());
 
+  if (token.size() > kMaxDMTokenLength) {
+    LOG(ERROR) << "DMToken length out of bounds";
+    return false;
+  }
+
   std::wstring path;
   std::wstring name;
   InstallUtil::GetMachineLevelUserCloudPolicyDMTokenRegistryPath(&path,
@@ -928,6 +933,12 @@ bool StoreDMToken(const std::string& token) {
   VLOG(1) << "Successfully stored specified DMToken in the registry.";
 
   return true;
+}
+
+base::FilePath GetNotificationHelperPath(const base::FilePath& target_path,
+                                         const base::Version& version) {
+  return target_path.AppendASCII(version.GetString())
+      .Append(kNotificationHelperExe);
 }
 
 }  // namespace installer

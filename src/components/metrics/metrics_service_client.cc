@@ -36,11 +36,15 @@ std::string MetricsServiceClient::GetInsecureMetricsServerUrl() {
   return kNewMetricsServerUrlInsecure;
 }
 
-bool MetricsServiceClient::IsHistorySyncEnabledOnAllProfiles() {
+bool MetricsServiceClient::SyncStateAllowsUkm() {
   return false;
 }
 
-bool MetricsServiceClient::IsExtensionSyncEnabledOnAllProfiles() {
+bool MetricsServiceClient::SyncStateAllowsExtensionUkm() {
+  return false;
+}
+
+bool MetricsServiceClient::AreNotificationListenersEnabledOnAllProfiles() {
   return false;
 }
 
@@ -52,6 +56,10 @@ void MetricsServiceClient::SetUpdateRunningServicesCallback(
 void MetricsServiceClient::UpdateRunningServices() {
   if (update_running_services_)
     update_running_services_.Run();
+}
+
+std::string MetricsServiceClient::GetAppPackageName() {
+  return std::string();
 }
 
 }  // namespace metrics

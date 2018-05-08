@@ -11,8 +11,10 @@
 #include "ash/system/web_notification/inactive_user_notification_blocker.h"
 #include "ash/system/web_notification/session_state_notification_blocker.h"
 #include "base/macros.h"
+#include "components/arc/common/notifications.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "ui/arc/notification/arc_notification_manager.h"
 
 namespace message_center {
 struct NotifierId;
@@ -37,13 +39,17 @@ class ASH_EXPORT MessageCenterController
   // mojom::AshMessageCenterController:
   void SetClient(
       mojom::AshMessageCenterClientAssociatedPtrInfo client) override;
+  void SetArcNotificationsInstance(
+      arc::mojom::NotificationsInstancePtr arc_notification_instance) override;
   void ShowClientNotification(
-      const message_center::Notification& notification) override;
+      const message_center::Notification& notification,
+      const base::UnguessableToken& display_token) override;
   void CloseClientNotification(const std::string& id) override;
   void UpdateNotifierIcon(const message_center::NotifierId& notifier_id,
                           const gfx::ImageSkia& icon) override;
   void NotifierEnabledChanged(const message_center::NotifierId& notifier_id,
                               bool enabled) override;
+  void GetActiveNotifications(GetActiveNotificationsCallback callback) override;
 
   InactiveUserNotificationBlocker*
   inactive_user_notification_blocker_for_testing() {
@@ -72,6 +78,11 @@ class ASH_EXPORT MessageCenterController
   // Callback for GetNotifierList.
   void OnGotNotifierList(std::vector<mojom::NotifierUiDataPtr> ui_data);
 
+  // Handles get app id calls from ArcNotificationManager.
+  void GetArcAppIdByPackageName(
+      const std::string& package_name,
+      arc::ArcNotificationManager::GetAppIdResponseCallback callback);
+
   std::unique_ptr<FullscreenNotificationBlocker>
       fullscreen_notification_blocker_;
   std::unique_ptr<InactiveUserNotificationBlocker>
@@ -82,9 +93,11 @@ class ASH_EXPORT MessageCenterController
 
   NotifierSettingsListener* notifier_id_ = nullptr;
 
-  mojo::Binding<mojom::AshMessageCenterController> binding_;
+  mojo::BindingSet<mojom::AshMessageCenterController> binding_set_;
 
   mojom::AshMessageCenterClientAssociatedPtr client_;
+
+  std::unique_ptr<arc::ArcNotificationManager> arc_notification_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterController);
 };

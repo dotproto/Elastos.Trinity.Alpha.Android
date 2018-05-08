@@ -49,8 +49,10 @@ class CastWebViewDefault : public CastWebView,
   content::WebContents* web_contents() const override;
   void LoadUrl(GURL url) override;
   void ClosePage(const base::TimeDelta& shutdown_delay) override;
-  void CreateWindow(CastWindowManager* window_manager,
-                    bool is_visible) override;
+  void InitializeWindow(CastWindowManager* window_manager,
+                        bool is_visible,
+                        CastWindowManager::WindowId z_order,
+                        VisibilityPriority initial_priority) override;
 
  private:
   // WebContentsObserver implementation:
@@ -92,6 +94,9 @@ class CastWebViewDefault : public CastWebView,
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
       const content::MediaResponseCallback& callback) override;
+  std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
+      content::RenderFrameHost* frame,
+      const content::BluetoothChooser::EventHandler& event_handler) override;
 #if defined(OS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetContentVideoViewEmbedder()
       override;

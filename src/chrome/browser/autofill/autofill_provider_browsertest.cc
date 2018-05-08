@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/base_switches.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -39,7 +40,7 @@ class MockAutofillProvider : public TestAutofillProvider {
   ~MockAutofillProvider() override {}
 
   MOCK_METHOD5(OnFormSubmitted,
-               bool(AutofillHandlerProxy* handler,
+               void(AutofillHandlerProxy* handler,
                     const FormData& form,
                     bool,
                     SubmissionSource,
@@ -61,13 +62,12 @@ class MockAutofillProvider : public TestAutofillProvider {
     is_queried_ = true;
   }
 
-  bool OnFormSubmittedImpl(AutofillHandlerProxy*,
+  void OnFormSubmittedImpl(AutofillHandlerProxy*,
                            const FormData& form,
                            bool success,
                            SubmissionSource source,
                            base::TimeTicks timestamp) {
     submitted_form_ = form;
-    return false;
   }
 
   const FormData& queried_form() { return queried_form_; }
@@ -88,6 +88,12 @@ class AutofillProviderBrowserTest : public InProcessBrowserTest {
  public:
   AutofillProviderBrowserTest() {}
   ~AutofillProviderBrowserTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(::switches::kForceFieldTrials,
+                                    "AutofillSingleClick/Disabled");
+  }
 
   void SetUpOnMainThread() override {
     autofill_provider_ = std::make_unique<MockAutofillProvider>();
@@ -157,6 +163,7 @@ class AutofillProviderBrowserTest : public InProcessBrowserTest {
   void SetLabelChangeExpectationAndTriggerQuery() {
     ReplaceAutofillDriver();
 
+    // If AutofillSingleClick is enabled, there may be multiple queries.
     EXPECT_CALL(*autofill_provider_, OnQueryFormFieldAutofill(_, _, _, _, _))
         .WillOnce(Invoke(autofill_provider_.get(),
                          &MockAutofillProvider::OnQueryFormFieldAutofillImpl));

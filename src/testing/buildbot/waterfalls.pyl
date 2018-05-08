@@ -576,7 +576,6 @@
         ],
         'test_suites': {
           'gtest_tests': 'linux_chromeos_rel_gtests',
-          'isolated_scripts': 'linux_chromeos_rel_isolated_scripts',
         },
       },
     },
@@ -605,36 +604,6 @@
         },
       },
       'CrWinAsanCov': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang(dbg)': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang(shared)': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang64': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang64(dbg)': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinClang64(dll)': {
         'test_suites': {
           'gtest_tests': 'chromium_win_clang_gtests',
         },
@@ -849,6 +818,14 @@
           'gtest_tests': 'goma_gtests',
         },
       },
+      'Chromium Linux Goma RBE Staging': {
+        'additional_compile_targets': [
+          'all',
+        ],
+        'test_suites': {
+          'gtest_tests': 'goma_gtests',
+        },
+      },
       'Chromium Linux Goma Staging': {
         'additional_compile_targets': [
           'all',
@@ -874,14 +851,6 @@
         },
       },
       'CrWinClangGomaGCEStaging': {
-        'additional_compile_targets': [
-          'all',
-        ],
-        'test_suites': {
-          'gtest_tests': 'goma_gtests',
-        },
-      },
-      'CrWinClexeGomaGCEStaging': {
         'additional_compile_targets': [
           'all',
         ],
@@ -933,14 +902,9 @@
           'gtest_tests': 'chromium_linux_clang_and_gl_gtests',
         },
       },
-      'linux-gcc-rel': {
-        'additional_compile_targets': [
-          'empty_main',
-        ],
-      },
       'linux-annotator-rel': {
         'test_suites': {
-          'scripts': 'check_network_annotation_auditor_script',
+          'scripts': 'test_traffic_annotation_auditor_script',
         }
       },
       'mac-views-rel': {
@@ -970,21 +934,6 @@
       'Chromium Win 10 GCE Tests': {
         'test_suites': {
           'gtest_tests': 'chromium_win_fyi_gtests',
-        },
-      },
-      'CrWinAsan tester': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinAsan(dll) tester': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
-        },
-      },
-      'CrWinAsanCov tester': {
-        'test_suites': {
-          'gtest_tests': 'chromium_win_clang_gtests',
         },
       },
       'Dummy WebKit Mac10.13': {
@@ -1076,6 +1025,7 @@
       },
       'linux-blink-heap-incremental-marking': {
         'test_suites': {
+          'gtest_tests': 'chromium_gtests',
           'isolated_scripts': 'chromium_webkit_isolated_scripts',
         },
       },
@@ -1268,14 +1218,19 @@
         },
       },
       'Site Isolation Linux': {
-        # TODO(dpranke): Remove this builder once the tests are running on
-        # the main 'Linux Tests' bot; base_unittests is a placeholder
+        # TODO(lukasza, dpranke): Remove this bot once site-per-process has
+        # been turned on by default for a while (e.g. once
+        # https://crrev.com/c/981019 "sticks").
+        # base_unittests is a placeholder
         # to keep the builder from building "all".
         'additional_compile_targets': [
           'base_unittests',
         ],
       },
       'Site Isolation Win': {
+        # TODO(lukasza, dpranke): Remove this bot once site-per-process has
+        # been turned on by default for a while (e.g. once
+        # https://crrev.com/c/981019 "sticks").
         'test_suites': {
           'gtest_tests': 'site_isolation_win_fyi_gtests',
         },
@@ -1368,12 +1323,10 @@
         },
       },
       'Win cl.exe Goma Canary LocalOutputCache': {
+        # Build only chromium's subproject using cl.exe.
         'additional_compile_targets': [
-          'all',
+          'v8:gn_all', 'pdfium_all', 'libANGLE',
         ],
-        'test_suites': {
-          'gtest_tests': 'goma_gtests',
-        },
       },
       'Win7 Builder (dbg) Goma Canary': {
         'additional_compile_targets': [
@@ -1393,17 +1346,31 @@
         },
       },
       'WinMSVC64 Goma Canary': {
+        # Build only chromium's subproject using cl.exe.
         'additional_compile_targets': [
-          'all',
+          'v8:gn_all', 'pdfium_all', 'libANGLE',
         ],
-        'test_suites': {
-          'gtest_tests': 'goma_gtests',
-        },
       },
       'chromeos-amd64-generic-rel-goma-canary': {
         'additional_compile_targets': [
           'chromiumos_preflight',
         ],
+      },
+      'chromeos-amd64-generic-rel-vm-tests': {
+        'additional_compile_targets': [
+          'chromiumos_preflight',
+        ],
+        'test_suites': {
+          'gtest_tests': 'chromeos_gtests',
+        },
+        'swarming': {
+          'dimension_sets': [
+            {
+              'kvm': '1',
+              'os': 'Ubuntu-14.04',
+            },
+          ],
+        },
       },
     },
   },
@@ -1439,6 +1406,11 @@
         'test_suites': {
           'scripts': 'check_network_annotations_script',
         }
+      },
+      'linux-jumbo-rel': {
+        'additional_compile_targets': [
+          'all'
+        ]
       },
       'Linux Builder (dbg)': {
         'additional_compile_targets': [
@@ -1504,6 +1476,19 @@
         },
       },
       'Ozone Linux': {
+        'additional_compile_targets': [
+          'chrome',
+        ],
+        'test_suites': {
+          'gtest_tests': 'ozone_linux_gtests',
+        },
+      },
+      'linux-gcc-rel': {
+        'additional_compile_targets': [
+          'empty_main',
+        ],
+      },
+      'linux-ozone-rel': {
         'additional_compile_targets': [
           'chrome',
         ],
@@ -1606,11 +1591,6 @@
           'chromium_builder_asan',
         ],
       },
-      'Win SyzyASAN LKGR': {
-        'additional_compile_targets': [
-          'chromium_builder_asan',
-        ],
-      },
     },
   },
   {
@@ -1620,6 +1600,11 @@
         'additional_compile_targets': [
           'pdf_fuzzers',
         ],
+      },
+      'mac-jumbo-rel': {
+        'additional_compile_targets': [
+          'all'
+        ]
       },
       'Mac10.10 Tests': {
         'test_suites': {
@@ -1696,17 +1681,17 @@
       },
       'Linux ChromiumOS MSan Tests': {
         'test_suites': {
-          'gtest_tests': 'chromium_memory_chromiumos_msan_gtests',
+          'gtest_tests': 'chromium_memory_chromiumos_asan_gtests',
         },
       },
       'Linux MSan Tests': {
         'test_suites': {
-          'gtest_tests': 'chromium_memory_linux_msan_gtests',
+          'gtest_tests': 'chromium_memory_linux_asan_gtests',
         },
       },
       'Linux TSan Tests': {
         'test_suites': {
-          'gtest_tests': 'chromium_memory_linux_tsan_gtests',
+          'gtest_tests': 'chromium_memory_linux_asan_gtests',
         },
       },
       'Mac ASan 64 Tests (1)': {
@@ -1865,18 +1850,8 @@
         },
       },
       'WebKit Mac10.12': {
-        'test_suites': {
-          'isolated_scripts': 'chromium_webkit_isolated_scripts',
-        },
-        'swarming': {
-          'dimension_sets': [
-            {
-              'gpu': '8086:0a2e',
-              'hidpi': '0',
-              'os': 'Mac-10.12.6',
-            },
-          ],
-        },
+        # TODO(dpranke): Remove this builder, it is now redundant
+        # w/ Mac10.13 Tests on chromium.mac
       },
       'WebKit Win x64 Builder': {
         # TODO(dpranke): Remove this builder, it is now redundant
@@ -1923,11 +1898,6 @@
           'frame_analyzer',
           'jingle_unittests',
           'remoting_unittests',
-        ],
-      },
-      'Linux Builder (Chromium w/o WebRTC)': {
-        'additional_compile_targets': [
-          'chrome',
         ],
       },
       'Mac Builder': {
@@ -1996,11 +1966,19 @@
           'frame_analyzer',
           'jingle_unittests',
           'remoting_unittests',
+          'remoting/webapp:webapp',
         ],
       },
       'Linux Builder (dbg)': {
         'additional_compile_targets': [
-          'all',
+          'browser_tests',
+          'capture_unittests',
+          'content_browsertests',
+          'content_unittests',
+          'frame_analyzer',
+          'jingle_unittests',
+          'remoting_unittests',
+          'remoting/webapp:webapp',
         ],
       },
       'Mac Builder': {
@@ -2020,8 +1998,10 @@
           'capture_unittests',
           'content_browsertests',
           'content_unittests',
+          'frame_analyzer',
           'jingle_unittests',
           'remoting_unittests',
+          'remoting/webapp:webapp',
         ],
       },
       'Win Builder': {
@@ -2033,11 +2013,19 @@
           'frame_analyzer',
           'jingle_unittests',
           'remoting_unittests',
+          'remoting/webapp:webapp',
         ],
       },
       'Win Builder (dbg)': {
         'additional_compile_targets': [
-          'all',
+          'browser_tests',
+          'capture_unittests',
+          'content_browsertests',
+          'content_unittests',
+          'frame_analyzer',
+          'jingle_unittests',
+          'remoting_unittests',
+          'remoting/webapp:webapp',
         ],
       },
     },
@@ -2053,19 +2041,10 @@
           'scripts': 'check_network_annotations_script',
         },
       },
-      'WinMSVC64': {
+      'win-jumbo-rel': {
         'additional_compile_targets': [
-          'all',
-        ],
-      },
-      'WinMSVC64 (dbg)': {
-        'additional_compile_targets': [
-          # TODO(crbug.com/777642): Add more compile targets if we get
-          # more capacity.
-          'chrome',
-          'browser_tests',
-          'unit_tests',
-        ],
+          'all'
+        ]
       },
       'Win 7 Tests x64 (1)': {
         'test_suites': {
@@ -2076,6 +2055,7 @@
       'Win10 Tests x64': {
         'test_suites': {
           'gtest_tests': 'chromium_win_gtests',
+          'isolated_scripts': 'win_specific_isolated_scripts',
         },
       },
       'Win7 (32) Tests': {

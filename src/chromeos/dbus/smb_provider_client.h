@@ -48,10 +48,20 @@ class CHROMEOS_EXPORT SmbProviderClient
   static SmbProviderClient* Create();
 
   // Calls Mount. It runs OpenDirectory() on |share_path| to check that it is a
-  // valid share. |callback| is called after getting (or failing to get) D-BUS
-  // response.
+  // valid share. |workgroup|, |username|, and |password_fd| will be used as
+  // credentials to access the mount. |callback| is called after getting (or
+  // failing to get) D-BUS response.
   virtual void Mount(const base::FilePath& share_path,
+                     const std::string& workgroup,
+                     const std::string& username,
+                     base::ScopedFD password_fd,
                      MountCallback callback) = 0;
+
+  // Calls Remount. This attempts to remount the share at |share_path| with its
+  // original |mount_id|.
+  virtual void Remount(const base::FilePath& share_path,
+                       int32_t mount_id,
+                       StatusCallback callback) = 0;
 
   // Calls Unmount. This removes the corresponding mount of |mount_id| from
   // the list of valid mounts. Subsequent operations on |mount_id| will fail.
@@ -156,6 +166,12 @@ class CHROMEOS_EXPORT SmbProviderClient
   virtual void GetDeleteList(int32_t mount_id,
                              const base::FilePath& entry_path,
                              GetDeleteListCallback callback) = 0;
+
+  // Calls GetShares. This gets the shares from |server_url| and calls
+  // |callback| when shares are found. The DirectoryEntryListProto will contain
+  // no entries if there are no shares found.
+  virtual void GetShares(const base::FilePath& server_url,
+                         ReadDirectoryCallback callback) = 0;
 
  protected:
   // Create() should be used instead.

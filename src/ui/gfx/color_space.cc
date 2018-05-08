@@ -38,6 +38,10 @@ base::LazyInstance<SkColorSpaceCache>::Leaky g_sk_color_space_cache =
 base::LazyInstance<base::Lock>::Leaky g_sk_color_space_cache_lock =
     LAZY_INSTANCE_INITIALIZER;
 
+static bool IsAlmostZero(float value) {
+  return std::abs(value) < std::numeric_limits<float>::epsilon();
+}
+
 }  // namespace
 
 ColorSpace::ColorSpace() {}
@@ -225,6 +229,10 @@ bool ColorSpace::FullRangeEncodedValues() const {
          transfer_ == TransferID::IEC61966_2_4;
 }
 
+bool ColorSpace::IsParametricAccurate() const {
+  return icc_profile_id_ == 0;
+}
+
 ColorSpace ColorSpace::GetParametricApproximation() const {
   ColorSpace result = *this;
   result.icc_profile_id_ = 0;
@@ -306,7 +314,8 @@ size_t ColorSpace::GetHash() const {
 std::string ColorSpace::ToString() const {
   std::stringstream ss;
   ss << std::fixed << std::setprecision(4);
-  ss << "{primaries:";
+  if (primaries_ != PrimaryID::CUSTOM)
+    ss << "{primaries:";
   switch (primaries_) {
     PRINT_ENUM_CASE(PrimaryID, INVALID)
     PRINT_ENUM_CASE(PrimaryID, BT709)
@@ -324,20 +333,29 @@ std::string ColorSpace::ToString() const {
     PRINT_ENUM_CASE(PrimaryID, APPLE_GENERIC_RGB)
     PRINT_ENUM_CASE(PrimaryID, WIDE_GAMUT_COLOR_SPIN)
     case PrimaryID::CUSTOM:
-      ss << "[";
-      for (size_t i = 0; i < 3; ++i) {
-        ss << "[";
-        for (size_t j = 0; j < 3; ++j)
-          ss << custom_primary_matrix_[3 * i + j] << ",";
-        ss << "],";
-      }
-      ss << "]";
+      // |custom_primary_matrix_| is in column-major order.
+      const float sum_X = custom_primary_matrix_[0] +
+                          custom_primary_matrix_[3] + custom_primary_matrix_[6];
+      const float sum_Y = custom_primary_matrix_[1] +
+                          custom_primary_matrix_[4] + custom_primary_matrix_[7];
+      const float sum_Z = custom_primary_matrix_[2] +
+                          custom_primary_matrix_[5] + custom_primary_matrix_[8];
+      if (IsAlmostZero(sum_X) || IsAlmostZero(sum_Y) || IsAlmostZero(sum_Z))
+        break;
+
+      ss << "{primaries_d50_referred: [[" << (custom_primary_matrix_[0] / sum_X)
+         << ", " << (custom_primary_matrix_[3] / sum_X) << "], "
+         << " [" << (custom_primary_matrix_[1] / sum_Y) << ", "
+         << (custom_primary_matrix_[4] / sum_Y) << "], "
+         << " [" << (custom_primary_matrix_[2] / sum_Z) << ", "
+         << (custom_primary_matrix_[5] / sum_Z) << "]]";
       break;
   }
   ss << ", transfer:";
   switch (transfer_) {
     PRINT_ENUM_CASE(TransferID, INVALID)
     PRINT_ENUM_CASE(TransferID, BT709)
+    PRINT_ENUM_CASE(TransferID, BT709_APPLE)
     PRINT_ENUM_CASE(TransferID, GAMMA18)
     PRINT_ENUM_CASE(TransferID, GAMMA22)
     PRINT_ENUM_CASE(TransferID, GAMMA24)
@@ -402,6 +420,13 @@ ColorSpace ColorSpace::GetAsFullRangeRGB() const {
     return result;
   result.matrix_ = MatrixID::RGB;
   result.range_ = RangeID::FULL;
+  return result;
+}
+
+ColorSpace ColorSpace::GetAsRGB() const {
+  ColorSpace result(*this);
+  if (IsValid())
+    result.matrix_ = MatrixID::RGB;
   return result;
 }
 
@@ -759,6 +784,9 @@ bool ColorSpace::GetTransferFunction(SkColorSpaceTransferFn* fn) const {
       fn->fD = 0.040449937172f;
       fn->fG = 2.400000000000f;
       return true;
+    case ColorSpace::TransferID::BT709_APPLE:
+      fn->fG = 1.961000000000f;
+      return true;
     case ColorSpace::TransferID::SMPTEST428_1:
       fn->fA = 0.225615407568f;
       fn->fE = -1.091041666667f;
@@ -908,6 +936,28 @@ void ColorSpace::GetRangeAdjustMatrix(SkMatrix44* matrix) const {
       matrix->postTranslate(-16.0f/219.0f, -15.5f/224.0f, -15.5f/224.0f);
       break;
   }
+}
+
+bool ColorSpace::ToSkYUVColorSpace(SkYUVColorSpace* out) {
+  if (range_ == RangeID::FULL) {
+    *out = kJPEG_SkYUVColorSpace;
+    return true;
+  }
+  switch (matrix_) {
+    case MatrixID::BT709:
+      *out = kRec709_SkYUVColorSpace;
+      return true;
+
+    case MatrixID::BT470BG:
+    case MatrixID::SMPTE170M:
+    case MatrixID::SMPTE240M:
+      *out = kRec601_SkYUVColorSpace;
+      return true;
+
+    default:
+      break;
+  }
+  return false;
 }
 
 std::ostream& operator<<(std::ostream& out, const ColorSpace& color_space) {

@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/base/cast_features.h"
@@ -18,6 +17,7 @@
 #include "chromecast/chromecast_buildflags.h"
 #include "chromecast/public/cast_media_shlib.h"
 #include "content/public/browser/media_capture_devices.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -52,10 +52,7 @@ std::unique_ptr<content::WebContents> CreateWebContents(
   create_params.routing_id = MSG_ROUTING_NONE;
   create_params.initial_size = display_size;
   create_params.site_instance = site_instance;
-  content::WebContents* web_contents =
-      content::WebContents::Create(create_params);
-
-  return base::WrapUnique(web_contents);
+  return content::WebContents::Create(create_params);
 }
 
 }  // namespace
@@ -85,6 +82,23 @@ CastWebViewDefault::CastWebViewDefault(
   DCHECK(window_);
   content::WebContentsObserver::Observe(web_contents_.get());
   web_contents_->SetDelegate(this);
+
+#if BUILDFLAG(IS_ANDROID_THINGS)
+// Configure the ducking multiplier for AThings speakers. When CMA backend is
+// used we don't want the Chromium MediaSession to duck since we are doing
+// our own ducking. When no CMA backend is used we rely on the MediaSession
+// for ducking. In that case set it to a proper value to match the ducking
+// done in CMA backend.
+#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+  // passthrough, i.e., disable ducking
+  constexpr double kDuckingMultiplier = 1.0;
+#else
+  // duck by -30dB
+  constexpr double kDuckingMultiplier = 0.03;
+#endif
+  content::MediaSession::Get(web_contents_.get())
+      ->SetDuckingVolumeMultiplier(kDuckingMultiplier);
+#endif
 
   // If this CastWebView is enabled for development, start the remote debugger.
   if (enabled_for_dev_) {
@@ -127,16 +141,17 @@ void CastWebViewDefault::CloseContents(content::WebContents* source) {
   delegate_->OnPageStopped(net::OK);
 }
 
-void CastWebViewDefault::CreateWindow(CastWindowManager* window_manager,
-                                      bool is_visible) {
+void CastWebViewDefault::InitializeWindow(CastWindowManager* window_manager,
+                                          bool is_visible,
+                                          CastWindowManager::WindowId z_order,
+                                          VisibilityPriority initial_priority) {
   if (media::CastMediaShlib::ClearVideoPlaneImage) {
     media::CastMediaShlib::ClearVideoPlaneImage();
   }
 
   DCHECK(window_manager);
-  window_->CreateWindowForWebContents(
-      web_contents_.get(), window_manager, is_visible,
-      chromecast::shell::VisibilityPriority::STICKY_ACTIVITY);
+  window_->CreateWindowForWebContents(web_contents_.get(), window_manager,
+                                      is_visible, z_order, initial_priority);
   web_contents_->Focus();
 }
 
@@ -169,7 +184,7 @@ bool CastWebViewDefault::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
-  if (!base::FeatureList::IsEnabled(kAllowUserMediaAccess) &&
+  if (!chromecast::IsFeatureEnabled(kAllowUserMediaAccess) &&
       !allow_media_access_) {
     LOG(WARNING) << __func__ << ": media access is disabled.";
     return false;
@@ -209,7 +224,7 @@ void CastWebViewDefault::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-  if (!base::FeatureList::IsEnabled(kAllowUserMediaAccess) &&
+  if (!chromecast::IsFeatureEnabled(kAllowUserMediaAccess) &&
       !allow_media_access_) {
     LOG(WARNING) << __func__ << ": media access is disabled.";
     callback.Run(content::MediaStreamDevices(),
@@ -248,6 +263,16 @@ void CastWebViewDefault::RequestMediaAccessPermission(
 
   callback.Run(devices, content::MEDIA_DEVICE_OK,
                std::unique_ptr<content::MediaStreamUI>());
+}
+
+std::unique_ptr<content::BluetoothChooser>
+CastWebViewDefault::RunBluetoothChooser(
+    content::RenderFrameHost* frame,
+    const content::BluetoothChooser::EventHandler& event_handler) {
+  auto chooser = delegate_->RunBluetoothChooser(frame, event_handler);
+  return chooser
+             ? std::move(chooser)
+             : WebContentsDelegate::RunBluetoothChooser(frame, event_handler);
 }
 
 #if defined(OS_ANDROID)

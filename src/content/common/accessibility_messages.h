@@ -15,7 +15,7 @@
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
 #include "ipc/param_traits_macros.h"
-#include "third_party/WebKit/public/web/WebAXEnums.h"
+#include "third_party/blink/public/web/web_ax_enums.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_relative_bounds.h"
@@ -29,7 +29,7 @@
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::AXContentIntAttribute,
                           content::AX_CONTENT_INT_ATTRIBUTE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Action, ax::mojom::Action::kLast)
+IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Action, ax::mojom::Action::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::AXActionData)
   IPC_STRUCT_TRAITS_MEMBER(action)

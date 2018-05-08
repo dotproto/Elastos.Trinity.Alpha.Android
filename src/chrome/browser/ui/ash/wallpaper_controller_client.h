@@ -5,16 +5,11 @@
 #ifndef CHROME_BROWSER_UI_ASH_WALLPAPER_CONTROLLER_CLIENT_H_
 #define CHROME_BROWSER_UI_ASH_WALLPAPER_CONTROLLER_CLIENT_H_
 
+#include "ash/public/cpp/wallpaper_types.h"
 #include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/wallpaper_policy_handler.h"
 #include "mojo/public/cpp/bindings/binding.h"
-
-namespace wallpaper {
-class WallpaperFilesId;
-enum WallpaperLayout;
-enum WallpaperType;
-}  // namespace wallpaper
 
 // Handles method calls sent from ash to chrome. Also sends messages from chrome
 // to ash.
@@ -33,20 +28,27 @@ class WallpaperControllerClient : public ash::mojom::WallpaperControllerClient,
   static WallpaperControllerClient* Get();
 
   // Returns files identifier for the |account_id|.
-  wallpaper::WallpaperFilesId GetFilesId(const AccountId& account_id) const;
+  std::string GetFilesId(const AccountId& account_id) const;
 
   // Wrappers around the ash::mojom::WallpaperController interface.
   void SetCustomWallpaper(const AccountId& account_id,
-                          const wallpaper::WallpaperFilesId& wallpaper_files_id,
+                          const std::string& wallpaper_files_id,
                           const std::string& file_name,
-                          wallpaper::WallpaperLayout layout,
+                          ash::WallpaperLayout layout,
                           const gfx::ImageSkia& image,
                           bool preview_mode);
-  void SetOnlineWallpaper(const AccountId& account_id,
-                          const gfx::ImageSkia& image,
-                          const std::string& url,
-                          wallpaper::WallpaperLayout layout,
-                          bool preview_mode);
+  void SetOnlineWallpaperIfExists(
+      const AccountId& account_id,
+      const GURL& url,
+      ash::WallpaperLayout layout,
+      bool preview_mode,
+      ash::mojom::WallpaperController::SetOnlineWallpaperIfExistsCallback
+          callback);
+  void SetOnlineWallpaperFromData(const AccountId& account_id,
+                                  const std::string& image_data,
+                                  const GURL& url,
+                                  ash::WallpaperLayout layout,
+                                  bool preview_mode);
   void SetDefaultWallpaper(const AccountId& account_id, bool show_wallpaper);
   void SetCustomizedDefaultWallpaperPaths(
       const base::FilePath& customized_default_small_path,
@@ -55,29 +57,39 @@ class WallpaperControllerClient : public ash::mojom::WallpaperControllerClient,
                           std::unique_ptr<std::string> data);
   void SetThirdPartyWallpaper(
       const AccountId& account_id,
-      const wallpaper::WallpaperFilesId& wallpaper_files_id,
+      const std::string& wallpaper_files_id,
       const std::string& file_name,
-      wallpaper::WallpaperLayout layout,
+      ash::WallpaperLayout layout,
       const gfx::ImageSkia& image,
       ash::mojom::WallpaperController::SetThirdPartyWallpaperCallback callback);
   void ConfirmPreviewWallpaper();
   void CancelPreviewWallpaper();
   void UpdateCustomWallpaperLayout(const AccountId& account_id,
-                                   wallpaper::WallpaperLayout layout);
+                                   ash::WallpaperLayout layout);
   void ShowUserWallpaper(const AccountId& account_id);
   void ShowSigninWallpaper();
   void RemoveUserWallpaper(const AccountId& account_id);
   void RemovePolicyWallpaper(const AccountId& account_id);
+  void GetOfflineWallpaperList(
+      ash::mojom::WallpaperController::GetOfflineWallpaperListCallback
+          callback);
   void SetAnimationDuration(const base::TimeDelta& animation_duration);
   void OpenWallpaperPickerIfAllowed();
+  void MinimizeInactiveWindows(const std::string& user_id_hash);
+  void RestoreMinimizedWindows(const std::string& user_id_hash);
   void AddObserver(ash::mojom::WallpaperObserverAssociatedPtrInfo observer);
   void GetWallpaperImage(
       ash::mojom::WallpaperController::GetWallpaperImageCallback callback);
   void GetWallpaperColors(
       ash::mojom::WallpaperController::GetWallpaperColorsCallback callback);
+  void IsWallpaperBlurred(
+      ash::mojom::WallpaperController::IsWallpaperBlurredCallback callback);
   void IsActiveUserWallpaperControlledByPolicy(
       ash::mojom::WallpaperController::
           IsActiveUserWallpaperControlledByPolicyCallback callback);
+  void GetActiveUserWallpaperLocation(
+      ash::mojom::WallpaperController::GetActiveUserWallpaperLocationCallback
+          callback);
   void ShouldShowWallpaperSetting(
       ash::mojom::WallpaperController::ShouldShowWallpaperSettingCallback
           callback);

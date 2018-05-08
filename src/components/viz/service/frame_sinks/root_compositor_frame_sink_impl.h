@@ -42,8 +42,6 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
 
   ~RootCompositorFrameSinkImpl() override;
 
-  CompositorFrameSinkSupport* support() const { return support_.get(); }
-
   // mojom::DisplayPrivate:
   void SetDisplayVisible(bool visible) override;
   void SetDisplayColorMatrix(const gfx::Transform& color_matrix) override;
@@ -74,6 +72,8 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   void DisplayDidDrawAndSwap() override;
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
+  void DidSwapAfterSnapshotRequestReceived(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   void OnClientConnectionLost();
 

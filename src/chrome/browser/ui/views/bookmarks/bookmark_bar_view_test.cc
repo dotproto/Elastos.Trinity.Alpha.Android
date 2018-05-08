@@ -8,7 +8,6 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -86,9 +85,7 @@ class DialogWaiter : public aura::EnvObserver,
   views::Widget* WaitForDialog() {
     if (dialog_created_)
       return dialog_;
-    base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-    base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     quit_closure_ = run_loop.QuitClosure();
     run_loop.Run();
     return dialog_;
@@ -140,9 +137,7 @@ class DialogCloseWaiter : public views::WidgetObserver {
   void WaitForDialogClose() {
     if (dialog_closed_)
       return;
-    base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-    base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     quit_closure_ = run_loop.QuitClosure();
     run_loop.Run();
   }
@@ -177,9 +172,7 @@ class TabKeyWaiter : public ui::EventHandler {
   void WaitForTab() {
     if (received_tab_)
       return;
-    base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-    base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     quit_closure_ = run_loop.QuitClosure();
     run_loop.Run();
   }
@@ -279,10 +272,6 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
         model_(NULL) {}
 
   void SetUp() override {
-    // Make sure the correct layout provider is created and used. This must be
-    // done prior to any view being created which uses the layout provider.
-    layout_provider_ = ChromeLayoutProvider::CreateLayoutProvider();
-
     content_client_.reset(new ChromeContentClient);
     content::SetContentClient(content_client_.get());
     browser_content_client_.reset(new ChromeContentBrowserClient());
@@ -335,11 +324,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
     profile_.reset();
 
     // Run the message loop to ensure we delete allTasks and fully shut down.
-    base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-    base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-    base::RunLoop run_loop;
-    loop->task_runner()->PostTask(FROM_HERE, run_loop.QuitClosure());
-    run_loop.Run();
+    base::RunLoop().RunUntilIdle();
 
     ViewEventTestBase::TearDown();
     BookmarkBarView::DisableAnimationsForTesting(false);
@@ -423,7 +408,6 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<Browser> browser_;
   std::unique_ptr<ScopedTestingLocalState> local_state_;
-  std::unique_ptr<views::LayoutProvider> layout_provider_;
 };
 
 // Clicks on first menu, makes sure button is depressed. Moves mouse to first
@@ -530,8 +514,9 @@ class BookmarkBarViewTest2 : public BookmarkBarViewEventTestBase {
   }
 };
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) || defined(OS_WIN)
 // TODO(erg): linux_aura bringup: http://crbug.com/163931
+// Disable this test on Win10:    http://crbug.com/828063
 #define MAYBE_HideOnDesktopClick DISABLED_HideOnDesktopClick
 #else
 #define MAYBE_HideOnDesktopClick HideOnDesktopClick

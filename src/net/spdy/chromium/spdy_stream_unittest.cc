@@ -30,11 +30,11 @@
 #include "net/spdy/chromium/spdy_session_pool.h"
 #include "net/spdy/chromium/spdy_stream_test_util.h"
 #include "net/spdy/chromium/spdy_test_util_common.h"
-#include "net/spdy/core/spdy_protocol.h"
-#include "net/spdy/platform/api/spdy_string_piece.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/platform/api/spdy_string_piece.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -389,6 +389,12 @@ TEST_F(SpdyStreamTest, PushedStream) {
   EXPECT_THAT(push_delegate.WaitForClose(), IsOk());
   EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(pushed_msg, push_delegate.TakeReceivedData());
+
+  // Finish async network reads and writes.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
 }
 
 TEST_F(SpdyStreamTest, StreamError) {

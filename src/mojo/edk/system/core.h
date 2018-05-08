@@ -19,7 +19,6 @@
 #include "mojo/edk/system/dispatcher.h"
 #include "mojo/edk/system/handle_signals_state.h"
 #include "mojo/edk/system/handle_table.h"
-#include "mojo/edk/system/mapping_table.h"
 #include "mojo/edk/system/node_controller.h"
 #include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/buffer.h"
@@ -36,12 +35,16 @@ class PortProvider;
 namespace mojo {
 namespace edk {
 
+class PlatformSharedMemoryMapping;
+
 // |Core| is an object that implements the Mojo system calls. All public methods
 // are thread-safe.
 class MOJO_SYSTEM_IMPL_EXPORT Core {
  public:
   Core();
   virtual ~Core();
+
+  static Core* Get();
 
   // Called exactly once, shortly after construction, and before any other
   // methods are called on this object.
@@ -51,6 +54,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   NodeController* GetNodeController();
 
   scoped_refptr<Dispatcher> GetDispatcher(MojoHandle handle);
+  scoped_refptr<Dispatcher> GetAndRemoveDispatcher(MojoHandle handle);
 
   void SetDefaultProcessErrorCallback(const ProcessErrorCallback& callback);
 
@@ -141,18 +145,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   MojoResult PassWrappedPlatformHandle(MojoHandle wrapper_handle,
                                        ScopedPlatformHandle* platform_handle);
 
-  MojoResult CreateSharedBufferWrapper(
-      base::SharedMemoryHandle shared_memory_handle,
-      size_t num_bytes,
-      bool read_only,
-      MojoHandle* mojo_wrapper_handle);
-
-  MojoResult PassSharedMemoryHandle(
-      MojoHandle mojo_handle,
-      base::SharedMemoryHandle* shared_memory_handle,
-      size_t* num_bytes,
-      bool* read_only);
-
   // Requests that the EDK tear itself down. |callback| will be called once
   // the shutdown process is complete. Note that |callback| is always called
   // asynchronously on the calling thread if said thread is running a message
@@ -160,8 +152,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // until the callback is called. If there is no running loop, the |callback|
   // may be called from any thread. Beware!
   void RequestShutdown(const base::Closure& callback);
-
-  MojoResult SetProperty(MojoPropertyType type, const void* value);
 
   // ---------------------------------------------------------------------------
 
@@ -221,7 +211,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   MojoResult GetMessageContext(MojoMessageHandle message_handle,
                                const MojoGetMessageContextOptions* options,
                                uintptr_t* context);
-  MojoResult GetProperty(MojoPropertyType type, void* value);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/message_pipe.h":
@@ -280,6 +269,9 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                        void** buffer,
                        MojoMapBufferFlags flags);
   MojoResult UnmapBuffer(void* buffer);
+  MojoResult GetBufferInfo(MojoHandle buffer_handle,
+                           const MojoSharedBufferOptions* options,
+                           MojoSharedBufferInfo* info);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/platform_handle.h".
@@ -329,11 +321,10 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   std::unique_ptr<HandleTable> handles_;
 
   base::Lock mapping_table_lock_;  // Protects |mapping_table_|.
-  MappingTable mapping_table_;
 
-  base::Lock property_lock_;
-  // Properties that can be read using the MojoGetProperty() API.
-  bool property_sync_call_allowed_ = true;
+  using MappingTable =
+      std::unordered_map<void*, std::unique_ptr<PlatformSharedMemoryMapping>>;
+  MappingTable mapping_table_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };

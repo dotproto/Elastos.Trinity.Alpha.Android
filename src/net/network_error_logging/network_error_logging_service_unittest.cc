@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -18,7 +19,6 @@
 #include "net/network_error_logging/network_error_logging_service.h"
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_service.h"
-#include "net/socket/next_proto.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -35,13 +35,19 @@ class TestReportingService : public ReportingService {
         : url(other.url),
           group(other.group),
           type(other.type),
-          body(std::move(other.body)) {}
+          body(std::move(other.body)),
+          depth(other.depth) {}
 
     Report(const GURL& url,
            const std::string& group,
            const std::string& type,
-           std::unique_ptr<const base::Value> body)
-        : url(url), group(group), type(type), body(std::move(body)) {}
+           std::unique_ptr<const base::Value> body,
+           int depth)
+        : url(url),
+          group(group),
+          type(type),
+          body(std::move(body)),
+          depth(depth) {}
 
     ~Report() = default;
 
@@ -49,6 +55,7 @@ class TestReportingService : public ReportingService {
     std::string group;
     std::string type;
     std::unique_ptr<const base::Value> body;
+    int depth;
 
    private:
     DISALLOW_COPY(Report);
@@ -65,8 +72,9 @@ class TestReportingService : public ReportingService {
   void QueueReport(const GURL& url,
                    const std::string& group,
                    const std::string& type,
-                   std::unique_ptr<const base::Value> body) override {
-    reports_.push_back(Report(url, group, type, std::move(body)));
+                   std::unique_ptr<const base::Value> body,
+                   int depth) override {
+    reports_.push_back(Report(url, group, type, std::move(body), depth));
   }
 
   void ProcessHeader(const GURL& url,
@@ -80,9 +88,9 @@ class TestReportingService : public ReportingService {
     NOTREACHED();
   }
 
-  bool RequestIsUpload(const URLRequest& request) override {
+  int GetUploadDepth(const URLRequest& request) override {
     NOTREACHED();
-    return true;
+    return 0;
   }
 
   const ReportingPolicy& GetPolicy() const override {
@@ -126,11 +134,10 @@ class NetworkErrorLoggingServiceTest : public ::testing::Test {
     details.uri = url;
     details.referrer = kReferrer_;
     details.server_ip = IPAddress::IPv4AllZeros();
-    details.protocol = kProtoUnknown;
     details.status_code = status_code;
     details.elapsed_time = base::TimeDelta::FromSeconds(1);
     details.type = error_type;
-    details.is_reporting_upload = false;
+    details.reporting_upload_depth = 0;
 
     return details;
   }
@@ -154,7 +161,7 @@ class NetworkErrorLoggingServiceTest : public ::testing::Test {
 
   const std::string kHeader_ = "{\"report-to\":\"group\",\"max-age\":86400}";
   const std::string kHeaderIncludeSubdomains_ =
-      "{\"report-to\":\"group\",\"max-age\":86400,\"includeSubdomains\":true}";
+      "{\"report-to\":\"group\",\"max-age\":86400,\"include-subdomains\":true}";
   const std::string kHeaderMaxAge0_ = "{\"max-age\":0}";
   const std::string kHeaderTooLong_ =
       "{\"report-to\":\"group\",\"max-age\":86400,\"junk\":\"" +
@@ -240,6 +247,7 @@ TEST_F(NetworkErrorLoggingServiceTest, SuccessReportQueued) {
   EXPECT_EQ(kUrl_, reports()[0].url);
   EXPECT_EQ(kGroup_, reports()[0].group);
   EXPECT_EQ(kType_, reports()[0].type);
+  EXPECT_EQ(0, reports()[0].depth);
 
   const base::DictionaryValue* body;
   ASSERT_TRUE(reports()[0].body->GetAsDictionary(&body));
@@ -273,6 +281,7 @@ TEST_F(NetworkErrorLoggingServiceTest, FailureReportQueued) {
   EXPECT_EQ(kUrl_, reports()[0].url);
   EXPECT_EQ(kGroup_, reports()[0].group);
   EXPECT_EQ(kType_, reports()[0].type);
+  EXPECT_EQ(0, reports()[0].depth);
 
   const base::DictionaryValue* body;
   ASSERT_TRUE(reports()[0].body->GetAsDictionary(&body));
@@ -306,6 +315,7 @@ TEST_F(NetworkErrorLoggingServiceTest, HttpErrorReportQueued) {
   EXPECT_EQ(kUrl_, reports()[0].url);
   EXPECT_EQ(kGroup_, reports()[0].group);
   EXPECT_EQ(kType_, reports()[0].type);
+  EXPECT_EQ(0, reports()[0].depth);
 
   const base::DictionaryValue* body;
   ASSERT_TRUE(reports()[0].body->GetAsDictionary(&body));
@@ -506,6 +516,76 @@ TEST_F(NetworkErrorLoggingServiceTest, RemoveSomeBrowsingData) {
       MakeRequestDetails(kUrlDifferentHost_, ERR_CONNECTION_REFUSED));
 
   ASSERT_EQ(1u, reports().size());
+}
+
+TEST_F(NetworkErrorLoggingServiceTest, Nested) {
+  service()->OnHeader(kOrigin_, kHeader_);
+
+  NetworkErrorLoggingService::RequestDetails details =
+      MakeRequestDetails(kUrl_, ERR_CONNECTION_REFUSED);
+  details.reporting_upload_depth =
+      NetworkErrorLoggingService::kMaxNestedReportDepth;
+  service()->OnRequest(details);
+
+  ASSERT_EQ(1u, reports().size());
+  EXPECT_EQ(NetworkErrorLoggingService::kMaxNestedReportDepth,
+            reports()[0].depth);
+}
+
+TEST_F(NetworkErrorLoggingServiceTest, NestedTooDeep) {
+  service()->OnHeader(kOrigin_, kHeader_);
+
+  NetworkErrorLoggingService::RequestDetails details =
+      MakeRequestDetails(kUrl_, ERR_CONNECTION_REFUSED);
+  details.reporting_upload_depth =
+      NetworkErrorLoggingService::kMaxNestedReportDepth + 1;
+  service()->OnRequest(details);
+
+  EXPECT_TRUE(reports().empty());
+}
+
+TEST_F(NetworkErrorLoggingServiceTest, StatusAsValue) {
+  base::SimpleTestTickClock clock;
+  service()->SetTickClockForTesting(&clock);
+
+  static const std::string kHeaderSuccessFraction1 =
+      "{\"report-to\":\"group\",\"max-age\":86400,\"success-fraction\":1.0}";
+  service()->OnHeader(kOrigin_, kHeaderSuccessFraction1);
+  service()->OnHeader(kOriginDifferentHost_, kHeader_);
+  service()->OnHeader(kOriginSubdomain_, kHeaderIncludeSubdomains_);
+
+  base::Value actual = service()->StatusAsValue();
+  std::unique_ptr<base::Value> expected = base::test::ParseJson(R"json(
+      {
+        "originPolicies": [
+          {
+            "origin": "https://example.com",
+            "includeSubdomains": false,
+            "expires": "86400000",
+            "reportTo": "group",
+            "successFraction": 1.0,
+            "failureFraction": 1.0,
+          },
+          {
+            "origin": "https://example2.com",
+            "includeSubdomains": false,
+            "expires": "86400000",
+            "reportTo": "group",
+            "successFraction": 0.0,
+            "failureFraction": 1.0,
+          },
+          {
+            "origin": "https://subdomain.example.com",
+            "includeSubdomains": true,
+            "expires": "86400000",
+            "reportTo": "group",
+            "successFraction": 0.0,
+            "failureFraction": 1.0,
+          },
+        ]
+      }
+      )json");
+  EXPECT_EQ(*expected, actual);
 }
 
 }  // namespace

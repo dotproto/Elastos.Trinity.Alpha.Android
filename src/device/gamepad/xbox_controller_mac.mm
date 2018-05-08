@@ -35,6 +35,8 @@ const int kXbox360ControlEndpoint = 2;
 const int kXboxOneReadEndpoint = 2;
 const int kXboxOneControlEndpoint = 1;
 
+const double kXboxOneMaxEffectDurationMillis = 2500;  // 2.5 seconds
+
 enum {
   STATUS_MESSAGE_BUTTONS = 0,
   STATUS_MESSAGE_LED = 1,
@@ -151,8 +153,8 @@ struct XboxOneRumbleData {
   uint8_t rumble_mask;
   uint8_t trigger_left;
   uint8_t trigger_right;
-  uint8_t weak_magnitude;
   uint8_t strong_magnitude;
+  uint8_t weak_magnitude;
   uint8_t duration;
   uint8_t period;
   uint8_t extra;
@@ -368,11 +370,24 @@ void XboxControllerMac::StartVibration(int sequence_id,
     return;
   SetVibration(strong_magnitude, weak_magnitude);
 
-  playing_effect_task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&XboxControllerMac::StopVibration, base::Unretained(this),
-                     sequence_id),
-      base::TimeDelta::FromMillisecondsD(duration));
+  // The Xbox One controller rumble packet specifies a duration for the rumble
+  // effect with a maximum length of about 3 seconds. Support longer durations
+  // by sending a second rumble packet to extend the duration.
+  if (duration > kXboxOneMaxEffectDurationMillis) {
+    double remaining = duration - kXboxOneMaxEffectDurationMillis;
+    playing_effect_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&XboxControllerMac::StartVibration,
+                       base::Unretained(this), sequence_id, remaining,
+                       strong_magnitude, weak_magnitude),
+        base::TimeDelta::FromMillisecondsD(kXboxOneMaxEffectDurationMillis));
+  } else {
+    playing_effect_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&XboxControllerMac::StopVibration,
+                       base::Unretained(this), sequence_id),
+        base::TimeDelta::FromMillisecondsD(duration));
+  }
 }
 
 void XboxControllerMac::StopVibration(int sequence_id) {
@@ -870,8 +885,8 @@ void XboxControllerMac::WriteXboxOneRumble(uint8_t strong_magnitude,
   // Set rumble intensities.
   rumble_data->trigger_left = 0x00;
   rumble_data->trigger_right = 0x00;
-  rumble_data->weak_magnitude = weak_magnitude;
   rumble_data->strong_magnitude = strong_magnitude;
+  rumble_data->weak_magnitude = weak_magnitude;
 
   kern_return_t kr =
       (*interface_)

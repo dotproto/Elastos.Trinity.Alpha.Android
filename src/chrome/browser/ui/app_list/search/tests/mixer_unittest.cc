@@ -7,12 +7,12 @@
 #include <stddef.h>
 
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,8 +20,6 @@
 #include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 
 class FakeAppListModelUpdater;
 
@@ -33,7 +31,7 @@ const size_t kMaxAppsGroupResults = 4;
 const size_t kMaxOmniboxResults = 4;
 const size_t kMaxWebstoreResults = 2;
 
-class TestSearchResult : public SearchResult {
+class TestSearchResult : public ChromeSearchResult {
  public:
   TestSearchResult(const std::string& id, double relevance)
       : instance_id_(instantiation_count++) {
@@ -43,19 +41,17 @@ class TestSearchResult : public SearchResult {
   }
   ~TestSearchResult() override {}
 
-  using SearchResult::set_voice_result;
-
-  // SearchResult overrides:
+  // ChromeSearchResult overrides:
   void Open(int event_flags) override {}
   void InvokeAction(int action_index, int event_flags) override {}
-  std::unique_ptr<SearchResult> Duplicate() const override {
+  std::unique_ptr<ChromeSearchResult> Duplicate() const override {
     return std::make_unique<TestSearchResult>(id(), relevance());
   }
 
   // For reference equality testing. (Addresses cannot be used to test reference
   // equality because it is possible that an object will be allocated at the
   // same address as a previously deleted one.)
-  static int GetInstanceId(SearchResult* result) {
+  static int GetInstanceId(ChromeSearchResult* result) {
     return static_cast<const TestSearchResult*>(result)->instance_id_;
   }
 
@@ -90,27 +86,22 @@ class TestSearchProvider : public SearchProvider {
         relevance = 10.0 - i * 10;
       TestSearchResult* result = new TestSearchResult(id, relevance);
       result->set_display_type(display_type_);
-      if (voice_result_indices.find(i) != voice_result_indices.end())
-        result->set_voice_result(true);
-      Add(std::unique_ptr<SearchResult>(result));
+      Add(std::unique_ptr<ChromeSearchResult>(result));
     }
   }
 
   void set_prefix(const std::string& prefix) { prefix_ = prefix; }
-  void set_display_type(SearchResult::DisplayType display_type) {
+  void set_display_type(ChromeSearchResult::DisplayType display_type) {
     display_type_ = display_type;
   }
   void set_count(size_t count) { count_ = count; }
-  void set_as_voice_result(size_t index) { voice_result_indices.insert(index); }
   void set_bad_relevance_range() { bad_relevance_range_ = true; }
 
  private:
   std::string prefix_;
   size_t count_;
   bool bad_relevance_range_;
-  SearchResult::DisplayType display_type_;
-  // Indices of results that will have the |voice_result| flag set.
-  std::set<size_t> voice_result_indices;
+  ChromeSearchResult::DisplayType display_type_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSearchProvider);
 };
@@ -255,30 +246,6 @@ TEST_F(MixerTest, RemoveDuplicates) {
   EXPECT_EQ("dup0,dup1,dup2", GetResults());
 }
 
-// Tests that "known results" have priority over others.
-TEST_F(MixerTest, KnownResultsPriority) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
-  // This gives omnibox 0 -- 5.
-  omnibox_provider()->set_count(6);
-
-  // omnibox 1 -- 4 are "known results".
-  AddKnownResult("omnibox1", PREFIX_SECONDARY);
-  AddKnownResult("omnibox2", PERFECT_SECONDARY);
-  AddKnownResult("omnibox3", PREFIX_PRIMARY);
-  AddKnownResult("omnibox4", PERFECT_PRIMARY);
-
-  RunQuery();
-
-  // omnibox 1 -- 4 should be prioritised over the others. They should be
-  // ordered 4, 3, 2, 1 (in order of match quality).
-  EXPECT_EQ("omnibox4,omnibox3,omnibox2,omnibox1,omnibox0,omnibox5",
-            GetResults());
-}
-
 // Tests that "known results" are not considered for recommendation results.
 TEST_F(MixerTest, KnownResultsIgnoredForRecommendations) {
   // This gives omnibox 0 -- 5.
@@ -297,23 +264,6 @@ TEST_F(MixerTest, KnownResultsIgnoredForRecommendations) {
   // omnibox 1 -- 4 should be unaffected despite being known results.
   EXPECT_EQ("omnibox0,omnibox1,omnibox2,omnibox3,omnibox4,omnibox5",
             GetResults());
-}
-
-TEST_F(MixerTest, VoiceQuery) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
-  omnibox_provider()->set_count(3);
-  RunQuery();
-  EXPECT_EQ("omnibox0,omnibox1,omnibox2", GetResults());
-
-  // Set "omnibox1" as a voice result. Do not expect any changes (as this is not
-  // a voice query).
-  omnibox_provider()->set_as_voice_result(1);
-  RunQuery();
-  EXPECT_EQ("omnibox0,omnibox1,omnibox2", GetResults());
 }
 
 }  // namespace test

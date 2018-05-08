@@ -9,9 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
@@ -42,7 +40,7 @@ class FakeTask : public Task {
 
   const Task* GetParentTask() const override { return nullptr; }
 
-  int GetTabId() const override { return 0; }
+  SessionID GetTabId() const override { return SessionID::InvalidValue(); }
 
  private:
   Type type_;

@@ -68,6 +68,8 @@ ShellBrowserContext::ShellBrowserContext(bool off_the_record,
 }
 
 ShellBrowserContext::~ShellBrowserContext() {
+  NotifyWillBeDestroyed(this);
+
   BrowserContextDependencyManager::GetInstance()->
       DestroyBrowserContextServices(this);
   // Need to destruct the ResourceContext before posting tasks which may delete
@@ -108,7 +110,7 @@ void ShellBrowserContext::InitWhileIOAllowed() {
   }
 
 #if defined(OS_WIN)
-  CHECK(PathService::Get(base::DIR_LOCAL_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_LOCAL_APP_DATA, &path_));
   path_ = path_.Append(std::wstring(L"content_shell"));
 #elif defined(OS_LINUX)
   std::unique_ptr<base::Environment> env(base::Environment::Create());
@@ -118,10 +120,10 @@ void ShellBrowserContext::InitWhileIOAllowed() {
                                  base::nix::kDotConfigDir));
   path_ = config_dir.Append("content_shell");
 #elif defined(OS_MACOSX)
-  CHECK(PathService::Get(base::DIR_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
   path_ = path_.Append("Chromium Content Shell");
 #elif defined(OS_ANDROID)
-  CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
   path_ = path_.Append(FILE_PATH_LITERAL("content_shell"));
 #else
   NOTIMPLEMENTED();
@@ -183,7 +185,13 @@ ShellBrowserContext::CreateRequestContextForStoragePartition(
     bool in_memory,
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
-  return nullptr;
+  scoped_refptr<ShellURLRequestContextGetter>& context_getter =
+      isolated_url_request_getters_[partition_path];
+  if (!context_getter) {
+    context_getter = CreateURLRequestContextGetter(
+        protocol_handlers, std::move(request_interceptors));
+  }
+  return context_getter.get();
 }
 
 net::URLRequestContextGetter*

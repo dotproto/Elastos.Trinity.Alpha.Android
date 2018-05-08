@@ -15,8 +15,12 @@ import android.os.Looper;
 import android.os.RemoteException;
 
 import org.chromium.base.Log;
+import org.chromium.base.MemoryPressureLevel;
+import org.chromium.base.MemoryPressureListener;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.memory.MemoryPressureCallback;
 
 import java.util.List;
 
@@ -195,14 +199,12 @@ public class ChildProcessConnection {
     // Process ID of the corresponding child process.
     private int mPid;
 
-    // Inital moderate binding.
-    private final ChildServiceConnection mInitialBinding;
-
     // Strong binding will make the service priority equal to the priority of the activity.
     private final ChildServiceConnection mStrongBinding;
 
     // Moderate binding will make the service priority equal to the priority of a visible process
     // while the app is in the foreground.
+    // This is also used as the initial binding before any priorities are set.
     private final ChildServiceConnection mModerateBinding;
 
     // Low priority binding maintained in the entire lifetime of the connection, i.e. between calls
@@ -215,10 +217,15 @@ public class ChildProcessConnection {
 
     // Indicates whether the connection only has the waived binding (if the connection is unbound,
     // it contains the state at time of unbinding).
-    private boolean mWaivedBoundOnly;
+    private volatile boolean mWaivedBoundOnly;
 
     // Set to true once unbind() was called.
     private boolean mUnbound;
+
+    // Indicate |kill()| was called to intentionally kill this process.
+    private volatile boolean mKilledByUs;
+
+    private MemoryPressureCallback mMemoryPressureCallback;
 
     public ChildProcessConnection(Context context, ComponentName serviceName, boolean bindToCaller,
             boolean bindAsExternalService, Bundle serviceBundle) {
@@ -278,7 +285,6 @@ public class ChildProcessConnection {
         int defaultFlags = Context.BIND_AUTO_CREATE
                 | (bindAsExternalService ? Context.BIND_EXTERNAL_SERVICE : 0);
 
-        mInitialBinding = connectionFactory.createConnection(intent, defaultFlags, delegate);
         mModerateBinding = connectionFactory.createConnection(intent, defaultFlags, delegate);
         mStrongBinding = connectionFactory.createConnection(
                 intent, defaultFlags | Context.BIND_IMPORTANT, delegate);
@@ -380,6 +386,19 @@ public class ChildProcessConnection {
         notifyChildProcessDied();
     }
 
+    public void kill() {
+        assert isRunningOnLauncherThread();
+        IChildProcessService service = mService;
+        unbind();
+        try {
+            if (service != null) service.forceKill();
+        } catch (RemoteException e) {
+            // Intentionally ignore since we are killing it anyway.
+        }
+        mKilledByUs = true;
+        notifyChildProcessDied();
+    }
+
     private void onServiceConnectedOnLauncherThread(IBinder service) {
         assert isRunningOnLauncherThread();
         // A flag from the parent class ensures we run the post-connection logic only once
@@ -414,6 +433,12 @@ public class ChildProcessConnection {
             }
 
             mServiceConnectComplete = true;
+
+            if (mMemoryPressureCallback == null) {
+                final MemoryPressureCallback callback = this ::onMemoryPressure;
+                ThreadUtils.postOnUiThread(() -> MemoryPressureListener.addCallback(callback));
+                mMemoryPressureCallback = callback;
+            }
 
             // Run the setup if the connection parameters have already been provided. If
             // not, doConnectionSetup() will be called from setupConnection().
@@ -492,7 +517,13 @@ public class ChildProcessConnection {
         assert isRunningOnLauncherThread();
         assert !mUnbound;
 
-        boolean success = useStrongBinding ? mStrongBinding.bind() : mInitialBinding.bind();
+        boolean success;
+        if (useStrongBinding) {
+            success = mStrongBinding.bind();
+        } else {
+            mModerateBindingCount++;
+            success = mModerateBinding.bind();
+        }
         if (!success) return false;
 
         updateWaivedBoundOnlyState();
@@ -509,31 +540,19 @@ public class ChildProcessConnection {
         mStrongBinding.unbind();
         mWaivedBinding.unbind();
         mModerateBinding.unbind();
-        mInitialBinding.unbind();
         // Note that we don't update the waived bound only state here as to preserve the state when
         // disconnected.
-    }
 
-    public boolean isInitialBindingBound() {
-        assert isRunningOnLauncherThread();
-        return mInitialBinding.isBound();
-    }
-
-    public void addInitialBinding() {
-        assert isRunningOnLauncherThread();
-        mInitialBinding.bind();
-        updateWaivedBoundOnlyState();
+        if (mMemoryPressureCallback != null) {
+            final MemoryPressureCallback callback = mMemoryPressureCallback;
+            ThreadUtils.postOnUiThread(() -> MemoryPressureListener.removeCallback(callback));
+            mMemoryPressureCallback = null;
+        }
     }
 
     public boolean isStrongBindingBound() {
         assert isRunningOnLauncherThread();
         return mStrongBinding.isBound();
-    }
-
-    public void removeInitialBinding() {
-        assert isRunningOnLauncherThread();
-        mInitialBinding.unbind();
-        updateWaivedBoundOnlyState();
     }
 
     public void addStrongBinding() {
@@ -606,11 +625,20 @@ public class ChildProcessConnection {
         return mWaivedBoundOnly;
     }
 
-    // Should be called every time the mInitialBinding or mStrongBinding are bound/unbound.
+    /**
+     * @return true if the connection is intentionally killed by calling kill().
+     */
+    public boolean isKilledByUs() {
+        // WARNING: this method can be called from a thread other than the launcher thread.
+        // Note that it returns the current waived bound only state and is racy. This not really
+        // preventable without changing the caller's API, short of blocking.
+        return mKilledByUs;
+    }
+
+    // Should be called every time the mModerateBinding or mStrongBinding are bound/unbound.
     private void updateWaivedBoundOnlyState() {
         if (!mUnbound) {
-            mWaivedBoundOnly = !mInitialBinding.isBound() && !mStrongBinding.isBound()
-                    && !mModerateBinding.isBound();
+            mWaivedBoundOnly = !mStrongBinding.isBound() && !mModerateBinding.isBound();
         }
     }
 
@@ -629,7 +657,7 @@ public class ChildProcessConnection {
 
     @VisibleForTesting
     public void crashServiceForTesting() throws RemoteException {
-        mService.crashIntentionallyForTesting();
+        mService.forceKill();
     }
 
     @VisibleForTesting
@@ -640,5 +668,18 @@ public class ChildProcessConnection {
     @VisibleForTesting
     protected Handler getLauncherHandler() {
         return mLauncherHandler;
+    }
+
+    private void onMemoryPressure(@MemoryPressureLevel int pressure) {
+        mLauncherHandler.post(() -> onMemoryPressureOnLauncherThread(pressure));
+    }
+
+    private void onMemoryPressureOnLauncherThread(@MemoryPressureLevel int pressure) {
+        if (mService == null) return;
+        try {
+            mService.onMemoryPressure(pressure);
+        } catch (RemoteException ex) {
+            // Ignore
+        }
     }
 }

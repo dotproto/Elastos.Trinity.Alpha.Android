@@ -4,6 +4,7 @@
 
 # Defines fuzzer_test.
 #
+import("//build/config/coverage/coverage.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//testing/test.gni")
@@ -17,6 +18,7 @@ import("//testing/test.gni")
 # - dict - a dictionary file for the fuzzer.
 # - libfuzzer_options - options for the fuzzer (e.g. -max_len or -timeout).
 # - seed_corpus - a directory with seed corpus.
+# - skip_owners - if true, skips writing the owners file.
 #
 # If use_libfuzzer gn flag is defined, then proper fuzzer would be build.
 # Without use_libfuzzer or use_afl a unit-test style binary would be built on
@@ -27,6 +29,10 @@ import("//testing/test.gni")
 # config (.options file) file would be generated or modified in root output
 # dir (next to test).
 template("fuzzer_test") {
+  assert(!(is_mac && use_clang_coverage && use_fuzzing_engine),
+         "Code Coverage for fuzz targets does not work on Mac until " +
+             "crbug.com/790747 is resolved.")
+
   if (!disable_libfuzzer && (use_fuzzing_engine || use_drfuzz || is_linux)) {
     assert(defined(invoker.sources), "Need sources in $target_name.")
 
@@ -87,12 +93,12 @@ template("fuzzer_test") {
       }
 
       # Generate .options file.
-      config_name = target_name + ".options"
-      action(config_name) {
+      config_file_name = target_name + ".options"
+      action(config_file_name) {
         script = "//testing/libfuzzer/gen_fuzzer_config.py"
         args = [
           "--config",
-          rebase_path("$root_build_dir/" + config_name, root_build_dir),
+          rebase_path("$root_build_dir/" + config_file_name, root_build_dir),
         ]
 
         if (defined(invoker.dict)) {
@@ -109,11 +115,36 @@ template("fuzzer_test") {
         }
 
         outputs = [
-          "$root_build_dir/$config_name",
+          "$root_build_dir/$config_file_name",
         ]
       }
-      test_deps += [ ":" + config_name ]
+      test_deps += [ ":" + config_file_name ]
     }
+
+    # Generate .owners file (if skip_owners is not true).
+    owners_file_name = target_name + ".owners"
+    action(owners_file_name) {
+      script = "//testing/libfuzzer/gen_fuzzer_owners.py"
+      args = [
+        "--owners",
+        rebase_path("$root_build_dir/" + owners_file_name, root_build_dir),
+      ]
+
+      if (defined(invoker.sources) && invoker.sources != []) {
+        args += [ "--sources" ] + rebase_path(invoker.sources, root_build_dir)
+      } else if (defined(invoker.deps) && invoker.deps != []) {
+        args += [
+                  "--build-dir",
+                  rebase_path("$root_build_dir/", root_build_dir),
+                  "--deps",
+                ] + invoker.deps
+      }
+
+      outputs = [
+        "$root_build_dir/$owners_file_name",
+      ]
+    }
+    test_deps += [ ":" + owners_file_name ]
 
     test(target_name) {
       forward_variables_from(invoker,

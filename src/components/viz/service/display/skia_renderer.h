@@ -10,32 +10,34 @@
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/sync_query_collection.h"
 #include "components/viz/service/viz_service_export.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/latency/latency_info.h"
 
 class SkNWayCanvas;
 
-namespace cc {
-class OutputSurface;
-class RenderPassDrawQuad;
-}  // namespace cc
+namespace gpu {
+struct Capabilities;
+}
 
 namespace viz {
 class DebugBorderDrawQuad;
 class PictureDrawQuad;
+class SkiaOutputSurface;
 class SolidColorDrawQuad;
 class TextureDrawQuad;
 class TileDrawQuad;
 
 class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
  public:
+  // TODO(penghuang): Remove skia_output_surface when DDL is used everywhere.
   SkiaRenderer(const RendererSettings* settings,
                OutputSurface* output_surface,
-               cc::DisplayResourceProvider* resource_provider);
-
+               cc::DisplayResourceProvider* resource_provider,
+               SkiaOutputSurface* skia_output_surface = nullptr);
   ~SkiaRenderer() override;
 
-  void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) override;
+  void SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                   bool need_presentation_feedback) override;
 
   void SetDisablePictureQuadImageFiltering(bool disable) {
     disable_picture_quad_image_filtering_ = disable;
@@ -72,6 +74,9 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void GenerateMipmap() override;
 
  private:
+  struct DrawRenderPassDrawQuadParams;
+  class ScopedSkImageBuilder;
+
   void ClearCanvas(SkColor color);
   void ClearFramebuffer();
   void SetClipRect(const gfx::Rect& rect);
@@ -83,18 +88,24 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void DrawTextureQuad(const TextureDrawQuad* quad);
   void DrawTileQuad(const TileDrawQuad* quad);
   void DrawUnsupportedQuad(const DrawQuad* quad);
+  bool CalculateRPDQParams(sk_sp<SkImage> src_image,
+                           const RenderPassDrawQuad* quad,
+                           DrawRenderPassDrawQuadParams* params);
+
   bool ShouldApplyBackgroundFilters(
       const RenderPassDrawQuad* quad,
       const cc::FilterOperations* background_filters) const;
-  sk_sp<SkImage> ApplyImageFilter(SkImageFilter* filter,
-                                  const RenderPassDrawQuad* quad,
-                                  const SkBitmap& to_filter,
-                                  SkIRect* auto_bounds) const;
   gfx::Rect GetBackdropBoundingBoxForRenderPassQuad(
       const RenderPassDrawQuad* quad,
       const gfx::Transform& contents_device_transform,
-      const cc::FilterOperations* background_filters) const;
-  SkBitmap GetBackdropBitmap(const gfx::Rect& bounding_rect) const;
+      const cc::FilterOperations* background_filters,
+      gfx::Rect* unclipped_rect) const;
+  sk_sp<SkImage> ApplyBackgroundFilters(SkImageFilter* filter,
+                                        const RenderPassDrawQuad* quad,
+                                        sk_sp<SkImage> src_image,
+                                        const gfx::Rect& rect) const;
+
+  sk_sp<SkImage> GetBackdropImage(const gfx::Rect& bounding_rect) const;
   sk_sp<SkShader> GetBackgroundFilterShader(
       const RenderPassDrawQuad* quad,
       SkShader::TileMode content_tile_mode) const;
@@ -102,12 +113,14 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // A map from RenderPass id to the texture used to draw the RenderPass from.
   struct RenderPassBacking {
     sk_sp<SkSurface> render_pass_surface;
+    gfx::Size size;
     bool mipmap;
     gfx::ColorSpace color_space;
+    ResourceFormat format;
     RenderPassBacking(GrContext* gr_context,
+                      const gpu::Capabilities& caps,
                       const gfx::Size& size,
                       bool mipmap,
-                      bool capability_bgra8888,
                       const gfx::ColorSpace& color_space);
     ~RenderPassBacking();
     RenderPassBacking(RenderPassBacking&&);
@@ -115,11 +128,13 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   };
   base::flat_map<RenderPassId, RenderPassBacking> render_pass_backings_;
 
+  SkiaOutputSurface* const skia_output_surface_ = nullptr;
   bool disable_picture_quad_image_filtering_ = false;
-
   bool is_scissor_enabled_ = false;
+
   gfx::Rect scissor_rect_;
 
+  bool is_drawing_render_pass_ = false;
   sk_sp<SkSurface> root_surface_;
   sk_sp<SkSurface> non_root_surface_;
   sk_sp<SkSurface> overdraw_surface_;
@@ -127,6 +142,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   std::unique_ptr<SkNWayCanvas> nway_canvas_;
   SkCanvas* root_canvas_ = nullptr;
   SkCanvas* current_canvas_ = nullptr;
+  SkSurface* current_surface_ = nullptr;
   SkPaint current_paint_;
 
   base::Optional<SyncQueryCollection> sync_queries_;
@@ -134,6 +150,19 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
 
   gfx::Rect swap_buffer_rect_;
   std::vector<gfx::Rect> swap_content_bounds_;
+
+  // Lock set for resources that are used for the current frame. All resources
+  // in this set will be unlocked with a sync token when the frame is done in
+  // the compositor thread. And the sync token will be released when the DDL
+  // for the current frame is replayed on the GPU thread.
+  // It is only used with DDL.
+  cc::DisplayResourceProvider::LockSetForExternalUse lock_set_for_external_use_;
+
+  // Promise images created from resources used in the current frame. This map
+  // will be cleared when the frame is done and before all resources in
+  // |lock_set_for_external_use_| are unlocked on the compositor thread.
+  // It is only used with DDL.
+  base::flat_map<ResourceId, sk_sp<SkImage>> promise_images_;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaRenderer);
 };

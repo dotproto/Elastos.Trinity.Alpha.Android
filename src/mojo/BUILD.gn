@@ -10,7 +10,6 @@ group("mojo") {
   testonly = true
   deps = [
     ":tests",
-    "//mojo/common",
   ]
 
   if (!(is_linux && current_cpu == "x86")) {
@@ -30,7 +29,6 @@ group("tests") {
     ":mojo_perftests",
     ":mojo_unittests",
     "//ipc:ipc_tests",
-    "//mojo/common:mojo_common_unittests",
     "//services/service_manager/tests",
   ]
 }

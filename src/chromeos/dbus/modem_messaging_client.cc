@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -39,8 +38,8 @@ class ModemMessagingProxy {
         modemmanager::kSMSAddedSignal,
         base::Bind(&ModemMessagingProxy::OnSmsAdded,
                    weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&ModemMessagingProxy::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&ModemMessagingProxy::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
   virtual ~ModemMessagingProxy() = default;
 

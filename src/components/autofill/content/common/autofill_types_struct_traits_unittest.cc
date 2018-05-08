@@ -31,6 +31,7 @@ void CreateTestFieldDataPredictions(const std::string& signature,
   field_predict->server_type = "TestServerType";
   field_predict->overall_type = "TestOverallType";
   field_predict->parseable_name = "TestParseableName";
+  field_predict->section = "TestSection";
 }
 
 void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
@@ -104,7 +105,6 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->was_parsed_using_autofill_predictions = false;
   form->is_public_suffix_match = true;
   form->is_affiliation_based_match = true;
-  form->does_look_like_signup_form = true;
   form->submission_event =
       PasswordForm::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
 }

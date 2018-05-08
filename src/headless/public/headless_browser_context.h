@@ -13,6 +13,7 @@
 
 #include "base/callback.h"
 #include "base/optional.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/web_preferences.h"
 #include "headless/lib/browser/headless_network_conditions.h"
@@ -25,6 +26,10 @@ namespace base {
 class FilePath;
 }
 
+namespace net {
+class IOBuffer;
+};
+
 namespace headless {
 class HeadlessBrowserImpl;
 class HeadlessBrowserContextOptions;
@@ -34,10 +39,7 @@ class HeadlessBrowserContextOptions;
 using content::WebPreferences;
 
 using DevToolsStatus = content::ResourceRequestInfo::DevToolsStatus;
-
-using ProtocolHandlerMap = std::unordered_map<
-    std::string,
-    std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
+using content::ProtocolHandlerMap;
 
 // Represents an isolated session with a unique cache, cookies, and other
 // profile/session related data.
@@ -96,6 +98,12 @@ class HEADLESS_EXPORT HeadlessBrowserContext::Observer {
                                 int net_error,
                                 DevToolsStatus devtools_status) {}
 
+  // Called when metadata for a resource (e.g. v8 code cache) has been sent by a
+  // renderer.
+  virtual void OnMetadataForResource(const GURL& url,
+                                     net::IOBuffer* buf,
+                                     int buf_len) {}
+
   // Indicates the HeadlessBrowserContext is about to be deleted.
   virtual void OnHeadlessBrowserContextDestruct() {}
 
@@ -144,6 +152,7 @@ class HEADLESS_EXPORT HeadlessBrowserContext::Builder {
   Builder& SetAllowCookies(bool incognito_mode);
   Builder& SetOverrideWebPreferencesCallback(
       base::RepeatingCallback<void(WebPreferences*)> callback);
+  Builder& SetCaptureResourceMetadata(bool capture_resource_metadata);
 
   HeadlessBrowserContext* Build();
 

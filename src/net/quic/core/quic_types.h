@@ -39,6 +39,10 @@ typedef std::array<uint8_t, kQuicPathFrameBufferSize> QuicPathFrameBuffer;
 // Application error code used in the QUIC Stop Sending frame.
 typedef uint16_t QuicApplicationErrorCode;
 
+// The connection id sequence number specifies the order that connection
+// ids must be used in.
+typedef uint64_t QuicConnectionIdSequenceNumber;
+
 // A struct for functions which consume data payloads and fins.
 struct QUIC_EXPORT_PRIVATE QuicConsumedData {
   QuicConsumedData(size_t bytes_consumed, bool fin_consumed);
@@ -148,6 +152,16 @@ enum QuicFrameType : int8_t {
   ACK_FRAME,
   // The path MTU discovery frame is encoded as a PING frame on the wire.
   MTU_DISCOVERY_FRAME,
+
+  // These are for IETF-specific frames for which there is no mapping
+  // from Google QUIC frames. These are valid/allowed if and only if IETF-
+  // QUIC has been negotiated. Values are not important, they are not
+  // the values that are in the packets (see QuicIetfFrameType, below).
+  APPLICATION_CLOSE_FRAME,
+  NEW_CONNECTION_ID_FRAME,
+  MAX_STREAM_ID_FRAME,
+  STREAM_ID_BLOCKED_FRAME,
+
   NUM_FRAME_TYPES
 };
 
@@ -393,6 +407,46 @@ enum QuicIetfTransportErrorCodes : uint16_t {
   PROTOCOL_VIOLATION = 0xA,
   UNSOLICITED_PONG = 0xB,
   FRAME_ERROR_base = 0x100,  // add frame type to this base
+};
+
+enum QuicIetfPacketHeaderForm {
+  // Long header is used for packets that are sent prior to the completion of
+  // version negotiation and establishment of 1-RTT keys.
+  LONG_HEADER,
+  // Short header is used after the version and 1-RTT keys are negotiated.
+  SHORT_HEADER,
+};
+
+// Used in long header to explicitly indicate the packet type.
+enum QuicLongHeaderType : uint8_t {
+  VERSION_NEGOTIATION = 0,  // Value does not matter.
+  ZERO_RTT_PROTECTED = 0x7C,
+  HANDSHAKE = 0x7D,
+  RETRY = 0x7E,
+  INITIAL = 0x7F,
+
+  INVALID_PACKET_TYPE,
+};
+
+// Used in short header to determine the size of packet number field.
+enum QuicShortHeaderType : uint8_t {
+  SHORT_HEADER_1_BYTE_PACKET_NUMBER = 0,
+  SHORT_HEADER_2_BYTE_PACKET_NUMBER = 1,
+  SHORT_HEADER_4_BYTE_PACKET_NUMBER = 2,
+};
+
+enum QuicPacketHeaderTypeFlags : uint8_t {
+  // Bit 3: Google QUIC Demultiplexing bit, the short header always sets this
+  // bit to 0, allowing to distinguish Google QUIC packets from short header
+  // packets.
+  FLAGS_DEMULTIPLEXING_BIT = 1 << 3,
+  // Bit 5: Indicates the key phase, which allows the receipt of the packet to
+  // identify the packet protection keys that are used to protect the packet.
+  FLAGS_KEY_PHASE_BIT = 1 << 5,
+  // Bit 6: Indicates the connection ID is omitted in short header.
+  FLAGS_OMIT_CONNECTION_ID = 1 << 6,
+  // Bit 7: Indicates the header is long or short header.
+  FLAGS_LONG_HEADER = 1 << 7,
 };
 
 }  // namespace net

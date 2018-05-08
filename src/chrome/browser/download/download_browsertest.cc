@@ -23,7 +23,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -329,6 +328,10 @@ bool WasAutoOpened(DownloadItem* item) {
   return item->GetAutoOpened();
 }
 
+bool IsDownloadExternallyRemoved(DownloadItem* item) {
+  return item->GetFileExternallyRemoved();
+}
+
 #if !defined(OS_CHROMEOS)
 // Called when a download starts. Marks the download as hidden.
 void SetHiddenDownloadCallback(DownloadItem* item,
@@ -475,11 +478,6 @@ class DownloadTest : public InProcessBrowserTest {
     EXPECT_EQ(1, window_count);
     EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
-    // Set up the temporary download folder.
-    bool created_downloads_dir = CreateAndSetDownloadsDirectory(browser());
-    EXPECT_TRUE(created_downloads_dir);
-    if (!created_downloads_dir)
-      return false;
     browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
 
@@ -504,10 +502,6 @@ class DownloadTest : public InProcessBrowserTest {
     return test_file_directory;
   }
 
-  base::FilePath GetDownloadsDirectory() {
-    return downloads_directory_.GetPath();
-  }
-
   // Location of the file source (the place from which it is downloaded).
   base::FilePath OriginFile(const base::FilePath& file) {
     return test_dir_.Append(file);
@@ -520,26 +514,6 @@ class DownloadTest : public InProcessBrowserTest {
 
   content::TestDownloadResponseHandler* test_response_handler() {
     return &test_response_handler_;
-  }
-
-  // Must be called after browser creation.  Creates a temporary
-  // directory for downloads that is auto-deleted on destruction.
-  // Returning false indicates a failure of the function, and should be asserted
-  // in the caller.
-  bool CreateAndSetDownloadsDirectory(Browser* browser) {
-    if (!browser)
-      return false;
-
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    if (!downloads_directory_.CreateUniqueTempDir())
-      return false;
-
-    browser->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory, downloads_directory_.GetPath());
-    browser->profile()->GetPrefs()->SetFilePath(
-        prefs::kSaveFileDefaultDirectory, downloads_directory_.GetPath());
-
-    return true;
   }
 
   DownloadPrefs* GetDownloadPrefs(Browser* browser) {
@@ -790,7 +764,7 @@ class DownloadTest : public InProcessBrowserTest {
     base::FilePath basefilename(filename.BaseName());
     net::FileURLToFilePath(url, &filename);
     base::FilePath download_path =
-        downloads_directory_.GetPath().Append(basefilename);
+        GetDownloadDirectory(browser).Append(basefilename);
 
     bool downloaded_path_exists = base::PathExists(download_path);
     EXPECT_TRUE(downloaded_path_exists);
@@ -1105,9 +1079,6 @@ class DownloadTest : public InProcessBrowserTest {
  private:
   // Location of the test data.
   base::FilePath test_dir_;
-
-  // Location of the downloads directory for these tests
-  base::ScopedTempDir downloads_directory_;
 
   content::TestDownloadResponseHandler test_response_handler_;
   std::unique_ptr<DownloadTestFileActivityObserver> file_activity_observer_;
@@ -1504,7 +1475,6 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, IncognitoDownload) {
   EXPECT_EQ(2, window_count);
 
   // Download a file in the Incognito window and wait.
-  CreateAndSetDownloadsDirectory(incognito);
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url =
@@ -1581,12 +1551,6 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadTest_IncognitoRegular) {
   ASSERT_TRUE(incognito);
   int window_count = BrowserList::GetInstance()->size();
   EXPECT_EQ(2, window_count);
-  incognito->profile()->GetPrefs()->SetFilePath(
-      prefs::kDownloadDefaultDirectory,
-      GetDownloadsDirectory());
-  incognito->profile()->GetPrefs()->SetFilePath(
-      prefs::kSaveFileDefaultDirectory,
-      GetDownloadsDirectory());
 
   download_items.clear();
   GetDownloads(incognito, &download_items);
@@ -1794,17 +1758,18 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CloseNewTab4) {
   // Open a new tab for the download
   content::WebContents* tab =
         browser()->tab_strip_model()->GetActiveWebContents();
-  content::WebContents* new_tab = content::WebContents::Create(
-        content::WebContents::CreateParams(tab->GetBrowserContext()));
-  ASSERT_TRUE(new_tab);
-  ASSERT_TRUE(new_tab->GetController().IsInitialNavigation());
-  browser()->tab_strip_model()->AppendWebContents(new_tab, true);
+  std::unique_ptr<content::WebContents> new_tab = content::WebContents::Create(
+      content::WebContents::CreateParams(tab->GetBrowserContext()));
+  content::WebContents* raw_new_tab = new_tab.get();
+  ASSERT_TRUE(raw_new_tab);
+  ASSERT_TRUE(raw_new_tab->GetController().IsInitialNavigation());
+  browser()->tab_strip_model()->AppendWebContents(std::move(new_tab), true);
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
 
   // Download a file in that new tab, having it open a file picker
   std::unique_ptr<DownloadUrlParameters> params(
       content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
-          new_tab, slow_download_url, TRAFFIC_ANNOTATION_FOR_TESTS));
+          raw_new_tab, slow_download_url, TRAFFIC_ANNOTATION_FOR_TESTS));
   params->set_prompt(true);
   manager->DownloadUrl(std::move(params));
   observer->WaitForFinished();
@@ -2088,11 +2053,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, BrowserCloseAfterDownload) {
 
   DownloadAndWait(browser(), download_url);
 
-  content::WindowedNotificationObserver signal(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::Source<Browser>(browser()));
-  chrome::CloseWindow(browser());
-  signal.Wait();
+  CloseBrowserSynchronously(browser());
 }
 
 // Test to make sure the 'download' attribute in anchor tag is respected.
@@ -2639,12 +2600,12 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadErrorsServer) {
        // the headers are successfully received.
        "download-anchor-attrib-404.html", "there_IS_no_spoon.zip",
        DOWNLOAD_NAVIGATE,
-       download::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT, false, false},
+       download::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT, true, false},
       {// Similar to the above, but the resulting response contains a status
        // code of 400.
        "download-anchor-attrib-400.html", "zip_file_not_found.zip",
        DOWNLOAD_NAVIGATE, download::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
-       false, false},
+       true, false},
       {// Direct download of a URL where the hostname doesn't resolve.
        "http://doesnotexist/shouldnotdownloadsuccessfully",
        "http://doesnotexist/shouldnotdownloadsuccessfully", DOWNLOAD_DIRECT,
@@ -3481,6 +3442,32 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, SecurityLevels) {
                                     2);
 }
 
+// Tests that opening the downloads page will cause file existence check.
+IN_PROC_BROWSER_TEST_F(DownloadTest, FileExistenceCheckOpeningDownloadsPage) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url =
+      embedded_test_server()->GetURL("/" + std::string(kDownloadTest1Path));
+
+  // Download the file and wait.  We do not expect the Select File dialog.
+  DownloadAndWait(browser(), url);
+
+  std::vector<DownloadItem*> downloads;
+  DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+  DownloadItem* item = downloads[0];
+  base::DeleteFile(item->GetTargetFilePath(), false);
+  ASSERT_FALSE(item->GetFileExternallyRemoved());
+
+  // Open the downloads tab.
+  chrome::ShowDownloads(browser());
+  // Check file removal update will eventually come.
+  content::DownloadUpdatedObserver(
+      item, base::BindRepeating(&IsDownloadExternallyRemoved))
+      .WaitForEvent();
+}
+
 #if defined(FULL_SAFE_BROWSING)
 
 namespace {
@@ -3886,7 +3873,6 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, IncognitoDownloadShelfVisibility) {
   ASSERT_TRUE(incognito);
 
   // Download a file in the Incognito window and wait.
-  CreateAndSetDownloadsDirectory(incognito);
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url =

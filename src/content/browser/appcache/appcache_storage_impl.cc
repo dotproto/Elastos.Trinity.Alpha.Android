@@ -14,11 +14,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -30,6 +32,7 @@
 #include "content/browser/appcache/appcache_quota_client.h"
 #include "content/browser/appcache/appcache_response.h"
 #include "content/browser/appcache/appcache_service_impl.h"
+#include "content/public/common/content_switches.h"
 #include "net/base/cache_type.h"
 #include "net/base/net_errors.h"
 #include "sql/connection.h"
@@ -37,15 +40,17 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace content {
 
-// Hard coded default when not using quota management.
-static const int kDefaultQuota = 5 * 1024 * 1024;
+const int kMB = 1024 * 1024;
 
-static const int kMaxAppCacheDiskCacheSize = 250 * 1024 * 1024;
-static const int kMaxAppCacheMemDiskCacheSize = 10 * 1024 * 1024;
+// Hard coded default when not using quota management.
+static const int kDefaultQuota = 5 * kMB;
+
+static const int kMaxAppCacheDiskCacheSize = 250 * kMB;
+static const int kMaxAppCacheMemDiskCacheSize = 10 * kMB;
 static const base::FilePath::CharType kDiskCacheDirectoryName[] =
     FILE_PATH_LITERAL("Cache");
 
@@ -97,7 +102,7 @@ void AppCacheStorageImpl::ClearSessionOnlyOrigins(
   if (!has_session_only_appcaches)
     return;
 
-  std::set<GURL> origins;
+  std::set<url::Origin> origins;
   database->FindOriginsWithGroups(&origins);
   if (origins.empty())
     return;  // nothing to delete
@@ -108,10 +113,10 @@ void AppCacheStorageImpl::ClearSessionOnlyOrigins(
     return;
   }
 
-  for (const GURL& origin : origins) {
-    if (!special_storage_policy->IsStorageSessionOnly(origin))
+  for (const url::Origin& origin : origins) {
+    if (!special_storage_policy->IsStorageSessionOnly(origin.GetURL()))
       continue;
-    if (special_storage_policy->IsStorageProtected(origin))
+    if (special_storage_policy->IsStorageProtected(origin.GetURL()))
       continue;
 
     std::vector<AppCacheDatabase::GroupRecord> groups;
@@ -282,7 +287,7 @@ class AppCacheStorageImpl::InitTask : public DatabaseTask {
   int64_t last_cache_id_;
   int64_t last_response_id_;
   int64_t last_deletable_response_rowid_;
-  std::map<GURL, int64_t> usage_map_;
+  std::map<url::Origin, int64_t> usage_map_;
 };
 
 void AppCacheStorageImpl::InitTask::Run() {
@@ -359,9 +364,9 @@ class AppCacheStorageImpl::GetAllInfoTask : public DatabaseTask {
 };
 
 void AppCacheStorageImpl::GetAllInfoTask::Run() {
-  std::set<GURL> origins;
+  std::set<url::Origin> origins;
   database_->FindOriginsWithGroups(&origins);
-  for (const GURL& origin : origins) {
+  for (const url::Origin& origin : origins) {
     AppCacheInfoVector& infos = info_collection_->infos_by_origin[origin];
     std::vector<AppCacheDatabase::GroupRecord> groups;
     database_->FindGroupsForOrigin(origin, &groups);
@@ -612,17 +617,25 @@ class AppCacheStorageImpl::StoreGroupAndCacheTask : public StoreOrLoadTask {
   bool would_exceed_quota_;
   int64_t space_available_;
   int64_t new_origin_usage_;
+  int64_t max_appcache_origin_cache_size_;
   std::vector<int64_t> newly_deletable_response_ids_;
 };
 
 AppCacheStorageImpl::StoreGroupAndCacheTask::StoreGroupAndCacheTask(
-    AppCacheStorageImpl* storage, AppCacheGroup* group, AppCache* newest_cache)
-    : StoreOrLoadTask(storage), group_(group), cache_(newest_cache),
-      success_(false), would_exceed_quota_(false),
-      space_available_(-1), new_origin_usage_(-1) {
+    AppCacheStorageImpl* storage,
+    AppCacheGroup* group,
+    AppCache* newest_cache)
+    : StoreOrLoadTask(storage),
+      group_(group),
+      cache_(newest_cache),
+      success_(false),
+      would_exceed_quota_(false),
+      space_available_(-1),
+      new_origin_usage_(-1),
+      max_appcache_origin_cache_size_(kDefaultQuota) {
   group_record_.group_id = group->group_id();
   group_record_.manifest_url = group->manifest_url();
-  group_record_.origin = group_record_.manifest_url.GetOrigin();
+  group_record_.origin = url::Origin::Create(group_record_.manifest_url);
   group_record_.last_full_update_check_time =
       group->last_full_update_check_time();
   group_record_.first_evictable_error_time =
@@ -633,6 +646,15 @@ AppCacheStorageImpl::StoreGroupAndCacheTask::StoreGroupAndCacheTask(
       &intercept_namespace_records_,
       &fallback_namespace_records_,
       &online_whitelist_records_);
+
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kMaxAppCacheOriginCacheSizeMb)) {
+    if (base::StringToInt64(command_line.GetSwitchValueASCII(
+                                switches::kMaxAppCacheOriginCacheSizeMb),
+                            &max_appcache_origin_cache_size_)) {
+      max_appcache_origin_cache_size_ *= kMB;
+    }
+  }
 }
 
 void AppCacheStorageImpl::StoreGroupAndCacheTask::GetQuotaThenSchedule() {
@@ -645,7 +667,7 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::GetQuotaThenSchedule() {
   if (!quota_manager) {
     if (storage_->service()->special_storage_policy() &&
         storage_->service()->special_storage_policy()->IsStorageUnlimited(
-            group_record_.origin))
+            group_record_.origin.GetURL()))
       space_available_ = std::numeric_limits<int64_t>::max();
     Schedule();
     return;
@@ -659,8 +681,8 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::GetQuotaThenSchedule() {
   // We have to ask the quota manager for the value.
   storage_->pending_quota_queries_.insert(this);
   quota_manager->GetUsageAndQuota(
-      group_record_.origin, blink::mojom::StorageType::kTemporary,
-      base::Bind(&StoreGroupAndCacheTask::OnQuotaCallback, this));
+      group_record_.origin.GetURL(), blink::mojom::StorageType::kTemporary,
+      base::BindOnce(&StoreGroupAndCacheTask::OnQuotaCallback, this));
 }
 
 void AppCacheStorageImpl::StoreGroupAndCacheTask::OnQuotaCallback(
@@ -754,9 +776,10 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
     return;
   }
 
-  // Use a simple hard-coded value when not using quota management.
+  // Use a user defined value or a simple hard-coded value when not using quota
+  // management.
   if (space_available_ == -1) {
-    if (new_origin_usage_ > kDefaultQuota) {
+    if (new_origin_usage_ > max_appcache_origin_cache_size_) {
       would_exceed_quota_ = true;
       success_ = false;
       return;
@@ -780,7 +803,7 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
 void AppCacheStorageImpl::StoreGroupAndCacheTask::RunCompleted() {
   if (success_) {
     storage_->UpdateUsageMapAndNotify(
-        group_->manifest_url().GetOrigin(), new_origin_usage_);
+        url::Origin::Create(group_->manifest_url()), new_origin_usage_);
     if (cache_.get() != group_->newest_complete_cache()) {
       cache_->set_complete(true);
       group_->AddCache(cache_.get());
@@ -997,9 +1020,9 @@ bool AppCacheStorageImpl::FindMainResponseTask::FindNamespaceMatch(
     int64_t preferred_cache_id) {
   AppCacheDatabase::NamespaceRecordVector all_intercepts;
   AppCacheDatabase::NamespaceRecordVector all_fallbacks;
-  if (!database_->FindNamespacesForOrigin(
-          url_.GetOrigin(), &all_intercepts, &all_fallbacks)
-      || (all_intercepts.empty() && all_fallbacks.empty())) {
+  if (!database_->FindNamespacesForOrigin(url::Origin::Create(url_),
+                                          &all_intercepts, &all_fallbacks) ||
+      (all_intercepts.empty() && all_fallbacks.empty())) {
     return false;
   }
 
@@ -1141,7 +1164,7 @@ class AppCacheStorageImpl::MakeGroupObsoleteTask : public DatabaseTask {
  private:
   scoped_refptr<AppCacheGroup> group_;
   int64_t group_id_;
-  GURL origin_;
+  url::Origin origin_;
   bool success_;
   int response_code_;
   int64_t new_origin_usage_;
@@ -1155,7 +1178,7 @@ AppCacheStorageImpl::MakeGroupObsoleteTask::MakeGroupObsoleteTask(
     : DatabaseTask(storage),
       group_(group),
       group_id_(group->group_id()),
-      origin_(group->manifest_url().GetOrigin()),
+      origin_(url::Origin::Create(group->manifest_url())),
       success_(false),
       response_code_(response_code),
       new_origin_usage_(-1) {}
@@ -1294,7 +1317,7 @@ class AppCacheStorageImpl::LazyUpdateLastAccessTimeTask
       AppCacheStorageImpl* storage, AppCacheGroup* group, base::Time time)
       : DatabaseTask(storage), group_id_(group->group_id()),
         last_access_time_(time) {
-    storage->NotifyStorageAccessed(group->manifest_url().GetOrigin());
+    storage->NotifyStorageAccessed(url::Origin::Create(group->manifest_url()));
   }
 
   // DatabaseTask:
@@ -1485,7 +1508,7 @@ void AppCacheStorageImpl::LoadOrCreateGroup(
     return;
   }
 
-  if (usage_map_.find(manifest_url.GetOrigin()) == usage_map_.end()) {
+  if (usage_map_.find(url::Origin::Create(manifest_url)) == usage_map_.end()) {
     // No need to query the database, return a new group immediately.
     scoped_refptr<AppCacheGroup> new_group(
         new AppCacheGroup(this, manifest_url, NewGroupId()));
@@ -1533,7 +1556,7 @@ void AppCacheStorageImpl::FindResponseForMainRequest(
     url_ptr = &url_no_ref;
   }
 
-  const GURL origin = url.GetOrigin();
+  const url::Origin origin(url::Origin::Create(url));
 
   // First look in our working set for a direct hit without having to query
   // the database.
@@ -1869,9 +1892,21 @@ AppCacheDiskCache* AppCacheStorageImpl::disk_cache() {
                      base::Unretained(this)));
     } else {
       expecting_cleanup_complete_on_disable_ = true;
+
+      const base::CommandLine& command_line =
+          *base::CommandLine::ForCurrentProcess();
+      unsigned int max_appcache_disk_cache_size = kMaxAppCacheDiskCacheSize;
+      if (command_line.HasSwitch(switches::kMaxAppCacheDiskCacheSizeMb)) {
+        if (base::StringToUint(command_line.GetSwitchValueASCII(
+                                   switches::kMaxAppCacheDiskCacheSizeMb),
+                               &max_appcache_disk_cache_size)) {
+          max_appcache_disk_cache_size *= kMB;
+        }
+      }
+
       rv = disk_cache_->InitWithDiskBackend(
           cache_directory_.Append(kDiskCacheDirectoryName),
-          kMaxAppCacheDiskCacheSize, false,
+          max_appcache_disk_cache_size, false,
           base::BindOnce(&AppCacheStorageImpl::OnDiskCacheCleanupComplete,
                          weak_factory_.GetWeakPtr()),
           base::Bind(&AppCacheStorageImpl::OnDiskCacheInitialized,

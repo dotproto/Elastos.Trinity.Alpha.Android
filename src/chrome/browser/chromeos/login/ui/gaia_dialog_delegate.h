@@ -23,7 +23,7 @@ class Widget;
 
 namespace chromeos {
 
-class LoginDisplayHostViews;
+class LoginDisplayHostMojo;
 class OobeUI;
 
 // This class manages the behavior of the gaia signin dialog.
@@ -35,11 +35,23 @@ class OobeUI;
 //   clientView---->Widget's view hierarchy
 class GaiaDialogDelegate : public ui::WebDialogDelegate {
  public:
-  explicit GaiaDialogDelegate(base::WeakPtr<LoginDisplayHostViews> controller);
+  explicit GaiaDialogDelegate(base::WeakPtr<LoginDisplayHostMojo> controller);
   ~GaiaDialogDelegate() override;
 
-  void Show();
+  // Show the dialog widget.
+  // |closable_by_esc|: Whether the widget will be hidden after press escape
+  // key.
+  void Show(bool closable_by_esc);
+
+  // Close the widget, and it will delete this object.
   void Close();
+
+  // Hide the dialog widget.
+  void Hide();
+
+  // Initialize the dialog widget.
+  void Init();
+
   void SetSize(int width, int height);
   OobeUI* GetOobeUI() const;
 
@@ -60,14 +72,16 @@ class GaiaDialogDelegate : public ui::WebDialogDelegate {
   bool ShouldShowDialogTitle() const override;
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
   std::vector<ui::Accelerator> GetAccelerators() override;
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
-  base::WeakPtr<LoginDisplayHostViews> controller_;
+  base::WeakPtr<LoginDisplayHostMojo> controller_;
 
   // This is owned by the underlying native widget.
   // Before its deletion, onDialogClosed will get called and delete this object.
   views::Widget* dialog_widget_ = nullptr;
   views::WebDialogView* dialog_view_ = nullptr;
   gfx::Size size_;
+  bool closable_by_esc_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(GaiaDialogDelegate);
 };

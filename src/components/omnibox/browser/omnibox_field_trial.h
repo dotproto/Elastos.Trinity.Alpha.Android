@@ -25,11 +25,10 @@ class TimeDelta;
 
 namespace omnibox {
 
-extern const base::Feature kOmniboxEntitySuggestions;
 extern const base::Feature kOmniboxRichEntitySuggestions;
+extern const base::Feature kOmniboxNewAnswerLayout;
 extern const base::Feature kOmniboxTailSuggestions;
 extern const char kOmniboxTabSwitchSuggestionsFlag[];
-extern const char kOmniboxTabSwitchWithButton[];
 extern const base::Feature kEnableClipboardProvider;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kZeroSuggestRedirectToChrome;
@@ -41,7 +40,6 @@ extern const base::Feature kUIExperimentMaxAutocompleteMatches;
 extern const base::Feature kUIExperimentNarrowDropdown;
 extern const base::Feature kUIExperimentShowSuggestionFavicons;
 extern const base::Feature kUIExperimentSwapTitleAndUrl;
-extern const base::Feature kUIExperimentVerticalLayout;
 extern const base::Feature kUIExperimentVerticalMargin;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
 extern const base::Feature kBreakWordsAtUnderscores;
@@ -412,34 +410,10 @@ class OmniboxFieldTrial {
       const AutocompleteInput& input);
 
   // ---------------------------------------------------------
-  // For PhysicalWebProvider related experiments.
-
-  // Returns whether the user is in a Physical Web field trial where the
-  // PhysicalWebProvider should be used to get suggestions when the user clicks
-  // on the omnibox but has not typed anything yet.
-  static bool InPhysicalWebZeroSuggestFieldTrial();
-
-  // Returns whether the user is in a Physical Web field trial and URL-based
-  // suggestions can continue to appear after the user has started typing.
-  static bool InPhysicalWebAfterTypingFieldTrial();
-
-  // Returns the base relevance score for Physical Web omnibox suggestions when
-  // the user has clicked on the omnibox but has not typed anything yet.
-  static int GetPhysicalWebZeroSuggestBaseRelevance();
-
-  // Returns the base relevance score for Physical Web omnibox suggestions when
-  // the user has started typing in the omnibox.
-  static int GetPhysicalWebAfterTypingBaseRelevance();
-
-  // ---------------------------------------------------------
   // For tab switch suggestions related experiments.
 
   // Returns whether the tab switch suggestion experiment is enabled.
   static bool InTabSwitchSuggestionTrial();
-
-  // Returns whether the tab switch suggestion experiment using
-  // a button is selected.
-  static bool InTabSwitchSuggestionWithButtonTrial();
 
   // ---------------------------------------------------------
   // Clipboard URL suggestions:
@@ -478,8 +452,6 @@ class OmniboxFieldTrial {
   static const char kKeywordScoreForSufficientlyCompleteMatchRule[];
   static const char kHQPAllowDupMatchesForScoringRule[];
   static const char kEmphasizeTitlesRule[];
-  static const char kPhysicalWebZeroSuggestRule[];
-  static const char kPhysicalWebAfterTypingRule[];
 
   // Parameter names used by the HUP new scoring experiments.
   static const char kHUPNewScoringTypedCountRelevanceCapParam[];
@@ -499,10 +471,6 @@ class OmniboxFieldTrial {
   // urls indexed for suggestions.
   static const char kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam[];
   static const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
-
-  // Parameter names used by the Physical Web experimental scoring experiments.
-  static const char kPhysicalWebZeroSuggestBaseRelevanceParam[];
-  static const char kPhysicalWebAfterTypingBaseRelevanceParam[];
 
   // Parameter names used by UI experiments.
   static const char kUIMaxAutocompleteMatchesParam[];

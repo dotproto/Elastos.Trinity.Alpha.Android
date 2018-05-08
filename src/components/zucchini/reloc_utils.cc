@@ -118,7 +118,10 @@ bool RelocRvaReaderWin32::LoadRelocBlock(
   const auto& header = header_buf.read<pe::RelocHeader>(0);
   rva_hi_bits_ = header.rva_hi;
   uint32_t block_size = header.size;
-  DCHECK_GE(block_size, sizeof(pe::RelocHeader));
+  if (block_size < sizeof(pe::RelocHeader))
+    return false;
+  if ((block_size - sizeof(pe::RelocHeader)) % kRelocUnitSize != 0)
+    return false;
   cur_reloc_units_ = BufferSource(block_begin, block_size);
   cur_reloc_units_.Skip(sizeof(pe::RelocHeader));
   return true;
@@ -146,15 +149,10 @@ base::Optional<Reference> RelocReaderWin32::GetNext() {
     offset_t target = entry_rva_to_offset_.Convert(unit->target_rva);
     if (target == kInvalidOffset)
       continue;
-    offset_t location = unit->location;
-    if (IsMarked(target)) {
-      LOG(WARNING) << "Warning: Skipping mark-aliased reloc target: "
-                   << AsHex<8>(location) << " -> " << AsHex<8>(target) << ".";
-      continue;
-    }
     // Ensures the target (abs32 reference) lies entirely within the image.
     if (target >= offset_bound_)
       continue;
+    offset_t location = unit->location;
     return Reference{location, target};
   }
   return base::nullopt;

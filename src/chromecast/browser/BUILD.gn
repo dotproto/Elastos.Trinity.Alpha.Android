@@ -17,6 +17,8 @@ cast_source_set("browser") {
   sources = [
     "application_media_capabilities.cc",
     "application_media_capabilities.h",
+    "bluetooth/cast_bluetooth_chooser.cc",
+    "bluetooth/cast_bluetooth_chooser.h",
     "cast_browser_context.cc",
     "cast_browser_context.h",
     "cast_browser_main_parts.cc",
@@ -25,7 +27,6 @@ cast_source_set("browser") {
     "cast_browser_process.h",
     "cast_content_browser_client.cc",
     "cast_content_browser_client.h",
-    "cast_content_window.h",
     "cast_download_manager_delegate.cc",
     "cast_download_manager_delegate.h",
     "cast_http_user_agent_settings.cc",
@@ -47,7 +48,6 @@ cast_source_set("browser") {
     "cast_web_contents_manager.cc",
     "cast_web_contents_manager.h",
     "cast_web_view.cc",
-    "cast_web_view.h",
     "cast_web_view_default.cc",
     "cast_web_view_default.h",
     "cast_web_view_factory.cc",
@@ -87,6 +87,10 @@ cast_source_set("browser") {
     ]
   }
 
+  public_deps = [
+    ":public",
+  ]
+
   deps = [
     "//base",
     "//base:i18n",
@@ -99,6 +103,7 @@ cast_source_set("browser") {
     "//chromecast/base:cast_sys_info",
     "//chromecast/base:cast_version",
     "//chromecast/browser:resources",
+    "//chromecast/browser/bluetooth/public/interfaces",
     "//chromecast/common",
     "//chromecast/common:interfaces",
     "//chromecast/common/media",
@@ -122,11 +127,13 @@ cast_source_set("browser") {
     "//components/network_session_configurator/common",
     "//components/prefs",
     "//components/proxy_config",
+    "//components/viz/service",
     "//content",
     "//content/public/browser",
     "//content/public/common",
     "//content/public/common:service_names",
     "//content/public/utility",
+    "//device/bluetooth",
     "//device/geolocation",
     "//gpu",
     "//ipc",
@@ -137,6 +144,7 @@ cast_source_set("browser") {
     "//ui/compositor",
     "//ui/display",
     "//ui/events",
+    "//ui/events/devices",
     "//ui/gl",
   ]
 
@@ -216,8 +224,14 @@ cast_source_set("browser") {
       "cast_web_view_extension.h",
       "extension_request_protocol_handler.cc",
       "extension_request_protocol_handler.h",
+      "extensions/api/automation_internal/automation_internal_api.cc",
+      "extensions/api/automation_internal/automation_internal_api.h",
       "extensions/api/bookmarks/bookmarks_api.cc",
       "extensions/api/bookmarks/bookmarks_api.h",
+      "extensions/api/braille_display_private/braille_display_private_api.cc",
+      "extensions/api/braille_display_private/braille_display_private_api.h",
+      "extensions/api/history/history_api.cc",
+      "extensions/api/history/history_api.h",
       "extensions/api/identity/identity_api.cc",
       "extensions/api/identity/identity_api.h",
       "extensions/cast_display_info_provider.cc",
@@ -256,6 +270,28 @@ cast_source_set("browser") {
   }
 
   configs += [ "//media/audio:platform_config" ]
+}
+
+# Lightweight target for Cast interfaces that wrap //content/public/browser.
+# This target should only include interfaces which are required for unit tests.
+cast_source_set("public") {
+  sources = [
+    "cast_content_window.h",
+    "cast_web_view.h",
+  ]
+
+  # Need to expose this so that internal public_configs are propagated.
+  public_deps = [
+    "//content/public/browser",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/graphics",
+    "//content",
+    "//ui/events",
+    "//url",
+  ]
 }
 
 # This target generates an "overlay" interface spec, allowing the Cast build to
@@ -362,6 +398,7 @@ cast_source_set("unittests") {
   testonly = true
 
   sources = [
+    "bluetooth/cast_bluetooth_chooser_unittest.cc",
     "cast_media_blocker_unittest.cc",
     "cast_touch_device_manager_unittest.cc",
     "devtools/cast_devtools_manager_delegate_unittest.cc",
@@ -390,6 +427,10 @@ if (is_android) {
       "android/apk/src/org/chromium/chromecast/shell/CastSysInfoAndroid.java",
       "android/apk/src/org/chromium/chromecast/shell/CastWebContentsSurfaceHelper.java",
     ]
+
+    if (is_android_things_non_public) {
+      sources += [ "android/apk/src/org/chromium/chromecast/shell/CastSysInfoAndroidThings.java" ]
+    }
 
     jni_package = "chromecast"
   }

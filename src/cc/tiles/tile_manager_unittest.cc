@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -1366,8 +1365,6 @@ TEST_F(TileManagerTilePriorityQueueTest,
   EXPECT_FALSE(queue->IsEmpty());
   EXPECT_TRUE(queue->Top().tile()->required_for_draw());
   EXPECT_EQ(gfx::Size(256, 256), queue->Top().tile()->desired_texture_size());
-  EXPECT_EQ(viz::RGBA_8888,
-            host_impl()->resource_provider()->best_texture_format());
 
   ManagedMemoryPolicy policy = host_impl()->ActualManagedMemoryPolicy();
   policy.bytes_limit_when_visible =
@@ -1571,7 +1568,7 @@ class TestSoftwareRasterBufferProvider : public FakeRasterBufferProviderImpl {
       RasterBufferProvider::PlaybackToMemory(
           pixels_, viz::RGBA_8888, size_, /*stride=*/0, raster_source,
           raster_full_rect, /*playback_rect=*/raster_full_rect, transform,
-          gfx::ColorSpace(), playback_settings);
+          gfx::ColorSpace(), /*gpu_compositing=*/true, playback_settings);
     }
 
    private:
@@ -2292,7 +2289,6 @@ TEST_F(TileManagerReadyToDrawTest, SmoothActivationWaitsOnCallback) {
               run_loop.Quit();
               return 1;
             }));
-    host_impl()->tile_manager()->DidModifyTilePriorities();
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
   }
@@ -2322,7 +2318,6 @@ TEST_F(TileManagerReadyToDrawTest, NonSmoothActivationDoesNotWaitOnCallback) {
   // will cause a test failure.
   base::RunLoop run_loop;
 
-  host_impl()->tile_manager()->DidModifyTilePriorities();
   host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
   EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate())
       .WillOnce(Invoke([&run_loop]() { run_loop.Quit(); }));
@@ -2357,7 +2352,6 @@ TEST_F(TileManagerReadyToDrawTest, SmoothDrawWaitsOnCallback) {
               run_loop.Quit();
               return 1;
             }));
-    host_impl()->tile_manager()->DidModifyTilePriorities();
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
   }
@@ -2387,7 +2381,6 @@ TEST_F(TileManagerReadyToDrawTest, NonSmoothDrawDoesNotWaitOnCallback) {
   // will cause a test failure.
   base::RunLoop run_loop;
 
-  host_impl()->tile_manager()->DidModifyTilePriorities();
   host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
   EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw())
       .WillOnce(Invoke([&run_loop]() { run_loop.Quit(); }));
@@ -2402,7 +2395,6 @@ TEST_F(TileManagerReadyToDrawTest, NoCallbackWhenAlreadyReadyToDraw) {
   SetupTreesWithPendingTreeTiles();
 
   base::RunLoop run_loop;
-  host_impl()->tile_manager()->DidModifyTilePriorities();
   host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
   EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate())
       .WillOnce(Invoke([&run_loop]() { run_loop.Quit(); }));
@@ -2412,6 +2404,92 @@ TEST_F(TileManagerReadyToDrawTest, NoCallbackWhenAlreadyReadyToDraw) {
 
   EXPECT_TRUE(host_impl()->tile_manager()->IsReadyToDraw());
   EXPECT_TRUE(host_impl()->tile_manager()->IsReadyToActivate());
+}
+
+TEST_F(TileManagerReadyToDrawTest, TilePrioritiesUpdated) {
+  // Use smoothness as that's a mode in which we wait on resources to be
+  // ready instead of marking them ready immediately.
+  host_impl()->SetTreePriority(SMOOTHNESS_TAKES_PRIORITY);
+  gfx::Size very_small(1, 1);
+  host_impl()->SetViewportSize(very_small);
+
+  gfx::Size layer_bounds(1000, 1000);
+  SetupDefaultTrees(layer_bounds);
+
+  // Run until all tile tasks are complete, but don't let any draw callbacks
+  // finish.
+  {
+    base::RunLoop run_loop;
+    EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
+        .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
+
+    // Until we activate our ready to draw callback, treat all resources as not
+    // ready to draw.
+    EXPECT_CALL(*mock_raster_buffer_provider(),
+                IsResourceReadyToDraw(testing::_))
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*mock_raster_buffer_provider(), SetReadyToDrawCallback(_, _, _))
+        .WillRepeatedly(Return(1));
+    host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
+    run_loop.Run();
+  }
+
+  // Inspect the current state of tiles in this world of cpu done but gpu
+  // not ready yet.
+  size_t orig_num_required = 0;
+  size_t orig_num_prepaint = 0;
+  std::vector<Tile*> prepaint_tiles;
+  for (auto* tile : host_impl()->tile_manager()->AllTilesForTesting()) {
+    if (tile->draw_info().has_resource()) {
+      if (tile->is_prepaint()) {
+        orig_num_prepaint++;
+        prepaint_tiles.push_back(tile);
+      } else {
+        orig_num_required++;
+      }
+    }
+  }
+
+  // Verify that there exist some prepaint tiles here.
+  EXPECT_GT(orig_num_prepaint, 0u);
+  EXPECT_GT(orig_num_required, 0u);
+
+  host_impl()->SetViewportSize(layer_bounds);
+  host_impl()->active_tree()->UpdateDrawProperties();
+  host_impl()->pending_tree()->UpdateDrawProperties();
+
+  // Rerun prepare tiles.
+  {
+    base::RunLoop run_loop;
+    EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
+        .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
+    host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
+    run_loop.Run();
+  }
+
+  // Make sure tiles priorities are updated.
+  size_t final_num_required = 0;
+  size_t final_num_prepaint = 0;
+  bool found_one_prepaint_to_required_transition = false;
+  for (auto* tile : host_impl()->tile_manager()->AllTilesForTesting()) {
+    if (tile->draw_info().has_resource()) {
+      if (tile->is_prepaint()) {
+        final_num_prepaint++;
+      } else {
+        final_num_required++;
+        if (std::find(prepaint_tiles.begin(), prepaint_tiles.end(), tile) !=
+            prepaint_tiles.end()) {
+          found_one_prepaint_to_required_transition = true;
+        }
+      }
+    }
+  }
+
+  // Tile priorities should be updated and we should have more required
+  // and fewer prepaint now that the viewport has changed.
+  EXPECT_GT(final_num_required, orig_num_required);
+  EXPECT_LT(final_num_prepaint, orig_num_prepaint);
+  EXPECT_TRUE(found_one_prepaint_to_required_transition);
 }
 
 void UpdateVisibleRect(FakePictureLayerImpl* layer,

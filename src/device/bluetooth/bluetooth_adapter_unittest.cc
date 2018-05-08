@@ -33,6 +33,8 @@
 #include "device/bluetooth/test/bluetooth_test_mac.h"
 #elif defined(OS_WIN)
 #include "device/bluetooth/test/bluetooth_test_win.h"
+#elif defined(USE_CAST_BLUETOOTH_ADAPTER)
+#include "device/bluetooth/test/bluetooth_test_cast.h"
 #elif defined(OS_CHROMEOS) || defined(OS_LINUX)
 #include "device/bluetooth/test/bluetooth_test_bluez.h"
 #endif
@@ -145,17 +147,17 @@ class TestBluetoothAdapter : public BluetoothAdapter {
   void AddDiscoverySession(
       BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override {}
+      DiscoverySessionErrorCallback error_callback) override {}
 
   void RemoveDiscoverySession(
       BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override {}
+      DiscoverySessionErrorCallback error_callback) override {}
 
   void SetDiscoveryFilter(
       std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override {}
+      DiscoverySessionErrorCallback error_callback) override {}
 
   void RemovePairingDelegateInternal(
       BluetoothDevice::PairingDelegate* pairing_delegate) override {}
@@ -990,7 +992,8 @@ TEST_F(BluetoothTest, MAYBE_TurnOffAdapterWithConnectedDevice) {
   EXPECT_FALSE(device->IsGattConnected());
 }
 
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+#if (defined(OS_CHROMEOS) || defined(OS_LINUX)) && \
+    !defined(USE_CAST_BLUETOOTH_ADAPTER)
 #define MAYBE_RegisterLocalGattServices RegisterLocalGattServices
 #else
 #define MAYBE_RegisterLocalGattServices DISABLED_RegisterLocalGattServices

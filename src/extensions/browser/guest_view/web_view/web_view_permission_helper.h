@@ -15,7 +15,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 namespace extensions {
 
@@ -119,6 +119,10 @@ class WebViewPermissionHelper
 
   WebViewGuest* web_view_guest() { return web_view_guest_; }
 
+  void set_default_media_access_permission(bool allow_media_access) {
+    default_media_access_permission_ = allow_media_access;
+  }
+
  private:
   void OnMediaPermissionResponse(const content::MediaStreamRequest& request,
                                  const content::MediaResponseCallback& callback,
@@ -141,6 +145,8 @@ class WebViewPermissionHelper
       web_view_permission_helper_delegate_;
 
   WebViewGuest* const web_view_guest_;
+
+  bool default_media_access_permission_;
 
   base::WeakPtrFactory<WebViewPermissionHelper> weak_factory_;
 

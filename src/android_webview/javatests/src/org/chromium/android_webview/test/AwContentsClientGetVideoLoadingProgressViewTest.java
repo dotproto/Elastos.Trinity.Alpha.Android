@@ -16,8 +16,10 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.DOMUtils;
+import org.chromium.media.MediaSwitches;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeoutException;
  * can't miss it.
  */
 @RunWith(AwJUnit4ClassRunner.class)
+@CommandLineFlags.Add({"disable-features=" + MediaSwitches.USE_MODERN_MEDIA_CONTROLS})
 public class AwContentsClientGetVideoLoadingProgressViewTest
         implements View.OnAttachStateChangeListener {
     @Rule
@@ -85,9 +88,9 @@ public class AwContentsClientGetVideoLoadingProgressViewTest
         mActivityTestRule.loadUrlSync(
                 awContents, contentsClient.getOnPageFinishedHelper(), VIDEO_TEST_URL);
         Thread.sleep(5 * 1000);
-        DOMUtils.clickNode(awContents.getContentViewCore(), CUSTOM_FULLSCREEN_CONTROL_ID);
+        DOMUtils.clickNode(awContents.getWebContents(), CUSTOM_FULLSCREEN_CONTROL_ID);
         Thread.sleep(1 * 1000);
-        DOMUtils.clickNode(awContents.getContentViewCore(), CUSTOM_PLAY_CONTROL_ID);
+        DOMUtils.clickNode(awContents.getWebContents(), CUSTOM_PLAY_CONTROL_ID);
         waitForViewAttached();
     }
 }

@@ -9,7 +9,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/macros.h"
@@ -19,7 +18,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
-#include "third_party/WebKit/public/mojom/clipboard/clipboard.mojom.h"
+#include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
 #include "ui/base/clipboard/clipboard.h"
 
 class GURL;
@@ -78,7 +77,7 @@ class CONTENT_EXPORT ClipboardHostImpl : public blink::mojom::ClipboardHost {
   void WriteSmartPasteMarker(ui::ClipboardType clipboard_type) override;
   void WriteCustomData(
       ui::ClipboardType clipboard_type,
-      const std::unordered_map<base::string16, base::string16>& data) override;
+      const base::flat_map<base::string16, base::string16>& data) override;
   void WriteBookmark(ui::ClipboardType clipboard_type,
                      const std::string& url,
                      const base::string16& title) override;

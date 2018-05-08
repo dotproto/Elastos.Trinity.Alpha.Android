@@ -4,7 +4,6 @@
 
 #include "chrome/browser/vr/elements/environment/background.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/skia_surface_provider.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
@@ -310,6 +309,7 @@ void Background::Renderer::Draw(const gfx::Transform& view_proj_matrix,
                                 float normal_factor,
                                 float incognito_factor,
                                 float fullscreen_factor) {
+  glDisable(GL_BLEND);
   glUseProgram(program_handle_);
 
   // Pass in model view project matrix.

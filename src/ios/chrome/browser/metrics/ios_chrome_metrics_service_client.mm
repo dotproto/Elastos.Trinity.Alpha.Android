@@ -29,6 +29,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics/metrics_switches.h"
 #include "components/metrics/net/cellular_logic_helper.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
@@ -70,7 +71,7 @@ IOSChromeMetricsServiceClient::IOSChromeMetricsServiceClient(
       stability_metrics_provider_(nullptr),
       weak_ptr_factory_(this) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  RegisterForNotifications();
+  notification_listeners_active_ = RegisterForNotifications();
 }
 
 IOSChromeMetricsServiceClient::~IOSChromeMetricsServiceClient() {
@@ -97,6 +98,12 @@ void IOSChromeMetricsServiceClient::RegisterPrefs(
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
   metrics::RegisterMetricsReportingStatePrefs(registry);
   ukm::UkmService::RegisterPrefs(registry);
+}
+
+// static
+bool IOSChromeMetricsServiceClient::IsMetricsReportingForceEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      metrics::switches::kForceEnableMetricsReporting);
 }
 
 metrics::MetricsService* IOSChromeMetricsServiceClient::GetMetricsService() {
@@ -176,8 +183,14 @@ void IOSChromeMetricsServiceClient::Initialize() {
   metrics_service_ = std::make_unique<metrics::MetricsService>(
       metrics_state_manager_, this, local_state);
 
-  if (base::FeatureList::IsEnabled(ukm::kUkmFeature))
-    ukm_service_ = std::make_unique<ukm::UkmService>(local_state, this);
+  if (IsMetricsReportingForceEnabled() ||
+      base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
+    // We only need to restrict to whitelisted Entries if metrics reporting
+    // is not forced.
+    bool restrict_to_whitelist_entries = !IsMetricsReportingForceEnabled();
+    ukm_service_ = std::make_unique<ukm::UkmService>(
+        local_state, this, restrict_to_whitelist_entries);
+  }
 
   // Register metrics providers.
   metrics_service_->RegisterMetricsProvider(
@@ -245,7 +258,7 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
   collect_final_metrics_done_callback_.Run();
 }
 
-void IOSChromeMetricsServiceClient::RegisterForNotifications() {
+bool IOSChromeMetricsServiceClient::RegisterForNotifications() {
   tab_parented_subscription_ =
       TabParentingGlobalObserver::GetInstance()->RegisterCallback(
           base::Bind(&IOSChromeMetricsServiceClient::OnTabParented,
@@ -259,12 +272,16 @@ void IOSChromeMetricsServiceClient::RegisterForNotifications() {
       GetApplicationContext()
           ->GetChromeBrowserStateManager()
           ->GetLoadedBrowserStates();
+  bool all_profiles_succeeded = true;
   for (ios::ChromeBrowserState* browser_state : loaded_browser_states) {
-    RegisterForBrowserStateEvents(browser_state);
+    if (!RegisterForBrowserStateEvents(browser_state)) {
+      all_profiles_succeeded = false;
+    }
   }
+  return all_profiles_succeeded;
 }
 
-void IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
+bool IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
     ios::ChromeBrowserState* browser_state) {
   history::HistoryService* history_service =
       ios::HistoryServiceFactory::GetForBrowserState(
@@ -274,6 +291,7 @@ void IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
       IOSChromeProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
           browser_state);
   ObserveServiceForSyncDisables(static_cast<syncer::SyncService*>(sync));
+  return (history_service != nullptr && sync != nullptr);
 }
 
 void IOSChromeMetricsServiceClient::OnTabParented(web::WebState* web_state) {
@@ -316,6 +334,11 @@ void IOSChromeMetricsServiceClient::OnIncognitoWebStateRemoved() {
   UpdateRunningServices();
 }
 
-bool IOSChromeMetricsServiceClient::IsHistorySyncEnabledOnAllProfiles() {
-  return SyncDisableObserver::IsHistorySyncEnabledOnAllProfiles();
+bool IOSChromeMetricsServiceClient::SyncStateAllowsUkm() {
+  return SyncDisableObserver::SyncStateAllowsUkm();
+}
+
+bool IOSChromeMetricsServiceClient::
+    AreNotificationListenersEnabledOnAllProfiles() {
+  return notification_listeners_active_;
 }

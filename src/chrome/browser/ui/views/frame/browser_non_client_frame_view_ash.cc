@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/extensions/hosted_app_browser_controller.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
+#include "chrome/browser/ui/views/frame/browser_frame_ash.h"
 #include "chrome/browser/ui/views/frame/browser_frame_header_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/hosted_app_button_container.h"
@@ -56,6 +57,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/layout.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/label.h"
@@ -63,20 +65,6 @@
 #include "ui/views/widget/widget_delegate.h"
 
 namespace {
-
-// Space between right edge of tabstrip and maximize button.
-constexpr int kTabstripRightSpacing = 10;
-// Height of the shadow in the tab image, used to ensure clicks in the shadow
-// area still drag restored windows.  This keeps the clickable area large enough
-// to hit easily.
-constexpr int kTabShadowHeight = 4;
-
-constexpr SkColor kMdWebUIFrameColor =
-    SkColorSetARGBMacro(0xff, 0x25, 0x4f, 0xae);
-
-// How long to wait before starting the titlebar animation.
-constexpr base::TimeDelta kTitlebarAnimationDelay =
-    base::TimeDelta::FromMilliseconds(750);
 
 bool IsV1AppBackButtonEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -110,7 +98,7 @@ void SetRightSide(gfx::Rect* rect, int x) {
 }
 
 void AlignVerticalCenterWith(gfx::Rect* rect, const gfx::Rect& sibling) {
-  rect->set_y(sibling.y() + (sibling.height() - rect->height()) / 2);
+  rect->set_y(sibling.CenterPoint().y() - rect->height() / 2);
   DCHECK_EQ(rect->CenterPoint().y(), sibling.CenterPoint().y());
 }
 
@@ -145,6 +133,10 @@ BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
 }
 
 BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
+  if (frame() && frame()->GetNativeWindow() &&
+      frame()->GetNativeWindow()->HasObserver(this)) {
+    frame()->GetNativeWindow()->RemoveObserver(this);
+  }
   if (TabletModeClient::Get())
     TabletModeClient::Get()->RemoveObserver(this);
   ash::Shell::Get()->RemoveShellObserver(this);
@@ -156,7 +148,7 @@ BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
 
 void BrowserNonClientFrameViewAsh::Init() {
   caption_button_container_ = new ash::FrameCaptionButtonContainerView(frame());
-  caption_button_container_->UpdateSizeButtonVisibility();
+  caption_button_container_->UpdateCaptionButtonState(false /*=animate*/);
   AddChildView(caption_button_container_);
 
   Browser* browser = browser_view()->browser();
@@ -188,6 +180,8 @@ void BrowserNonClientFrameViewAsh::Init() {
   // TabletModeClient may not be initialized during unit tests.
   if (TabletModeClient::Get())
     TabletModeClient::Get()->AddObserver(this);
+
+  frame()->GetNativeWindow()->AddObserver(this);
 }
 
 ash::mojom::SplitViewObserverPtr
@@ -241,8 +235,7 @@ int BrowserNonClientFrameViewAsh::GetTopInset(bool restored) const {
 
   const int header_height =
       restored
-          ? GetAshLayoutSize(AshLayoutSize::BROWSER_RESTORED_CAPTION_BUTTON)
-                .height()
+          ? GetAshLayoutSize(AshLayoutSize::kBrowserCaptionRestored).height()
           : frame_header_->GetHeaderHeight();
   return header_height - browser_view()->GetTabStripHeight();
 }
@@ -304,6 +297,7 @@ int BrowserNonClientFrameViewAsh::NonClientHitTest(const gfx::Point& point) {
     gfx::Point client_point(point);
     View::ConvertPointToTarget(this, frame()->client_view(), &client_point);
     gfx::Rect tabstrip_bounds(browser_view()->tabstrip()->bounds());
+    constexpr int kTabShadowHeight = 4;
     if (client_point.y() < tabstrip_bounds.y() + kTabShadowHeight)
       return HTCAPTION;
   }
@@ -401,6 +395,11 @@ void BrowserNonClientFrameViewAsh::Layout() {
     AlignVerticalCenterWith(&text_bounds, caption_button_container_->bounds());
     frame_header_origin_text_->SetBoundsRect(text_bounds);
   }
+
+  // The top right corner must be occupied by a caption button for easy mouse
+  // access. This check is agnostic to RTL layout.
+  DCHECK_EQ(caption_button_container_->y(), 0);
+  DCHECK_EQ(caption_button_container_->bounds().right(), width());
 }
 
 const char* BrowserNonClientFrameViewAsh::GetClassName() const {
@@ -442,10 +441,13 @@ void BrowserNonClientFrameViewAsh::ChildPreferredSizeChanged(
 void BrowserNonClientFrameViewAsh::OnOverviewModeStarting() {
   in_overview_mode_ = true;
 
-  // Update the window icon so that overview mode can grab the icon from
-  // aura::client::kWindowIcon to display.
-  if (base::FeatureList::IsEnabled(ash::features::kNewOverviewUi))
+  // Update the window icon if needed so that overview mode can grab the icon
+  // from kAppIconKey or kWindowIconKey to display.
+  if (base::FeatureList::IsEnabled(ash::features::kNewOverviewUi) &&
+      !frame()->GetNativeWindow()->GetProperty(
+          aura::client::kHasOverviewIcon)) {
     frame()->UpdateWindowIcon();
+  }
 
   frame()->GetNativeWindow()->SetProperty(aura::client::kTopViewColor,
                                           GetFrameColor());
@@ -461,7 +463,7 @@ void BrowserNonClientFrameViewAsh::OnOverviewModeEnded() {
 // ash::mojom::TabletModeClient:
 
 void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
-  caption_button_container_->UpdateSizeButtonVisibility();
+  caption_button_container_->UpdateCaptionButtonState(true /*=animate*/);
 
   if (enabled) {
     // Enter immersive mode if the feature is enabled and the widget is not
@@ -525,6 +527,26 @@ void BrowserNonClientFrameViewAsh::OnSplitViewStateChanged(
   OnOverviewOrSplitviewModeChanged();
 }
 
+void BrowserNonClientFrameViewAsh::OnWindowDestroying(aura::Window* window) {
+  DCHECK_EQ(frame()->GetNativeWindow(), window);
+  window->RemoveObserver(this);
+}
+
+void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
+                                                           const void* key,
+                                                           intptr_t old) {
+  DCHECK_EQ(frame()->GetNativeWindow(), window);
+  if (key != aura::client::kShowStateKey)
+    return;
+  frame_header_->OnShowStateChanged(
+      window->GetProperty(aura::client::kShowStateKey));
+}
+
+HostedAppButtonContainer*
+BrowserNonClientFrameViewAsh::GetHostedAppButtonContainerForTesting() const {
+  return hosted_app_button_container_;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewAsh, protected:
 
@@ -538,8 +560,17 @@ AvatarButtonStyle BrowserNonClientFrameViewAsh::GetAvatarButtonStyle() const {
 // BrowserNonClientFrameViewAsh, private:
 
 int BrowserNonClientFrameViewAsh::GetTabStripRightInset() const {
-  return kTabstripRightSpacing +
-      caption_button_container_->GetPreferredSize().width();
+  int inset = caption_button_container_->GetPreferredSize().width();
+
+  // For Material Refresh, the end of the tabstrip contains empty space to
+  // ensure the window remains draggable, which is sufficient padding to the
+  // other tabstrip contents.
+  using MD = ui::MaterialDesignController;
+  constexpr int kTabstripRightSpacing = 10;
+  if (MD::GetMode() != MD::MATERIAL_REFRESH)
+    inset += kTabstripRightSpacing;
+
+  return inset;
 }
 
 bool BrowserNonClientFrameViewAsh::UsePackagedAppHeaderStyle() const {
@@ -605,13 +636,14 @@ BrowserNonClientFrameViewAsh::CreateFrameHeader() {
     if (theme_color) {
       SkColor opaque_theme_color =
           SkColorSetA(theme_color.value(), SK_AlphaOPAQUE);
-      default_frame_header->SetFrameColors(opaque_theme_color,
-                                           opaque_theme_color);
+      default_frame_header->SetThemeColor(opaque_theme_color);
     }
 
     // Add the container for extra hosted app buttons (e.g app menu button).
     SkColor active_color = ash::FrameCaptionButton::GetButtonColor(
-        default_frame_header->ShouldUseLightImages());
+        theme_color ? ash::FrameCaptionButton::ColorMode::kThemed
+                    : ash::FrameCaptionButton::ColorMode::kDefault,
+        default_frame_header->GetActiveFrameColor());
     const float inactive_alpha_ratio =
         ash::FrameCaptionButton::GetInactiveButtonColorAlphaRatio();
     SkColor inactive_color =
@@ -624,22 +656,21 @@ BrowserNonClientFrameViewAsh::CreateFrameHeader() {
     frame_header_origin_text_ =
         std::make_unique<ash::FrameHeaderOriginText>(
             browser->hosted_app_controller()->GetFormattedUrlOrigin(),
-            active_color, inactive_color,
-            default_frame_header->GetActiveFrameColor(),
-            default_frame_header->GetInactiveFrameColor())
+            active_color, inactive_color)
             .release();
     AddChildView(frame_header_origin_text_);
 
     // Schedule the title bar animation.
+    constexpr base::TimeDelta kTitlebarAnimationDelay =
+        base::TimeDelta::FromMilliseconds(750);
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&BrowserNonClientFrameViewAsh::StartHostedAppAnimation,
                        weak_factory_.GetWeakPtr()),
         kTitlebarAnimationDelay);
   } else if (!browser->is_app()) {
-    // For non app (i.e. WebUI) windows (e.g. Settings) use MD frame color.
-    default_frame_header->SetFrameColors(kMdWebUIFrameColor,
-                                         kMdWebUIFrameColor);
+    default_frame_header->SetFrameColors(BrowserFrameAsh::kMdWebUiFrameColor,
+                                         BrowserFrameAsh::kMdWebUiFrameColor);
   }
 
   if (back_button_)

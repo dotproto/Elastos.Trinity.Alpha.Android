@@ -16,7 +16,8 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "base/win/win_util.h"
@@ -27,51 +28,9 @@ namespace edk {
 
 namespace {
 
-// A view over a Channel::Message object. The write queue uses these since
-// large messages may need to be sent in chunks.
-class MessageView {
- public:
-  // Owns |message|. |offset| indexes the first unsent byte in the message.
-  MessageView(Channel::MessagePtr message, size_t offset)
-      : message_(std::move(message)),
-        offset_(offset) {
-    DCHECK_GT(message_->data_num_bytes(), offset_);
-  }
-
-  MessageView(MessageView&& other) { *this = std::move(other); }
-
-  MessageView& operator=(MessageView&& other) {
-    message_ = std::move(other.message_);
-    offset_ = other.offset_;
-    return *this;
-  }
-
-  ~MessageView() {}
-
-  const void* data() const {
-    return static_cast<const char*>(message_->data()) + offset_;
-  }
-
-  size_t data_num_bytes() const { return message_->data_num_bytes() - offset_; }
-
-  size_t data_offset() const { return offset_; }
-  void advance_data_offset(size_t num_bytes) {
-    DCHECK_GE(message_->data_num_bytes(), offset_ + num_bytes);
-    offset_ += num_bytes;
-  }
-
-  Channel::MessagePtr TakeChannelMessage() { return std::move(message_); }
-
- private:
-  Channel::MessagePtr message_;
-  size_t offset_;
-
-  DISALLOW_COPY_AND_ASSIGN(MessageView);
-};
-
 class ChannelWin : public Channel,
-                   public base::MessageLoop::DestructionObserver,
-                   public base::MessageLoopForIO::IOHandler {
+                   public base::MessageLoopCurrent::DestructionObserver,
+                   public base::MessagePumpForIO::IOHandler {
  public:
   ChannelWin(Delegate* delegate,
              ScopedPlatformHandle handle,
@@ -102,7 +61,7 @@ class ChannelWin : public Channel,
         return;
 
       bool write_now = !delay_writes_ && outgoing_messages_.empty();
-      outgoing_messages_.emplace_back(std::move(message), 0);
+      outgoing_messages_.emplace_back(std::move(message));
       if (write_now && !WriteNoLock(outgoing_messages_.front()))
         reject_writes_ = write_error = true;
     }
@@ -147,8 +106,8 @@ class ChannelWin : public Channel,
   ~ChannelWin() override {}
 
   void StartOnIOThread() {
-    base::MessageLoop::current()->AddDestructionObserver(this);
-    base::MessageLoopForIO::current()->RegisterIOHandler(
+    base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
+    base::MessageLoopCurrentForIO::Get()->RegisterIOHandler(
         handle_.get().handle, this);
 
     if (handle_.get().needs_connection) {
@@ -184,13 +143,14 @@ class ChannelWin : public Channel,
       }
     }
 
-    // Keep this alive in case we synchronously run shutdown.
+    // Keep this alive in case we synchronously run shutdown, via OnError(),
+    // as a result of a ReadFile() failure on the channel.
     scoped_refptr<ChannelWin> keep_alive(this);
     ReadMore(0);
   }
 
   void ShutDownOnIOThread() {
-    base::MessageLoop::current()->RemoveDestructionObserver(this);
+    base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
 
     // BUG(crbug.com/583525): This function is expected to be called once, and
     // |handle_| should be valid at this point.
@@ -204,7 +164,7 @@ class ChannelWin : public Channel,
     self_ = nullptr;
   }
 
-  // base::MessageLoop::DestructionObserver:
+  // base::MessageLoopCurrent::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override {
     DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
     if (self_)
@@ -212,14 +172,19 @@ class ChannelWin : public Channel,
   }
 
   // base::MessageLoop::IOHandler:
-  void OnIOCompleted(base::MessageLoopForIO::IOContext* context,
+  void OnIOCompleted(base::MessagePumpForIO::IOContext* context,
                      DWORD bytes_transfered,
                      DWORD error) override {
     if (error != ERROR_SUCCESS) {
-      if (context == &write_context_)
+      if (context == &write_context_) {
+        {
+          base::AutoLock lock(write_lock_);
+          reject_writes_ = true;
+        }
         OnWriteError(Error::kDisconnected);
-      else
+      } else {
         OnError(Error::kDisconnected);
+      }
     } else if (context == &connect_context_) {
       DCHECK(is_connect_pending_);
       is_connect_pending_ = false;
@@ -263,21 +228,22 @@ class ChannelWin : public Channel,
     {
       base::AutoLock lock(write_lock_);
 
+      DCHECK(is_write_pending_);
+      is_write_pending_ = false;
       DCHECK(!outgoing_messages_.empty());
 
-      MessageView& message_view = outgoing_messages_.front();
-      message_view.advance_data_offset(bytes_written);
-      if (message_view.data_num_bytes() == 0) {
-        Channel::MessagePtr message = message_view.TakeChannelMessage();
-        outgoing_messages_.pop_front();
+      Channel::MessagePtr message = std::move(outgoing_messages_.front());
+      outgoing_messages_.pop_front();
 
-        // Clear any handles so they don't get closed on destruction.
-        std::vector<ScopedPlatformHandle> handles = message->TakeHandles();
-        for (auto& handle : handles)
-          ignore_result(handle.release());
-      }
+      // Clear any handles so they don't get closed on destruction.
+      std::vector<ScopedPlatformHandle> handles = message->TakeHandles();
+      for (auto& handle : handles)
+        ignore_result(handle.release());
 
-      if (!WriteNextNoLock())
+      // Overlapped WriteFile() to a pipe should always fully complete.
+      if (message->data_num_bytes() != bytes_written)
+        reject_writes_ = write_error = true;
+      else if (!WriteNextNoLock())
         reject_writes_ = write_error = true;
     }
     if (write_error)
@@ -308,14 +274,13 @@ class ChannelWin : public Channel,
   // Attempts to write a message directly to the channel. If the full message
   // cannot be written, it's queued and a wait is initiated to write the message
   // ASAP on the I/O thread.
-  bool WriteNoLock(const MessageView& message_view) {
-    BOOL ok = WriteFile(handle_.get().handle,
-                        message_view.data(),
-                        static_cast<DWORD>(message_view.data_num_bytes()),
-                        NULL,
+  bool WriteNoLock(const Channel::MessagePtr& message) {
+    BOOL ok = WriteFile(handle_.get().handle, message->data(),
+                        static_cast<DWORD>(message->data_num_bytes()), NULL,
                         &write_context_.overlapped);
 
     if (ok || GetLastError() == ERROR_IO_PENDING) {
+      is_write_pending_ = true;
       AddRef();
       return true;
     }
@@ -347,19 +312,20 @@ class ChannelWin : public Channel,
   scoped_refptr<Channel> self_;
 
   ScopedPlatformHandle handle_;
-  scoped_refptr<base::TaskRunner> io_task_runner_;
+  const scoped_refptr<base::TaskRunner> io_task_runner_;
 
-  base::MessageLoopForIO::IOContext connect_context_;
-  base::MessageLoopForIO::IOContext read_context_;
-  base::MessageLoopForIO::IOContext write_context_;
+  base::MessagePumpForIO::IOContext connect_context_;
+  base::MessagePumpForIO::IOContext read_context_;
   bool is_connect_pending_ = false;
   bool is_read_pending_ = false;
 
-  // Protects |delay_writes_|, |reject_writes_| and |outgoing_messages_|.
+  // Protects all fields potentially accessed on multiple threads via Write().
   base::Lock write_lock_;
-  base::circular_deque<MessageView> outgoing_messages_;
+  base::MessagePumpForIO::IOContext write_context_;
+  base::circular_deque<Channel::MessagePtr> outgoing_messages_;
   bool delay_writes_ = true;
   bool reject_writes_ = false;
+  bool is_write_pending_ = false;
 
   bool leak_handle_ = false;
 

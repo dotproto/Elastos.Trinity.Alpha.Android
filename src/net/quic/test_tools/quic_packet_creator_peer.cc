@@ -11,14 +11,22 @@ namespace test {
 
 // static
 bool QuicPacketCreatorPeer::SendVersionInPacket(QuicPacketCreator* creator) {
-  return creator->send_version_in_packet_;
+  return creator->IncludeVersionInHeader();
 }
 
 // static
 void QuicPacketCreatorPeer::SetSendVersionInPacket(
     QuicPacketCreator* creator,
     bool send_version_in_packet) {
-  creator->send_version_in_packet_ = send_version_in_packet;
+  if (creator->framer_->transport_version() != QUIC_VERSION_99) {
+    creator->send_version_in_packet_ = send_version_in_packet;
+    return;
+  }
+  if (!send_version_in_packet) {
+    creator->packet_.encryption_level = ENCRYPTION_FORWARD_SECURE;
+    return;
+  }
+  DCHECK(creator->packet_.encryption_level < ENCRYPTION_FORWARD_SECURE);
 }
 
 // static
@@ -31,7 +39,7 @@ void QuicPacketCreatorPeer::SetPacketNumberLength(
 // static
 QuicPacketNumberLength QuicPacketCreatorPeer::GetPacketNumberLength(
     QuicPacketCreator* creator) {
-  return creator->packet_.packet_number_length;
+  return creator->GetPacketNumberLength();
 }
 
 void QuicPacketCreatorPeer::SetPacketNumber(QuicPacketCreator* creator,

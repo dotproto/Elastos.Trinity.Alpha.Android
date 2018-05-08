@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
@@ -60,9 +59,9 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/public_features.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -913,17 +912,18 @@ void DevToolsWindow::OnPageCloseCanceled(WebContents* contents) {
 
 DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
                                Profile* profile,
-                               WebContents* main_web_contents,
+                               std::unique_ptr<WebContents> main_web_contents,
                                DevToolsUIBindings* bindings,
                                WebContents* inspected_web_contents,
                                bool can_dock)
     : frontend_type_(frontend_type),
       profile_(profile),
-      main_web_contents_(main_web_contents),
+      main_web_contents_(main_web_contents.get()),
       toolbox_web_contents_(nullptr),
       bindings_(bindings),
       browser_(nullptr),
       is_docked_(true),
+      owned_main_web_contents_(std::move(main_web_contents)),
       can_dock_(can_dock),
       close_on_detach_(true),
       // This initialization allows external front-end to work without changes.
@@ -1011,8 +1011,8 @@ DevToolsWindow* DevToolsWindow::Create(
   // Create WebContents with devtools.
   GURL url(GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel,
                           has_other_clients));
-  std::unique_ptr<WebContents> main_web_contents(
-      WebContents::Create(WebContents::CreateParams(profile)));
+  std::unique_ptr<WebContents> main_web_contents =
+      WebContents::Create(WebContents::CreateParams(profile));
   main_web_contents->GetController().LoadURL(
       DecorateFrontendURL(url), content::Referrer(),
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
@@ -1022,8 +1022,9 @@ DevToolsWindow* DevToolsWindow::Create(
     return nullptr;
   if (!settings.empty())
     SetPreferencesFromJson(profile, settings);
-  return new DevToolsWindow(frontend_type, profile, main_web_contents.release(),
-                            bindings, inspected_web_contents, can_dock);
+  return new DevToolsWindow(frontend_type, profile,
+                            std::move(main_web_contents), bindings,
+                            inspected_web_contents, can_dock);
 }
 
 // static
@@ -1043,11 +1044,14 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
       "?remoteBase=" + DevToolsUI::GetRemoteBaseURL().spec();
 #endif
 
+  const std::string valid_frontend =
+      frontend_url.empty() ? chrome::kChromeUIDevToolsURL : frontend_url;
+
   // remoteFrontend is here for backwards compatibility only.
   std::string remote_frontend =
-      frontend_url + ((frontend_url.find("?") == std::string::npos)
-                          ? "?remoteFrontend=true"
-                          : "&remoteFrontend=true");
+      valid_frontend + ((valid_frontend.find("?") == std::string::npos)
+                            ? "?remoteFrontend=true"
+                            : "&remoteFrontend=true");
   switch (frontend_type) {
     case kFrontendDefault:
       url = kDefaultFrontendURL + remote_base;
@@ -1134,12 +1138,16 @@ void DevToolsWindow::ActivateContents(WebContents* contents) {
 }
 
 void DevToolsWindow::AddNewContents(WebContents* source,
-                                    WebContents* new_contents,
+                                    std::unique_ptr<WebContents> new_contents,
                                     WindowOpenDisposition disposition,
                                     const gfx::Rect& initial_rect,
                                     bool user_gesture,
                                     bool* was_blocked) {
-  if (new_contents == toolbox_web_contents_) {
+  if (new_contents.get() == toolbox_web_contents_) {
+    // TODO(erikchen): Fix ownership semantics for WebContents.
+    // https://crbug.com/832879.
+    new_contents.release();
+
     toolbox_web_contents_->SetDelegate(
         new DevToolsToolboxDelegate(toolbox_web_contents_,
                                     inspected_contents_observer_.get()));
@@ -1156,8 +1164,8 @@ void DevToolsWindow::AddNewContents(WebContents* source,
   WebContents* inspected_web_contents = GetInspectedWebContents();
   if (inspected_web_contents) {
     inspected_web_contents->GetDelegate()->AddNewContents(
-        source, new_contents, disposition, initial_rect, user_gesture,
-        was_blocked);
+        source, std::move(new_contents), disposition, initial_rect,
+        user_gesture, was_blocked);
   }
 }
 
@@ -1180,6 +1188,13 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
         toolbox_web_contents_);
     data_use_measurement::DataUseWebContentsObserver::CreateForWebContents(
         toolbox_web_contents_);
+
+    // The toolbox holds a placeholder for the inspected WebContents. When the
+    // placeholder is resized, a frame is requested. The inspected WebContents
+    // is resized when the frame is rendered. Force rendering of the toolbox at
+    // all times, to make sure that a frame can be rendered even when the
+    // inspected WebContents fully covers the toolbox. https://crbug.com/828307
+    toolbox_web_contents_->IncrementCapturerCount(gfx::Size());
   }
 }
 
@@ -1190,7 +1205,8 @@ void DevToolsWindow::CloseContents(WebContents* source) {
   // In case of docked main_web_contents_, we own it so delete here.
   // Embedding DevTools window will be deleted as a result of
   // DevToolsUIBindings destruction.
-  delete main_web_contents_;
+  CHECK(owned_main_web_contents_);
+  owned_main_web_contents_.reset();
 }
 
 void DevToolsWindow::ContentsZoomChange(bool zoom_in) {
@@ -1330,9 +1346,15 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
     // Detach window from the external devtools browser. It will lead to
     // the browser object's close and delete. Remove observer first.
     TabStripModel* tab_strip_model = browser_->tab_strip_model();
-    tab_strip_model->DetachWebContentsAt(
-        tab_strip_model->GetIndexOfWebContents(main_web_contents_));
+    DCHECK(!owned_main_web_contents_);
+
+    // Removing the only WebContents from the tab strip of browser_ will
+    // eventually lead to the destruction of browser_ as well, which is why it's
+    // okay to just null the raw pointer here.
     browser_ = NULL;
+
+    owned_main_web_contents_ = tab_strip_model->DetachWebContentsAt(
+        tab_strip_model->GetIndexOfWebContents(main_web_contents_));
   } else if (!dock_requested && was_docked) {
     UpdateBrowserWindow();
   }
@@ -1527,8 +1549,8 @@ void DevToolsWindow::CreateDevToolsBrowser() {
 
   browser_ = new Browser(Browser::CreateParams::CreateForDevTools(profile_));
   browser_->tab_strip_model()->AddWebContents(
-      main_web_contents_, -1, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      TabStripModel::ADD_ACTIVE);
+      std::move(owned_main_web_contents_), -1,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, TabStripModel::ADD_ACTIVE);
   main_web_contents_->GetRenderViewHost()->SyncRendererPrefs();
 }
 

@@ -45,10 +45,10 @@
 #include "net/socket/datagram_client_socket.h"
 #include "net/socket/socket_test_util.h"
 #include "net/spdy/chromium/spdy_test_util_common.h"
-#include "net/spdy/core/spdy_test_utils.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/third_party/spdy/core/spdy_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -223,7 +223,7 @@ class QuicChromiumClientSessionTest
 };
 
 INSTANTIATE_TEST_CASE_P(
-    VersionIncludeStreamDependencySequnece,
+    VersionIncludeStreamDependencySequence,
     QuicChromiumClientSessionTest,
     ::testing::Combine(::testing::ValuesIn(AllSupportedTransportVersions()),
                        ::testing::Bool()));
@@ -289,7 +289,8 @@ TEST_P(QuicChromiumClientSessionTest, CryptoConnect) {
 
 TEST_P(QuicChromiumClientSessionTest, Handle) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -374,7 +375,8 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
 
 TEST_P(QuicChromiumClientSessionTest, StreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -398,7 +400,8 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, ConfirmationRequiredStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -422,7 +425,8 @@ TEST_P(QuicChromiumClientSessionTest, ConfirmationRequiredStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, StreamRequestBeforeConfirmation) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -451,9 +455,11 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequestBeforeConfirmation) {
 
 TEST_P(QuicChromiumClientSessionTest, CancelStreamRequestBeforeRelease) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
-  quic_data.AddWrite(client_maker_.MakeRstPacket(
-      2, true, GetNthClientInitiatedStreamId(0), QUIC_STREAM_CANCELLED));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeRstPacket(
+                                      2, true, GetNthClientInitiatedStreamId(0),
+                                      QUIC_STREAM_CANCELLED));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -477,9 +483,11 @@ TEST_P(QuicChromiumClientSessionTest, CancelStreamRequestBeforeRelease) {
 
 TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
-  quic_data.AddWrite(client_maker_.MakeRstPacket(
-      2, true, GetNthClientInitiatedStreamId(0), QUIC_RST_ACKNOWLEDGEMENT));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeRstPacket(
+                                      2, true, GetNthClientInitiatedStreamId(0),
+                                      QUIC_RST_ACKNOWLEDGEMENT));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -520,7 +528,8 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -569,9 +578,11 @@ TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
-  quic_data.AddWrite(client_maker_.MakeRstPacket(
-      2, true, GetNthClientInitiatedStreamId(0), QUIC_RST_ACKNOWLEDGEMENT));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeRstPacket(
+                                      2, true, GetNthClientInitiatedStreamId(0),
+                                      QUIC_RST_ACKNOWLEDGEMENT));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -613,9 +624,11 @@ TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
-  quic_data.AddRead(server_maker_.MakeConnectionClosePacket(
-      1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED, "Time to panic!"));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddRead(ASYNC, server_maker_.MakeConnectionClosePacket(
+                               1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED,
+                               "Time to panic!"));
   quic_data.AddSocketDataToFactory(&socket_factory_);
 
   Initialize();
@@ -640,8 +653,9 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeStreamRequest) {
 TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeHandshakeConfirmed) {
   MockQuicData quic_data;
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
-  quic_data.AddRead(server_maker_.MakeConnectionClosePacket(
-      1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED, "Time to panic!"));
+  quic_data.AddRead(ASYNC, server_maker_.MakeConnectionClosePacket(
+                               1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED,
+                               "Time to panic!"));
   quic_data.AddSocketDataToFactory(&socket_factory_);
 
   Initialize();
@@ -668,10 +682,12 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeHandshakeConfirmed) {
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
-  quic_data.AddRead(server_maker_.MakeConnectionClosePacket(
-      1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED, "Time to panic!"));
+  quic_data.AddRead(ASYNC, server_maker_.MakeConnectionClosePacket(
+                               1, false, QUIC_CRYPTO_VERSION_NOT_SUPPORTED,
+                               "Time to panic!"));
   quic_data.AddSocketDataToFactory(&socket_factory_);
 
   Initialize();
@@ -1417,11 +1433,12 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   migrate_session_early_v2_ = true;
 
   MockQuicData quic_data;
-  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
-  quic_data.AddWrite(client_maker_.MakePingPacket(2, true));
-  quic_data.AddRead(server_maker_.MakeAckPacket(1, 2, 1, 1, false));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakePingPacket(2, true));
+  quic_data.AddRead(ASYNC, server_maker_.MakeAckPacket(1, 2, 1, 1, false));
 
-  quic_data.AddWrite(client_maker_.MakePingPacket(3, false));
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakePingPacket(3, false));
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);
   quic_data.AddRead(ASYNC, OK);  // EOF
   quic_data.AddSocketDataToFactory(&socket_factory_);

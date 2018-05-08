@@ -96,16 +96,6 @@
         -webkit-margin-start: calc(var(--cr-button-edge-spacing) * -1);
       }
 
-      /* There are two settings button styles, .primary-button and normal
-       * buttons. The primary is the action button (e.g. "edit", "delete")
-       * while the normal (secondary-button) is often a "Cancel" button. */
-      .primary-button:not([disabled]) {
-        --paper-button-flat-keyboard-focus: {
-          background: rgba(51, 103, 214, .12);  /* --google-blue-700 */
-        };
-        color: var(--google-blue-500);
-      }
-
       paper-toggle-button {
         @apply --settings-actionable;
         height: var(--settings-row-min-height);

@@ -61,7 +61,8 @@ class MagnificationControllerTest : public AshTestBase {
     GetMagnificationController()->DisableMoveMagnifierDelayForTesting();
 
     touch_event_watcher_ = std::make_unique<TouchEventWatcher>();
-    GetRootWindow()->PrependPreTargetHandler(touch_event_watcher_.get());
+    GetRootWindow()->AddPreTargetHandler(touch_event_watcher_.get(),
+                                         ui::EventTarget::Priority::kSystem);
   }
 
   void TearDown() override {
@@ -244,6 +245,7 @@ TEST_F(MagnificationControllerTest, PointOfInterest) {
   EXPECT_EQ("450,350", CurrentPointOfInterest());
 }
 
+// TODO(warx): move this test to unit_tests.
 TEST_F(MagnificationControllerTest, FollowFocusChanged) {
   // Enables magnifier and confirm the viewport is at center.
   GetMagnificationController()->SetEnabled(true);
@@ -514,6 +516,30 @@ TEST_F(MagnificationControllerTest, PanWindowToLeft) {
   GetEventGenerator().MoveMouseToInHost(gfx::Point(0, 300));
   EXPECT_EQ("139,298", env->last_mouse_location().ToString());
   EXPECT_EQ("100,300", GetHostMouseLocation());
+}
+
+TEST_F(MagnificationControllerTest, FocusChangeEvents) {
+  MagnifierFocusTestHelper focus_test_helper;
+  focus_test_helper.CreateAndShowFocusTestView(gfx::Point(100, 200));
+
+  // Enables magnifier and confirm the viewport is at center.
+  GetMagnificationController()->SetEnabled(true);
+  EXPECT_EQ(2.0f, GetMagnificationController()->GetScale());
+  EXPECT_EQ("200,150 400x300", GetViewport().ToString());
+  EXPECT_FALSE(GetMagnificationController()->KeepFocusCentered());
+
+  // Focus on the first button and expect the magnifier to be centered around
+  // its center.
+  focus_test_helper.FocusFirstButton();
+  gfx::Point button_1_center(
+      focus_test_helper.GetFirstButtonBoundsInRoot().CenterPoint());
+  EXPECT_EQ(button_1_center, GetViewport().CenterPoint());
+
+  // Similarly if we focus on the second button.
+  focus_test_helper.FocusSecondButton();
+  gfx::Point button_2_center(
+      focus_test_helper.GetSecondButtonBoundsInRoot().CenterPoint());
+  EXPECT_EQ(button_2_center, GetViewport().CenterPoint());
 }
 
 TEST_F(MagnificationControllerTest, FollowTextInputFieldFocus) {

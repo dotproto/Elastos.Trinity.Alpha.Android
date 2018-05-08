@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Lietojumprogrammu palaidējs</translation>
 <translation id="1525508553941733066">NERĀDĪT</translation>
+<translation id="1537254971476575106">Pilnekrāna lupa</translation>
 <translation id="15373452373711364">Liels peles kursors</translation>
 <translation id="1550523713251050646">Noklikšķiniet, lai skatītu citas iespējas.</translation>
 <translation id="1567387640189251553">Kopš pēdējās reizes, kad ievadījāt paroli, ir pievienota cita tastatūra. Tā, iespējams, mēģina piesavināties jūsu taustiņsitienus.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Diemžēl jūsu paroli joprojām nevarēja verificēt. Ņemiet vērā: ja nesen mainījāt paroli, jaunā parole tiks lietota pēc izrakstīšanās. Lūdzu, šeit izmantojiet iepriekšējo paroli.</translation>
 <translation id="1677472565718498478">Atlikušais laiks: <ph name="TIME" /></translation>
 <translation id="1698760176351776263">IPv6 adrese: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Jūsu darbības var uzraudzīt ierīces administrators.</translation>
 <translation id="1734367976349034509">Šo ierīci pārvalda uzņēmums</translation>
 <translation id="1746730358044914197">Administrators konfigurē ievades metodes.</translation>
 <translation id="1747827819627189109">Ekrāna tastatūra iespējota</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Pārpildes poga</translation>
 <translation id="1951012854035635156">Asistents</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Iestatiet savu valodu.</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Izslēgt</translation>
 <translation id="2012624427112548395">Ctrl+Search+H</translation>
 <translation id="2049639323467105390">Šo ierīci pārvalda vietne <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Portrets</translation>
 <translation id="2067602449040652523">Tastatūras spilgtums</translation>
+<translation id="2081529251031312395">$1 joprojām varēs pierakstīties vēlāk.</translation>
 <translation id="2122028596993374965">Apturēt “<ph name="TAB_NAME" />” apraidi uztvērējā “<ph name="RECEIVER_NAME" />”</translation>
 <translation id="2127372758936585790">Lādētājs ar mazu strāvas padevi</translation>
+<translation id="2135456203358955318">Dokota lupa</translation>
 <translation id="2144487987174258011">Restartējiet, lai atjauninātu Adobe Flash Player</translation>
-<translation id="2191905770366256395">Jūsu noņemamajai tastatūrai nepieciešams svarīgs atjauninājums</translation>
 <translation id="2208323208084708176">Vienots darbvirsmas režīms</translation>
 <translation id="2220572644011485463">PIN vai parole</translation>
 <translation id="225680501294068881">Notiek ierīču meklēšana...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Attēlojuma mērogs</translation>
 <translation id="2303600792989757991">Pārslēgt loga kopsavilkumu</translation>
 <translation id="2338501278241028356">Ieslēdziet Bluetooth, lai atklātu tuvumā esošas ierīces</translation>
+<translation id="2339073806695260576">Pieskarieties skārienekrāna pildspalvas pogai plauktā, lai veiktu piezīmes, uzņemtu ekrānuzņēmumus, izmantotu lāzera rādītāju vai lupu.</translation>
 <translation id="2351266942280602854">Valoda un ievade</translation>
 <translation id="2352467521400612932">Skārienekrāna pildspalvas iestatījumi</translation>
 <translation id="2354174487190027830">Notiek <ph name="NAME" /> aktivizēšana.</translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Iesniegt</translation>
 <translation id="2675319268637823299">Administrators ir aizliedzis lietotājam <ph name="USER_EMAIL" /> vairākkārtēju pierakstīšanos.
     Lai turpinātu, visiem lietotājiem ir jāizrakstās.</translation>
+<translation id="2696763960464195425">Kad izrakstīsieties, jūsu informācija tiks noņemta. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Iestatiet savu tastatūru</translation>
 <translation id="2718395828230677721">Nakts režīms</translation>
 <translation id="2727977024730340865">Pievienots lādētājs ar mazu strāvas padevi. Akumulatora uzlāde var nebūt uzticama.</translation>
 <translation id="2761704814324807722">Statusa josla, laiks: <ph name="TIME" />. <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Rokraksta ievade</translation>
 <translation id="6528179044667508675">Netraucēt</translation>
 <translation id="6537270692134705506">Uzņemt ekrāna attēlu</translation>
-<translation id="6580955892089546165">Šī funkcija ļauj ātri piekļūt jebkuram lietotājam, kurš ir pierakstījies, nepieprasot paroli.
-
-Izmantojiet šo funkciju tikai uzticamiem kontiem.</translation>
 <translation id="6585808820553845416">Atlikušais laiks līdz šīs sesijas beigām: <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Meklēšana+Shift+K</translation>
 <translation id="6650933572246256093">Bluetooth ierīce “<ph name="DEVICE_NAME" />” vēlas saņemt atļauju, lai izveidotu savienojumu pārī. Lūdzu, ievadiet ierīcē šo ieejas atslēgu: <ph name="PASSKEY" />.</translation>
 <translation id="6657585470893396449">Parole</translation>
 <translation id="6691659475504239918">Search+Shift+H</translation>
+<translation id="6696025732084565524">Noņemamajai tastatūrai nepieciešams svarīgs atjauninājums</translation>
 <translation id="6700713906295497288">IME izvēlnes poga</translation>
 <translation id="6713285437468012787">Bluetooth ierīce “<ph name="DEVICE_NAME" />” ir savienota pārī un ir pieejama visiem lietotājiem. Lai pārtrauktu šo savienojumus, atveriet iestatījumus.</translation>
 <translation id="6715542151869432661">Netika atrasta neviena mobilā ierīce.</translation>
@@ -260,7 +265,6 @@ Izmantojiet šo funkciju tikai uzticamiem kontiem.</translation>
 <translation id="7029814467594812963">Iziet no sesijas</translation>
 <translation id="7034339000180558234">Notiek cilnes <ph name="TAB_NAME" /> apraide šādā vietā: <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Iestatīt fona tapeti...</translation>
-<translation id="7054808953701320293">Sapratu, turpmāk vairs nerādīt!</translation>
 <translation id="7066646422045619941">Jūsu administrators atspējoja šo tīklu.</translation>
 <translation id="7067196344162293536">Pagriezt automātiski</translation>
 <translation id="7098389117866926363">USB-C ierīce (pieslēgvieta aizmugurē pa kreisi)</translation>
@@ -299,8 +303,6 @@ Izmantojiet šo funkciju tikai uzticamiem kontiem.</translation>
 <translation id="7994370417837006925">Vairākkārtēja pierakstīšanās</translation>
 <translation id="8000066093800657092">Nav tīkla</translation>
 <translation id="8054466585765276473">Notiek akumulatora darbības ilguma aprēķināšana.</translation>
-<translation id="8056430285089645882">Sapratu, turpmāk vairs nerādīt!</translation>
-<translation id="8088137642766812908">Uzmanīgi, šī funkcija var darboties neparedzami!</translation>
 <translation id="8098591350844501178">Apturēt ekrāna apraidi uztvērējā “<ph name="RECEIVER_NAME" />”</translation>
 <translation id="8132793192354020517">Savienots ar <ph name="NAME" /></translation>
 <translation id="813913629614996137">Notiek inicializēšana...</translation>
@@ -326,10 +328,8 @@ Izmantojiet šo funkciju tikai uzticamiem kontiem.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Pievienots lādētājs ar mazu strāvas padevi</translation>
 <translation id="8734991477317290293">Tā, iespējams, mēģina piesavināties jūsu taustiņsitienus</translation>
+<translation id="8809737090443522491">Ievadiet lietotnes vai dokumenta nosaukumu</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">Logu pārvietošana uz citu darbvirsmu var izraisīt neparedzētu darbību.
-
-Turpmākie paziņojumi, logi un dialoglodziņi var tikt sadalīti pa darbvirsmām.</translation>
 <translation id="8825534185036233643">Spoguļošana ar vairāk nekā diviem ekrāniem netiek atbalstīta.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Poga Atpakaļ</translation>

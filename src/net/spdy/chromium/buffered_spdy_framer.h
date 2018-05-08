@@ -14,13 +14,13 @@
 #include "net/base/net_export.h"
 #include "net/log/net_log_source.h"
 #include "net/spdy/chromium/header_coalescer.h"
-#include "net/spdy/core/http2_frame_decoder_adapter.h"
-#include "net/spdy/core/spdy_alt_svc_wire_format.h"
-#include "net/spdy/core/spdy_framer.h"
-#include "net/spdy/core/spdy_header_block.h"
-#include "net/spdy/core/spdy_protocol.h"
-#include "net/spdy/platform/api/spdy_string.h"
-#include "net/spdy/platform/api/spdy_string_piece.h"
+#include "net/third_party/spdy/core/http2_frame_decoder_adapter.h"
+#include "net/third_party/spdy/core/spdy_alt_svc_wire_format.h"
+#include "net/third_party/spdy/core/spdy_framer.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/platform/api/spdy_string.h"
+#include "net/third_party/spdy/platform/api/spdy_string_piece.h"
 
 namespace net {
 
@@ -158,7 +158,6 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
       SpdyStreamId stream_id) override;
   void OnHeaderFrameEnd(SpdyStreamId stream_id) override;
   void OnSettings() override;
-  void OnSettingOld(SpdyKnownSettingsId id, uint32_t value) override;
   void OnSetting(SpdySettingsId id, uint32_t value) override;
   void OnSettingsAck() override;
   void OnSettingsEnd() override;

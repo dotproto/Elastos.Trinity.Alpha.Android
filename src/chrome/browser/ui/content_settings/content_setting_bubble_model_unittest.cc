@@ -938,6 +938,34 @@ TEST_F(ContentSettingBubbleModelTest, RPHAllow) {
   registry.Shutdown();
 }
 
+TEST_F(ContentSettingBubbleModelTest, RPHDefaultDone) {
+  ProtocolHandlerRegistry registry(profile(), new FakeDelegate());
+  registry.InitProtocolSettings();
+
+  const GURL page_url("http://toplevel.example/");
+  NavigateAndCommit(page_url);
+  TabSpecificContentSettings* content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
+  ProtocolHandler test_handler = ProtocolHandler::CreateProtocolHandler(
+      "mailto", GURL("http://www.toplevel.example/"));
+  content_settings->set_pending_protocol_handler(test_handler);
+
+  ContentSettingRPHBubbleModel content_setting_bubble_model(
+      NULL, web_contents(), profile(), &registry);
+
+  // If nothing is selected, the default action "Ignore" should be performed.
+  content_setting_bubble_model.OnDoneClicked();
+  {
+    ProtocolHandler handler = registry.GetHandlerFor("mailto");
+    EXPECT_TRUE(handler.IsEmpty());
+    EXPECT_EQ(CONTENT_SETTING_DEFAULT,
+              content_settings->pending_protocol_handler_setting());
+    EXPECT_TRUE(registry.IsIgnored(test_handler));
+  }
+
+  registry.Shutdown();
+}
+
 TEST_F(ContentSettingBubbleModelTest, SubresourceFilter) {
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       new ContentSettingSubresourceFilterBubbleModel(nullptr, web_contents(),
@@ -978,9 +1006,11 @@ TEST_F(ContentSettingBubbleModelTest, PopupBubbleModelListItems) {
                              blink::mojom::WindowFeatures(), false, true);
   constexpr size_t kItemCount = 3;
   for (size_t i = 1; i <= kItemCount; i++) {
+    NavigateParams navigate_params =
+        params.CreateNavigateParams(web_contents());
     EXPECT_TRUE(PopupBlockerTabHelper::MaybeBlockPopup(
-        web_contents(), url, params.CreateNavigateParams(web_contents()),
-        nullptr /*=open_url_params*/, params.features()));
+        web_contents(), url, &navigate_params, nullptr /*=open_url_params*/,
+        params.features()));
     EXPECT_EQ(i, list_items.size());
   }
 }

@@ -41,9 +41,6 @@ class PixelExpectations(GpuTestExpectations):
     self.Fail('Pixel_ScissorTestWithPreserveDrawingBuffer',
         ['android'], bug=521588)
 
-    # TODO(ccameron) fix these on Mac Retina
-    self.Fail('Pixel_CSS3DBlueBox', ['mac'], bug=533690)
-
     # TODO(vmiura) check / generate reference images for Android devices
     self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
 
@@ -66,23 +63,13 @@ class PixelExpectations(GpuTestExpectations):
     self.Fail('Pixel_CanvasUnacceleratedLowLatency2D',
         ['mac', 'linux', 'win', 'android', 'chromeos'], bug=788439)
 
-    # Rebaseline Pixel_CSS3DBlueBox
-    self.Fail('Pixel_CSS3DBlueBox', bug=796558)
-
     # Flaky for unknown reasons only on macOS. Not planning to investigate
     # further.
     self.Flaky('Pixel_ScissorTestWithPreserveDrawingBuffer', ['mac'],
                bug=660461)
 
     self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
-        ['win10', ('intel', 0x1912), 'android'], bug=690663)
-
-    self.Flaky('Pixel_OffscreenCanvasTransferBeforeStyleResize',
-              ['mac', 'linux', 'win', 'android'], bug=735228)
-    self.Flaky('Pixel_OffscreenCanvasTransferAfterStyleResize',
-              ['mac', 'linux', 'win', 'android'], bug=735171)
-    self.Flaky('Pixel_OffscreenCanvasTransferToImageBitmap',
-              ['linux', 'android'], bug=807742)
+        ['win10', ('intel', 0x1912)], bug=690663)
 
     self.Flaky('Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
         ['mac', ('nvidia', 0xfe9), 'debug'], bug=751328)
@@ -112,9 +99,6 @@ class PixelExpectations(GpuTestExpectations):
     self.Fail('Pixel_CSS3DBlueBox_NoGpuProcess',
               ['linux', 'mac', 'win'], bug=744658)
 
-    self.Flaky('Pixel_2DCanvasWebGL', ['android'], bug=807370)
-    self.Flaky('Pixel_Canvas2DRedBox', ['android'], bug=809846)
-    self.Flaky('Pixel_CanvasDisplayLinearRGBAccelerated2D', ['android'],
-               bug=809868)
-    self.Flaky('Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing',
-               ['android'], bug=810006)
+    # TODO(kbr): temporary suppression for new test.
+    self.Flaky('Pixel_WebGLSadCanvas', ['mac'], bug=575305)
+    self.Fail('Pixel_WebGLSadCanvas', ['android', 'nvidia'], bug=575305)

@@ -29,12 +29,12 @@ constexpr base::TimeDelta
     PowerButtonScreenshotController::kScreenshotChordDelay;
 
 PowerButtonScreenshotController::PowerButtonScreenshotController(
-    base::TickClock* tick_clock)
+    const base::TickClock* tick_clock)
     : tick_clock_(tick_clock) {
   DCHECK(tick_clock_);
   // Using prepend to make sure this event handler is put in front of
   // AcceleratorFilter. See Shell::Init().
-  Shell::Get()->PrependPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
 }
 
 PowerButtonScreenshotController::~PowerButtonScreenshotController() {

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/omnibox/chrome_omnibox_navigation_observer.h"
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "base/macros.h"

@@ -16,10 +16,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.os.SystemClock;
-import android.provider.Browser;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
-import android.support.customtabs.CustomTabsIntent;
 import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsSessionToken;
 import android.support.customtabs.TrustedWebUtils;
@@ -50,11 +48,12 @@ import org.chromium.chrome.browser.browserservices.OriginVerifier;
 import org.chromium.chrome.browser.browserservices.OriginVerifier.OriginVerificationListener;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.customtabs.CustomTabAppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.CustomTabNavigationEventObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
@@ -244,18 +243,32 @@ public class WebappActivity extends SingleTabActivity {
         return (intent == null) ? WebappInfo.createEmpty() : WebappInfo.create(intent);
     }
 
+    @Override
+    public void initializeState() {
+        super.initializeState();
+        initializeUI(getSavedInstanceState());
+    }
+
     protected void initializeUI(Bundle savedInstanceState) {
-        // We do not load URL when restoring from saved instance states.
-        if (savedInstanceState == null) {
-            getActivityTab().loadUrl(
-                    new LoadUrlParams(mWebappInfo.uri().toString(), PageTransition.AUTO_TOPLEVEL));
-        } else {
-            if (NetworkChangeNotifier.isOnline()) getActivityTab().reloadIgnoringCache();
+        Tab tab = getActivityTab();
+
+        // Make display mode available before page load.
+        tab.getTabWebContentsDelegateAndroid().setDisplayMode(mWebappInfo.displayMode());
+
+        // Add the navigation event observer before starting the load in order to capture the start
+        // event.
+        if (getBrowserSession() != null) {
+            tab.addObserver(new CustomTabNavigationEventObserver(getBrowserSession()));
         }
 
-        getActivityTab().addObserver(createTabObserver());
-        getActivityTab().getTabWebContentsDelegateAndroid().setDisplayMode(
-                mWebappInfo.displayMode());
+        // We do not load URL when restoring from saved instance states.
+        if (savedInstanceState == null) {
+            tab.loadUrl(
+                    new LoadUrlParams(mWebappInfo.uri().toString(), PageTransition.AUTO_TOPLEVEL));
+        } else {
+            if (NetworkChangeNotifier.isOnline()) tab.reloadIgnoringCache();
+        }
+        tab.addObserver(createTabObserver());
     }
 
     @Override
@@ -324,12 +337,6 @@ public class WebappActivity extends SingleTabActivity {
 
     @Override
     public void finishNativeInitialization() {
-        if (!mWebappInfo.isInitialized()) {
-            ApiCompatibilityUtils.finishAndRemoveTask(this);
-            return;
-        }
-
-        initializeUI(getSavedInstanceState());
         LayoutManager layoutDriver = new LayoutManager(getCompositorViewHolder());
         initializeCompositorContent(layoutDriver, findViewById(R.id.url_bar),
                 (ViewGroup) findViewById(android.R.id.content),
@@ -375,7 +382,7 @@ public class WebappActivity extends SingleTabActivity {
         BrowserSessionContentUtils.setActiveContentHandler(null);
         if (getActivityTab() != null) saveState(getActivityDirectory());
         if (getFullscreenManager() != null) {
-            getFullscreenManager().setPersistentFullscreenMode(false);
+            getFullscreenManager().exitPersistentFullscreenMode();
         }
         WebApkDisclosureNotificationManager.dismissNotification(this);
     }
@@ -622,9 +629,15 @@ public class WebappActivity extends SingleTabActivity {
         // Disable HTML5 fullscreen in PWA fullscreen mode.
         return new ChromeFullscreenManager(this, ChromeFullscreenManager.CONTROLS_POSITION_TOP) {
             @Override
-            public void setPersistentFullscreenMode(boolean enabled) {
+            public void enterPersistentFullscreenMode(FullscreenOptions options) {
                 if (mWebappInfo.displayMode() == WebDisplayMode.FULLSCREEN) return;
-                super.setPersistentFullscreenMode(enabled);
+                super.enterPersistentFullscreenMode(options);
+            }
+
+            @Override
+            public void exitPersistentFullscreenMode() {
+                if (mWebappInfo.displayMode() == WebDisplayMode.FULLSCREEN) return;
+                super.exitPersistentFullscreenMode();
             }
 
             @Override
@@ -760,23 +773,6 @@ public class WebappActivity extends SingleTabActivity {
         if (getBrowserSession() == null) return null;
         return CustomTabsConnection.getInstance().getClientPackageNameForSession(
                 getBrowserSession());
-    }
-
-    public CustomTabsIntent buildCustomTabIntentForURL(String url) {
-        CustomTabsIntent.Builder intentBuilder = new CustomTabsIntent.Builder();
-        intentBuilder.setShowTitle(true);
-        if (mWebappInfo.hasValidThemeColor()) {
-            // Need to cast as themeColor is a long to contain possible error results.
-            intentBuilder.setToolbarColor((int) mWebappInfo.themeColor());
-        }
-        CustomTabsIntent customTabIntent = intentBuilder.build();
-        customTabIntent.intent.setPackage(getPackageName());
-        customTabIntent.intent.putExtra(
-                CustomTabIntentDataProvider.EXTRA_SEND_TO_EXTERNAL_DEFAULT_HANDLER, true);
-        customTabIntent.intent.putExtra(
-                CustomTabIntentDataProvider.EXTRA_BROWSER_LAUNCH_SOURCE, getActivityType());
-        customTabIntent.intent.putExtra(Browser.EXTRA_APPLICATION_ID, mWebappInfo.apkPackageName());
-        return customTabIntent;
     }
 
     private void updateToolbarCloseButtonVisibility() {

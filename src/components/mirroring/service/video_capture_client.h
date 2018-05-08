@@ -29,9 +29,8 @@ class VideoCaptureClient : public media::mojom::VideoCaptureObserver {
   explicit VideoCaptureClient(media::mojom::VideoCaptureHostPtr host);
   ~VideoCaptureClient() override;
 
-  using FrameDeliverCallback =
-      base::RepeatingCallback<void(scoped_refptr<media::VideoFrame> video_frame,
-                                   base::TimeTicks estimated_capture_time)>;
+  using FrameDeliverCallback = base::RepeatingCallback<void(
+      scoped_refptr<media::VideoFrame> video_frame)>;
   void Start(FrameDeliverCallback deliver_callback,
              base::OnceClosure error_callback);
 
@@ -48,8 +47,8 @@ class VideoCaptureClient : public media::mojom::VideoCaptureObserver {
 
   // media::mojom::VideoCaptureObserver implementations.
   void OnStateChanged(media::mojom::VideoCaptureState state) override;
-  void OnBufferCreated(int32_t buffer_id,
-                       mojo::ScopedSharedBufferHandle handle) override;
+  void OnNewBuffer(int32_t buffer_id,
+                   media::mojom::VideoBufferHandlePtr buffer_handle) override;
   void OnBufferReady(int32_t buffer_id,
                      media::mojom::VideoFrameInfoPtr info) override;
   void OnBufferDestroyed(int32_t buffer_id) override;

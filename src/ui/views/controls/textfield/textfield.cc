@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -58,7 +57,6 @@
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
-#include "ui/base/win/osk_display_manager.h"
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -232,6 +230,16 @@ bool IsControlKeyModifier(int flags) {
 #else
   return false;
 #endif
+}
+
+void InstallOrUpdateFocusRing(Textfield* textfield) {
+  if (textfield->invalid()) {
+    FocusRing::Install(textfield,
+                       textfield->GetNativeTheme()->GetSystemColor(
+                           ui::NativeTheme::kColorId_AlertSeverityHigh));
+  } else {
+    FocusRing::Install(textfield);
+  }
 }
 
 }  // namespace
@@ -537,7 +545,8 @@ void Textfield::SetHorizontalAlignment(gfx::HorizontalAlignment alignment) {
 }
 
 void Textfield::ShowImeIfNeeded() {
-  if (enabled() && !read_only())
+  // GetInputMethod() may return nullptr in tests.
+  if (enabled() && !read_only() && GetInputMethod())
     GetInputMethod()->ShowImeIfNeeded();
 }
 
@@ -596,11 +605,8 @@ void Textfield::SetInvalid(bool invalid) {
   invalid_ = invalid;
   UpdateBorder();
 
-  if (HasFocus() && use_focus_ring_) {
-    FocusRing::Install(this, invalid_
-                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
-                                 : ui::NativeTheme::kColorId_NumColors);
-  }
+  if (use_focus_ring_ && HasFocus())
+    InstallOrUpdateFocusRing(this);
 }
 
 void Textfield::ClearEditHistory() {
@@ -646,8 +652,7 @@ const char* Textfield::GetClassName() const {
 }
 
 void Textfield::SetBorder(std::unique_ptr<Border> b) {
-  if (use_focus_ring_ && HasFocus())
-    FocusRing::Uninstall(this);
+  FocusRing::Uninstall(this);
   use_focus_ring_ = false;
   View::SetBorder(std::move(b));
 }
@@ -776,13 +781,6 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
         OnAfterUserAction();
       }
       CreateTouchSelectionControllerAndNotifyIt();
-#if defined(OS_WIN)
-      if (!read_only()) {
-        DCHECK(ui::OnScreenKeyboardDisplayManager::GetInstance());
-        ui::OnScreenKeyboardDisplayManager::GetInstance()
-            ->DisplayVirtualKeyboard(nullptr);
-      }
-#endif
       event->SetHandled();
       break;
     case ui::ET_GESTURE_LONG_PRESS:
@@ -1089,11 +1087,8 @@ void Textfield::OnFocus() {
   OnCaretBoundsChanged();
   if (ShouldBlinkCursor())
     StartBlinkingCursor();
-  if (use_focus_ring_) {
-    FocusRing::Install(this, invalid_
-                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
-                                 : ui::NativeTheme::kColorId_NumColors);
-  }
+  if (use_focus_ring_)
+    InstallOrUpdateFocusRing(this);
   SchedulePaint();
   View::OnFocus();
 }
@@ -1140,6 +1135,9 @@ void Textfield::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   render_text->set_selection_background_focused_color(
       GetSelectionBackgroundColor());
   cursor_view_.layer()->SetColor(GetTextColor());
+
+  if (use_focus_ring_ && HasFocus())
+    InstallOrUpdateFocusRing(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1372,6 +1370,15 @@ bool Textfield::GetAcceleratorForCommandId(int command_id,
     case IDS_APP_SELECT_ALL:
       *accelerator = ui::Accelerator(ui::VKEY_A, kPlatformModifier);
       return true;
+
+    case IDS_CONTENT_CONTEXT_EMOJI:
+#if defined(OS_MACOSX)
+      *accelerator = ui::Accelerator(ui::VKEY_SPACE,
+                                     ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+      return true;
+#else
+      return false;
+#endif
 
     default:
       return false;
@@ -1740,8 +1747,8 @@ gfx::RenderText* Textfield::GetRenderText() const {
   return model_->render_text();
 }
 
-gfx::Point Textfield::GetLastClickLocation() const {
-  return selection_controller_.last_click_location();
+gfx::Point Textfield::GetLastClickRootLocation() const {
+  return selection_controller_.last_click_root_location();
 }
 
 base::string16 Textfield::GetSelectionClipboardText() const {
@@ -2148,7 +2155,9 @@ void Textfield::OnCaretBoundsChanged() {
 #if defined(OS_MACOSX)
   // On Mac, the context menu contains a look up item which displays the
   // selected text. As such, the menu needs to be updated if the selection has
-  // changed.
+  // changed. Be careful to reset the MenuRunner first so it doesn't reference
+  // the old model.
+  context_menu_runner_.reset();
   context_menu_contents_.reset();
 #endif
 

@@ -21,7 +21,7 @@ Layout tests should be used to accomplish one of the following goals:
    get better. This is very much in line with our goal to move the Web forward.
 2. When a Blink feature cannot be tested using the tools provided by WPT, and
    cannot be easily covered by
-   [C++ unit tests](https://cs.chromium.org/chromium/src/third_party/WebKit/Source/web/tests/?q=webframetest&sq=package:chromium&type=cs),
+   [C++ unit tests](https://cs.chromium.org/chromium/src/third_party/blink/renderer/web/tests/?q=webframetest&sq=package:chromium&type=cs),
    the feature must be covered by layout tests, to avoid unexpected regressions.
    These tests will use Blink-specific testing APIs that are only available in
    [content_shell](./layout_tests_in_content_shell.md).
@@ -271,7 +271,7 @@ In these situations, a test file will be accompanied by a baseline, which is an
 `-expected.txt` file that contains the test's expected output.
 
 The baselines are generated automatically when appropriate by
-`run-webkit-tests`, which is described [here](./layout_tests.md), and by the
+`run_web_tests.py`, which is described [here](./layout_tests.md), and by the
 [rebaselining tools](./layout_test_expectations.md).
 
 Text baselines for `testharness.js` should be avoided, as having a text baseline
@@ -315,12 +315,12 @@ or features restricted to secure protocols.
 HTTP tests are those under `LayoutTests/http/tests` (or virtual variants). Use a
 locally running HTTP server (Apache) to run them. Tests are served off of ports
 8000 and 8080 for HTTP, and 8443 for HTTPS. If you run the tests using
-`run-webkit-tests`, the server will be started automatically. To run the server
+`run_web_tests.py`, the server will be started automatically. To run the server
 manually to reproduce or debug a failure:
 
 ```bash
-cd src/third_party/WebKit/Tools/Scripts
-./run-blink-httpd
+cd src/third_party/blink/tools
+./run_blink_httpd.py
 ```
 
 The layout tests will be served from `http://127.0.0.1:8000`. For example, to
@@ -330,7 +330,7 @@ navigate to
 tests will behave differently if you go to 127.0.0.1 instead of localhost, so
 use 127.0.0.1.
 
-To kill the server, hit any key on the terminal where `run-blink-httpd` is
+To kill the server, hit any key on the terminal where `run_blink_httpd.py` is
 running, or just use `taskkill` or the Task Manager on Windows, and `killall` or
 Activity Monitor on MacOS.
 

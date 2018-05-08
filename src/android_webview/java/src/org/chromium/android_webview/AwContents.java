@@ -63,10 +63,9 @@ import org.chromium.blink_public.web.WebReferrerPolicy;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.navigation_interception.NavigationParams;
-import org.chromium.content.browser.AppWebMessagePort;
-import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.ContentViewCore;
+import org.chromium.content_public.browser.ContentViewStatics;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.ImeAdapter;
@@ -133,7 +132,6 @@ public class AwContents implements SmartClipProvider {
 
     private static final double MIN_SCREEN_HEIGHT_PERCENTAGE_FOR_INTERSTITIAL = 0.7;
 
-    private static final String SAMSUNG_WORKAROUND_PACKAGE_NAME = "com.android.email";
     private static final String SAMSUNG_WORKAROUND_BASE_URL = "email://";
     private static final int SAMSUNG_WORKAROUND_DELAY = 200;
 
@@ -313,6 +311,7 @@ public class AwContents implements SmartClipProvider {
     private AwViewAndroidDelegate mViewAndroidDelegate;
     private WindowAndroidWrapper mWindowAndroid;
     private WebContents mWebContents;
+    private WebContentsInternalsHolder mWebContentsInternalsHolder;
     private NavigationController mNavigationController;
     private final AwContentsClient mContentsClient;
     private AwWebContentsObserver mWebContentsObserver;
@@ -339,8 +338,8 @@ public class AwContents implements SmartClipProvider {
     private boolean mIsViewVisible;
     private boolean mIsWindowVisible;
     private boolean mIsAttachedToWindow;
-    // Visiblity state of |mContentViewCore|.
-    private boolean mIsContentViewCoreVisible;
+    // Visiblity state of |mWebContents|.
+    private boolean mIsContentVisible;
     private boolean mIsUpdateVisibilityTaskPending;
     private Runnable mUpdateVisibilityRunnable;
 
@@ -442,6 +441,10 @@ public class AwContents implements SmartClipProvider {
         public WebContentsInternals get() {
             AwContents awContents = mAwContentsRef.get();
             return awContents == null ? null : awContents.mWebContentsInternals;
+        }
+
+        public boolean weakRefCleared() {
+            return mAwContentsRef.get() == null;
         }
     }
 
@@ -798,79 +801,85 @@ public class AwContents implements SmartClipProvider {
             InternalAccessDelegate internalAccessAdapter,
             NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory, AwContentsClient contentsClient,
             AwSettings settings, DependencyFactory dependencyFactory) {
-        mRendererPriority = RendererPriority.HIGH;
-        updateDefaultLocale();
-        settings.updateAcceptLanguages();
+        try (ScopedSysTraceEvent e1 = ScopedSysTraceEvent.scoped("AwContents.constructor")) {
+            mRendererPriority = RendererPriority.HIGH;
+            updateDefaultLocale();
+            settings.updateAcceptLanguages();
 
-        mBrowserContext = browserContext;
+            mBrowserContext = browserContext;
 
-        // setWillNotDraw(false) is required since WebView draws it's own contents using it's
-        // container view. If this is ever not the case we should remove this, as it removes
-        // Android's gatherTransparentRegion optimization for the view.
-        mContainerView = containerView;
-        mContainerView.setWillNotDraw(false);
+            // setWillNotDraw(false) is required since WebView draws it's own contents using it's
+            // container view. If this is ever not the case we should remove this, as it removes
+            // Android's gatherTransparentRegion optimization for the view.
+            mContainerView = containerView;
+            mContainerView.setWillNotDraw(false);
 
-        mHandler = new Handler();
-        mContext = context;
-        mAutofillProvider = dependencyFactory.createAutofillProvider(context, mContainerView);
-        mAppTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
-        mInternalAccessAdapter = internalAccessAdapter;
-        mNativeDrawGLFunctorFactory = nativeDrawGLFunctorFactory;
-        mInitialFunctor = new AwGLFunctor(mNativeDrawGLFunctorFactory, mContainerView);
-        mCurrentFunctor = mInitialFunctor;
-        mContentsClient = contentsClient;
-        mContentsClient.getCallbackHelper().setCancelCallbackPoller(
-                () -> AwContents.this.isDestroyedOrNoOperation(NO_WARN));
-        mAwViewMethods = new AwViewMethodsImpl();
-        mFullScreenTransitionsState = new FullScreenTransitionsState(
-                mContainerView, mInternalAccessAdapter, mAwViewMethods);
-        mLayoutSizer = dependencyFactory.createLayoutSizer();
-        mSettings = settings;
-        mLayoutSizer.setDelegate(new AwLayoutSizerDelegate());
-        mWebContentsDelegate = new AwWebContentsDelegateAdapter(
-                this, contentsClient, settings, mContext, mContainerView);
-        mContentsClientBridge = new AwContentsClientBridge(mContext, contentsClient,
-                AwContentsStatics.getClientCertLookupTable());
-        mZoomControls = new AwZoomControls(this);
-        mBackgroundThreadClient = new BackgroundThreadClientImpl();
-        mIoThreadClient = new IoThreadClientImpl();
-        mInterceptNavigationDelegate = new InterceptNavigationDelegateImpl();
-        mDisplayObserver = new AwDisplayAndroidObserver();
-        mUpdateVisibilityRunnable = () -> updateContentViewCoreVisibility();
+            mHandler = new Handler();
+            mContext = context;
+            mAutofillProvider = dependencyFactory.createAutofillProvider(context, mContainerView);
+            mAppTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+            mInternalAccessAdapter = internalAccessAdapter;
+            mNativeDrawGLFunctorFactory = nativeDrawGLFunctorFactory;
+            mInitialFunctor = new AwGLFunctor(mNativeDrawGLFunctorFactory, mContainerView);
+            mCurrentFunctor = mInitialFunctor;
+            mContentsClient = contentsClient;
+            mContentsClient.getCallbackHelper().setCancelCallbackPoller(
+                    () -> AwContents.this.isDestroyedOrNoOperation(NO_WARN));
+            mAwViewMethods = new AwViewMethodsImpl();
+            mFullScreenTransitionsState = new FullScreenTransitionsState(
+                    mContainerView, mInternalAccessAdapter, mAwViewMethods);
+            mLayoutSizer = dependencyFactory.createLayoutSizer();
+            mSettings = settings;
+            mLayoutSizer.setDelegate(new AwLayoutSizerDelegate());
+            mWebContentsDelegate = new AwWebContentsDelegateAdapter(
+                    this, contentsClient, settings, mContext, mContainerView);
+            mContentsClientBridge = new AwContentsClientBridge(
+                    mContext, contentsClient, AwContentsStatics.getClientCertLookupTable());
+            mZoomControls = new AwZoomControls(this);
+            mBackgroundThreadClient = new BackgroundThreadClientImpl();
+            mIoThreadClient = new IoThreadClientImpl();
+            mInterceptNavigationDelegate = new InterceptNavigationDelegateImpl();
+            mDisplayObserver = new AwDisplayAndroidObserver();
+            mUpdateVisibilityRunnable = () -> updateContentViewCoreVisibility();
 
-        AwSettings.ZoomSupportChangeListener zoomListener =
-                (supportsDoubleTapZoom, supportsMultiTouchZoom) -> {
-                    if (isDestroyedOrNoOperation(NO_WARN)) return;
-                    mContentViewCore.updateDoubleTapSupport(supportsDoubleTapZoom);
-                    mContentViewCore.updateMultiTouchZoomSupport(supportsMultiTouchZoom);
-                };
-        mSettings.setZoomListener(zoomListener);
-        mDefaultVideoPosterRequestHandler = new DefaultVideoPosterRequestHandler(mContentsClient);
-        mSettings.setDefaultVideoPosterURL(
-                mDefaultVideoPosterRequestHandler.getDefaultVideoPosterURL());
-        mScrollOffsetManager =
-                dependencyFactory.createScrollOffsetManager(new AwScrollOffsetManagerDelegate());
-        mScrollAccessibilityHelper = new ScrollAccessibilityHelper(mContainerView);
+            AwSettings.ZoomSupportChangeListener zoomListener =
+                    (supportsDoubleTapZoom, supportsMultiTouchZoom) -> {
+                if (isDestroyedOrNoOperation(NO_WARN)) return;
+                GestureListenerManager gestureManager =
+                        GestureListenerManager.fromWebContents(mWebContents);
+                gestureManager.updateDoubleTapSupport(supportsDoubleTapZoom);
+                gestureManager.updateMultiTouchZoomSupport(supportsMultiTouchZoom);
+            };
+            mSettings.setZoomListener(zoomListener);
+            mDefaultVideoPosterRequestHandler =
+                    new DefaultVideoPosterRequestHandler(mContentsClient);
+            mSettings.setDefaultVideoPosterURL(
+                    mDefaultVideoPosterRequestHandler.getDefaultVideoPosterURL());
+            mScrollOffsetManager = dependencyFactory.createScrollOffsetManager(
+                    new AwScrollOffsetManagerDelegate());
+            mScrollAccessibilityHelper = new ScrollAccessibilityHelper(mContainerView);
 
-        setOverScrollMode(mContainerView.getOverScrollMode());
-        setScrollBarStyle(mInternalAccessAdapter.super_getScrollBarStyle());
+            setOverScrollMode(mContainerView.getOverScrollMode());
+            setScrollBarStyle(mInternalAccessAdapter.super_getScrollBarStyle());
 
-        setNewAwContents(nativeInit(mBrowserContext));
+            setNewAwContents(nativeInit(mBrowserContext));
 
-        onContainerViewChanged();
+            onContainerViewChanged();
+        }
     }
 
-    private void createContentViewCore(Context context, ViewAndroidDelegate viewDelegate,
+    private void createContentViewCore(ViewAndroidDelegate viewDelegate,
             InternalAccessDelegate internalDispatcher, WebContents webContents,
             WindowAndroid windowAndroid) {
         mContentViewCore = ContentViewCore.create(mContext, PRODUCT_VERSION, webContents,
                 viewDelegate, internalDispatcher, windowAndroid);
+        mContentViewCore.setHideKeyboardOnBlur(false);
         SelectionPopupController controller = SelectionPopupController.fromWebContents(webContents);
         controller.setActionModeCallback(
                 new AwActionModeCallback(mContext, this, controller.getActionModeCallbackHelper()));
         if (mAutofillProvider != null) {
             controller.setNonSelectionActionModeCallback(
-                    new AutofillActionModeCallback(context, mAutofillProvider));
+                    new AutofillActionModeCallback(mContext, mAutofillProvider));
         }
         controller.setSelectionClient(SelectionClient.createSmartSelectionClient(webContents));
 
@@ -884,6 +893,14 @@ public class AwContents implements SmartClipProvider {
                 }
             }
         });
+    }
+
+    private boolean isSamsungMailApp() {
+        // There are 2 different Samsung mail apps exhibiting bugs related to
+        // http://crbug.com/781535.
+        String currentPackageName = mContext.getPackageName();
+        return "com.android.email".equals(currentPackageName)
+                || "com.samsung.android.email.composer".equals(currentPackageName);
     }
 
     boolean isFullScreen() {
@@ -928,7 +945,7 @@ public class AwContents implements SmartClipProvider {
      * Called when the app has requested to exit fullscreen.
      */
     void requestExitFullscreen() {
-        if (!isDestroyedOrNoOperation(NO_WARN)) mContentViewCore.getWebContents().exitFullscreen();
+        if (!isDestroyedOrNoOperation(NO_WARN)) mWebContents.exitFullscreen();
     }
 
     /**
@@ -985,9 +1002,7 @@ public class AwContents implements SmartClipProvider {
         updateNativeAwGLFunctor();
         mContainerView.setWillNotDraw(false);
 
-        mViewAndroidDelegate.updateCurrentContainerView(mContainerView,
-                mWindowAndroid.getWindowAndroid().getDisplay());
-        mContentViewCore.setContainerView(mContainerView);
+        mViewAndroidDelegate.setContainerView(mContainerView);
         if (mAwPdfExporter != null) {
             mAwPdfExporter.setContainerView(mContainerView);
         }
@@ -1115,6 +1130,7 @@ public class AwContents implements SmartClipProvider {
             destroyNatives();
             mContentViewCore = null;
             mWebContents = null;
+            mWebContentsInternalsHolder = null;
             mWebContentsInternals = null;
             mNavigationController = null;
             mJavascriptInjector = null;
@@ -1128,24 +1144,24 @@ public class AwContents implements SmartClipProvider {
         // each other, we should update |mBrowserContext| according to the newly received native
         // WebContent's browser context.
 
-        WebContents webContents = nativeGetWebContents(mNativeAwContents);
+        mWebContents = nativeGetWebContents(mNativeAwContents);
 
         mWindowAndroid = getWindowAndroid(mContext);
         mViewAndroidDelegate =
                 new AwViewAndroidDelegate(mContainerView, mContentsClient, mScrollOffsetManager);
-        createContentViewCore(mContext, mViewAndroidDelegate, mInternalAccessAdapter, webContents,
+        createContentViewCore(mViewAndroidDelegate, mInternalAccessAdapter, mWebContents,
                 mWindowAndroid.getWindowAndroid());
         nativeSetJavaPeers(mNativeAwContents, this, mWebContentsDelegate, mContentsClientBridge,
                 mIoThreadClient, mInterceptNavigationDelegate, mAutofillProvider);
-        mWebContents = mContentViewCore.getWebContents();
-        mWebContents.setInternalsHolder(new WebContentsInternalsHolder(this));
+        mWebContentsInternalsHolder = new WebContentsInternalsHolder(this);
+        mWebContents.setInternalsHolder(mWebContentsInternalsHolder);
         GestureListenerManager.fromWebContents(mWebContents)
                 .addListener(new AwGestureStateListener());
 
         mNavigationController = mWebContents.getNavigationController();
         installWebContentsObserver();
-        mSettings.setWebContents(webContents);
-        if (mAutofillProvider != null) mAutofillProvider.setWebContents(webContents);
+        mSettings.setWebContents(mWebContents);
+        if (mAutofillProvider != null) mAutofillProvider.setWebContents(mWebContents);
 
         mDisplayObserver.onDIPScaleChanged(getDeviceScaleFactor());
 
@@ -1347,11 +1363,13 @@ public class AwContents implements SmartClipProvider {
         }
         boolean destroyRunnableHasRun =
                 mCleanupReference != null && mCleanupReference.hasCleanedUp();
+        boolean weakRefsCleared =
+                mWebContentsInternalsHolder != null && mWebContentsInternalsHolder.weakRefCleared();
         if (TRACE && destroyRunnableHasRun && !mIsDestroyed) {
             // Swallow the error. App developers are not going to do anything with an error msg.
             Log.d(TAG, "AwContents is kept alive past CleanupReference by finalizer");
         }
-        return mIsDestroyed || destroyRunnableHasRun;
+        return mIsDestroyed || destroyRunnableHasRun || weakRefsCleared;
     }
 
     @VisibleForTesting
@@ -1372,6 +1390,10 @@ public class AwContents implements SmartClipProvider {
     // Can be called from any thread.
     public AwSettings getSettings() {
         return mSettings;
+    }
+
+    ViewGroup getContainerView() {
+        return mContainerView;
     }
 
     public AwPdfExporter getPdfExporter() {
@@ -1616,7 +1638,7 @@ public class AwContents implements SmartClipProvider {
 
     private static void recordHistoryUrl(@HistoryUrl int value) {
         RecordHistogram.recordEnumeratedHistogram(
-                "WebView.LoadDataWithBaseUrl.HistoryUrl", value, HistoryUrl.COUNT);
+                "Android.WebView.LoadDataWithBaseUrl.HistoryUrl", value, HistoryUrl.COUNT);
     }
 
     /**
@@ -1674,8 +1696,7 @@ public class AwContents implements SmartClipProvider {
 
         // This is a workaround for an issue with PlzNavigate and one of Samsung's OEM mail apps.
         // See http://crbug.com/781535.
-        if (SAMSUNG_WORKAROUND_PACKAGE_NAME.equals(mContext.getPackageName())
-                && SAMSUNG_WORKAROUND_BASE_URL.equals(loadUrlParams.getBaseUrl())) {
+        if (isSamsungMailApp() && SAMSUNG_WORKAROUND_BASE_URL.equals(loadUrlParams.getBaseUrl())) {
             ThreadUtils.postOnUiThreadDelayed(
                     () -> loadUrl(loadUrlParams), SAMSUNG_WORKAROUND_DELAY);
             return;
@@ -2391,10 +2412,10 @@ public class AwContents implements SmartClipProvider {
     /**
      * Creates a message channel and returns the ports for each end of the channel.
      */
-    public AppWebMessagePort[] createMessageChannel() {
+    public MessagePort[] createMessageChannel() {
         if (TRACE) Log.i(TAG, "%s createMessageChannel", this);
         if (isDestroyedOrNoOperation(WARN)) return null;
-        return AppWebMessagePort.createPair();
+        return MessagePort.createPair();
     }
 
     public boolean hasAccessedInitialDocument() {
@@ -2494,8 +2515,8 @@ public class AwContents implements SmartClipProvider {
      * @see android.view.View#onGenericMotionEvent()
      */
     public boolean onGenericMotionEvent(MotionEvent event) {
-        return isDestroyedOrNoOperation(NO_WARN) ? false :
-            mContentViewCore.onGenericMotionEvent(event);
+        return isDestroyedOrNoOperation(NO_WARN) ? false
+                                                 : mContentViewCore.onGenericMotionEvent(event);
     }
 
     /**
@@ -2613,14 +2634,14 @@ public class AwContents implements SmartClipProvider {
     private void updateContentViewCoreVisibility() {
         mIsUpdateVisibilityTaskPending = false;
         if (isDestroyedOrNoOperation(NO_WARN)) return;
-        boolean contentViewCoreVisible = nativeIsVisible(mNativeAwContents);
+        boolean contentVisible = nativeIsVisible(mNativeAwContents);
 
-        if (contentViewCoreVisible && !mIsContentViewCoreVisible) {
-            mContentViewCore.onShow();
-        } else if (!contentViewCoreVisible && mIsContentViewCoreVisible) {
-            mContentViewCore.onHide();
+        if (contentVisible && !mIsContentVisible) {
+            mWebContents.onShow();
+        } else if (!contentVisible && mIsContentVisible) {
+            mWebContents.onHide();
         }
-        mIsContentViewCoreVisible = contentViewCoreVisible;
+        mIsContentVisible = contentVisible;
         updateChildProcessImportance();
     }
 
@@ -2632,7 +2653,7 @@ public class AwContents implements SmartClipProvider {
      */
     @VisibleForTesting
     public boolean isPageVisible() {
-        if (isDestroyedOrNoOperation(NO_WARN)) return mIsContentViewCoreVisible;
+        if (isDestroyedOrNoOperation(NO_WARN)) return mIsContentVisible;
         return nativeIsVisible(mNativeAwContents);
     }
 
@@ -2779,7 +2800,7 @@ public class AwContents implements SmartClipProvider {
     private void updateChildProcessImportance() {
         @ChildProcessImportance
         int effectiveImportance = ChildProcessImportance.IMPORTANT;
-        if (mRendererPriorityWaivedWhenNotVisible && !mIsContentViewCoreVisible) {
+        if (mRendererPriorityWaivedWhenNotVisible && !mIsContentVisible) {
             effectiveImportance = ChildProcessImportance.NORMAL;
         } else {
             switch (mRendererPriority) {
@@ -2849,8 +2870,8 @@ public class AwContents implements SmartClipProvider {
 
     @CalledByNative
     private long onCreateTouchHandle() {
-        PopupTouchHandleDrawable drawable =
-                PopupTouchHandleDrawable.create(mTouchHandleDrawables, mContentViewCore);
+        PopupTouchHandleDrawable drawable = PopupTouchHandleDrawable.create(
+                mTouchHandleDrawables, mWebContents, mContainerView);
         return drawable.getNativeDrawable();
     }
 
@@ -3332,8 +3353,9 @@ public class AwContents implements SmartClipProvider {
 
         @Override
         public boolean onKeyUp(int keyCode, KeyEvent event) {
-            return isDestroyedOrNoOperation(NO_WARN) ? false
-                    : mContentViewCore.onKeyUp(keyCode, event);
+            return isDestroyedOrNoOperation(NO_WARN)
+                    ? false
+                    : mWebContents.getEventForwarder().onKeyUp(keyCode, event);
         }
 
         @Override
@@ -3352,7 +3374,7 @@ public class AwContents implements SmartClipProvider {
                     && mContentsClient.shouldOverrideKeyEvent(event)) {
                 return mInternalAccessAdapter.super_dispatchKeyEvent(event);
             }
-            return mContentViewCore.dispatchKeyEvent(event);
+            return mWebContents.getEventForwarder().dispatchKeyEvent(event);
         }
 
         @Override
@@ -3404,7 +3426,7 @@ public class AwContents implements SmartClipProvider {
         @Override
         public boolean onGenericMotionEvent(MotionEvent event) {
             return isDestroyedOrNoOperation(NO_WARN) ? false
-                    : mContentViewCore.onGenericMotionEvent(event);
+                                                     : mContentViewCore.onGenericMotionEvent(event);
         }
 
         @Override
@@ -3474,7 +3496,7 @@ public class AwContents implements SmartClipProvider {
         public void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
             if (isDestroyedOrNoOperation(NO_WARN)) return;
             mContainerViewFocused = focused;
-            mContentViewCore.onFocusChanged(focused, false /* hideKeyboardOnBlur */);
+            mContentViewCore.onViewFocusChanged(focused);
         }
 
         @Override
@@ -3588,15 +3610,6 @@ public class AwContents implements SmartClipProvider {
         // TODO: If we decide not to migrate the geolocation, there are some unreachable
         // code need to remove. http://crbug.com/396184.
         return true;
-    }
-
-    //--------------------------------------------------------------------------------------------
-    //  Methods which is only for testing
-    //--------------------------------------------------------------------------------------------
-
-    @VisibleForTesting
-    public AwAutofillProvider getAwAutofillProviderForTesting() {
-        return (AwAutofillProvider) mAutofillProvider;
     }
 
     //--------------------------------------------------------------------------------------------

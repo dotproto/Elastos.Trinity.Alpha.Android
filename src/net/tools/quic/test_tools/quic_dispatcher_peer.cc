@@ -88,7 +88,21 @@ void QuicDispatcherPeer::SendPublicReset(
     const QuicSocketAddress& client_address,
     QuicConnectionId connection_id) {
   dispatcher->time_wait_list_manager()->SendPublicReset(
-      server_address, client_address, connection_id);
+      server_address, client_address, connection_id,
+      dispatcher->framer_.last_packet_is_ietf_quic());
+}
+
+// static
+std::unique_ptr<QuicDispatcher::PerPacketContext>
+QuicDispatcherPeer::GetPerPacketContext(QuicDispatcher* dispatcher) {
+  return dispatcher->GetPerPacketContext();
+}
+
+// static
+void QuicDispatcherPeer::RestorePerPacketContext(
+    QuicDispatcher* dispatcher,
+    std::unique_ptr<QuicDispatcher::PerPacketContext> context) {
+  dispatcher->RestorePerPacketContext(std::move(context));
 }
 
 }  // namespace test

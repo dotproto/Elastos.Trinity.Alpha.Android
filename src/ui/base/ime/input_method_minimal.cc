@@ -12,18 +12,10 @@
 
 namespace ui {
 
-InputMethodMinimal::InputMethodMinimal(
-    internal::InputMethodDelegate* delegate) {
-  SetDelegate(delegate);
-}
+InputMethodMinimal::InputMethodMinimal(internal::InputMethodDelegate* delegate)
+    : InputMethodBase(delegate) {}
 
 InputMethodMinimal::~InputMethodMinimal() {}
-
-bool InputMethodMinimal::OnUntranslatedIMEMessage(
-    const base::NativeEvent& event,
-    NativeEventResult* result) {
-  return false;
-}
 
 ui::EventDispatchDetails InputMethodMinimal::DispatchKeyEvent(
     ui::KeyEvent* event) {

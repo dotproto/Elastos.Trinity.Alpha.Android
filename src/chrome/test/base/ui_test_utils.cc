@@ -77,11 +77,6 @@
 #include <windows.h>
 #endif
 
-#if defined(USE_AURA)
-#include "ash/shell.h"
-#include "ui/aura/window_event_dispatcher.h"
-#endif
-
 using content::NavigationController;
 using content::NavigationEntry;
 using content::OpenURLParams;
@@ -173,7 +168,7 @@ bool GetCurrentTabTitle(const Browser* browser, base::string16* title) {
 
 void NavigateToURL(NavigateParams* params) {
   Navigate(params);
-  content::WaitForLoadStop(params->target_contents);
+  content::WaitForLoadStop(params->navigated_or_inserted_contents);
 }
 
 void NavigateToURLWithPost(Browser* browser, const GURL& url) {
@@ -279,7 +274,7 @@ base::FilePath GetTestFilePath(const base::FilePath& dir,
                                const base::FilePath& file) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::FilePath path;
-  PathService::Get(chrome::DIR_TEST_DATA, &path);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &path);
   return path.Append(dir).Append(file);
 }
 
@@ -295,7 +290,7 @@ bool GetRelativeBuildDirectory(base::FilePath* build_dir) {
   base::FilePath exe_dir =
       base::CommandLine::ForCurrentProcess()->GetProgram().DirName();
   base::FilePath src_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
     return false;
 
   // We must first generate absolute paths to SRC and EXE and from there
@@ -361,12 +356,6 @@ int FindInPage(WebContents* tab,
 }
 
 void DownloadURL(Browser* browser, const GURL& download_url) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  base::ScopedTempDir downloads_directory;
-  ASSERT_TRUE(downloads_directory.CreateUniqueTempDir());
-  browser->profile()->GetPrefs()->SetFilePath(prefs::kDownloadDefaultDirectory,
-                                              downloads_directory.GetPath());
-
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(browser->profile());
   std::unique_ptr<content::DownloadTestObserver> observer(

@@ -208,6 +208,125 @@ void GLES2ImplementationWithGrContextSupport::BindVertexArrayOES(GLuint array) {
   BaseClass::BindVertexArrayOES(array);
   ResetGrContextIfNeeded(kVertex_GrGLBackendState);
 }
+void GLES2ImplementationWithGrContextSupport::DeleteVertexArraysOES(
+    GLsizei n,
+    const GLuint* arrays) {
+  BaseClass::DeleteVertexArraysOES(n, arrays);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribDivisorANGLE(
+    GLuint index,
+    GLuint divisor) {
+  BaseClass::VertexAttribDivisorANGLE(index, divisor);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::DisableVertexAttribArray(
+    GLuint index) {
+  BaseClass::DisableVertexAttribArray(index);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::EnableVertexAttribArray(
+    GLuint index) {
+  BaseClass::EnableVertexAttribArray(index);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib1f(GLuint indx,
+                                                             GLfloat x) {
+  BaseClass::VertexAttrib1f(indx, x);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib1fv(
+    GLuint indx,
+    const GLfloat* values) {
+  BaseClass::VertexAttrib1fv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib2f(GLuint indx,
+                                                             GLfloat x,
+                                                             GLfloat y) {
+  BaseClass::VertexAttrib2f(indx, x, y);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib2fv(
+    GLuint indx,
+    const GLfloat* values) {
+  BaseClass::VertexAttrib2fv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib3f(GLuint indx,
+                                                             GLfloat x,
+                                                             GLfloat y,
+                                                             GLfloat z) {
+  BaseClass::VertexAttrib3f(indx, x, y, z);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib3fv(
+    GLuint indx,
+    const GLfloat* values) {
+  BaseClass::VertexAttrib3fv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib4f(GLuint indx,
+                                                             GLfloat x,
+                                                             GLfloat y,
+                                                             GLfloat z,
+                                                             GLfloat w) {
+  BaseClass::VertexAttrib4f(indx, x, y, z, w);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttrib4fv(
+    GLuint indx,
+    const GLfloat* values) {
+  BaseClass::VertexAttrib4fv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribI4i(GLuint indx,
+                                                              GLint x,
+                                                              GLint y,
+                                                              GLint z,
+                                                              GLint w) {
+  BaseClass::VertexAttribI4i(indx, x, y, z, w);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribI4iv(
+    GLuint indx,
+    const GLint* values) {
+  BaseClass::VertexAttribI4iv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribI4ui(GLuint indx,
+                                                               GLuint x,
+                                                               GLuint y,
+                                                               GLuint z,
+                                                               GLuint w) {
+  BaseClass::VertexAttribI4ui(indx, x, y, z, w);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribI4uiv(
+    GLuint indx,
+    const GLuint* values) {
+  BaseClass::VertexAttribI4uiv(indx, values);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribIPointer(
+    GLuint indx,
+    GLint size,
+    GLenum type,
+    GLsizei stride,
+    const void* ptr) {
+  BaseClass::VertexAttribIPointer(indx, size, type, stride, ptr);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
+void GLES2ImplementationWithGrContextSupport::VertexAttribPointer(
+    GLuint indx,
+    GLint size,
+    GLenum type,
+    GLboolean normalized,
+    GLsizei stride,
+    const void* ptr) {
+  BaseClass::VertexAttribPointer(indx, size, type, normalized, stride, ptr);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState);
+}
 
 // Calls that invalidate kStencil_GrGLBackendState
 void GLES2ImplementationWithGrContextSupport::StencilFunc(GLenum func,
@@ -331,6 +450,12 @@ void GLES2ImplementationWithGrContextSupport::WillBindBuffer(GLenum target) {
       break;
   }
 }
+void GLES2ImplementationWithGrContextSupport::DeleteBuffers(
+    GLsizei n,
+    const GLuint* buffers) {
+  BaseClass::DeleteBuffers(n, buffers);
+  ResetGrContextIfNeeded(kVertex_GrGLBackendState | kMisc_GrGLBackendState);
+}
 
 void GLES2ImplementationWithGrContextSupport::Disable(GLenum cap) {
   WillEnableOrDisable(cap);
@@ -358,6 +483,9 @@ void GLES2ImplementationWithGrContextSupport::WillEnableOrDisable(GLenum cap) {
       break;
     case GL_STENCIL_TEST:
       ResetGrContextIfNeeded(kStencil_GrGLBackendState);
+      break;
+    case GL_PRIMITIVE_RESTART_FIXED_INDEX:
+      ResetGrContextIfNeeded(kVertex_GrGLBackendState);
       break;
     case GL_DEPTH_TEST:
     case GL_CULL_FACE:

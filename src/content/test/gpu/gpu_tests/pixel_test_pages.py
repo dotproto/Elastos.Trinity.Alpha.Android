@@ -8,7 +8,7 @@ class PixelTestPage(object):
   """
   def __init__(self, url, name, test_rect, revision,
                tolerance=2, browser_args=None, expected_colors=None,
-               gpu_process_disabled=False):
+               gpu_process_disabled=False, optional_action=None):
     super(PixelTestPage, self).__init__()
     self.url = url
     self.name = name
@@ -27,6 +27,12 @@ class PixelTestPage(object):
     # disabled. To prevent regressions, only allow the GPU information
     # to be incomplete in these cases.
     self.gpu_process_disabled = gpu_process_disabled
+    # One of the tests (WebGLSadCanvas) requires custom actions to
+    # be run. These are specified as a string which is the name of a
+    # method to call in PixelIntegrationTest. For example if the
+    # action here is "CrashGpuProcess" then it would be defined in a
+    # "_CrashGpuProcess" method in PixelIntegrationTest.
+    self.optional_action = optional_action
 
   def CopyWithNewBrowserArgsAndSuffix(self, browser_args, suffix):
     return PixelTestPage(
@@ -108,7 +114,7 @@ def DefaultPages(base_name):
       'pixel_webgl_aa_alpha.html',
       base_name + '_WebGLGreenTriangle_AA_Alpha',
       test_rect=[0, 0, 300, 300],
-      revision=3),
+      revision=4),
 
     PixelTestPage(
       'pixel_webgl_noaa_alpha.html',
@@ -120,7 +126,7 @@ def DefaultPages(base_name):
       'pixel_webgl_aa_noalpha.html',
       base_name + '_WebGLGreenTriangle_AA_NoAlpha',
       test_rect=[0, 0, 300, 300],
-      revision=4),
+      revision=5),
 
     PixelTestPage(
       'pixel_webgl_noaa_noalpha.html',
@@ -133,6 +139,13 @@ def DefaultPages(base_name):
       base_name + '_WebGLTransparentGreenTriangle_NoAlpha_ImplicitClear',
       test_rect=[0, 0, 300, 300],
       revision=1),
+
+    PixelTestPage(
+      'pixel_webgl_sad_canvas.html',
+      base_name + '_WebGLSadCanvas',
+      test_rect=[0, 0, 300, 300],
+      revision=1,
+      optional_action='CrashGpuProcess'),
 
     PixelTestPage(
       'pixel_scissor.html',
@@ -167,7 +180,7 @@ def DefaultPages(base_name):
       'pixel_canvas2d_webgl.html',
       base_name + '_2DCanvasWebGL',
       test_rect=[0, 0, 300, 300],
-      revision=6),
+      revision=7),
 
     PixelTestPage(
       'pixel_background.html',
@@ -185,7 +198,7 @@ def DefaultPages(base_name):
       'pixel_video_vp9.html',
       base_name + '_Video_VP9',
       test_rect=[0, 0, 300, 300],
-      revision=7),
+      revision=8),
 
     PixelTestPage(
       'pixel_webgl_premultiplied_alpha_false.html',
@@ -388,14 +401,14 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_transfer_after_style_resize.html',
       base_name + '_OffscreenCanvasTransferAfterStyleResize',
       test_rect=[0, 0, 350, 350],
-      revision=5,
+      revision=6,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_transfer_before_style_resize.html',
       base_name + '_OffscreenCanvasTransferBeforeStyleResize',
       test_rect=[0, 0, 350, 350],
-      revision=5,
+      revision=6,
       browser_args=browser_args),
 
     PixelTestPage(
@@ -416,14 +429,14 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_webgl_commit_main.html',
       base_name + '_OffscreenCanvasWebGLDefault',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_worker.html',
       base_name + '_OffscreenCanvasWebGLDefaultWorker',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args),
 
     PixelTestPage(
@@ -444,42 +457,42 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasAccelerated2D',
       test_rect=[0, 0, 360, 200],
-      revision=9,
+      revision=10,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasAccelerated2DWorker',
       test_rect=[0, 0, 360, 200],
-      revision=9,
+      revision=10,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2D',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DWorker',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositing',
       test_rect=[0, 0, 360, 200],
-      revision=10,
+      revision=11,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
       test_rect=[0, 0, 360, 200],
-      revision=10,
+      revision=11,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
@@ -493,7 +506,7 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_webgl_resize_on_worker.html',
       base_name + '_OffscreenCanvasWebglResizeOnWorker',
       test_rect=[0, 0, 200, 200],
-      revision=5,
+      revision=6,
       browser_args=browser_args),
 
     PixelTestPage(
@@ -688,6 +701,6 @@ def DirectCompositionPages(base_name):
       'pixel_video_vp9.html',
       base_name + '_DirectComposition_Video_VP9',
       test_rect=[0, 0, 300, 300],
-      revision=8,
+      revision=9,
       browser_args=browser_args),
   ]

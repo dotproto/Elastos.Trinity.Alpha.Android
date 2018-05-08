@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/triggers/trigger_manager.h"
 
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/base_ui_manager.h"
 #include "components/safe_browsing/browser/threat_details.h"
@@ -12,7 +13,7 @@
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     safe_browsing::TriggerManagerWebContentsHelper);
@@ -122,6 +123,16 @@ SBErrorOptions TriggerManager::GetSBErrorDisplayOptions(
 bool TriggerManager::CanStartDataCollection(
     const SBErrorOptions& error_display_options,
     const TriggerType trigger_type) {
+  TriggerManagerReason unused_reason;
+  return CanStartDataCollectionWithReason(error_display_options, trigger_type,
+                                          &unused_reason);
+}
+
+bool TriggerManager::CanStartDataCollectionWithReason(
+    const SBErrorOptions& error_display_options,
+    const TriggerType trigger_type,
+    TriggerManagerReason* out_reason) {
+  *out_reason = TriggerManagerReason::NO_REASON;
   // If the |kAdSamplerCollectButDontSendFeature| feature is enabled then we
   // will overlook other checks to force the report to be created (which is safe
   // because we ensure it will be discarded downstream).
@@ -147,19 +158,39 @@ bool TriggerManager::CanStartDataCollection(
   // change the Extended Reporting opt-in, and the |trigger_type| has available
   // quota. For some triggers we also require Scout or extended reporting opt-in
   // in order to start data collection.
-  return !error_display_options.is_off_the_record &&
-         error_display_options.is_extended_reporting_opt_in_allowed &&
-         optin_required_check_ok && scout_check_ok &&
-         trigger_throttler_->TriggerCanFire(trigger_type);
+  if (!error_display_options.is_off_the_record &&
+      error_display_options.is_extended_reporting_opt_in_allowed &&
+      optin_required_check_ok && scout_check_ok) {
+    bool quota_ok = trigger_throttler_->TriggerCanFire(trigger_type);
+    if (!quota_ok)
+      *out_reason = TriggerManagerReason::DAILY_QUOTA_EXCEEDED;
+    return quota_ok;
+  } else {
+    *out_reason = TriggerManagerReason::USER_PREFERENCES;
+    return false;
+  }
 }
-
 bool TriggerManager::StartCollectingThreatDetails(
     const TriggerType trigger_type,
     content::WebContents* web_contents,
     const security_interstitials::UnsafeResource& resource,
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     history::HistoryService* history_service,
     const SBErrorOptions& error_display_options) {
+  TriggerManagerReason unused_reason;
+  return StartCollectingThreatDetailsWithReason(
+      trigger_type, web_contents, resource, url_loader_factory, history_service,
+      error_display_options, &unused_reason);
+}
+
+bool TriggerManager::StartCollectingThreatDetailsWithReason(
+    const TriggerType trigger_type,
+    content::WebContents* web_contents,
+    const security_interstitials::UnsafeResource& resource,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    history::HistoryService* history_service,
+    const SBErrorOptions& error_display_options,
+    TriggerManagerReason* reason) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!CanStartDataCollection(error_display_options, trigger_type))
     return false;
@@ -173,7 +204,7 @@ bool TriggerManager::StartCollectingThreatDetails(
   bool should_trim_threat_details = trigger_type == TriggerType::AD_SAMPLE;
   collectors->threat_details =
       scoped_refptr<ThreatDetails>(ThreatDetails::NewThreatDetails(
-          ui_manager_, web_contents, resource, request_context_getter,
+          ui_manager_, web_contents, resource, url_loader_factory,
           history_service, should_trim_threat_details,
           base::Bind(&TriggerManager::ThreatDetailsDone,
                      weak_factory_.GetWeakPtr())));
@@ -202,8 +233,8 @@ bool TriggerManager::FinishCollectingThreatDetails(
     // Find the data collector and tell it to finish collecting data. We expect
     // it to notify us when it's finished so we can clean up references to it.
 
-    content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::IO, FROM_HERE,
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
         base::BindOnce(&ThreatDetails::FinishCollection,
                        collectors->threat_details, did_proceed, num_visits),
         delay);

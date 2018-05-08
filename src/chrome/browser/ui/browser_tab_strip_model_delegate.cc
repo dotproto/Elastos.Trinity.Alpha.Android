@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
@@ -72,8 +71,9 @@ Browser* BrowserTabStripModelDelegate::CreateNewStripWithContents(
     if (i == 0)
       item.add_types |= TabStripModel::ADD_ACTIVE;
 
-    new_model->InsertWebContentsAt(
-        static_cast<int>(i), item.web_contents, item.add_types);
+    new_model->InsertWebContentsAt(static_cast<int>(i),
+                                   base::WrapUnique(item.web_contents),
+                                   item.add_types);
     // Make sure the loading state is updated correctly, otherwise the throbber
     // won't start if the page is loading.
     // TODO(beng): find a better way of doing this.

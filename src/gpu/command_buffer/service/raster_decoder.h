@@ -15,7 +15,9 @@ namespace gpu {
 class DecoderClient;
 
 namespace gles2 {
+class CopyTextureCHROMIUMResourceManager;
 class GLES2Util;
+class ImageManager;
 class Logger;
 class Outputter;
 }  // namespace gles2
@@ -54,6 +56,9 @@ class GPU_GLES2_EXPORT RasterDecoder : public DecoderContext,
   virtual gles2::Logger* GetLogger() = 0;
   virtual void SetIgnoreCachedStateForTest(bool ignore) = 0;
 
+  // Gets the ImageManager for this context.
+  virtual gles2::ImageManager* GetImageManagerForTest() = 0;
+
   void set_initialized() { initialized_ = true; }
 
   // Set to true to call glGetError after every command.
@@ -61,8 +66,12 @@ class GPU_GLES2_EXPORT RasterDecoder : public DecoderContext,
   bool debug() const { return debug_; }
 
   // Set to true to LOG every command.
-  void set_log_commands(bool log_commands) { log_commands_ = log_commands; }
+  void SetLogCommands(bool log_commands) override;
   bool log_commands() const { return log_commands_; }
+
+  virtual void SetCopyTextureResourceManagerForTest(
+      gles2::CopyTextureCHROMIUMResourceManager*
+          copy_texture_resource_manager) = 0;
 
  protected:
   RasterDecoder(CommandBufferServiceBase* command_buffer_service);

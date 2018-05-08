@@ -21,6 +21,7 @@
 #include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/dummy_histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -75,6 +76,11 @@ bool ReadHistogramArguments(PickleIterator* iter,
 
 bool ValidateRangeChecksum(const HistogramBase& histogram,
                            uint32_t range_checksum) {
+  // Normally, |histogram| should have type HISTOGRAM or be inherited from it.
+  // However, if it's expired, it will actually be a DUMMY_HISTOGRAM.
+  // Skip the checks in that case.
+  if (histogram.GetHistogramType() == DUMMY_HISTOGRAM)
+    return true;
   const Histogram& casted_histogram =
       static_cast<const Histogram&>(histogram);
 
@@ -152,6 +158,12 @@ class Histogram::Factory {
 HistogramBase* Histogram::Factory::Build() {
   HistogramBase* histogram = StatisticsRecorder::FindHistogram(name_);
   if (!histogram) {
+    // TODO(gayane): |HashMetricName()| is called again in Histogram
+    // constructor. Refactor code to avoid the additional call.
+    bool should_record =
+        StatisticsRecorder::ShouldRecordHistogram(HashMetricName(name_));
+    if (!should_record)
+      return DummyHistogram::GetInstance();
     // To avoid racy destruction at shutdown, the following will be leaked.
     const BucketRanges* created_ranges = CreateRanges();
     const BucketRanges* registered_ranges =
@@ -216,17 +228,19 @@ HistogramBase* Histogram::Factory::Build() {
     }
   }
 
-  CHECK_EQ(histogram_type_, histogram->GetHistogramType()) << name_;
-  if (bucket_count_ != 0 &&
-      !histogram->HasConstructionArguments(minimum_, maximum_, bucket_count_)) {
+  if (histogram_type_ != histogram->GetHistogramType() ||
+      (bucket_count_ != 0 && !histogram->HasConstructionArguments(
+                                 minimum_, maximum_, bucket_count_))) {
     // The construction arguments do not match the existing histogram.  This can
     // come about if an extension updates in the middle of a chrome run and has
-    // changed one of them, or simply by bad code within Chrome itself.  We
-    // return NULL here with the expectation that bad code in Chrome will crash
-    // on dereference, but extension/Pepper APIs will guard against NULL and not
-    // crash.
-    DLOG(ERROR) << "Histogram " << name_ << " has bad construction arguments";
-    return nullptr;
+    // changed one of them, or simply by bad code within Chrome itself.  A NULL
+    // return would cause Chrome to crash; better to just record it for later
+    // analysis.
+    UmaHistogramSparse("Histogram.MismatchedConstructionArguments",
+                       static_cast<Sample>(HashMetricName(name_)));
+    DLOG(ERROR) << "Histogram " << name_
+                << " has mismatched construction arguments";
+    return DummyHistogram::GetInstance();
   }
   return histogram;
 }
@@ -529,6 +543,14 @@ void Histogram::WriteAscii(std::string* output) const {
   WriteAsciiImpl(true, "\n", output);
 }
 
+void Histogram::ValidateHistogramContents() const {
+  CHECK(unlogged_samples_);
+  CHECK(unlogged_samples_->bucket_ranges());
+  CHECK(logged_samples_);
+  CHECK(logged_samples_->bucket_ranges());
+  CHECK_NE(0U, logged_samples_->id());
+}
+
 void Histogram::SerializeInfoImpl(Pickle* pickle) const {
   DCHECK(bucket_ranges()->HasValidChecksum());
   pickle->WriteString(histogram_name());
@@ -545,8 +567,7 @@ Histogram::Histogram(const char* name,
                      Sample maximum,
                      const BucketRanges* ranges)
     : HistogramBase(name) {
-  // TODO(bcwhite): Make this a DCHECK once crbug/734049 is resolved.
-  CHECK(ranges) << name << ": " << minimum << "-" << maximum;
+  DCHECK(ranges) << name << ": " << minimum << "-" << maximum;
   unlogged_samples_.reset(new SampleVector(HashMetricName(name), ranges));
   logged_samples_.reset(new SampleVector(unlogged_samples_->id(), ranges));
 }
@@ -560,8 +581,7 @@ Histogram::Histogram(const char* name,
                      HistogramSamples::Metadata* meta,
                      HistogramSamples::Metadata* logged_meta)
     : HistogramBase(name) {
-  // TODO(bcwhite): Make this a DCHECK once crbug/734049 is resolved.
-  CHECK(ranges) << name << ": " << minimum << "-" << maximum;
+  DCHECK(ranges) << name << ": " << minimum << "-" << maximum;
   unlogged_samples_.reset(
       new PersistentSampleVector(HashMetricName(name), ranges, meta, counts));
   logged_samples_.reset(new PersistentSampleVector(
@@ -629,15 +649,9 @@ std::unique_ptr<SampleVector> Histogram::SnapshotAllSamples() const {
 }
 
 std::unique_ptr<SampleVector> Histogram::SnapshotUnloggedSamples() const {
-  // TODO(bcwhite): Remove these CHECKs once crbug/734049 is resolved.
-  HistogramSamples* unlogged = unlogged_samples_.get();
-  CHECK(unlogged_samples_);
-  CHECK(unlogged_samples_->id());
-  CHECK(bucket_ranges());
   std::unique_ptr<SampleVector> samples(
       new SampleVector(unlogged_samples_->id(), bucket_ranges()));
   samples->Add(*unlogged_samples_);
-  debug::Alias(&unlogged);
   return samples;
 }
 
@@ -807,6 +821,11 @@ class LinearHistogram::Factory : public Histogram::Factory {
 
   void FillHistogram(HistogramBase* base_histogram) override {
     Histogram::Factory::FillHistogram(base_histogram);
+    // Normally, |base_histogram| should have type LINEAR_HISTOGRAM or be
+    // inherited from it. However, if it's expired, it will actually be a
+    // DUMMY_HISTOGRAM. Skip filling in that case.
+    if (base_histogram->GetHistogramType() == DUMMY_HISTOGRAM)
+      return;
     LinearHistogram* histogram = static_cast<LinearHistogram*>(base_histogram);
     // Set range descriptions.
     if (descriptions_) {

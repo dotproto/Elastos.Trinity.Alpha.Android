@@ -11,7 +11,8 @@
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/common/content_export.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace cc {
 class SoftwareOutputDevice;
@@ -44,19 +45,14 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
-  bool SurfaceIsSuspendForRecycle() const override;
   uint32_t GetFramebufferCopyTextureFormat() override;
 #if BUILDFLAG(ENABLE_VULKAN)
   gpu::VulkanSurface* GetVulkanSurface() override;
 #endif
 
  private:
-  // BrowserCompositorOutputSurface implementation.
-#if defined(OS_MACOSX)
-  void SetSurfaceSuspendedForRecycle(bool suspended) override;
-#endif
-
-  void SwapBuffersCallback(uint64_t swap_id);
+  void SwapBuffersCallback(uint64_t swap_id,
+                           const std::vector<ui::LatencyInfo>& latency_info);
   void UpdateVSyncCallback(const base::TimeTicks timebase,
                            const base::TimeDelta interval);
 
@@ -64,6 +60,7 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   uint64_t swap_id_ = 0;
   base::TimeDelta refresh_interval_;
+  ui::LatencyTracker latency_tracker_;
   base::WeakPtrFactory<SoftwareBrowserCompositorOutputSurface> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurface);

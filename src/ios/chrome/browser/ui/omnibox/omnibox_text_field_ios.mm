@@ -120,8 +120,6 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     }
     [self setFont:_font];
     [self setTextColor:_displayedTextColor];
-    [self setClearButtonMode:UITextFieldViewModeNever];
-    [self setRightViewMode:UITextFieldViewModeAlways];
     [self setAutocorrectionType:UITextAutocorrectionTypeNo];
     [self setAutocapitalizationType:UITextAutocapitalizationTypeNone];
     [self setEnablesReturnKeyAutomatically:YES];
@@ -130,6 +128,15 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [self setSpellCheckingType:UITextSpellCheckingTypeNo];
     [self setTextAlignment:NSTextAlignmentNatural];
     [self setKeyboardType:(UIKeyboardType)UIKeyboardTypeWebSearch];
+
+    if (IsRefreshLocationBarEnabled()) {
+      [self setClearButtonMode:UITextFieldViewModeWhileEditing];
+      [self setRightViewMode:UITextFieldViewModeNever];
+    } else {
+      [self setClearButtonMode:UITextFieldViewModeNever];
+      [self setRightViewMode:UITextFieldViewModeAlways];
+    }
+
 #if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
     if (@available(iOS 11.0, *)) {
       [self setSmartQuotesType:UITextSmartQuotesTypeNo];
@@ -296,28 +303,32 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (void)addExpandOmniboxAnimations:(UIViewPropertyAnimator*)animator
                 completionAnimator:(UIViewPropertyAnimator*)completionAnimator {
+  DCHECK(!IsRefreshLocationBarEnabled());
+
   // Hide the rightView button so its not visibile on its initial layout
   // while the expan animation is happening.
-  self.clearButton.hidden = YES;
-  self.clearButton.alpha = 0;
-  self.clearButton.frame =
+  self.clearButtonView.hidden = YES;
+  self.clearButtonView.alpha = 0;
+  self.clearButtonView.frame =
       CGRectLayoutOffset([self rightViewRectForBounds:self.bounds],
                          [self clearButtonAnimationOffset]);
 
   [completionAnimator addAnimations:^{
-    self.clearButton.hidden = NO;
-    self.clearButton.alpha = 1.0;
+    self.clearButtonView.hidden = NO;
+    self.clearButtonView.alpha = 1.0;
 
-    self.clearButton.frame = CGRectLayoutOffset(
-        self.clearButton.frame, -[self clearButtonAnimationOffset]);
+    self.clearButtonView.frame = CGRectLayoutOffset(
+        self.clearButtonView.frame, -[self clearButtonAnimationOffset]);
   }];
 }
 
 - (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator {
+  DCHECK(!IsRefreshLocationBarEnabled());
+
   [animator addAnimations:^{
-    self.clearButton.alpha = 0;
-    self.clearButton.frame = CGRectLayoutOffset(self.clearButton.frame,
-                                                kToolbarButtonAnimationOffset);
+    self.clearButtonView.alpha = 0;
+    self.clearButtonView.frame = CGRectLayoutOffset(
+        self.clearButtonView.frame, kToolbarButtonAnimationOffset);
   }];
   [animator addCompletion:^(UIViewAnimatingPosition finalPosition) {
     [self resetClearButton];
@@ -480,29 +491,31 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 - (CGRect)editingRectForBounds:(CGRect)bounds {
   CGRect newBounds = [super editingRectForBounds:bounds];
 
-  // -editingRectForBounds doesn't account for rightViews that aren't flush
-  // with the right edge, it just looks at the rightView's width.  Account for
-  // the offset here.
-  CGFloat rightViewMaxX = CGRectGetMaxX([self rightViewRectForBounds:bounds]);
-  if (rightViewMaxX)
-    newBounds.size.width -= bounds.size.width - rightViewMaxX;
+  if (!IsRefreshLocationBarEnabled()) {
+    // -editingRectForBounds doesn't account for rightViews that aren't flush
+    // with the right edge, it just looks at the rightView's width.  Account for
+    // the offset here.
+    CGFloat rightViewMaxX = CGRectGetMaxX([self rightViewRectForBounds:bounds]);
+    if (rightViewMaxX)
+      newBounds.size.width -= bounds.size.width - rightViewMaxX;
 
-  LayoutRect editingRectLayout =
-      LayoutRectForRectInBoundingRect(newBounds, bounds);
-  editingRectLayout.size.width -= kEditingRectWidthInset;
-  if (IsIPadIdiom()) {
-    if (!IsCompactTablet() && !self.rightView) {
-      // Normally the clear button shrinks the edit box, but if the rightView
-      // isn't set, shrink behind the mic icons.
-      editingRectLayout.size.width -= kVoiceSearchButtonWidth;
+    LayoutRect editingRectLayout =
+        LayoutRectForRectInBoundingRect(newBounds, bounds);
+    editingRectLayout.size.width -= kEditingRectWidthInset;
+    if (IsIPadIdiom()) {
+      if (!IsCompactTablet() && !self.rightView) {
+        // Normally the clear button shrinks the edit box, but if the rightView
+        // isn't set, shrink behind the mic icons.
+        editingRectLayout.size.width -= kVoiceSearchButtonWidth;
+      }
     }
-  }
-  // Don't let the edit rect extend over the clear button.  The right view
-  // is hidden during animations, so fake its width here.
-  if (self.rightViewMode == UITextFieldViewModeNever)
-    editingRectLayout.size.width -= self.rightView.bounds.size.width;
+    // Don't let the edit rect extend over the clear button.  The right view
+    // is hidden during animations, so fake its width here.
+    if (self.rightViewMode == UITextFieldViewModeNever)
+      editingRectLayout.size.width -= self.rightView.bounds.size.width;
 
-  newBounds = LayoutRectGetRect(editingRectLayout);
+    newBounds = LayoutRectGetRect(editingRectLayout);
+  }
 
   // Position the selection view appropriately.
   [_selection setFrame:newBounds];
@@ -513,6 +526,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 // Overriding this method to offset the rightView property
 // (containing a clear text button).
 - (CGRect)rightViewRectForBounds:(CGRect)bounds {
+  if (IsRefreshLocationBarEnabled()) {
+    return [super rightViewRectForBounds:bounds];
+  }
+
   // iOS9 added updated RTL support, but only half implemented it for
   // UITextField. leftView and rightView were not renamed, but are are correctly
   // swapped and treated as leadingView / trailingView.  However,
@@ -527,6 +544,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 // Overriding this method to offset the leftView property
 // (containing a placeholder image) consistently with omnibox text padding.
 - (CGRect)leftViewRectForBounds:(CGRect)bounds {
+  if (IsRefreshLocationBarEnabled()) {
+    return [super leftViewRectForBounds:bounds];
+  }
+
   // iOS9 added updated RTL support, but only half implemented it for
   // UITextField. leftView and rightView were not renamed, but are are correctly
   // swapped and treated as leadingView / trailingView.  However,
@@ -704,7 +725,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (NSArray<UIKeyCommand*>*)keyCommands {
   NSMutableArray<UIKeyCommand*>* commands = [[self upDownCommands] mutableCopy];
-  if ([self isPreEditing]) {
+  if ([self isPreEditing] || [self hasAutocompleteText]) {
     [commands addObjectsFromArray:[self leftRightCommands]];
   }
 
@@ -719,10 +740,12 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [self.suggestionCommandsEndpoint highlightPreviousSuggestion];
 }
 
-#pragma mark preedit-only key commands
+#pragma mark preedit and inline autocomplete key commands
 
 // React to left and right keys when in preedit state to exit preedit and put
-// cursor to the beginning/end of the textfield.
+// cursor to the beginning/end of the textfield; or if there is inline
+// suggestion displayed, accept it and put the cursor before/after the
+// suggested text.
 - (NSArray<UIKeyCommand*>*)leftRightCommands {
   UIKeyCommand* commandLeft =
       [UIKeyCommand keyCommandWithInput:UIKeyInputLeftArrow
@@ -737,20 +760,55 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 - (void)keyCommandLeft {
-  [self exitPreEditState];
-  UITextPosition* beginning = self.beginningOfDocument;
-  UITextRange* textRange =
-      [self textRangeFromPosition:beginning toPosition:beginning];
+  DCHECK([self isPreEditing] || [self hasAutocompleteText]);
 
+  // Cursor offset.
+  NSInteger offset = 0;
+  if ([self isPreEditing]) {
+    [self exitPreEditState];
+  }
+
+  if ([self hasAutocompleteText]) {
+    // The cursor should stay in the end of the user input.
+    offset = self.text.length;
+
+    // Accept autocomplete suggestion.
+    [self acceptAutocompleteText];
+  }
+
+  UITextPosition* beginning = self.beginningOfDocument;
+  UITextPosition* cursorPosition =
+      [self positionFromPosition:beginning offset:offset];
+  UITextRange* textRange =
+      [self textRangeFromPosition:cursorPosition toPosition:cursorPosition];
   self.selectedTextRange = textRange;
 }
 
 - (void)keyCommandRight {
-  [self exitPreEditState];
+  DCHECK([self isPreEditing] || [self hasAutocompleteText]);
+
+  if ([self isPreEditing]) {
+    [self exitPreEditState];
+  }
+
+  if ([self hasAutocompleteText]) {
+    [self acceptAutocompleteText];
+  }
+
+  // Put the cursor to the end of the input.
   UITextPosition* end = self.endOfDocument;
   UITextRange* textRange = [self textRangeFromPosition:end toPosition:end];
 
   self.selectedTextRange = textRange;
+}
+
+// A helper to accept the current autocomplete text.
+- (void)acceptAutocompleteText {
+  DCHECK([self hasAutocompleteText]);
+  // Strip attributes and set text as if the user typed it.
+  NSAttributedString* string =
+      [[NSAttributedString alloc] initWithString:_selection.text];
+  [self setText:string userTextLength:string.length];
 }
 
 #pragma mark - helpers
@@ -911,6 +969,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 - (CGRect)layoutRightViewForBounds:(CGRect)bounds {
+  DCHECK(!IsRefreshLocationBarEnabled());
+
   if ([self rightView]) {
     CGSize rightViewSize = self.rightView.bounds.size;
     CGFloat leadingOffset = 0;
@@ -932,7 +992,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 // Accesses the clear button view when it's available; correctly resolves RTL.
-- (UIView*)clearButton {
+// This method must not be named -clearButton, because that conflicts with an
+// internal UITextField method.
+- (UIView*)clearButtonView {
+  DCHECK(!IsRefreshLocationBarEnabled());
   if ([self isTextFieldLTR]) {
     return self.rightView;
   } else {
@@ -941,6 +1004,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 - (void)resetClearButton {
+  DCHECK(!IsRefreshLocationBarEnabled());
+
   if ([self isTextFieldLTR]) {
     self.rightView = nil;
   } else {
@@ -949,6 +1014,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 - (CGFloat)clearButtonAnimationOffset {
+  DCHECK(!IsRefreshLocationBarEnabled());
+
   if ([self isTextFieldLTR]) {
     return kToolbarButtonAnimationOffset;
   } else {

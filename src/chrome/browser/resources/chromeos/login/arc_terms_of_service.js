@@ -8,7 +8,7 @@
  */
 
 Polymer({
-  is: 'arc-tos-md',
+  is: 'arc-tos-root',
 
   properties: {
     /**
@@ -42,6 +42,15 @@ Polymer({
    */
   onAccept_: function() {
     this.screen.onAccept();
+  },
+
+  /**
+   * On-tap event handler for Next button.
+   *
+   * @private
+   */
+  onNext_: function() {
+    this.screen.onNext();
   },
 
   /**

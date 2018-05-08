@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -171,6 +170,11 @@ void DeviceService::OnStart() {
       &DeviceService::BindVibrationManagerRequest, base::Unretained(this)));
 #endif
 
+#if defined(OS_CHROMEOS)
+  registry_.AddInterface<mojom::MtpManager>(base::BindRepeating(
+      &DeviceService::BindMtpManagerRequest, base::Unretained(this)));
+#endif
+
 #if defined(OS_LINUX) && defined(USE_UDEV)
   registry_.AddInterface<mojom::InputDeviceManager>(base::Bind(
       &DeviceService::BindInputDeviceManagerRequest, base::Unretained(this)));
@@ -204,6 +208,14 @@ void DeviceService::BindNFCProviderRequest(mojom::NFCProviderRequest request) {
 void DeviceService::BindVibrationManagerRequest(
     mojom::VibrationManagerRequest request) {
   VibrationManagerImpl::Create(std::move(request));
+}
+#endif
+
+#if defined(OS_CHROMEOS)
+void DeviceService::BindMtpManagerRequest(mojom::MtpManagerRequest request) {
+  if (!mtp_device_manager_)
+    mtp_device_manager_ = std::make_unique<MtpDeviceManager>();
+  mtp_device_manager_->AddBinding(std::move(request));
 }
 #endif
 

@@ -42,7 +42,7 @@
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_views.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_mojo.h"
 #include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -177,6 +177,7 @@ bool IsOobeComplete() {
           connector->IsEnterpriseManaged());
 }
 
+// Returns true if signin (not oobe) should be displayed.
 bool ShouldShowSigninScreen(chromeos::OobeScreen first_screen) {
   return (first_screen == chromeos::OobeScreen::SCREEN_UNKNOWN &&
           IsOobeComplete()) ||
@@ -203,7 +204,7 @@ void ShowLoginWizardFinish(
     display_host = chromeos::LoginDisplayHost::default_host();
   } else if (ash::switches::IsUsingViewsLogin() &&
              ShouldShowSigninScreen(first_screen)) {
-    display_host = new chromeos::LoginDisplayHostViews();
+    display_host = new chromeos::LoginDisplayHostMojo();
   } else {
     display_host = new chromeos::LoginDisplayHostWebUI();
   }
@@ -1147,9 +1148,15 @@ void LoginDisplayHostWebUI::StartVoiceInteractionOobe() {
   login_view_->set_should_emit_login_prompt_visible(false);
 }
 
-void LoginDisplayHostWebUI::UpdateGaiaDialogVisibility(bool visible) {}
+void LoginDisplayHostWebUI::UpdateGaiaDialogVisibility(
+    bool visible,
+    const base::Optional<AccountId>& account) {
+  NOTREACHED();
+}
 
-void LoginDisplayHostWebUI::UpdateGaiaDialogSize(int width, int height) {}
+void LoginDisplayHostWebUI::UpdateGaiaDialogSize(int width, int height) {
+  NOTREACHED();
+}
 
 const user_manager::UserList LoginDisplayHostWebUI::GetUsers() {
   return user_manager::UserList();
@@ -1186,9 +1193,10 @@ void ShowLoginWizard(OobeScreen first_screen) {
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kNaturalScrollDefault));
 
-  session_manager::SessionManager::Get()->SetSessionState(
-      IsOobeComplete() ? session_manager::SessionState::LOGIN_PRIMARY
-                       : session_manager::SessionState::OOBE);
+  auto session_state = session_manager::SessionState::OOBE;
+  if (IsOobeComplete() || first_screen == OobeScreen::SCREEN_SPECIAL_LOGIN)
+    session_state = session_manager::SessionState::LOGIN_PRIMARY;
+  session_manager::SessionManager::Get()->SetSessionState(session_state);
 
   bool show_app_launch_splash_screen =
       (first_screen == OobeScreen::SCREEN_APP_LAUNCH_SPLASH);

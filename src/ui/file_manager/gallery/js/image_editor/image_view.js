@@ -260,7 +260,9 @@ ImageView.prototype.paintDeviceRect = function(canvas, imageRect) {
     this.replaceContent_(canvas);
   }
   ImageRect.drawImage(
-      this.contentImage_.getContext('2d'), canvas, deviceRect, imageRect);
+      /** @type {!CanvasRenderingContext2D} */ (
+          this.contentImage_.getContext('2d')),
+      canvas, deviceRect, imageRect);
 };
 
 /**
@@ -584,10 +586,14 @@ ImageView.prototype.updateThumbnail_ = function(image) {
   var downScale =
       Math.max(1, Math.sqrt(image.width * image.height / pixelCount));
 
-  this.thumbnailCanvas_ = image.ownerDocument.createElement('canvas');
+  this.thumbnailCanvas_ = /** @type {!HTMLCanvasElement} */ (
+      image.ownerDocument.createElement('canvas'));
   this.thumbnailCanvas_.width = Math.round(image.width / downScale);
   this.thumbnailCanvas_.height = Math.round(image.height / downScale);
-  ImageRect.drawImage(this.thumbnailCanvas_.getContext('2d'), image);
+  ImageRect.drawImage(
+      /** @type {!CanvasRenderingContext2D} */ (
+          this.thumbnailCanvas_.getContext('2d')),
+      image);
   ImageUtil.trace.reportTimer('thumb');
 };
 
@@ -660,7 +666,6 @@ ImageView.prototype.replace = function(
  *     transformation.
  * @param {ImageView.Effect=} opt_effect The effect to apply.
  * @param {number=} opt_duration Transition duration.
- * @private
  */
 ImageView.prototype.setTransform_ = function(
     element, viewport, opt_effect, opt_duration) {

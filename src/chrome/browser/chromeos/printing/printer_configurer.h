@@ -18,10 +18,11 @@ namespace chromeos {
 // These values are written to logs.  New enum values can be added, but existing
 // enums must never be renumbered or deleted and reused.
 enum PrinterSetupResult {
-  kFatalError = 0,          // Setup failed in an unrecognized way
-  kSuccess = 1,             // Printer set up successfully
-  kPrinterUnreachable = 2,  // Could not reach printer
-  kDbusError = 3,           // Could not contact debugd
+  kFatalError = 0,                // Setup failed in an unrecognized way
+  kSuccess = 1,                   // Printer set up successfully
+  kPrinterUnreachable = 2,        // Could not reach printer
+  kDbusError = 3,                 // Could not contact debugd
+  kNativePrintersNotAllowed = 4,  // Tried adding/editing printers policy set
   // Space left for additional errors
 
   // PPD errors
@@ -61,6 +62,9 @@ class PrinterConfigurer {
  protected:
   PrinterConfigurer() = default;
 };
+
+// Stream operator for ease of logging |result|.
+std::ostream& operator<<(std::ostream& out, const PrinterSetupResult& result);
 
 }  // namespace chromeos
 

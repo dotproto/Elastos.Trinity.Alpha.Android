@@ -159,6 +159,7 @@ class CC_EXPORT SnapContainerData {
   bool operator==(const SnapContainerData& other) const {
     return (other.scroll_snap_type_ == scroll_snap_type_) &&
            (other.max_position_ == max_position_) &&
+           (other.proximity_range_ == proximity_range_) &&
            (other.snap_area_list_ == snap_area_list_);
   }
 
@@ -166,9 +167,10 @@ class CC_EXPORT SnapContainerData {
     return !(*this == other);
   }
 
-  gfx::ScrollOffset FindSnapPosition(const gfx::ScrollOffset& current_position,
-                                     bool should_snap_on_x,
-                                     bool should_snap_on_y) const;
+  bool FindSnapPosition(const gfx::ScrollOffset& current_position,
+                        bool should_snap_on_x,
+                        bool should_snap_on_y,
+                        gfx::ScrollOffset* snap_position) const;
 
   void AddSnapAreaData(SnapAreaData snap_area_data);
   size_t size() const { return snap_area_list_.size(); }
@@ -182,6 +184,11 @@ class CC_EXPORT SnapContainerData {
   }
   gfx::ScrollOffset max_position() const { return max_position_; }
 
+  void set_proximity_range(const gfx::ScrollOffset& range) {
+    proximity_range_ = range;
+  }
+  gfx::ScrollOffset proximity_range() const { return proximity_range_; }
+
  private:
   // Specifies whether a scroll container is a scroll snap container, how
   // strictly it snaps, and which axes are considered.
@@ -191,6 +198,10 @@ class CC_EXPORT SnapContainerData {
   // The maximal scroll position of the SnapContainer, in the same coordinate
   // with blink's scroll position.
   gfx::ScrollOffset max_position_;
+
+  // A valid snap position should be within the |proximity_range_| of the
+  // current offset on the snapping axis.
+  gfx::ScrollOffset proximity_range_;
 
   // The SnapAreaData for the snap areas in this snap container. When a scroll
   // happens, we iterate through the snap_area_list to find the best snap

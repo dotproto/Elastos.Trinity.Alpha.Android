@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/containers/queue.h"
-#include "base/memory/ptr_util.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/ws/drag_source.h"
 #include "services/ui/ws/drag_target_connection.h"
@@ -84,7 +83,7 @@ class DragTestWindow : public DragTargetConnection {
 
   // Overridden from DragTestConnection:
   void PerformOnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data)
       override {
     times_received_drag_drop_start_++;
     mime_data_ = mime_data;
@@ -135,7 +134,7 @@ class DragTestWindow : public DragTargetConnection {
   DragControllerTest* parent_;
   TestServerWindowDelegate* window_delegate_;
   ServerWindow window_;
-  std::unordered_map<std::string, std::vector<uint8_t>> mime_data_;
+  base::flat_map<std::string, std::vector<uint8_t>> mime_data_;
   uint32_t times_received_drag_drop_start_ = 0;
 
   base::queue<DragEvent> queued_callbacks_;
@@ -157,11 +156,10 @@ class DragControllerTest : public testing::Test,
       DragTestWindow* window,
       uint32_t drag_operations) {
     window->PerformOnDragDropStart(
-        std::unordered_map<std::string, std::vector<uint8_t>>());
+        base::flat_map<std::string, std::vector<uint8_t>>());
     drag_operation_ = std::make_unique<DragController>(
         this, this, window->window(), window, MouseEvent::kMousePointerId,
-        std::unordered_map<std::string, std::vector<uint8_t>>(),
-        drag_operations);
+        base::flat_map<std::string, std::vector<uint8_t>>(), drag_operations);
 
     // It would be nice if we could just let the observer method fire, but it
     // fires during the constructor when we haven't assigned the unique_ptr

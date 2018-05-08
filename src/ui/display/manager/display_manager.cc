@@ -17,7 +17,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -42,7 +41,7 @@
 #if defined(OS_CHROMEOS)
 #include "base/sys_info.h"
 #include "chromeos/system/devicemode.h"
-#include "ui/display/manager/chromeos/display_util.h"
+#include "ui/display/manager/display_util.h"
 #endif
 
 #if defined(OS_WIN)
@@ -606,7 +605,7 @@ bool DisplayManager::SetDisplayMode(int64_t display_id,
 
           // Different resolutions allow different zoom factors to be set in the
           // UI. To avoid confusion in the UI, reset the zoom factor to 1.0.
-          display_zoom_factors_[display_id] = 1.f;
+          display_info_[display_id].set_zoom_factor(1.f);
           break;
         }
         if (info.device_scale_factor() != display_mode.device_scale_factor()) {
@@ -656,11 +655,12 @@ void DisplayManager::RegisterDisplayProperty(
                                         Display::RotationSource::USER);
   display_info_[display_id].SetRotation(rotation,
                                         Display::RotationSource::ACTIVE);
-  // Just in case the preference file was corrupted.
-  // TODO(mukai): register |display_modes_| here as well, so the lookup for the
-  // default mode in GetActiveModeForDisplayId() gets much simpler.
-  if (0.5f <= ui_scale && ui_scale <= 2.0f)
+
+  if (features::IsDisplayZoomSettingEnabled())
+    display_info_[display_id].set_zoom_factor(display_zoom_factor);
+  else if (0.5f <= ui_scale && ui_scale <= 2.0f)
     display_info_[display_id].set_configured_ui_scale(ui_scale);
+
   if (overscan_insets)
     display_info_[display_id].SetOverscanInsets(*overscan_insets);
 
@@ -672,8 +672,6 @@ void DisplayManager::RegisterDisplayProperty(
                             device_scale_factor);
     display_modes_[display_id] = mode;
   }
-
-  display_zoom_factors_[display_id] = display_zoom_factor;
 }
 
 bool DisplayManager::GetActiveModeForDisplayId(int64_t display_id,
@@ -1285,7 +1283,7 @@ int64_t DisplayManager::GetDisplayIdForUIScaling() const {
 
 bool DisplayManager::ShouldSetMirrorModeOn(const DisplayIdList& new_id_list) {
   DCHECK(new_id_list.size() > 1);
-  if (layout_store_->forced_mirror_mode())
+  if (layout_store_->forced_mirror_mode_for_tablet())
     return true;
 
   if (disable_restoring_mirror_mode_for_test_)
@@ -1408,7 +1406,10 @@ bool DisplayManager::SoftwareMirroringEnabled() const {
 bool DisplayManager::IsSoftwareMirroringEnforced() const {
   // There is no source display for hardware mirroring, so enforce software
   // mirroring if the mixed mirror mode parameters are specified.
-  return !!mixed_mirror_mode_params_;
+  // Enforce software mirroring if tablet mode is enabled as well because
+  // the tablet's rotation should be offset in external display.
+  return !!mixed_mirror_mode_params_ ||
+         layout_store_->forced_mirror_mode_for_tablet();
 }
 
 void DisplayManager::SetTouchCalibrationData(
@@ -1493,8 +1494,11 @@ void DisplayManager::ClearTouchCalibrationData(
 void DisplayManager::UpdateZoomFactor(int64_t display_id, float zoom_factor) {
   DCHECK(zoom_factor > 0);
   DCHECK_NE(display_id, kInvalidDisplayId);
+  auto iter = display_info_.find(display_id);
+  if (iter == display_info_.end())
+    return;
 
-  display_zoom_factors_[display_id] = zoom_factor;
+  iter->second.set_zoom_factor(zoom_factor);
 
   for (const auto& display : active_display_list_) {
     if (display.id() == display_id) {
@@ -1504,14 +1508,6 @@ void DisplayManager::UpdateZoomFactor(int64_t display_id, float zoom_factor) {
   }
 }
 #endif
-
-float DisplayManager::GetZoomFactorForDisplay(int64_t display_id) const {
-  // If there is no entry for the given display id, then the zoom factor is
-  // still at its default level of 100% zoom.
-  if (!base::ContainsKey(display_zoom_factors_, display_id))
-    return 1.f;
-  return display_zoom_factors_.at(display_id);
-}
 
 void DisplayManager::SetDefaultMultiDisplayModeForCurrentDisplays(
     MultiDisplayMode mode) {
@@ -1578,8 +1574,8 @@ void DisplayManager::CreateMirrorWindowAsyncIfAny() {
   if (software_mirroring_display_list_.empty() || !delegate_)
     return;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&DisplayManager::CreateMirrorWindowIfAny,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&DisplayManager::CreateMirrorWindowIfAny,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DisplayManager::UpdateInternalManagedDisplayModeListForTest() {
@@ -1619,10 +1615,11 @@ bool DisplayManager::ZoomDisplay(int64_t display_id, bool up) {
   if (!GetActiveModeForDisplayId(display_id, &display_mode))
     return false;
   const std::vector<double> zooms = GetDisplayZoomFactors(display_mode);
-  const double current_display_zoom =
-      base::ContainsKey(display_zoom_factors_, display_id)
-          ? display_zoom_factors_[display_id]
-          : 1.f;
+  auto iter = display_info_.find(display_id);
+  if (iter == display_info_.end())
+    return false;
+
+  const double current_display_zoom = iter->second.zoom_factor();
 
   // Find the index of |current_display_zoom| in |zooms|. The nearest value is
   // used if the exact match is not found.
@@ -1642,7 +1639,7 @@ bool DisplayManager::ZoomDisplay(int64_t display_id, bool up) {
   if (next_zoom_idx < 0 || next_zoom_idx >= zooms.size())
     return false;
 
-  display_zoom_factors_[display_id] = zooms[next_zoom_idx];
+  iter->second.set_zoom_factor(zooms[next_zoom_idx]);
   UpdateDisplays();
   return true;
 #else
@@ -1652,10 +1649,11 @@ bool DisplayManager::ZoomDisplay(int64_t display_id, bool up) {
 
 void DisplayManager::ResetDisplayZoom(int64_t display_id) {
   DCHECK(!IsInUnifiedMode());
-  if (!base::ContainsKey(display_zoom_factors_, display_id))
+  auto iter = display_info_.find(display_id);
+  if (iter == display_info_.end())
     return;
-  if (std::abs(display_zoom_factors_[display_id] - 1.f) > 0.001) {
-    display_zoom_factors_[display_id] = 1.f;
+  if (std::abs(iter->second.zoom_factor() - 1.f) > 0.001) {
+    iter->second.set_zoom_factor(1.f);
     UpdateDisplays();
   }
 }
@@ -2026,9 +2024,6 @@ Display DisplayManager::CreateDisplayFromDisplayInfoById(int64_t id) {
   gfx::Rect bounds_in_native(display_info.size_in_pixel());
   float device_scale_factor = display_info.GetEffectiveDeviceScaleFactor();
 
-  // Apply the zoom factor for the display.
-  device_scale_factor *= GetZoomFactorForDisplay(id);
-
   // Simply set the origin to (0,0).  The primary display's origin is
   // always (0,0) and the bounds of non-primary display(s) will be updated
   // in |UpdateNonPrimaryDisplayBoundsForLayout| called in |UpdateDisplay|.
@@ -2037,8 +2032,13 @@ Display DisplayManager::CreateDisplayFromDisplayInfoById(int64_t id) {
   new_display.set_rotation(display_info.GetActiveRotation());
   new_display.set_touch_support(display_info.touch_support());
   new_display.set_maximum_cursor_size(display_info.maximum_cursor_size());
-  if (!Display::HasForceColorProfile())
+#if defined(OS_CHROMEOS)
+  // TODO(mcasas): remove this check, http://crbug.com/771345.
+  if (base::FeatureList::IsEnabled(features::kUseMonitorColorSpace))
     new_display.set_color_space(display_info.color_space());
+#else
+  new_display.set_color_space(display_info.color_space());
+#endif
 
   if (internal_display_has_accelerometer_ && Display::IsInternalDisplayId(id)) {
     new_display.set_accelerometer_support(

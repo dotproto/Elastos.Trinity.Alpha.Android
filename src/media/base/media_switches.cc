@@ -12,6 +12,10 @@ namespace switches {
 // Allow users to specify a custom buffer size for debugging purpose.
 const char kAudioBufferSize[] = "audio-buffer-size";
 
+// Set a timeout (in milliseconds) for the audio service to quit if there are no
+// client connections to it. If the value is zero the service never quits.
+const char kAudioServiceQuitTimeoutMs[] = "audio-service-quit-timeout-ms";
+
 // Command line flag name to set the autoplay policy.
 const char kAutoplayPolicy[] = "autoplay-policy";
 
@@ -73,18 +77,14 @@ const char kUseCras[] = "use-cras";
 const char kUnsafelyAllowProtectedMediaIdentifierForDomain[] =
     "unsafely-allow-protected-media-identifier-for-domain";
 
-#if !defined(OS_ANDROID) || BUILDFLAG(ENABLE_PLUGINS)
 // Enable a internal audio focus management between tabs in such a way that two
 // tabs can't  play on top of each other.
 // The allowed values are: "" (empty) or |kEnableAudioFocusDuckFlash|.
 const char kEnableAudioFocus[] = "enable-audio-focus";
-#endif  // !defined(OS_ANDROID) || BUILDFLAG(ENABLE_PLUGINS)
 
-#if BUILDFLAG(ENABLE_PLUGINS)
 // This value is used as an option for |kEnableAudioFocus|. Flash will
 // be ducked when losing audio focus.
 const char kEnableAudioFocusDuckFlash[] = "duck-flash";
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
 // Rather than use the renderer hosted remotely in the media service, fall back
@@ -149,6 +149,20 @@ const char kMSEVideoBufferSizeLimit[] = "mse-video-buffer-size-limit";
 // kExternalClearKeyForTesting.
 const char kClearKeyCdmPathForTesting[] = "clear-key-cdm-path-for-testing";
 
+// Overrides the default enabled library CDM interface version(s) with the one
+// specified with this switch, which will be the only version enabled. For
+// example, on a build where CDM 8, CDM 9 and CDM 10 are all supported
+// (implemented), but only CDM 8 and CDM 9 are enabled by default:
+//  --override-enabled-cdm-interface-version=8 : Only CDM 8 is enabled
+//  --override-enabled-cdm-interface-version=9 : Only CDM 9 is enabled
+//  --override-enabled-cdm-interface-version=10 : Only CDM 10 is enabled
+//  --override-enabled-cdm-interface-version=11 : No CDM interface is enabled
+// This can be used for local testing and debugging. It can also be used to
+// enable an experimental CDM interface (which is always disabled by default)
+// for testing while it's still in development.
+const char kOverrideEnabledCdmInterfaceVersion[] =
+    "override-enabled-cdm-interface-version";
+
 #if !defined(OS_ANDROID)
 // Turns on the internal media session backend. This should be used by embedders
 // that want to control the media playback with the media session interfaces.
@@ -190,6 +204,9 @@ const base::Feature kOverlayFullscreenVideo{"overlay-fullscreen-video",
 const base::Feature kPictureInPicture{"PictureInPicture",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kPreloadMetadataSuspend{"PreloadMetadataSuspend",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Let videos be resumed via remote controls (for example, the notification)
 // when in background.
 const base::Feature kResumeBackgroundVideo {
@@ -226,18 +243,22 @@ const base::Feature kBackgroundVideoTrackOptimization{
 const base::Feature kBackgroundVideoPauseOptimization{
     "BackgroundVideoPauseOptimization", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kComplexityBasedVideoBuffering{
-    "ComplexityBasedVideoBuffering", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Make MSE garbage collection algorithm more aggressive when we are under
 // moderate or critical memory pressure. This will relieve memory pressure by
 // releasing stale data from MSE buffers.
 const base::Feature kMemoryPressureBasedSourceBufferGC{
     "MemoryPressureBasedSourceBufferGC", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable MojoVideoDecoder.  Has no effect except on Android currently.
-const base::Feature kMojoVideoDecoder{"MojoVideoDecoder",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable MojoVideoDecoder.  On Android, we use this by default.  Elsewhere,
+// it's experimental.
+const base::Feature kMojoVideoDecoder {
+  "MojoVideoDecoder",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Manage and report MSE buffered ranges by PTS intervals, not DTS intervals.
 const base::Feature kMseBufferByPts{"MseBufferByPts",
@@ -289,13 +310,6 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 const base::Feature kExternalClearKeyForTesting{
     "ExternalClearKeyForTesting", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables support of experimental CDM interface version(s). This is usually
-// used to enable new CDM interface support for testing while it's still in
-// development. This switch may not be used anywhere if there's no experimental
-// CDM interface being developed.
-const base::Feature kSupportExperimentalCdmInterface{
-    "SupportExperimentalCdmInterface", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables low-delay video rendering in media pipeline on "live" stream.
 const base::Feature kLowDelayVideoRenderingOnLiveStream{
     "low-delay-video-rendering-on-live-stream",
@@ -316,6 +330,13 @@ const base::Feature kVideoRotateToFullscreen{"VideoRotateToFullscreen",
 const base::Feature kMediaDrmPersistentLicense{
     "MediaDrmPersistentLicense", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables the Android MediaRouter implementation using CAF (Cast v3).
+const base::Feature kCafMediaRouterImpl{"CafMediaRouterImpl",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the Android Image Reader path for Video decoding(for AVDA and MCVD)
+const base::Feature kAImageReaderVideoOutput{"AImageReaderVideoOutput",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_WIN)
@@ -331,6 +352,12 @@ const base::Feature kMediaFoundationH264Encoding{
 // Enables MediaFoundation based video capture
 const base::Feature kMediaFoundationVideoCapture{
     "MediaFoundationVideoCapture", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables DirectShow GetPhotoState implementation
+// Created to act as a kill switch by disabling it, in the case of the
+// resurgence of https://crbug.com/722038
+const base::Feature kDirectShowGetPhotoState{"DirectShowGetPhotoState",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif  // defined(OS_WIN)
 
@@ -350,22 +377,19 @@ std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
 #endif
 }
 
-#if BUILDFLAG(ENABLE_PLUGINS)
 MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled() {
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
              switches::kEnableAudioFocus) ==
          switches::kEnableAudioFocusDuckFlash;
 }
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 // Adds icons to the overflow menu on the native media controls.
-// For experiment: crbug.com/763301
 const base::Feature kOverflowIconsForMediaControls{
-    "OverflowIconsForMediaControls", base::FEATURE_DISABLED_BY_DEFAULT};
+    "OverflowIconsForMediaControls", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the new redesigned media controls.
 const base::Feature kUseModernMediaControls{"UseModernMediaControls",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Media Engagement Index recording. This data will be used to determine
 // when to bypass autoplay policies. This is recorded on all platforms.

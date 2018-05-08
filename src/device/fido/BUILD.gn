@@ -21,6 +21,8 @@ component("fido") {
     "authenticator_get_info_response.h",
     "authenticator_make_credential_response.cc",
     "authenticator_make_credential_response.h",
+    "authenticator_selection_criteria.cc",
+    "authenticator_selection_criteria.h",
     "authenticator_supported_options.cc",
     "authenticator_supported_options.h",
     "ctap_empty_authenticator_request.cc",
@@ -29,6 +31,9 @@ component("fido") {
     "ctap_get_assertion_request.h",
     "ctap_make_credential_request.cc",
     "ctap_make_credential_request.h",
+    "ctap_register_operation.cc",
+    "ctap_register_operation.h",
+    "device_operation.h",
     "device_response_converter.cc",
     "device_response_converter.h",
     "ec_public_key.cc",
@@ -57,6 +62,26 @@ component("fido") {
     "fido_hid_message.h",
     "fido_hid_packet.cc",
     "fido_hid_packet.h",
+    "fido_parsing_utils.cc",
+    "fido_parsing_utils.h",
+    "fido_request_handler.h",
+    "fido_request_handler_base.cc",
+    "fido_request_handler_base.h",
+    "fido_task.cc",
+    "fido_task.h",
+    "fido_transport_protocol.h",
+    "get_assertion_request_handler.cc",
+    "get_assertion_request_handler.h",
+    "get_assertion_task.cc",
+    "get_assertion_task.h",
+    "make_credential_request_handler.cc",
+    "make_credential_request_handler.h",
+    "make_credential_task.cc",
+    "make_credential_task.h",
+    "opaque_attestation_statement.cc",
+    "opaque_attestation_statement.h",
+    "opaque_public_key.cc",
+    "opaque_public_key.h",
     "public_key.cc",
     "public_key.h",
     "public_key_credential_descriptor.cc",
@@ -67,22 +92,18 @@ component("fido") {
     "public_key_credential_rp_entity.h",
     "public_key_credential_user_entity.cc",
     "public_key_credential_user_entity.h",
-    "register_response_data.cc",
-    "register_response_data.h",
     "response_data.cc",
     "response_data.h",
-    "sign_response_data.cc",
-    "sign_response_data.h",
-    "u2f_parsing_utils.cc",
-    "u2f_parsing_utils.h",
+    "u2f_command_constructor.cc",
+    "u2f_command_constructor.h",
     "u2f_register.cc",
     "u2f_register.h",
     "u2f_request.cc",
     "u2f_request.h",
-    "u2f_return_code.h",
     "u2f_sign.cc",
     "u2f_sign.h",
-    "u2f_transport_protocol.h",
+    "virtual_fido_device.cc",
+    "virtual_fido_device.h",
     "virtual_u2f_device.cc",
     "virtual_u2f_device.h",
   ]
@@ -105,6 +126,8 @@ component("fido") {
     "//services/device/public/mojom",
   ]
 
+  libs = []  # Extended for mac.
+
   # HID is not supported on Android.
   if (!is_android) {
     sources += [
@@ -117,6 +140,23 @@ component("fido") {
     deps += [
       "//services/device/public/cpp/hid",
       "//services/device/public/mojom",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "mac/get_assertion_operation.h",
+      "mac/get_assertion_operation.mm",
+      "mac/make_credential_operation.h",
+      "mac/make_credential_operation.mm",
+      "mac/util.h",
+      "mac/util.mm",
+    ]
+
+    libs += [
+      "Foundation.framework",
+      "LocalAuthentication.framework",
+      "Security.framework",
     ]
   }
 }
@@ -162,30 +202,6 @@ fuzzer_test("fido_ble_frames_fuzzer") {
   libfuzzer_options = [ "max_len=65535" ]
 }
 
-fuzzer_test("sign_response_data_fuzzer") {
-  sources = [
-    "sign_response_data_fuzzer.cc",
-  ]
-  deps = [
-    ":fido",
-    "//base",
-  ]
-  seed_corpus = "response_data_fuzzer_corpus/"
-  libfuzzer_options = [ "max_len=65537" ]
-}
-
-fuzzer_test("register_response_data_fuzzer") {
-  sources = [
-    "register_response_data_fuzzer.cc",
-  ]
-  deps = [
-    ":fido",
-  ]
-
-  seed_corpus = "response_data_fuzzer_corpus/"
-  libfuzzer_options = [ "max_len=65537" ]
-}
-
 fuzzer_test("ctap_response_fuzzer") {
   sources = [
     "ctap_response_fuzzer.cc",
@@ -195,7 +211,7 @@ fuzzer_test("ctap_response_fuzzer") {
     "//base",
     "//base:i18n",
   ]
-  seed_corpus = "ctap_response_fuzzer_corpus/"
+  seed_corpus = "response_data_fuzzer_corpus/"
   libfuzzer_options = [ "max_len=65537" ]
 }
 
@@ -206,8 +222,8 @@ source_set("test_support") {
   sources = [
     "fake_fido_discovery.cc",
     "fake_fido_discovery.h",
-    "scoped_virtual_u2f_device.cc",
-    "scoped_virtual_u2f_device.h",
+    "scoped_virtual_fido_device.cc",
+    "scoped_virtual_fido_device.h",
     "test_callback_receiver.h",
   ]
   deps = [

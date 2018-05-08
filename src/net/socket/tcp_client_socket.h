@@ -17,6 +17,7 @@
 #include "net/socket/connection_attempts.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/tcp_socket.h"
+#include "net/socket/transport_client_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
@@ -26,7 +27,7 @@ struct NetLogSource;
 class SocketPerformanceWatcher;
 
 // A client socket that uses TCP as the transport layer.
-class NET_EXPORT TCPClientSocket : public StreamSocket {
+class NET_EXPORT TCPClientSocket : public TransportClientSocket {
  public:
   // The IP address(es) and port number to connect to.  The TCP socket will try
   // each IP address in the list until it succeeds in establishing a
@@ -44,11 +45,10 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
 
   ~TCPClientSocket() override;
 
-  // Binds the socket to a local IP address and port.
-  int Bind(const IPEndPoint& address);
-
+  // TransportClientSocket implementation.
+  int Bind(const IPEndPoint& address) override;
   // StreamSocket implementation.
-  int Connect(const CompletionCallback& callback) override;
+  int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
@@ -73,13 +73,13 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   // Full duplex mode (reading and writing at the same time) is supported.
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
@@ -99,7 +99,7 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   // set to true, ReadIfReady() will be used instead of Read().
   int ReadCommon(IOBuffer* buf,
                  int buf_len,
-                 const CompletionCallback& callback,
+                 const CompletionOnceCallback callback,
                  bool read_if_ready);
 
   // State machine used by Connect().
@@ -112,9 +112,9 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   void DoDisconnect();
 
   void DidCompleteConnect(int result);
-  void DidCompleteRead(const CompletionCallback& callback, int result);
-  void DidCompleteWrite(const CompletionCallback& callback, int result);
-  void DidCompleteReadWrite(const CompletionCallback& callback, int result);
+  void DidCompleteRead(CompletionOnceCallback callback, int result);
+  void DidCompleteWrite(CompletionOnceCallback callback, int result);
+  void DidCompleteReadWrite(CompletionOnceCallback callback, int result);
 
   int OpenSocket(AddressFamily family);
 
@@ -142,7 +142,7 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   int current_address_index_;
 
   // External callback; called when connect is complete.
-  CompletionCallback connect_callback_;
+  CompletionOnceCallback connect_callback_;
 
   // The next state for the Connect() state machine.
   ConnectState next_connect_state_;

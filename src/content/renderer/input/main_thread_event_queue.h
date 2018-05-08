@@ -13,10 +13,11 @@
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/input_event_ack_state.h"
+#include "content/renderer/input/input_event_prediction.h"
 #include "content/renderer/input/main_thread_event_queue_task_list.h"
 #include "content/renderer/input/scoped_web_input_event_with_latency_info.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_main_thread_scheduler.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/latency/latency_info.h"
@@ -84,7 +85,7 @@ class CONTENT_EXPORT MainThreadEventQueue
   MainThreadEventQueue(
       MainThreadEventQueueClient* client,
       const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
-      blink::scheduler::RendererScheduler* renderer_scheduler,
+      blink::scheduler::WebMainThreadScheduler* main_thread_scheduler,
       bool allow_raf_aligned_input);
 
   // Called once the compositor has handled |event| and indicated that it is
@@ -102,6 +103,11 @@ class CONTENT_EXPORT MainThreadEventQueue
 
   // Request unbuffered input events until next pointerup.
   void RequestUnbufferedInputEvents();
+
+  // Resampling event before dispatch it.
+  void HandleEventResampling(
+      const std::unique_ptr<MainThreadEventQueueTask>& item,
+      base::TimeTicks frame_time);
 
  protected:
   friend class base::RefCountedThreadSafe<MainThreadEventQueue>;
@@ -129,8 +135,6 @@ class CONTENT_EXPORT MainThreadEventQueue
   MainThreadEventQueueClient* client_;
   bool last_touch_start_forced_nonblocking_due_to_fling_;
   bool enable_fling_passive_listener_flag_;
-  bool enable_non_blocking_due_to_main_thread_responsiveness_flag_;
-  base::TimeDelta main_thread_responsiveness_threshold_;
   bool needs_low_latency_;
   bool allow_raf_aligned_input_;
   bool needs_low_latency_until_pointer_up_ = false;
@@ -153,9 +157,11 @@ class CONTENT_EXPORT MainThreadEventQueue
   SharedState shared_state_;
 
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-  blink::scheduler::RendererScheduler* renderer_scheduler_;
+  blink::scheduler::WebMainThreadScheduler* main_thread_scheduler_;
   base::OneShotTimer raf_fallback_timer_;
   bool use_raf_fallback_timer_;
+
+  std::unique_ptr<InputEventPrediction> event_predictor_;
 
   DISALLOW_COPY_AND_ASSIGN(MainThreadEventQueue);
 };

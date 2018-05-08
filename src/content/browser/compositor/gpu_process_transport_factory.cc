@@ -6,6 +6,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -61,7 +62,7 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/host/gpu_memory_buffer_support.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
@@ -272,16 +273,24 @@ CreateOverlayCandidateValidator(
   std::unique_ptr<viz::CompositorOverlayCandidateValidator> validator;
 #if defined(USE_OZONE)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableHardwareOverlays)) {
-    std::string enable_overlay_flag =
-        command_line->GetSwitchValueASCII(switches::kEnableHardwareOverlays);
-    std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
-        ui::OzonePlatform::GetInstance()
-            ->GetOverlayManager()
-            ->CreateOverlayCandidates(widget);
-    validator.reset(new viz::CompositorOverlayCandidateValidatorOzone(
-        std::move(overlay_candidates), enable_overlay_flag));
+
+  std::string enable_overlay_flag =
+      command_line->GetSwitchValueASCII(switches::kEnableHardwareOverlays);
+
+  ui::OzonePlatform* ozone_platform = ui::OzonePlatform::GetInstance();
+  DCHECK(ozone_platform);
+  ui::OverlayManagerOzone* overlay_manager =
+      ozone_platform->GetOverlayManager();
+  if (!command_line->HasSwitch(switches::kEnableHardwareOverlays) &&
+      overlay_manager->SupportsOverlays()) {
+    enable_overlay_flag = "single-fullscreen,single-on-top";
   }
+
+  std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
+      ozone_platform->GetOverlayManager()->CreateOverlayCandidates(widget);
+
+  validator.reset(new viz::CompositorOverlayCandidateValidatorOzone(
+      std::move(overlay_candidates), enable_overlay_flag));
 #elif defined(OS_MACOSX)
   // Overlays are only supported through the remote layer API.
   if (ui::RemoteLayerAPISupported()) {
@@ -513,18 +522,18 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
         bool disable_overlay_ca_layers = gpu_feature_info.IsWorkaroundEnabled(
             gpu::DISABLE_OVERLAY_CA_LAYERS);
         display_output_surface = std::make_unique<GpuOutputSurfaceMac>(
-            compositor->widget(), context_provider, data->surface_handle,
-            vsync_callback,
+            context_provider, data->surface_handle, vsync_callback,
             CreateOverlayCandidateValidator(compositor->widget(),
                                             disable_overlay_ca_layers),
             GetGpuMemoryBufferManager());
 #else
+        DCHECK(capabilities.texture_format_bgra8888);
         auto gpu_output_surface =
             std::make_unique<GpuSurfacelessBrowserCompositorOutputSurface>(
                 context_provider, data->surface_handle,
                 std::move(vsync_callback),
                 CreateOverlayCandidateValidator(compositor->widget()),
-                GL_TEXTURE_2D, GL_RGB,
+                GL_TEXTURE_2D, GL_BGRA_EXT,
                 display::DisplaySnapshot::PrimaryFormat(),
                 GetGpuMemoryBufferManager());
         gpu_vsync_control = gpu_output_surface.get();
@@ -644,7 +653,6 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       GetFrameSinkManager(), data->display.get(), data->display_client.get(),
       context_provider, shared_worker_context_provider_,
       compositor->task_runner(), GetGpuMemoryBufferManager(),
-      viz::ServerSharedBitmapManager::current(),
       features::IsVizHitTestingEnabled());
   data->display->Resize(compositor->size());
   data->display->SetOutputIsSecure(data->output_is_secure);
@@ -653,6 +661,8 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 
 void GpuProcessTransportFactory::DisableGpuCompositing(
     ui::Compositor* guilty_compositor) {
+  DLOG(ERROR) << "Switching to software compositing.";
+
   // Change the result of IsGpuCompositingDisabled() before notifying anything.
   is_gpu_compositing_disabled_ = true;
 
@@ -695,6 +705,8 @@ void GpuProcessTransportFactory::DisableGpuCompositing(
     if (visible)
       compositor->SetVisible(true);
   }
+
+  GpuDataManagerImpl::GetInstance()->NotifyGpuInfoUpdate();
 }
 
 std::unique_ptr<ui::Reflector> GpuProcessTransportFactory::CreateReflector(
@@ -930,20 +942,6 @@ viz::GLHelper* GpuProcessTransportFactory::GetGLHelper() {
   return gl_helper_.get();
 }
 
-#if defined(OS_MACOSX)
-void GpuProcessTransportFactory::SetCompositorSuspendedForRecycle(
-    ui::Compositor* compositor,
-    bool suspended) {
-  PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
-  if (it == per_compositor_data_.end())
-    return;
-  PerCompositorData* data = it->second.get();
-  DCHECK(data);
-  if (data->display_output_surface)
-    data->display_output_surface->SetSurfaceSuspendedForRecycle(suspended);
-}
-#endif
-
 scoped_refptr<ContextProvider>
 GpuProcessTransportFactory::SharedMainThreadContextProvider() {
   if (is_gpu_compositing_disabled_)
@@ -1104,8 +1102,7 @@ GpuProcessTransportFactory::CreateContextCommon(
   return base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
       std::move(gpu_channel_host), GetGpuMemoryBufferManager(), stream_id,
       stream_priority, surface_handle, url, automatic_flushes, support_locking,
-      support_grcontext, gpu::SharedMemoryLimits(), attributes,
-      nullptr /* share_context */, type);
+      support_grcontext, gpu::SharedMemoryLimits(), attributes, type);
 }
 
 }  // namespace content

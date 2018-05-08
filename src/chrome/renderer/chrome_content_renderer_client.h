@@ -26,9 +26,9 @@
 #include "content/public/renderer/render_thread.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ipc/ipc_channel_proxy.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/local_interface_provider.h"
@@ -48,6 +48,7 @@ class PrescientNetworkingDispatcher;
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheck;
 #endif
+class ThreadProfiler;
 
 namespace content {
 class BrowserPluginDelegate;
@@ -138,6 +139,10 @@ class ChromeContentRendererClient
       std::string* error_html,
       base::string16* error_description) override;
 
+  void GetErrorDescription(const blink::WebURLRequest& failed_request,
+                           const blink::WebURLError& error,
+                           base::string16* error_description) override;
+
   void DeferMediaLoad(content::RenderFrame* render_frame,
                       bool has_played_media_before,
                       const base::Closure& closure) override;
@@ -146,7 +151,7 @@ class ChromeContentRendererClient
   void PostCompositorThreadCreated(
       base::SingleThreadTaskRunner* compositor_thread_task_runner) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
-  bool AllowStoppingWhenProcessBackgrounded() override;
+  bool AllowFreezingWhenProcessBackgrounded() override;
   bool AllowPopup() override;
   bool ShouldFork(blink::WebLocalFrame* frame,
                   const GURL& url,
@@ -154,11 +159,12 @@ class ChromeContentRendererClient
                   bool is_initial_navigation,
                   bool is_server_redirect,
                   bool* send_referrer) override;
-  bool WillSendRequest(
-      blink::WebLocalFrame* frame,
-      ui::PageTransition transition_type,
-      const blink::WebURL& url,
-      GURL* new_url) override;
+  void WillSendRequest(blink::WebLocalFrame* frame,
+                       ui::PageTransition transition_type,
+                       const blink::WebURL& url,
+                       const url::Origin* initiator_origin,
+                       GURL* new_url,
+                       bool* attach_same_site_cookies) override;
   bool IsPrefetchOnly(content::RenderFrame* render_frame,
                       const blink::WebURLRequest& request) override;
   unsigned long long VisitedLinkHash(const char* canonical_url,
@@ -172,11 +178,12 @@ class ChromeContentRendererClient
   bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path) override;
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() override;
+  std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+  CreateWebSocketHandshakeThrottleProvider() override;
   std::unique_ptr<blink::WebSpeechSynthesizer> OverrideSpeechSynthesizer(
       blink::WebSpeechSynthesizerClient* client) override;
   bool ShouldReportDetailedMessageForSource(
       const base::string16& source) const override;
-  bool ShouldGatherSiteIsolationStats() const override;
   std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient(
       content::RenderFrame* render_frame) override;
@@ -279,6 +286,10 @@ class ChromeContentRendererClient
                                 std::string* error_html,
                                 base::string16* error_description);
 
+  void GetErrorDescriptionInternal(const blink::WebURLRequest& failed_request,
+                                   const error_page::Error& error,
+                                   base::string16* error_description);
+
   // Time at which this object was created. This is very close to the time at
   // which the RendererMain function was entered.
   base::TimeTicks main_entry_time_;
@@ -294,6 +305,9 @@ class ChromeContentRendererClient
 #endif
 
   service_manager::Connector* GetConnector();
+
+  // Used to profile main thread.
+  std::unique_ptr<ThreadProfiler> main_thread_profiler_;
 
   rappor::mojom::RapporRecorderPtr rappor_recorder_;
 

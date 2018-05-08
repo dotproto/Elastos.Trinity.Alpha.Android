@@ -10,6 +10,7 @@
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
 @protocol PopupMenuItem;
+@protocol PopupMenuTableViewControllerCommands;
 
 // TableViewController for the popup menu.
 @interface PopupMenuTableViewController : ChromeTableViewController
@@ -17,9 +18,14 @@
 // The model of this controller.
 @property(nonatomic, readonly, strong)
     TableViewModel<TableViewItem<PopupMenuItem>*>* tableViewModel;
-
 // Dispatcher.
 @property(nonatomic, weak) id<ApplicationCommands, BrowserCommands> dispatcher;
+// Command handler for this table view.
+@property(nonatomic, weak) id<PopupMenuTableViewControllerCommands>
+    commandHandler;
+// Presenting ViewController for the ViewController needing to be presented as
+// result of an interaction with the popup.
+@property(nonatomic, weak) UIViewController* baseViewController;
 
 // Sets the |items| to be displayed by this Table View. Removes all the
 // currently presented items.

@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/printing/cloud_print/privet_device_lister_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,7 +43,7 @@ class MockServiceWatcher : public ServiceWatcher {
 
   ~MockServiceWatcher() override {}
 
-  virtual void Start() {
+  void Start() override {
     DCHECK(!started_);
     started_ = true;
     mock_delegate_->ServiceWatcherStarted(service_type_, this);
@@ -55,9 +54,7 @@ class MockServiceWatcher : public ServiceWatcher {
   MOCK_METHOD1(SetActivelyRefreshServices, void(
       bool actively_refresh_services));
 
-  virtual std::string GetServiceType() const {
-    return service_type_;
-  }
+  std::string GetServiceType() const override { return service_type_; }
 
   bool started() {
     return started_;
@@ -157,7 +154,7 @@ class MockServiceDiscoveryMockDelegate : public ServiceDiscoveryMockDelegate {
 class MockDeviceListerDelegate : public PrivetDeviceLister::Delegate {
  public:
   MockDeviceListerDelegate() {}
-  virtual ~MockDeviceListerDelegate() {}
+  ~MockDeviceListerDelegate() override {}
 
   MOCK_METHOD2(DeviceChanged,
                void(const std::string& name,

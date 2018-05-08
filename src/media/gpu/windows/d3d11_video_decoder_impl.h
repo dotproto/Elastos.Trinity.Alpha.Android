@@ -15,7 +15,9 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
+#include "media/base/callback_registry.h"
 #include "media/base/video_decoder.h"
 #include "media/gpu/gles2_decoder_helper.h"
 #include "media/gpu/media_gpu_export.h"
@@ -27,7 +29,7 @@ namespace media {
 class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
                                                public D3D11VideoDecoderClient {
  public:
-  D3D11VideoDecoderImpl(
+  explicit D3D11VideoDecoderImpl(
       base::RepeatingCallback<gpu::CommandBufferStub*()> get_stub_cb);
   ~D3D11VideoDecoderImpl() override;
 
@@ -40,7 +42,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
       const InitCB& init_cb,
       const OutputCB& output_cb,
       const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
   bool NeedsBitstreamConversion() const override;
@@ -71,6 +73,10 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
 
   void OnMailboxReleased(scoped_refptr<D3D11PictureBuffer> buffer,
                          const gpu::SyncToken& sync_token);
+  void OnSyncTokenReleased(scoped_refptr<D3D11PictureBuffer> buffer);
+
+  // Callback to notify that new usable key is available.
+  void NotifyNewKey();
 
   // Enter the kError state.  This will fail any pending |init_cb_| and / or
   // pending decode as well.
@@ -103,6 +109,12 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
   std::vector<scoped_refptr<D3D11PictureBuffer>> picture_buffers_;
 
   State state_ = State::kInitializing;
+
+  // Callback registration to keep the new key callback registered.
+  std::unique_ptr<CallbackRegistration> new_key_callback_registration_;
+
+  // Wait sequence for sync points.
+  gpu::SequenceId wait_sequence_id_;
 
   base::WeakPtrFactory<D3D11VideoDecoderImpl> weak_factory_;
 

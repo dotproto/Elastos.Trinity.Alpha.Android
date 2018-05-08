@@ -12,9 +12,22 @@
 
 namespace features {
 
+// If enabled, the emoji picker context menu item may be shown for editable
+// text areas.
+const base::Feature kEnableEmojiContextMenu{"EnableEmojiContextMenu",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the floating virtual keyboard behavior.
 const base::Feature kEnableFloatingVirtualKeyboard = {
     "enable-floating-virtual-keyboard", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the full screen handwriting virtual keyboard behavior.
+const base::Feature kEnableFullscreenHandwritingVirtualKeyboard = {
+    "enable-fullscreen-handwriting-virtual-keyboard",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableStylusVirtualKeyboard = {
+    "enable-stylus-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Applies the material design mode to elements throughout Chrome (not just top
 // Chrome).
@@ -37,6 +50,17 @@ bool IsTouchableAppContextMenuEnabled() {
          switches::IsTouchableAppContextMenuEnabled();
 }
 
+// Enables scrolling with layers under ui using the ui::Compositor.
+const base::Feature kUiCompositorScrollWithLayers = {
+    "UiCompositorScrollWithLayers",
+// TODO(https://crbug.com/615948): Use composited scrolling on all platforms.
+#if defined(OS_MACOSX)
+    base::FEATURE_ENABLED_BY_DEFAULT
+#else
+    base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
+
 #if defined(OS_WIN)
 // Enables stylus appearing as touch when in contact with digitizer.
 const base::Feature kDirectManipulationStylus = {
@@ -57,6 +81,10 @@ bool IsUsingWMPointerForTouch() {
 // Enables DirectManipulation API for processing Precision Touchpad events.
 const base::Feature kPrecisionTouchpad{"PrecisionTouchpad",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables Swipe left/right to navigation back/forward API for processing
+// Precision Touchpad events.
+const base::Feature kPrecisionTouchpadScrollPhase{
+    "PrecisionTouchpadScrollPhase", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
 
 // Used to have ash run in its own process. This implicitly turns on the

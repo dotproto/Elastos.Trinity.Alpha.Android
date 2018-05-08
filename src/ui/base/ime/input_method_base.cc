@@ -6,10 +6,11 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_delegate.h"
+#include "ui/base/ime/input_method_keyboard_controller_stub.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/events/event.h"
@@ -23,9 +24,15 @@ ui::IMEEngineHandlerInterface* InputMethodBase::GetEngine() {
 }
 
 InputMethodBase::InputMethodBase(internal::InputMethodDelegate* delegate)
+    : InputMethodBase(delegate, nullptr) {}
+
+InputMethodBase::InputMethodBase(
+    internal::InputMethodDelegate* delegate,
+    std::unique_ptr<InputMethodKeyboardController> keyboard_controller)
     : sending_key_event_(false),
       delegate_(delegate),
-      text_input_client_(nullptr) {}
+      text_input_client_(nullptr),
+      keyboard_controller_(std::move(keyboard_controller)) {}
 
 InputMethodBase::~InputMethodBase() {
   for (InputMethodObserver& observer : observer_list_)
@@ -52,6 +59,14 @@ void InputMethodBase::OnBlur() {
       ui::IMEBridge::Get()->GetInputContextHandler() == this)
     ui::IMEBridge::Get()->SetInputContextHandler(nullptr);
 }
+
+#if defined(OS_WIN)
+bool InputMethodBase::OnUntranslatedIMEMessage(
+    const MSG event,
+    InputMethod::NativeEventResult* result) {
+  return false;
+}
+#endif
 
 void InputMethodBase::SetFocusedTextInputClient(TextInputClient* client) {
   SetFocusedTextInputClientInternal(client);
@@ -109,6 +124,7 @@ bool InputMethodBase::CanComposeInline() const {
 void InputMethodBase::ShowImeIfNeeded() {
   for (InputMethodObserver& observer : observer_list_)
     observer.OnShowImeIfNeeded();
+  GetInputMethodKeyboardController()->DisplayVirtualKeyboard();
 }
 
 void InputMethodBase::AddObserver(InputMethodObserver* observer) {
@@ -117,6 +133,14 @@ void InputMethodBase::AddObserver(InputMethodObserver* observer) {
 
 void InputMethodBase::RemoveObserver(InputMethodObserver* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+InputMethodKeyboardController*
+InputMethodBase::GetInputMethodKeyboardController() {
+  if (!keyboard_controller_)
+    keyboard_controller_ =
+        std::make_unique<InputMethodKeyboardControllerStub>();
+  return keyboard_controller_.get();
 }
 
 bool InputMethodBase::IsTextInputClientFocused(const TextInputClient* client) {
@@ -143,17 +167,17 @@ ui::EventDispatchDetails InputMethodBase::DispatchKeyEventPostIME(
 
 ui::EventDispatchDetails InputMethodBase::DispatchKeyEventPostIME(
     ui::KeyEvent* event,
-    std::unique_ptr<base::OnceCallback<void(bool)>> ack_callback) const {
+    base::OnceCallback<void(bool)> ack_callback) const {
   if (delegate_) {
     ui::EventDispatchDetails details =
         delegate_->DispatchKeyEventPostIME(event);
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(event->stopped_propagation());
+    if (ack_callback)
+      std::move(ack_callback).Run(event->stopped_propagation());
     return details;
   }
 
-  if (ack_callback && !ack_callback->is_null())
-    std::move(*ack_callback).Run(false);
+  if (ack_callback)
+    std::move(ack_callback).Run(false);
   return EventDispatchDetails();
 }
 

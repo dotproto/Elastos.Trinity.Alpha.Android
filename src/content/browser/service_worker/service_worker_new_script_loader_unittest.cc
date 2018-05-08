@@ -13,8 +13,8 @@
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "mojo/common/data_pipe_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -23,7 +23,7 @@
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -99,8 +99,7 @@ class MockNetworkURLLoaderFactory final
       client->OnReceiveRedirect(net::RedirectInfo(), response_head);
       return;
     }
-    client->OnReceiveResponse(response_head, base::nullopt /* ssl_info */,
-                              nullptr /* downloaded_file */);
+    client->OnReceiveResponse(response_head, nullptr /* downloaded_file */);
 
     // Pass the response body to the client.
     uint32_t bytes_written = response.body.size();
@@ -229,6 +228,7 @@ class ServiceWorkerNewScriptLoaderTest : public testing::Test {
     loader_ = std::make_unique<ServiceWorkerNewScriptLoader>(
         routing_id, request_id, options, request, client_->CreateInterfacePtr(),
         version_, helper_->url_loader_factory_getter(),
+        nullptr /* non_network_loader_factory */,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
 
@@ -302,8 +302,8 @@ TEST_F(ServiceWorkerNewScriptLoaderTest, Success) {
   EXPECT_TRUE(client_->has_received_response());
   EXPECT_TRUE(client_->response_body().is_valid());
   std::string response;
-  EXPECT_TRUE(mojo::common::BlockingCopyToString(
-      client_->response_body_release(), &response));
+  EXPECT_TRUE(
+      mojo::BlockingCopyToString(client_->response_body_release(), &response));
   EXPECT_EQ(mock_server_->Get(kScriptURL).body, response);
 
   // The response should also be stored in the storage.
@@ -326,8 +326,8 @@ TEST_F(ServiceWorkerNewScriptLoaderTest, Success_EmptyBody) {
   EXPECT_TRUE(client_->has_received_response());
   EXPECT_TRUE(client_->response_body().is_valid());
   std::string response;
-  EXPECT_TRUE(mojo::common::BlockingCopyToString(
-      client_->response_body_release(), &response));
+  EXPECT_TRUE(
+      mojo::BlockingCopyToString(client_->response_body_release(), &response));
   EXPECT_TRUE(response.empty());
 
   // The response should also be stored in the storage.
@@ -356,8 +356,8 @@ TEST_F(ServiceWorkerNewScriptLoaderTest, Success_LargeBody) {
   EXPECT_TRUE(client_->has_received_response());
   EXPECT_TRUE(client_->response_body().is_valid());
   std::string response;
-  EXPECT_TRUE(mojo::common::BlockingCopyToString(
-      client_->response_body_release(), &response));
+  EXPECT_TRUE(
+      mojo::BlockingCopyToString(client_->response_body_release(), &response));
   EXPECT_EQ(mock_server_->Get(kScriptURL).body, response);
 
   // The response should also be stored in the storage.
@@ -478,8 +478,8 @@ TEST_F(ServiceWorkerNewScriptLoaderTest, Success_PathRestriction) {
   EXPECT_TRUE(client_->has_received_response());
   EXPECT_TRUE(client_->response_body().is_valid());
   std::string response;
-  EXPECT_TRUE(mojo::common::BlockingCopyToString(
-      client_->response_body_release(), &response));
+  EXPECT_TRUE(
+      mojo::BlockingCopyToString(client_->response_body_release(), &response));
   EXPECT_EQ(mock_server_->Get(kScriptURL).body, response);
 
   // The response should also be stored in the storage.

@@ -55,6 +55,9 @@ MockBackgroundFetchDelegate::MockBackgroundFetchDelegate() {}
 
 MockBackgroundFetchDelegate::~MockBackgroundFetchDelegate() {}
 
+void MockBackgroundFetchDelegate::GetIconDisplaySize(
+    GetIconDisplaySizeCallback callback) {}
+
 void MockBackgroundFetchDelegate::CreateDownloadJob(
     const std::string& job_unique_id,
     const std::string& title,

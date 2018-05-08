@@ -49,7 +49,6 @@
 
 
 using base::TimeDelta;
-using sync_pb::GetUpdatesCallerInfo;
 
 class GURL;
 
@@ -61,25 +60,25 @@ using syncable::UNIQUE_POSITION;
 
 namespace {
 
-GetUpdatesCallerInfo::GetUpdatesSource GetSourceFromReason(
+sync_pb::SyncEnums::GetUpdatesOrigin GetOriginFromReason(
     ConfigureReason reason) {
   switch (reason) {
     case CONFIGURE_REASON_RECONFIGURATION:
-      return GetUpdatesCallerInfo::RECONFIGURATION;
+      return sync_pb::SyncEnums::RECONFIGURATION;
     case CONFIGURE_REASON_MIGRATION:
-      return GetUpdatesCallerInfo::MIGRATION;
+      return sync_pb::SyncEnums::MIGRATION;
     case CONFIGURE_REASON_NEW_CLIENT:
-      return GetUpdatesCallerInfo::NEW_CLIENT;
+      return sync_pb::SyncEnums::NEW_CLIENT;
     case CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE:
     case CONFIGURE_REASON_CRYPTO:
     case CONFIGURE_REASON_CATCH_UP:
-      return GetUpdatesCallerInfo::NEWLY_SUPPORTED_DATATYPE;
+      return sync_pb::SyncEnums::NEWLY_SUPPORTED_DATATYPE;
     case CONFIGURE_REASON_PROGRAMMATIC:
-      return GetUpdatesCallerInfo::PROGRAMMATIC;
+      return sync_pb::SyncEnums::PROGRAMMATIC;
     case CONFIGURE_REASON_UNKNOWN:
       NOTREACHED();
   }
-  return GetUpdatesCallerInfo::UNKNOWN;
+  return sync_pb::SyncEnums::UNKNOWN_ORIGIN;
 }
 
 }  // namespace
@@ -190,7 +189,7 @@ void SyncManagerImpl::ConfigureSyncer(
   DVLOG(1) << "Configuring -"
            << "\n\t"
            << "types to download: " << ModelTypeSetToString(to_download);
-  ConfigurationParams params(GetSourceFromReason(reason), to_download,
+  ConfigurationParams params(GetOriginFromReason(reason), to_download,
                              ready_task, retry_task);
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
@@ -201,6 +200,8 @@ void SyncManagerImpl::Init(InitArgs* args) {
   DCHECK(!initialized_);
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(args->post_factory.get());
+  DCHECK(!args->short_poll_interval.is_zero());
+  DCHECK(!args->long_poll_interval.is_zero());
   if (!args->enable_local_sync_backend) {
     DCHECK(!args->credentials.account_id.empty());
     DCHECK(!args->credentials.sync_token.empty());
@@ -302,7 +303,8 @@ void SyncManagerImpl::Init(InitArgs* args) {
   cycle_context_ = args->engine_components_factory->BuildContext(
       connection_manager_.get(), directory(), args->extensions_activity,
       listeners, &debug_info_event_listener_, model_type_registry_.get(),
-      args->invalidator_client_id);
+      args->invalidator_client_id, args->short_poll_interval,
+      args->long_poll_interval);
   scheduler_ = args->engine_components_factory->BuildScheduler(
       name_, cycle_context_.get(), args->cancelation_signal,
       args->enable_local_sync_backend);
@@ -483,6 +485,11 @@ void SyncManagerImpl::UpdateCredentials(const SyncCredentials& credentials) {
   scheduler_->OnCredentialsUpdated();
 
   // TODO(zea): pass the credential age to the debug info event listener.
+}
+
+void SyncManagerImpl::InvalidateCredentials() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  connection_manager_->SetAuthToken(std::string());
 }
 
 void SyncManagerImpl::AddObserver(SyncManager::Observer* observer) {
@@ -943,9 +950,8 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
   return found_experiment;
 }
 
-bool SyncManagerImpl::HasUnsyncedItems() {
-  ReadTransaction trans(FROM_HERE, GetUserShare());
-  return (trans.GetWrappedTrans()->directory()->unsynced_entity_count() != 0);
+bool SyncManagerImpl::HasUnsyncedItemsForTest() {
+  return model_type_registry_->HasUnsyncedItems();
 }
 
 SyncEncryptionHandler* SyncManagerImpl::GetEncryptionHandler() {

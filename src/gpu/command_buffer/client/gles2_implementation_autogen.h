@@ -845,7 +845,7 @@ GLboolean IsVertexArrayOES(GLuint array) override;
 
 void BindVertexArrayOES(GLuint array) override;
 
-void SwapBuffers() override;
+void SwapBuffers(GLbitfield flags = 0) override;
 
 GLuint GetMaxValueInBufferCHROMIUM(GLuint buffer_id,
                                    GLsizei count,
@@ -935,7 +935,8 @@ void GetTranslatedShaderSourceANGLE(GLuint shader,
 void PostSubBufferCHROMIUM(GLint x,
                            GLint y,
                            GLint width,
-                           GLint height) override;
+                           GLint height,
+                           GLbitfield flags = 0) override;
 
 void CopyTextureCHROMIUM(GLuint source_id,
                          GLint source_level,
@@ -1037,7 +1038,8 @@ void ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
                                   GLfloat uv_x,
                                   GLfloat uv_y,
                                   GLfloat uv_width,
-                                  GLfloat uv_height) override;
+                                  GLfloat uv_height,
+                                  GLboolean enable_blend) override;
 
 void ScheduleCALayerSharedStateCHROMIUM(GLfloat opacity,
                                         GLboolean is_clipped,
@@ -1055,7 +1057,7 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
 void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                        const GLuint* textures) override;
 
-void CommitOverlayPlanesCHROMIUM() override;
+void CommitOverlayPlanesCHROMIUM(GLbitfield flags = 0) override;
 
 void FlushDriverCachesCHROMIUM() override;
 
@@ -1222,7 +1224,9 @@ void OverlayPromotionHintCHROMIUM(GLuint texture,
                                   GLint display_width,
                                   GLint display_height) override;
 
-void SwapBuffersWithBoundsCHROMIUM(GLsizei count, const GLint* rects) override;
+void SwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                   const GLint* rects,
+                                   GLbitfield flags = 0) override;
 
 void SetDrawRectangleCHROMIUM(GLint x,
                               GLint y,
@@ -1241,7 +1245,6 @@ void BeginRasterCHROMIUM(GLuint texture_id,
                          GLuint sk_color,
                          GLuint msaa_sample_count,
                          GLboolean can_use_lcd_text,
-                         GLboolean use_distance_field_text,
                          GLint color_type,
                          GLuint color_space_transfer_cache_id) override;
 

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <tuple>
+
 #include "base/logging.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/color_space.h"
@@ -282,11 +284,10 @@ TEST(SimpleColorSpace, ICCProfileOnlyXYZ) {
 }
 
 TEST(SimpleColorSpace, ICCProfileOnlyColorSpin) {
-  const float kEpsilon = 2.5f / 255.f;
+  const float kEpsilon = 3.0f / 255.f;
   ICCProfile icc_profile = ICCProfileForTestingNoAnalyticTrFn();
   ColorSpace icc_space = icc_profile.GetColorSpace();
-  ColorSpace colorspin =
-      ICCProfileForTestingColorSpin().GetParametricColorSpace();
+  ColorSpace colorspin = ICCProfileForTestingColorSpin().GetColorSpace();
 
   ColorTransform::TriStim input_value(0.25f, 0.5f, 0.75f);
   ColorTransform::TriStim transformed_value = input_value;
@@ -586,21 +587,21 @@ INSTANTIATE_TEST_CASE_P(ColorSpace,
                         ExtendedTransferTest,
                         testing::ValuesIn(extended_transfers));
 
-typedef std::tr1::tuple<ColorSpace::PrimaryID,
-                        ColorSpace::TransferID,
-                        ColorSpace::MatrixID,
-                        ColorSpace::RangeID,
-                        ColorTransform::Intent>
+typedef std::tuple<ColorSpace::PrimaryID,
+                   ColorSpace::TransferID,
+                   ColorSpace::MatrixID,
+                   ColorSpace::RangeID,
+                   ColorTransform::Intent>
     ColorSpaceTestData;
 
 class ColorSpaceTest : public testing::TestWithParam<ColorSpaceTestData> {
  public:
   ColorSpaceTest()
-      : color_space_(std::tr1::get<0>(GetParam()),
-                     std::tr1::get<1>(GetParam()),
-                     std::tr1::get<2>(GetParam()),
-                     std::tr1::get<3>(GetParam())),
-        intent_(std::tr1::get<4>(GetParam())) {}
+      : color_space_(std::get<0>(GetParam()),
+                     std::get<1>(GetParam()),
+                     std::get<2>(GetParam()),
+                     std::get<3>(GetParam())),
+        intent_(std::get<4>(GetParam())) {}
 
  protected:
   ColorSpace color_space_;

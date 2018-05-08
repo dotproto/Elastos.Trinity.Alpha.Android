@@ -6,9 +6,8 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
@@ -247,7 +246,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   // Generally you want NewWindow(), but use this if you need to test given
   // a complete window id (NewWindow() ors with the client id).
   Id NewWindowWithCompleteId(Id id) {
-    std::unordered_map<std::string, std::vector<uint8_t>> properties;
+    base::flat_map<std::string, std::vector<uint8_t>> properties;
     const uint32_t change_id = GetAndAdvanceChangeId();
     tree()->NewWindow(change_id, id, std::move(properties));
     return WaitForChangeCompleted(change_id) ? id : 0;
@@ -423,9 +422,8 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
     tracker_.OnWindowCursorChanged(window_id, cursor);
   }
 
-  void OnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data)
-      override {
+  void OnDragDropStart(const base::flat_map<std::string, std::vector<uint8_t>>&
+                           drag_data) override {
     NOTIMPLEMENTED();
   }
 
@@ -513,7 +511,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   void WmCreateTopLevelWindow(
       uint32_t change_id,
       const viz::FrameSinkId& frame_sink_id,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& properties)
+      const base::flat_map<std::string, std::vector<uint8_t>>& properties)
       override {
     NOTIMPLEMENTED();
   }

@@ -6,13 +6,14 @@
 
 #include <stddef.h>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/app_list_button.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
@@ -65,8 +66,6 @@
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/mus/change_completion_waiter.h"
 #include "ui/aura/window.h"
@@ -785,7 +784,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   LoadAndLaunchPlatformApp("app_icon", "Launched");
 
   // Create panel window.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createPanelWindow");
   ready_listener.Reset();
   // Default app icon + extension icon updates.
@@ -793,7 +792,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   const gfx::ImageSkia app_item_image = test_observer.last_app_icon();
 
   // Set panel window icon.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("setPanelWindowIcon");
   ready_listener.Reset();
   // Custom icon update.
@@ -801,28 +800,28 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   const gfx::ImageSkia panel_item_image = test_observer.last_app_icon();
 
   // Create non-shelf window.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createNonShelfWindow");
   ready_listener.Reset();
   // Default app icon + extension icon updates.
   test_observer.WaitForIconUpdates(2);
 
   // Create shelf window.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createShelfWindow");
   ready_listener.Reset();
   // Default app icon + extension icon updates.
   test_observer.WaitForIconUpdates(2);
 
   // Set shelf window icon.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("setShelfWindowIcon");
   ready_listener.Reset();
   // Custom icon update.
   test_observer.WaitForIconUpdate();
 
   // Create shelf window with custom icon on init.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createShelfWindowWithCustomIcon");
   ready_listener.Reset();
   // Default app icon + extension icon + custom icon updates.
@@ -853,7 +852,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   // Ensure icon heights are correct (see test.js in app_icon/ test directory)
   // Note, images are no longer available in ChromeLauncherController. They are
   // are passed directly to the ShelfController.
-  EXPECT_EQ(ash::kShelfSize, app_item_image.height());
+  EXPECT_EQ(extension_misc::EXTENSION_ICON_MEDIUM, app_item_image.height());
   EXPECT_EQ(extension_misc::EXTENSION_ICON_LARGE,
             app_item_custom_image.height());
   EXPECT_EQ(64, panel_item_image.height());
@@ -863,7 +862,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   EXPECT_EQ(11, test_observer.icon_updates());
 
   // Exit.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("exit");
   ready_listener.Reset();
 }
@@ -1009,7 +1008,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchInBackground) {
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchMaximized) {
   MaximizeWindow(browser()->window());
   content::WindowedNotificationObserver open_observer(
-      chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+      chrome::NOTIFICATION_BROWSER_OPENED,
       content::NotificationService::AllSources());
   chrome::NewEmptyWindow(browser()->profile());
   open_observer.Wait();
@@ -1107,8 +1106,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, TabDragAndDrop) {
 
   // Detach a tab at index 1 (app1) from |tab_strip_model1| and insert it as an
   // active tab at index 1 to |tab_strip_model2|.
-  content::WebContents* detached_tab = tab_strip_model1->DetachWebContentsAt(1);
-  tab_strip_model2->InsertWebContentsAt(1, detached_tab,
+  std::unique_ptr<content::WebContents> detached_tab =
+      tab_strip_model1->DetachWebContentsAt(1);
+  tab_strip_model2->InsertWebContentsAt(1, std::move(detached_tab),
                                         TabStripModel::ADD_ACTIVE);
   EXPECT_EQ(1, tab_strip_model1->count());
   EXPECT_EQ(2, tab_strip_model2->count());
@@ -1858,7 +1858,8 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, MatchingShelfIDandActiveTab) {
 
 // Check that a windowed V1 application can navigate away from its domain, but
 // still gets detected properly.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, V1AppNavigation) {
+// Disabled due to https://crbug.com/838743.
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_V1AppNavigation) {
   // We assume that the web store is always there (which it apparently is).
   controller_->PinAppWithID(extensions::kWebStoreAppId);
   const ash::ShelfID id(extensions::kWebStoreAppId);

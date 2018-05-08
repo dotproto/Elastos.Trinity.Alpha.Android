@@ -5,35 +5,21 @@
 #ifndef CONTENT_BROWSER_ANDROID_CONTENT_VIEW_CORE_H_
 #define CONTENT_BROWSER_ANDROID_CONTENT_VIEW_CORE_H_
 
-#include <stdint.h>
-
-#include <memory>
-#include <vector>
-
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/compiler_specific.h"
-#include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/process/process.h"
-#include "content/browser/renderer_host/render_widget_host_view_android.h"
-#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "ui/android/view_android.h"
-#include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/selection_bound.h"
-#include "url/gurl.h"
 
 namespace ui {
+class ViewAndroid;
 class WindowAndroid;
 }
 
 namespace content {
 
 class RenderWidgetHostViewAndroid;
+class WebContentsImpl;
 
 class ContentViewCore : public WebContentsObserver {
  public:
@@ -44,17 +30,9 @@ class ContentViewCore : public WebContentsObserver {
 
   ~ContentViewCore() override;
 
-  base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
-  WebContents* GetWebContents() const;
-  ui::WindowAndroid* GetWindowAndroid() const;
-
   // --------------------------------------------------------------------------
   // Methods called from Java via JNI
   // --------------------------------------------------------------------------
-
-  base::android::ScopedJavaLocalRef<jobject> GetJavaWindowAndroid(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
 
   void UpdateWindowAndroid(
       JNIEnv* env,
@@ -64,27 +42,10 @@ class ContentViewCore : public WebContentsObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 
-  // Returns the amount of the top controls height if controls are in the state
-  // of shrinking Blink's view size, otherwise 0.
-  int GetTopControlsShrinkBlinkHeightPixForTesting(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
-
   void SendOrientationChangeEvent(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jint orientation);
-
-  void ResetGestureDetection(JNIEnv* env,
-                             const base::android::JavaParamRef<jobject>& obj);
-  void SetDoubleTapSupportEnabled(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jboolean enabled);
-  void SetMultiTouchZoomSupportEnabled(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jboolean enabled);
 
   void SetFocus(JNIEnv* env,
                 const base::android::JavaParamRef<jobject>& obj,
@@ -94,42 +55,22 @@ class ContentViewCore : public WebContentsObserver {
                    const base::android::JavaParamRef<jobject>& obj,
                    jfloat dipScale);
 
-  void SetTextTrackSettings(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jboolean textTracksEnabled,
-      const base::android::JavaParamRef<jstring>& textTrackBackgroundColor,
-      const base::android::JavaParamRef<jstring>& textTrackFontFamily,
-      const base::android::JavaParamRef<jstring>& textTrackFontStyle,
-      const base::android::JavaParamRef<jstring>& textTrackFontVariant,
-      const base::android::JavaParamRef<jstring>& textTrackTextColor,
-      const base::android::JavaParamRef<jstring>& textTrackTextShadow,
-      const base::android::JavaParamRef<jstring>& textTrackTextSize);
-
-  // --------------------------------------------------------------------------
-  // Methods called from native code
-  // --------------------------------------------------------------------------
-
-  void OnTouchDown(const base::android::ScopedJavaLocalRef<jobject>& event);
-
-  ui::ViewAndroid* GetViewAndroid() const;
-
  private:
-  class ContentViewUserData;
-
-  friend class ContentViewUserData;
 
   // WebContentsObserver implementation.
   void RenderViewReady() override;
   void RenderViewHostChanged(RenderViewHost* old_host,
                              RenderViewHost* new_host) override;
+  void WebContentsDestroyed() override;
 
   // --------------------------------------------------------------------------
   // Other private methods and data
   // --------------------------------------------------------------------------
 
-  void InitWebContents();
   void SendScreenRectsAndResizeWidget();
+
+  ui::ViewAndroid* GetViewAndroid() const;
+  ui::WindowAndroid* GetWindowAndroid() const;
 
   RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid() const;
 
@@ -138,8 +79,6 @@ class ContentViewCore : public WebContentsObserver {
 
   // Send device_orientation_ to renderer.
   void SendOrientationChangeEventInternal();
-
-  float dpi_scale() const { return dpi_scale_; }
 
   // A weak reference to the Java ContentViewCore object.
   JavaObjectWeakGlobalRef java_ref_;

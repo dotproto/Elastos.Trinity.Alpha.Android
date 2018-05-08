@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -42,7 +41,7 @@ class PersistentPrefStoreClientTest : public testing::Test,
             mojom::PersistentPrefStoreConnection::New(
                 mojom::PrefStoreConnection::New(
                     mojom::PrefStoreObserverRequest(),
-                    std::make_unique<base::DictionaryValue>(), true),
+                    base::Value(base::Value::Type::DICTIONARY), true),
                 std::move(store_proxy_info),
                 ::PersistentPrefStore::PREF_READ_ERROR_NONE, false));
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();

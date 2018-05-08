@@ -189,18 +189,18 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
       public ui::ImplicitAnimationObserver {
  public:
   SplitViewDragIndicatorsView() {
-    left_hightlight_view_ =
+    left_highlight_view_ =
         new RoundedRectView(kHighlightScreenRoundRectRadiusDp, SK_ColorWHITE);
-    right_hightlight_view_ =
+    right_highlight_view_ =
         new RoundedRectView(kHighlightScreenRoundRectRadiusDp, SK_ColorWHITE);
 
-    left_hightlight_view_->SetPaintToLayer();
-    right_hightlight_view_->SetPaintToLayer();
-    left_hightlight_view_->layer()->SetFillsBoundsOpaquely(false);
-    right_hightlight_view_->layer()->SetFillsBoundsOpaquely(false);
+    left_highlight_view_->SetPaintToLayer();
+    right_highlight_view_->SetPaintToLayer();
+    left_highlight_view_->layer()->SetFillsBoundsOpaquely(false);
+    right_highlight_view_->layer()->SetFillsBoundsOpaquely(false);
 
-    AddChildView(left_hightlight_view_);
-    AddChildView(right_hightlight_view_);
+    AddChildView(left_highlight_view_);
+    AddChildView(right_highlight_view_);
 
     left_rotated_view_ = new RotatedImageLabelView();
     right_rotated_view_ = new RotatedImageLabelView();
@@ -209,8 +209,8 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
     AddChildView(right_rotated_view_);
 
     // Nothing is shown initially.
-    left_hightlight_view_->layer()->SetOpacity(0.f);
-    right_hightlight_view_->layer()->SetOpacity(0.f);
+    left_highlight_view_->layer()->SetOpacity(0.f);
+    right_highlight_view_->layer()->SetOpacity(0.f);
     left_rotated_view_->layer()->SetOpacity(0.f);
     right_rotated_view_->layer()->SetOpacity(0.f);
   }
@@ -227,9 +227,9 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
 
     switch (indicator_state) {
       case IndicatorState::kNone:
-        DoSplitviewOpacityAnimation(left_hightlight_view_->layer(),
+        DoSplitviewOpacityAnimation(left_highlight_view_->layer(),
                                     SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT);
-        DoSplitviewOpacityAnimation(right_hightlight_view_->layer(),
+        DoSplitviewOpacityAnimation(right_highlight_view_->layer(),
                                     SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT);
         DoSplitviewOpacityAnimation(left_rotated_view_->layer(),
                                     SPLITVIEW_ANIMATION_TEXT_FADE_OUT);
@@ -247,12 +247,13 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
                   ? IDS_ASH_SPLIT_VIEW_CANNOT_SNAP
                   : IDS_ASH_SPLIT_VIEW_GUIDANCE));
           SplitviewAnimationType animation_type;
-          if (IsPreviewAreaState(previous_indicator_state_)) {
-            animation_type = SPLITVIEW_ANIMATION_TEXT_FADE_IN;
+          if (!show) {
+            animation_type = SPLITVIEW_ANIMATION_TEXT_FADE_OUT_WITH_HIGHLIGHT;
           } else {
             animation_type =
-                show ? SPLITVIEW_ANIMATION_TEXT_FADE_IN_WITH_HIGHLIGHT
-                     : SPLITVIEW_ANIMATION_TEXT_FADE_OUT_WITH_HIGHLIGHT;
+                IsPreviewAreaState(previous_indicator_state_)
+                    ? SPLITVIEW_ANIMATION_TEXT_FADE_IN_WITH_HIGHLIGHT
+                    : SPLITVIEW_ANIMATION_TEXT_FADE_IN;
           }
           DoSplitviewOpacityAnimation(view->layer(), animation_type);
         }
@@ -277,16 +278,16 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
         }
 
         if (IsPreviewAreaOnLeftTopOfScreen(indicator_state_)) {
-          DoSplitviewOpacityAnimation(left_hightlight_view_->layer(),
+          DoSplitviewOpacityAnimation(left_highlight_view_->layer(),
                                       SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_IN);
           DoSplitviewOpacityAnimation(
-              right_hightlight_view_->layer(),
+              right_highlight_view_->layer(),
               SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_OUT);
         } else {
           DoSplitviewOpacityAnimation(
-              left_hightlight_view_->layer(),
+              left_highlight_view_->layer(),
               SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_OUT);
-          DoSplitviewOpacityAnimation(right_hightlight_view_->layer(),
+          DoSplitviewOpacityAnimation(right_highlight_view_->layer(),
                                       SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_IN);
         }
         Layout();
@@ -300,11 +301,11 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
   views::View* GetViewForIndicatorType(IndicatorType type) {
     switch (type) {
       case IndicatorType::kLeftHighlight:
-        return left_hightlight_view_;
+        return left_highlight_view_;
       case IndicatorType::kLeftText:
         return left_rotated_view_;
       case IndicatorType::kRightHighlight:
-        return right_hightlight_view_;
+        return right_highlight_view_;
       case IndicatorType::kRightText:
         return right_rotated_view_;
     }
@@ -409,32 +410,38 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
         // otherwise no animation will happen if we try to transform from
         // identity to identity. (OnImplicitAnimationsCompleted sets the bounds
         // and all transforms to identity to preserve rounded edges).
-        left_hightlight_view_->layer()->SetTransform(
+        left_highlight_view_->layer()->SetTransform(
             preview_left ? main_transform : other_transform);
-        right_hightlight_view_->layer()->SetTransform(
+        right_highlight_view_->layer()->SetTransform(
             preview_left ? other_transform : main_transform);
         main_transform.MakeIdentity();
         other_transform.MakeIdentity();
       }
     }
 
-    DoSplitviewTransformAnimation(
-        left_hightlight_view_->layer(),
-        SPLITVIEW_ANIMATION_PREVIEW_AREA_SLIDE_IN_OUT,
-        preview_left ? main_transform : other_transform, this);
-    left_hightlight_bounds_ =
+    left_highlight_bounds_ =
         gfx::Rect(kHighlightScreenEdgePaddingDp, kHighlightScreenEdgePaddingDp,
                   highlight_width, highlight_height);
-    left_hightlight_view_->SetBoundsRect(left_hightlight_bounds_);
-
-    DoSplitviewTransformAnimation(
-        right_hightlight_view_->layer(),
-        SPLITVIEW_ANIMATION_PREVIEW_AREA_SLIDE_IN_OUT,
-        preview_left ? other_transform : main_transform, nullptr);
-    right_hightlight_bounds_ =
+    right_highlight_bounds_ =
         gfx::Rect(right_bottom_origin.x(), right_bottom_origin.y(),
                   highlight_width, highlight_height);
-    right_hightlight_view_->SetBoundsRect(right_hightlight_bounds_);
+    if (base::i18n::IsRTL() && landscape) {
+      gfx::Rect temp = left_highlight_bounds_;
+      left_highlight_bounds_ = right_highlight_bounds_;
+      right_highlight_bounds_ = temp;
+    }
+
+    DoSplitviewTransformAnimation(
+        left_highlight_view_->layer(),
+        SPLITVIEW_ANIMATION_PREVIEW_AREA_SLIDE_IN_OUT,
+        preview_left ? main_transform : other_transform, this);
+    left_highlight_view_->SetBoundsRect(left_highlight_bounds_);
+
+    DoSplitviewTransformAnimation(
+        right_highlight_view_->layer(),
+        SPLITVIEW_ANIMATION_PREVIEW_AREA_SLIDE_IN_OUT,
+        preview_left ? other_transform : main_transform, nullptr);
+    right_highlight_view_->SetBoundsRect(right_highlight_bounds_);
 
     // Calculate the bounds of the views which contain the guidance text and
     // icon. Rotate the two views in landscape mode.
@@ -444,6 +451,8 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
                                   highlight_height / 2 - size.height() / 2,
                                   size.width(), size.height());
     gfx::Rect right_rotated_bounds = left_rotated_bounds;
+    left_rotated_bounds.Offset(kHighlightScreenEdgePaddingDp,
+                               kHighlightScreenEdgePaddingDp);
     right_rotated_bounds.Offset(right_bottom_origin.x(),
                                 right_bottom_origin.y());
 
@@ -488,47 +497,52 @@ class SplitViewDragIndicators::SplitViewDragIndicatorsView
   void OnImplicitAnimationsCompleted() override {
     // Set the final bounds and the layer transforms to identity, so that the
     // proper rounding on the rounded rect corners show up.
+    const bool flip =
+        base::i18n::IsRTL() && Shell::Get()
+                                   ->split_view_controller()
+                                   ->IsCurrentScreenOrientationLandscape();
+    const bool left =
+        (indicator_state_ == IndicatorState::kPreviewAreaLeft && !flip) ||
+        (indicator_state_ == IndicatorState::kPreviewAreaRight && flip);
     gfx::Rect preview_area_bounds =
         Shell::Get()->split_view_controller()->GetSnappedWindowBoundsInScreen(
             GetWidget()->GetNativeWindow(),
-            indicator_state_ == IndicatorState::kPreviewAreaLeft
-                ? SplitViewController::LEFT
-                : SplitViewController::RIGHT);
+            left ? SplitViewController::LEFT : SplitViewController::RIGHT);
     preview_area_bounds.Inset(kHighlightScreenEdgePaddingDp,
                               kHighlightScreenEdgePaddingDp);
 
     constexpr gfx::Rect kEmptyRect;
-    left_hightlight_view_->layer()->SetTransform(gfx::Transform());
-    right_hightlight_view_->layer()->SetTransform(gfx::Transform());
+    left_highlight_view_->layer()->SetTransform(gfx::Transform());
+    right_highlight_view_->layer()->SetTransform(gfx::Transform());
     if (IsPreviewAreaOnLeftTopOfScreen(indicator_state_)) {
-      left_hightlight_view_->SetBoundsRect(preview_area_bounds);
-      right_hightlight_view_->SetBoundsRect(kEmptyRect);
+      left_highlight_view_->SetBoundsRect(preview_area_bounds);
+      right_highlight_view_->SetBoundsRect(kEmptyRect);
     } else if (IsPreviewAreaState(indicator_state_)) {
-      left_hightlight_view_->SetBoundsRect(kEmptyRect);
-      right_hightlight_view_->SetBoundsRect(preview_area_bounds);
+      left_highlight_view_->SetBoundsRect(kEmptyRect);
+      right_highlight_view_->SetBoundsRect(preview_area_bounds);
     } else {
-      left_hightlight_view_->SetBoundsRect(left_hightlight_bounds_);
-      right_hightlight_view_->SetBoundsRect(right_hightlight_bounds_);
+      left_highlight_view_->SetBoundsRect(left_highlight_bounds_);
+      right_highlight_view_->SetBoundsRect(right_highlight_bounds_);
     }
   }
 
  private:
   std::vector<RoundedRectView*> GetHighlightViews() {
-    return {left_hightlight_view_, right_hightlight_view_};
+    return {left_highlight_view_, right_highlight_view_};
   }
   std::vector<RotatedImageLabelView*> GetTextViews() {
     return {left_rotated_view_, right_rotated_view_};
   }
 
-  RoundedRectView* left_hightlight_view_ = nullptr;
-  RoundedRectView* right_hightlight_view_ = nullptr;
+  RoundedRectView* left_highlight_view_ = nullptr;
+  RoundedRectView* right_highlight_view_ = nullptr;
   RotatedImageLabelView* left_rotated_view_ = nullptr;
   RotatedImageLabelView* right_rotated_view_ = nullptr;
 
   // Cache the bounds calculated in Layout(), so that they do not have to be
   // recalculated when animation is finished.
-  gfx::Rect left_hightlight_bounds_;
-  gfx::Rect right_hightlight_bounds_;
+  gfx::Rect left_highlight_bounds_;
+  gfx::Rect right_highlight_bounds_;
 
   IndicatorState indicator_state_ = IndicatorState::kNone;
   IndicatorState previous_indicator_state_ = IndicatorState::kNone;
@@ -570,7 +584,11 @@ void SplitViewDragIndicators::SetIndicatorState(
 }
 
 void SplitViewDragIndicators::OnDisplayBoundsChanged() {
-  indicators_view_->Layout();
+  aura::Window* root_window = widget_->GetNativeView()->GetRootWindow();
+  gfx::Rect bounds = screen_util::GetDisplayWorkAreaBoundsInParent(
+      root_window->GetChildById(kShellWindowId_OverlayContainer));
+  ::wm::ConvertRectToScreen(root_window, &bounds);
+  widget_->SetBounds(bounds);
 }
 
 bool SplitViewDragIndicators::GetIndicatorTypeVisibilityForTesting(

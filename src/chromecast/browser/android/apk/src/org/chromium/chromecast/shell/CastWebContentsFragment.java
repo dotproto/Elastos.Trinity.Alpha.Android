@@ -6,6 +6,8 @@ package org.chromium.chromecast.shell;
 
 import android.app.Fragment;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -16,7 +18,9 @@ import android.widget.Toast;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.content_public.browser.WebContents;
+import org.chromium.chromecast.base.CastSwitches;
+import org.chromium.chromecast.base.Controller;
+import org.chromium.chromecast.base.Unit;
 
 /**
  * Fragment for displaying a WebContents in CastShell.
@@ -32,14 +36,12 @@ import org.chromium.content_public.browser.WebContents;
 public class CastWebContentsFragment extends Fragment {
     private static final String TAG = "cr_CastWebContentFrg";
 
+    private final Controller<Unit> mResumedState = new Controller<>();
+
     private Context mPackageContext;
-
     private CastWebContentsSurfaceHelper mSurfaceHelper;
-
     private View mFragmentRootView;
-
     private String mAppId;
-
     private int mInitialVisiblityPriority;
 
     @Override
@@ -62,11 +64,10 @@ public class CastWebContentsFragment extends Fragment {
         }
         if (mFragmentRootView == null) {
             mFragmentRootView = inflater.cloneInContext(getContext())
-                .inflate(R.layout.cast_web_contents_activity, null);
+                                        .inflate(R.layout.cast_web_contents_activity, null);
         }
         return mFragmentRootView;
     }
-
 
     @Override
     public Context getContext() {
@@ -80,55 +81,66 @@ public class CastWebContentsFragment extends Fragment {
     public void onStart() {
         Log.d(TAG, "onStart");
         super.onStart();
+
         if (mSurfaceHelper != null) {
+            sendIntentSync(
+                    CastWebContentsIntentUtils.onVisibilityChange(mSurfaceHelper.getInstanceId(),
+                            CastWebContentsIntentUtils.VISIBITY_TYPE_FULL_SCREEN));
             return;
         }
+
         mSurfaceHelper = new CastWebContentsSurfaceHelper(getActivity(), /* hostActivity */
-                    (FrameLayout) getView().findViewById(R.id.web_contents_container),
-                    true /* showInFragment */);
+                CastWebContentsView.onLayout(getContext(),
+                        (FrameLayout) getView().findViewById(R.id.web_contents_container),
+                        CastSwitches.getSwitchValueColor(
+                                CastSwitches.CAST_APP_BACKGROUND_COLOR, Color.BLACK),
+                        mResumedState),
+                (Uri uri) -> sendIntentSync(CastWebContentsIntentUtils.onWebContentStopped(uri)));
+
         Bundle bundle = getArguments();
+        CastWebContentsSurfaceHelper.StartParams params =
+                CastWebContentsSurfaceHelper.StartParams.fromBundle(bundle);
+        if (params == null) return;
 
-        String uriString = CastWebContentsIntentUtils.getUriString(bundle);
-        if (uriString == null) {
-            return;
-        }
-        Uri uri = Uri.parse(uriString);
-
-        WebContents webContents = CastWebContentsIntentUtils.getWebContents(bundle);
         mAppId = CastWebContentsIntentUtils.getAppId(bundle);
         mInitialVisiblityPriority = CastWebContentsIntentUtils.getVisibilityPriority(bundle);
-        boolean touchInputEnabled = CastWebContentsIntentUtils.isTouchable(bundle);
-
-        mSurfaceHelper.onNewWebContents(uri, webContents, touchInputEnabled);
-    }
-
-    @Override
-    public void setArguments(Bundle args) {
-        super.setArguments(args);
-        args.setClassLoader(WebContents.class.getClassLoader());
+        mSurfaceHelper.onNewStartParams(params);
+        sendIntentSync(CastWebContentsIntentUtils.onVisibilityChange(mSurfaceHelper.getInstanceId(),
+                CastWebContentsIntentUtils.VISIBITY_TYPE_FULL_SCREEN));
     }
 
     @Override
     public void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
-        if (mSurfaceHelper != null) {
-            mSurfaceHelper.onPause();
-        }
+        // Set mFragmentRootView to invisible to avoid dismiss fragment animation -> activity back
+        // ground -> one frame of cast app UI -> acivity back ground
+        mFragmentRootView.setVisibility(View.INVISIBLE);
+        mResumedState.reset();
     }
 
     @Override
     public void onResume() {
         Log.d(TAG, "onResume");
         super.onResume();
-        if (mSurfaceHelper != null) {
-            mSurfaceHelper.onResume();
+        // Delayed set mFragmentRootView to visible to avoid activity UI -> one frame of fragment
+        // background -> cast app rendered UI
+        mFragmentRootView.setVisibility(View.INVISIBLE);
+        mFragmentRootView.postDelayed(this ::setToVisible, 150);
+        mResumedState.set(Unit.unit());
+    }
+
+    private void setToVisible() {
+        if (isResumed()) {
+            mFragmentRootView.setVisibility(View.VISIBLE);
         }
     }
 
     @Override
     public void onStop() {
         Log.d(TAG, "onStop");
+        sendIntentSync(CastWebContentsIntentUtils.onVisibilityChange(
+                mSurfaceHelper.getInstanceId(), CastWebContentsIntentUtils.VISIBITY_TYPE_HIDDEN));
         super.onStop();
     }
 
@@ -139,5 +151,9 @@ public class CastWebContentsFragment extends Fragment {
             mSurfaceHelper.onDestroy();
         }
         super.onDestroy();
+    }
+
+    private void sendIntentSync(Intent in) {
+        CastWebContentsIntentUtils.getLocalBroadcastManager().sendBroadcastSync(in);
     }
 }

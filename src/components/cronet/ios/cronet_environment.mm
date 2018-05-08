@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -320,7 +319,7 @@ void CronetEnvironment::InitializeOnNetworkThread() {
 
   // Cache
   base::FilePath storage_path;
-  if (!PathService::Get(base::DIR_CACHE, &storage_path))
+  if (!base::PathService::Get(base::DIR_CACHE, &storage_path))
     return;
   storage_path = storage_path.Append(FILE_PATH_LITERAL("cronet"));
 

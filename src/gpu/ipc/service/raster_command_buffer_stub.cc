@@ -4,10 +4,10 @@
 
 #include "gpu/ipc/service/raster_command_buffer_stub.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -243,7 +243,7 @@ gpu::ContextResult RasterCommandBufferStub::Initialize(
   }
 
   if (manager->gpu_preferences().enable_gpu_service_logging) {
-    decoder->set_log_commands(true);
+    decoder->SetLogCommands(true);
   }
   set_decoder_context(std::move(decoder));
 
@@ -289,5 +289,7 @@ void RasterCommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
                                                   bool is_lost) {
   NOTREACHED();
 }
+
+void RasterCommandBufferStub::OnSwapBuffers(uint32_t flags) {}
 
 }  // namespace gpu

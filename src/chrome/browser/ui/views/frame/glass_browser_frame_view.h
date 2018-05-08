@@ -26,11 +26,16 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
                               public TabIconViewModel,
                               public TabStripObserver {
  public:
+  // Alpha to use for features in the titlebar (the window title and caption
+  // buttons) when the window is inactive. They are opaque when active.
+  static constexpr SkAlpha kInactiveTitlebarFeatureAlpha = 0x65;
+
   // Constructs a non-client view for an BrowserFrame.
   GlassBrowserFrameView(BrowserFrame* frame, BrowserView* browser_view);
   ~GlassBrowserFrameView() override;
 
   // BrowserNonClientFrameView:
+  bool CaptionButtonsOnLeadingEdge() const override;
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
@@ -47,7 +52,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;
   void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override {}
-  void ResetWindowControls() override {}
+  void ResetWindowControls() override;
   void SizeConstraintsChanged() override {}
 
   // views::ButtonListener:
@@ -58,9 +63,8 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
   // TabStripObserver:
-  void TabStripMaxXChanged(TabStrip* tab_strip) override;
-  void TabStripDeleted(TabStrip* tab_strip) override;
-  void TabStripRemovedTabAt(TabStrip* tab_strip, int index) override;
+  void OnTabRemoved(int index) override;
+  void OnTabsMaxXChanged() override;
 
   bool IsMaximized() const;
 
@@ -112,7 +116,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   // don't have tabs.
   int TitlebarHeight(bool restored) const;
 
-  // Returns the y coordinate for the top of the frame, which in tablet mode
+  // Returns the y coordinate for the top of the frame, which in maximized mode
   // is the top of the screen and in restored mode is 1 pixel below the top of
   // the window to leave room for the visual border that Windows draws.
   int WindowTopY() const;
@@ -121,12 +125,12 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   // edge of the caption buttons.
   int MinimizeButtonX() const;
 
+  // Returns the spacing between the trailing edge of the tabstrip and the start
+  // of the caption buttons.
+  int TabStripCaptionSpacing() const;
+
   // Returns whether the toolbar is currently visible.
   bool IsToolbarVisible() const;
-
-  // Returns whether the caption buttons are drawn at the leading edge (i.e. the
-  // left in LTR mode, or the right in RTL mode).
-  bool CaptionButtonsOnLeadingEdge() const;
 
   bool ShowCustomIcon() const;
   bool ShowCustomTitle() const;

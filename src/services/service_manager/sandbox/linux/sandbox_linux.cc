@@ -26,7 +26,6 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
@@ -42,7 +41,7 @@
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
 #include "sandbox/linux/syscall_broker/broker_command.h"
 #include "sandbox/linux/syscall_broker/broker_process.h"
-#include "sandbox/sandbox_features.h"
+#include "sandbox/sandbox_buildflags.h"
 #include "services/service_manager/sandbox/linux/bpf_broker_policy_linux.h"
 #include "services/service_manager/sandbox/linux/sandbox_seccomp_bpf_linux.h"
 #include "services/service_manager/sandbox/sandbox.h"
@@ -440,18 +439,12 @@ bool SandboxLinux::LimitAddressSpace(const std::string& process_type,
     if (process_type == switches::kRendererProcess ||
         process_type == switches::kGpuProcess) {
       address_space_limit = 1ULL << 34;
-      if (options.has_wasm_trap_handler) {
-        // WebAssembly memory objects use a large amount of address space when
-        // trap-based bounds checks are enabled. To accomodate this, we allow
-        // the address space limit to adjust dynamically up to a certain limit.
-        // The limit is currently 4TiB, which should allow enough address space
-        // for any reasonable page. See https://crbug.com/750378.
-        address_space_limit_max = 1ULL << 42;
-      } else {
-        // If we are not using trap-based bounds checks, there's no reason to
-        // allow the address space limit to grow.
-        address_space_limit_max = address_space_limit;
-      }
+      // WebAssembly memory objects use a large amount of address space for
+      // guard regions. To accomodate this, we allow the address space limit to
+      // adjust dynamically up to a certain limit. The limit is currently 4TiB,
+      // which should allow enough address space for any reasonable page. See
+      // https://crbug.com/750378.
+      address_space_limit_max = 1ULL << 42;
     }
   }
 

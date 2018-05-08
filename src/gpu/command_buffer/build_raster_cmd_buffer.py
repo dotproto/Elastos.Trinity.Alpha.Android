@@ -11,21 +11,13 @@ from optparse import OptionParser
 
 import build_cmd_buffer_lib
 
-# Empty flags because raster interface does not support glEnable
-_CAPABILITY_FLAGS = []
-
-_STATE_INFO = {}
-
 # Named type info object represents a named type that is used in OpenGL call
 # arguments.  Each named type defines a set of valid OpenGL call arguments.  The
 # named types are used in 'raster_cmd_buffer_functions.txt'.
 # type: The actual GL type of the named type.
 # valid: The list of values that are valid for both the client and the service.
-# valid_es3: The list of values that are valid in OpenGL ES 3, but not ES 2.
 # invalid: Examples of invalid values for the type. At least these values
 #          should be tested to be invalid.
-# deprecated_es3: The list of values that are valid in OpenGL ES 2, but
-#                 deprecated in ES 3.
 # is_complete: The list of valid values of type are final and will not be
 #              modified during runtime.
 # validator: If set to False will prevent creation of a ValueValidator. Values
@@ -117,6 +109,7 @@ _NAMED_TYPE_INFO = {
     ],
     'invalid': [
       'gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE',
+      'gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE',
     ],
   },
   'viz::ResourceFormat': {
@@ -178,6 +171,14 @@ _NAMED_TYPE_INFO = {
 _FUNCTION_INFO = {
   'CreateAndConsumeTexture': {
     'type': 'NoCommand',
+    'trace_level': 2,
+  },
+  'CreateAndConsumeTextureINTERNAL': {
+    'decoder_func': 'DoCreateAndConsumeTextureINTERNAL',
+    'internal': True,
+    'type': 'PUT',
+    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
+    'unit_test': False,
     'trace_level': 2,
   },
   'CreateImageCHROMIUM': {
@@ -259,7 +260,6 @@ _FUNCTION_INFO = {
                 'GLuint64 timeout',
     'impl_func': False,
     'client_test': False,
-    'es3': True,
     'trace_level': 1,
   },
   'CompressedCopyTextureCHROMIUM': {
@@ -272,7 +272,6 @@ _FUNCTION_INFO = {
     'resource_type': 'Query',
     'resource_types': 'Queries',
     'unit_test': False,
-    'pepper_interface': 'Query',
     'not_shared': 'True',
   },
   'DeleteQueriesEXT': {
@@ -281,7 +280,6 @@ _FUNCTION_INFO = {
     'resource_type': 'Query',
     'resource_types': 'Queries',
     'unit_test': False,
-    'pepper_interface': 'Query',
   },
   'BeginQueryEXT': {
     'type': 'Custom',
@@ -289,7 +287,6 @@ _FUNCTION_INFO = {
     'cmd_args': 'GLenumQueryTarget target, GLidQuery id, void* sync_data',
     'data_transfer_methods': ['shm'],
     'gl_test_func': 'glBeginQuery',
-    'pepper_interface': 'Query',
   },
   'EndQueryEXT': {
     'type': 'Custom',
@@ -297,12 +294,10 @@ _FUNCTION_INFO = {
     'cmd_args': 'GLenumQueryTarget target, GLuint submit_count',
     'gl_test_func': 'glEndnQuery',
     'client_test': False,
-    'pepper_interface': 'Query',
   },
   'GetQueryObjectuivEXT': {
     'type': 'NoCommand',
     'gl_test_func': 'glGetQueryObjectuiv',
-    'pepper_interface': 'Query',
   },
   'BindTexImage2DCHROMIUM': {
     'decoder_func': 'DoBindTexImage2DCHROMIUM',
@@ -453,8 +448,7 @@ def main(argv):
   base_dir = os.getcwd()
   build_cmd_buffer_lib.InitializePrefix("Raster")
   gen = build_cmd_buffer_lib.GLGenerator(options.verbose, "2018",
-                                         _FUNCTION_INFO, _NAMED_TYPE_INFO,
-                                         _STATE_INFO, _CAPABILITY_FLAGS)
+                                         _FUNCTION_INFO, _NAMED_TYPE_INFO)
   gen.ParseGLH("gpu/command_buffer/raster_cmd_buffer_functions.txt")
 
   # Support generating files under gen/

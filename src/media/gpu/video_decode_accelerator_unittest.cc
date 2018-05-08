@@ -59,12 +59,13 @@
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/test_data_util.h"
+#include "media/gpu/buildflags.h"
 #include "media/gpu/fake_video_decode_accelerator.h"
-#include "media/gpu/features.h"
 #include "media/gpu/format_utils.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
-#include "media/gpu/rendering_helper.h"
-#include "media/gpu/video_accelerator_unittest_helpers.h"
+#include "media/gpu/test/rendering_helper.h"
+#include "media/gpu/test/video_accelerator_unittest_helpers.h"
+#include "media/gpu/test/video_decode_accelerator_unittest_helpers.h"
 #include "media/video/h264_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -79,10 +80,7 @@
 #endif  // BUILDFLAG(USE_VAAPI)
 
 #if defined(OS_CHROMEOS)
-#include "ui/gfx/native_pixmap.h"
-#include "ui/ozone/public/ozone_gpu_test_helper.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/ozone/public/surface_factory_ozone.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace media {
@@ -118,11 +116,15 @@ const base::FilePath::CharType* g_output_log = NULL;
 // The value is set by the switch "--rendering_fps".
 double g_rendering_fps = 60;
 
+bool g_use_gl_renderer = true;
+
 // The value is set by the switch "--num_play_throughs". The video will play
 // the specified number of times. In different test cases, we have different
 // values for |num_play_throughs|. This setting will override the value. A
 // special value "0" means no override.
 int g_num_play_throughs = 0;
+
+// TODO(hiroh): Change this type to bool
 // Fake decode
 int g_fake_decoder = 0;
 
@@ -139,20 +141,7 @@ base::FilePath g_test_file_path;
 base::FilePath g_thumbnail_output_dir;
 
 // Environment to store rendering thread.
-class VideoDecodeAcceleratorTestEnvironment;
-VideoDecodeAcceleratorTestEnvironment* g_env;
-
-// Magic constants for differentiating the reasons for NotifyResetDone being
-// called.
-enum ResetPoint {
-  // Reset() right after calling Flush() (before getting NotifyFlushDone()).
-  RESET_BEFORE_NOTIFY_FLUSH_DONE = -5,
-  // Reset() just after calling Decode() with a fragment containing config info.
-  RESET_AFTER_FIRST_CONFIG_INFO = -4,
-  START_OF_STREAM_RESET = -3,
-  MID_STREAM_RESET = -2,
-  END_OF_STREAM_RESET = -1
-};
+media::test::VideoDecodeAcceleratorTestEnvironment* g_env;
 
 const int kMaxResetAfterFrameNum = 100;
 const int kMaxFramesToDelayReuse = 64;
@@ -162,76 +151,33 @@ const int kWebRtcDecodeCallsPerSecond = 30;
 // Simulate an adjustment to a larger number of pictures to make sure the
 // decoder supports an upwards adjustment.
 const int kExtraPictureBuffers = 2;
-
-struct TestVideoFile {
-  explicit TestVideoFile(base::FilePath::StringType file_name)
-      : file_name(file_name),
-        width(-1),
-        height(-1),
-        num_frames(-1),
-        num_fragments(-1),
-        min_fps_render(-1),
-        min_fps_no_render(-1),
-        profile(VIDEO_CODEC_PROFILE_UNKNOWN),
-        reset_after_frame_num(END_OF_STREAM_RESET) {}
-
-  base::FilePath::StringType file_name;
-  int width;
-  int height;
-  int num_frames;
-  int num_fragments;
-  int min_fps_render;
-  int min_fps_no_render;
-  VideoCodecProfile profile;
-  int reset_after_frame_num;
-  std::string data_str;
-};
+const int kNoMidStreamReset = -1;
 
 const gfx::Size kThumbnailsPageSize(1600, 1200);
 const gfx::Size kThumbnailSize(160, 120);
-const int kMD5StringLength = 32;
 
-base::FilePath GetTestDataFile(const base::FilePath& input_file) {
-  if (input_file.IsAbsolute())
-    return input_file;
-  // input_file needs to be existed, otherwise base::MakeAbsoluteFilePath will
-  // return an empty base::FilePath.
-  base::FilePath abs_path =
-      base::MakeAbsoluteFilePath(g_test_file_path.Append(input_file));
-  LOG_IF(ERROR, abs_path.empty())
-      << g_test_file_path.Append(input_file).value().c_str()
-      << " is not an existing path.";
-  return abs_path;
-}
+// We assert a minimal number of concurrent decoders we expect to succeed.
+// Different platforms can support more concurrent decoders, so we don't assert
+// failure above this.
+const size_t kMinSupportedNumConcurrentDecoders = 3;
 
-// Read in golden MD5s for the thumbnailed rendering of this video
-void ReadGoldenThumbnailMD5s(const TestVideoFile* video_file,
-                             std::vector<std::string>* md5_strings) {
-  base::FilePath filepath(video_file->file_name);
-  filepath = filepath.AddExtension(FILE_PATH_LITERAL(".md5"));
-  std::string all_md5s;
-  base::ReadFileToString(GetTestDataFile(filepath), &all_md5s);
-  *md5_strings = base::SplitString(all_md5s, "\n", base::TRIM_WHITESPACE,
-                                   base::SPLIT_WANT_ALL);
-  // Check these are legitimate MD5s.
-  for (const std::string& md5_string : *md5_strings) {
-    // Ignore the empty string added by SplitString
-    if (!md5_string.length())
-      continue;
-    // Ignore comments
-    if (md5_string.at(0) == '#')
-      continue;
-
-    LOG_IF(ERROR, static_cast<int>(md5_string.length()) != kMD5StringLength)
-        << "MD5 length error: " << md5_string;
-    bool hex_only = std::count_if(md5_string.begin(), md5_string.end(),
-                                  isxdigit) == kMD5StringLength;
-    LOG_IF(ERROR, !hex_only) << "MD5 includes non-hex char: " << md5_string;
-  }
-  LOG_IF(ERROR, md5_strings->empty()) << "  MD5 checksum file ("
-                                      << filepath.MaybeAsASCII()
-                                      << ") missing or empty.";
-}
+// Magic constants for differentiating the reasons for NotifyResetDone being
+// called.
+enum ResetPoint {
+  // Reset() right after calling Flush() (before getting NotifyFlushDone()).
+  RESET_BEFORE_NOTIFY_FLUSH_DONE,
+  // Reset() just after calling Decode() with a fragment containing config info.
+  RESET_AFTER_FIRST_CONFIG_INFO,
+  // Reset() just after finishing Initialize().
+  START_OF_STREAM_RESET,
+  // Reset() after a specific number of Decode() are executed.
+  MID_STREAM_RESET,
+  // Reset() after NotifyFlushDone().
+  END_OF_STREAM_RESET,
+  // This is the state that Reset() by RESET_AFTER_FIRST_CONFIG_INFO
+  // is executed().
+  DONE_RESET_AFTER_FIRST_CONFIG_INFO,
+};
 
 // State of the GLRenderingVDAClient below.  Order matters here as the test
 // makes assumptions about it.
@@ -248,137 +194,41 @@ enum ClientState {
   CS_MAX,  // Must be last entry.
 };
 
-// Initialize the GPU thread for rendering. We only need to setup once
-// for all test cases.
-class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
- public:
-  VideoDecodeAcceleratorTestEnvironment()
-      : rendering_thread_("GLRenderingVDAClientThread") {}
+struct TestVideoFile {
+  explicit TestVideoFile(base::FilePath::StringType file_name)
+      : file_name(file_name),
+        width(-1),
+        height(-1),
+        num_frames(-1),
+        num_fragments(-1),
+        min_fps_render(-1),
+        min_fps_no_render(-1),
+        profile(VIDEO_CODEC_PROFILE_UNKNOWN),
+        reset_after_frame_num(-1) {}
 
-  void SetUp() override {
-    base::Thread::Options options;
-    options.message_loop_type = base::MessageLoop::TYPE_UI;
-    rendering_thread_.StartWithOptions(options);
-
-    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-    rendering_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&RenderingHelper::InitializeOneOff, &done));
-    done.Wait();
-
-#if defined(OS_CHROMEOS)
-    gpu_helper_.reset(new ui::OzoneGpuTestHelper());
-    // Need to initialize after the rendering side since the rendering side
-    // initializes the "GPU" parts of Ozone.
-    //
-    // This also needs to be done in the test environment since this shouldn't
-    // be initialized multiple times for the same Ozone platform.
-    gpu_helper_->Initialize(base::ThreadTaskRunnerHandle::Get());
-#endif
-  }
-
-  void TearDown() override {
-#if defined(OS_CHROMEOS)
-    gpu_helper_.reset();
-#endif
-    rendering_thread_.Stop();
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> GetRenderingTaskRunner() const {
-    return rendering_thread_.task_runner();
-  }
-
- private:
-  base::Thread rendering_thread_;
-#if defined(OS_CHROMEOS)
-  std::unique_ptr<ui::OzoneGpuTestHelper> gpu_helper_;
-#endif
-
-  DISALLOW_COPY_AND_ASSIGN(VideoDecodeAcceleratorTestEnvironment);
+  base::FilePath::StringType file_name;
+  int width;
+  int height;
+  int num_frames;
+  int num_fragments;
+  int min_fps_render;
+  int min_fps_no_render;
+  VideoCodecProfile profile;
+  int reset_after_frame_num;
+  std::string data_str;
 };
 
-// A helper class used to manage the lifetime of a Texture. Can be backed by
-// either a buffer allocated by the VDA, or by a preallocated pixmap.
-class TextureRef : public base::RefCounted<TextureRef> {
- public:
-  static scoped_refptr<TextureRef> Create(
-      uint32_t texture_id,
-      const base::Closure& no_longer_needed_cb);
-
-  static scoped_refptr<TextureRef> CreatePreallocated(
-      uint32_t texture_id,
-      const base::Closure& no_longer_needed_cb,
-      VideoPixelFormat pixel_format,
-      const gfx::Size& size);
-
-  gfx::GpuMemoryBufferHandle ExportGpuMemoryBufferHandle() const;
-
-  int32_t texture_id() const { return texture_id_; }
-
- private:
-  friend class base::RefCounted<TextureRef>;
-
-  TextureRef(uint32_t texture_id, const base::Closure& no_longer_needed_cb)
-      : texture_id_(texture_id), no_longer_needed_cb_(no_longer_needed_cb) {}
-
-  ~TextureRef();
-
-  uint32_t texture_id_;
-  base::Closure no_longer_needed_cb_;
-#if defined(OS_CHROMEOS)
-  scoped_refptr<gfx::NativePixmap> pixmap_;
-#endif
-};
-
-TextureRef::~TextureRef() {
-  base::ResetAndReturn(&no_longer_needed_cb_).Run();
-}
-
-// static
-scoped_refptr<TextureRef> TextureRef::Create(
-    uint32_t texture_id,
-    const base::Closure& no_longer_needed_cb) {
-  return base::WrapRefCounted(new TextureRef(texture_id, no_longer_needed_cb));
-}
-
-// static
-scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
-    uint32_t texture_id,
-    const base::Closure& no_longer_needed_cb,
-    VideoPixelFormat pixel_format,
-    const gfx::Size& size) {
-  scoped_refptr<TextureRef> texture_ref;
-#if defined(OS_CHROMEOS)
-  texture_ref = TextureRef::Create(texture_id, no_longer_needed_cb);
-  LOG_ASSERT(texture_ref);
-
-  ui::OzonePlatform* platform = ui::OzonePlatform::GetInstance();
-  ui::SurfaceFactoryOzone* factory = platform->GetSurfaceFactoryOzone();
-  gfx::BufferFormat buffer_format =
-      VideoPixelFormatToGfxBufferFormat(pixel_format);
-  texture_ref->pixmap_ =
-      factory->CreateNativePixmap(gfx::kNullAcceleratedWidget, size,
-                                  buffer_format, gfx::BufferUsage::SCANOUT);
-  LOG_ASSERT(texture_ref->pixmap_);
-#endif
-
-  return texture_ref;
-}
-
-gfx::GpuMemoryBufferHandle TextureRef::ExportGpuMemoryBufferHandle() const {
-  gfx::GpuMemoryBufferHandle handle;
-#if defined(OS_CHROMEOS)
-  CHECK(pixmap_);
-  int duped_fd = HANDLE_EINTR(dup(pixmap_->GetDmaBufFd(0)));
-  LOG_ASSERT(duped_fd != -1) << "Failed duplicating dmabuf fd";
-  handle.type = gfx::NATIVE_PIXMAP;
-  handle.native_pixmap_handle.fds.emplace_back(
-      base::FileDescriptor(duped_fd, true));
-  handle.native_pixmap_handle.planes.emplace_back(
-      pixmap_->GetDmaBufPitch(0), pixmap_->GetDmaBufOffset(0), 0,
-      pixmap_->GetDmaBufModifier(0));
-#endif
-  return handle;
+base::FilePath GetTestDataFile(const base::FilePath& input_file) {
+  if (input_file.IsAbsolute())
+    return input_file;
+  // input_file needs to be existed, otherwise base::MakeAbsoluteFilePath will
+  // return an empty base::FilePath.
+  base::FilePath abs_path =
+      base::MakeAbsoluteFilePath(g_test_file_path.Append(input_file));
+  LOG_IF(ERROR, abs_path.empty())
+      << g_test_file_path.Append(input_file).value().c_str()
+      << " is not an existing path.";
+  return abs_path;
 }
 
 // Client that can accept callbacks from a VideoDecodeAccelerator and is used by
@@ -387,38 +237,52 @@ class GLRenderingVDAClient
     : public VideoDecodeAccelerator::Client,
       public base::SupportsWeakPtr<GLRenderingVDAClient> {
  public:
+  // TODO(hiroh): Change some int type variables to size_t or uint32/64_t.
   // |window_id| the window_id of the client, which is used to identify the
-  // rendering area in the |rendering_helper|.
-  // Doesn't take ownership of |rendering_helper| or |note|, which must outlive
-  // |*this|.
+  // rendering area in the |rendering_helper_|.
+  // |num_in_flight_decodes| is the number of concurrent in-flight Decode()
+  // calls per decoder.
   // |num_play_throughs| indicates how many times to play through the video.
+  // |reset_point| indicates the timing of executing Reset().
   // |reset_after_frame_num| can be a frame number >=0 indicating a mid-stream
-  // Reset() should be done after that frame number is delivered, or
-  // END_OF_STREAM_RESET to indicate no mid-stream Reset().
+  // Reset() should be done.  This member argument is only meaningful and must
+  // not be less than 0 if |reset_point| == MID_STREAM_RESET.
+  // Unless |reset_point| == MID_STREAM_RESET, it must be kNoMidStreamReset.
   // |delete_decoder_state| indicates when the underlying decoder should be
   // Destroy()'d and deleted and can take values: N<0: delete after -N Decode()
   // calls have been made, N>=0 means interpret as ClientState.
   // Both |reset_after_frame_num| & |delete_decoder_state| apply only to the
   // last play-through (governed by |num_play_throughs|).
+  // |frame_size| is the frame size of the video file.
+  // |profile| is video codec profile of the video file.
+  // |fake_decoder| indicates decoder_ would be fake_video_decode_accelerator.
   // After |delay_reuse_after_frame_num| frame has been delivered, the client
   // will start delaying the call to ReusePictureBuffer() for kReuseDelay.
   // |decode_calls_per_second| is the number of VDA::Decode calls per second.
   // If |decode_calls_per_second| > 0, |num_in_flight_decodes| must be 1.
-  GLRenderingVDAClient(size_t window_id,
+  // |render_as_thumbnails| indicates if the decoded picture will be rendered
+  // as thumbnails at the end of tests.
+  struct Config {
+    size_t window_id = 0;
+    int num_in_flight_decodes = 1;
+    int num_play_throughs = 1;
+    ResetPoint reset_point = END_OF_STREAM_RESET;
+    int reset_after_frame_num = kNoMidStreamReset;
+    int delete_decoder_state = CS_RESET;
+    gfx::Size frame_size;
+    VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
+    int fake_decoder = 0;
+    int delay_reuse_after_frame_num = std::numeric_limits<int>::max();
+    int decode_calls_per_second = 0;
+    bool render_as_thumbnails = false;
+  };
+
+  // Doesn't take ownership of |rendering_helper| or |note|, which must outlive
+  // |*this|.
+  GLRenderingVDAClient(Config config,
+                       std::string encoded_data,
                        RenderingHelper* rendering_helper,
-                       ClientStateNotification<ClientState>* note,
-                       const std::string& encoded_data,
-                       int num_in_flight_decodes,
-                       int num_play_throughs,
-                       int reset_after_frame_num,
-                       int delete_decoder_state,
-                       int frame_width,
-                       int frame_height,
-                       VideoCodecProfile profile,
-                       int fake_decoder,
-                       int delay_reuse_after_frame_num,
-                       int decode_calls_per_second,
-                       bool render_as_thumbnails);
+                       ClientStateNotification<ClientState>* note);
   ~GLRenderingVDAClient() override;
   void CreateAndStartDecoder();
 
@@ -441,7 +305,9 @@ class GLRenderingVDAClient
 
   // Simple getters for inspecting the state of the Client.
   int num_done_bitstream_buffers() { return num_done_bitstream_buffers_; }
-  int num_skipped_fragments() { return num_skipped_fragments_; }
+  int num_skipped_fragments() {
+    return encoded_data_helper_->num_skipped_fragments();
+  }
   int num_queued_fragments() { return num_queued_fragments_; }
   int num_decoded_frames() { return num_decoded_frames_; }
   double frames_per_second();
@@ -450,7 +316,8 @@ class GLRenderingVDAClient
   bool decoder_deleted() { return !decoder_.get(); }
 
  private:
-  typedef std::map<int32_t, scoped_refptr<TextureRef>> TextureRefMap;
+  typedef std::map<int32_t, scoped_refptr<media::test::TextureRef>>
+      TextureRefMap;
 
   void SetState(ClientState new_state);
   void FinishInitialization();
@@ -461,57 +328,34 @@ class GLRenderingVDAClient
   // Reset the associated decoder after flushing.
   void ResetDecoderAfterFlush();
 
-  // Compute & return the first encoded bytes (including a start frame) to send
-  // to the decoder, starting at |start_pos| and returning one fragment. Skips
-  // to the first decodable position.
-  std::string GetBytesForFirstFragment(size_t start_pos, size_t* end_pos);
-  // Compute & return the encoded bytes of next fragment to send to the decoder
-  // (based on |start_pos|).
-  std::string GetBytesForNextFragment(size_t start_pos, size_t* end_pos);
-  // Helpers for GetBytesForNextFragment above.
-  void GetBytesForNextNALU(size_t start_pos, size_t* end_pos);  // For h.264.
-  std::string GetBytesForNextFrame(size_t start_pos,
-                                   size_t* end_pos);  // For VP8/9.
-
   // Request decode of the next fragment in the encoded data.
   void DecodeNextFragment();
 
-  size_t window_id_;
-  RenderingHelper* rendering_helper_;
+  const Config config_;
+  RenderingHelper* const rendering_helper_;
   gfx::Size frame_size_;
-  std::string encoded_data_;
-  const int num_in_flight_decodes_;
   int outstanding_decodes_;
-  size_t encoded_data_next_pos_to_decode_;
   int next_bitstream_buffer_id_;
-  ClientStateNotification<ClientState>* note_;
+  ClientStateNotification<ClientState>* const note_;
   std::unique_ptr<VideoDecodeAccelerator> decoder_;
   base::WeakPtr<VideoDecodeAccelerator> weak_vda_;
   std::unique_ptr<base::WeakPtrFactory<VideoDecodeAccelerator>>
       weak_vda_ptr_factory_;
   std::unique_ptr<GpuVideoDecodeAcceleratorFactory> vda_factory_;
   int remaining_play_throughs_;
-  int reset_after_frame_num_;
-  int delete_decoder_state_;
+  ResetPoint reset_point_;
   ClientState state_;
-  int num_skipped_fragments_;
   int num_queued_fragments_;
   int num_decoded_frames_;
   int num_done_bitstream_buffers_;
   base::TimeTicks initialize_done_ticks_;
-  VideoCodecProfile profile_;
-  int fake_decoder_;
   GLenum texture_target_;
   VideoPixelFormat pixel_format_;
   std::vector<base::TimeTicks> frame_delivery_times_;
-  int delay_reuse_after_frame_num_;
   // A map from bitstream buffer id to the decode start time of the buffer.
   std::map<int, base::TimeTicks> decode_start_time_;
   // The decode time of all decoded frames.
   std::vector<base::TimeDelta> decode_time_;
-  // The number of VDA::Decode calls per second. This is to simulate webrtc.
-  int decode_calls_per_second_;
-  bool render_as_thumbnails_;
 
   // A map of the textures that are currently active for the decoder, i.e.,
   // have been created via AssignPictureBuffers() and not dismissed via
@@ -527,6 +371,8 @@ class GLRenderingVDAClient
 
   int32_t next_picture_buffer_id_;
 
+  const std::unique_ptr<media::test::EncodedDataHelper> encoded_data_helper_;
+
   base::WeakPtr<GLRenderingVDAClient> weak_this_;
   base::WeakPtrFactory<GLRenderingVDAClient> weak_this_factory_;
 
@@ -541,57 +387,43 @@ static bool DummyBindImage(uint32_t client_texture_id,
 }
 
 GLRenderingVDAClient::GLRenderingVDAClient(
-    size_t window_id,
+    Config config,
+    std::string encoded_data,
     RenderingHelper* rendering_helper,
-    ClientStateNotification<ClientState>* note,
-    const std::string& encoded_data,
-    int num_in_flight_decodes,
-    int num_play_throughs,
-    int reset_after_frame_num,
-    int delete_decoder_state,
-    int frame_width,
-    int frame_height,
-    VideoCodecProfile profile,
-    int fake_decoder,
-    int delay_reuse_after_frame_num,
-    int decode_calls_per_second,
-    bool render_as_thumbnails)
-    : window_id_(window_id),
+    ClientStateNotification<ClientState>* note)
+    : config_(std::move(config)),
       rendering_helper_(rendering_helper),
-      frame_size_(frame_width, frame_height),
-      encoded_data_(encoded_data),
-      num_in_flight_decodes_(num_in_flight_decodes),
+      frame_size_(config_.frame_size),
       outstanding_decodes_(0),
-      encoded_data_next_pos_to_decode_(0),
       next_bitstream_buffer_id_(0),
       note_(note),
-      remaining_play_throughs_(num_play_throughs),
-      reset_after_frame_num_(reset_after_frame_num),
-      delete_decoder_state_(delete_decoder_state),
+      remaining_play_throughs_(config_.num_play_throughs),
+      reset_point_(config_.reset_point),
       state_(CS_CREATED),
-      num_skipped_fragments_(0),
       num_queued_fragments_(0),
       num_decoded_frames_(0),
       num_done_bitstream_buffers_(0),
-      fake_decoder_(fake_decoder),
       texture_target_(0),
       pixel_format_(PIXEL_FORMAT_UNKNOWN),
-      delay_reuse_after_frame_num_(delay_reuse_after_frame_num),
-      decode_calls_per_second_(decode_calls_per_second),
-      render_as_thumbnails_(render_as_thumbnails),
       next_picture_buffer_id_(1),
+      encoded_data_helper_(std::make_unique<media::test::EncodedDataHelper>(
+          std::move(encoded_data),
+          config_.profile)),
       weak_this_factory_(this) {
-  LOG_ASSERT(num_in_flight_decodes > 0);
-  LOG_ASSERT(num_play_throughs > 0);
+  DCHECK_NE(config.profile, VIDEO_CODEC_PROFILE_UNKNOWN);
+  LOG_ASSERT(config_.num_in_flight_decodes > 0);
+  LOG_ASSERT(config_.num_play_throughs > 0);
   // |num_in_flight_decodes_| is unsupported if |decode_calls_per_second_| > 0.
-  if (decode_calls_per_second_ > 0)
-    LOG_ASSERT(1 == num_in_flight_decodes_);
-
-  // Default to H264 baseline if no profile provided.
-  profile_ =
-      (profile != VIDEO_CODEC_PROFILE_UNKNOWN ? profile : H264PROFILE_BASELINE);
-
+  if (config_.decode_calls_per_second > 0)
+    LOG_ASSERT(1 == config_.num_in_flight_decodes);
   weak_this_ = weak_this_factory_.GetWeakPtr();
+  if (config_.reset_point == MID_STREAM_RESET) {
+    EXPECT_GE(config_.reset_after_frame_num, 0)
+        << "reset_ater_frame_num_ must be >=0 "
+        << "when reset_point == MID_STREAM_RESET";
+  } else {
+    EXPECT_EQ(config_.reset_after_frame_num, kNoMidStreamReset);
+  }
 }
 
 GLRenderingVDAClient::~GLRenderingVDAClient() {
@@ -604,28 +436,34 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
   LOG_ASSERT(decoder_deleted());
   LOG_ASSERT(!decoder_.get());
 
-  VideoDecodeAccelerator::Config config(profile_);
+  VideoDecodeAccelerator::Config vda_config(config_.profile);
 
-  if (fake_decoder_) {
+  if (config_.fake_decoder) {
     decoder_.reset(new FakeVideoDecodeAccelerator(
         frame_size_, base::Bind([]() { return true; })));
-    LOG_ASSERT(decoder_->Initialize(config, this));
+    LOG_ASSERT(decoder_->Initialize(vda_config, this));
   } else {
     if (!vda_factory_) {
-      vda_factory_ = GpuVideoDecodeAcceleratorFactory::Create(
-          base::Bind(&RenderingHelper::GetGLContext,
-                     base::Unretained(rendering_helper_)),
-          base::Bind([]() { return true; }), base::Bind(&DummyBindImage));
+      if (g_use_gl_renderer) {
+        vda_factory_ = GpuVideoDecodeAcceleratorFactory::Create(
+            base::Bind(&RenderingHelper::GetGLContext,
+                       base::Unretained(rendering_helper_)),
+            base::Bind([]() { return true; }), base::Bind(&DummyBindImage));
+      } else {
+        vda_factory_ = GpuVideoDecodeAcceleratorFactory::CreateWithNoGL();
+      }
+
       LOG_ASSERT(vda_factory_);
     }
 
     if (g_test_import) {
-      config.output_mode = VideoDecodeAccelerator::Config::OutputMode::IMPORT;
+      vda_config.output_mode =
+          VideoDecodeAccelerator::Config::OutputMode::IMPORT;
     }
     gpu::GpuDriverBugWorkarounds workarounds;
     gpu::GpuPreferences gpu_preferences;
     decoder_ =
-        vda_factory_->CreateVDA(this, config, workarounds, gpu_preferences);
+        vda_factory_->CreateVDA(this, vda_config, workarounds, gpu_preferences);
   }
 
   LOG_ASSERT(decoder_) << "Failed creating a VDA";
@@ -669,16 +507,17 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
                                      &done);
     done.Wait();
 
-    scoped_refptr<TextureRef> texture_ref;
+    scoped_refptr<media::test::TextureRef> texture_ref;
     base::Closure delete_texture_cb =
         base::Bind(&RenderingHelper::DeleteTexture,
                    base::Unretained(rendering_helper_), texture_id);
 
     if (g_test_import) {
-      texture_ref = TextureRef::CreatePreallocated(
+      texture_ref = media::test::TextureRef::CreatePreallocated(
           texture_id, delete_texture_cb, pixel_format, dimensions);
     } else {
-      texture_ref = TextureRef::Create(texture_id, delete_texture_cb);
+      texture_ref =
+          media::test::TextureRef::Create(texture_id, delete_texture_cb);
     }
 
     LOG_ASSERT(texture_ref);
@@ -739,13 +578,12 @@ void GLRenderingVDAClient::PictureReady(const Picture& picture) {
 
   // Mid-stream reset applies only to the last play-through per constructor
   // comment.
-  if (remaining_play_throughs_ == 1 &&
-      reset_after_frame_num_ == num_decoded_frames_) {
-    reset_after_frame_num_ = MID_STREAM_RESET;
+  if (remaining_play_throughs_ == 1 && reset_point_ == MID_STREAM_RESET &&
+      config_.reset_after_frame_num == num_decoded_frames_) {
     decoder_->Reset();
     // Re-start decoding from the beginning of the stream to avoid needing to
     // know how to find I-frames and so on in this test.
-    encoded_data_next_pos_to_decode_ = 0;
+    encoded_data_helper_->Rewind();
   }
 
   TextureRefMap::iterator texture_it =
@@ -758,11 +596,11 @@ void GLRenderingVDAClient::PictureReady(const Picture& picture) {
                  picture.picture_buffer_id()));
   ASSERT_TRUE(pending_textures_.insert(*texture_it).second);
 
-  if (render_as_thumbnails_) {
+  if (config_.render_as_thumbnails) {
     rendering_helper_->RenderThumbnail(video_frame->texture_target(),
                                        video_frame->texture_id());
   } else {
-    rendering_helper_->QueueVideoFrame(window_id_, video_frame);
+    rendering_helper_->QueueVideoFrame(config_.window_id, video_frame);
   }
 }
 
@@ -777,7 +615,7 @@ void GLRenderingVDAClient::ReturnPicture(int32_t picture_buffer_id) {
     return;
   }
 
-  if (num_decoded_frames_ > delay_reuse_after_frame_num_) {
+  if (num_decoded_frames_ > config_.delay_reuse_after_frame_num) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, base::Bind(&VideoDecodeAccelerator::ReusePictureBuffer,
                               weak_vda_, picture_buffer_id),
@@ -814,16 +652,16 @@ void GLRenderingVDAClient::NotifyEndOfBitstreamBuffer(
   --outstanding_decodes_;
 
   // Flush decoder after all BitstreamBuffers are processed.
-  if (encoded_data_next_pos_to_decode_ == encoded_data_.size()) {
+  if (encoded_data_helper_->ReachEndOfStream()) {
     if (state_ != CS_FLUSHING) {
       decoder_->Flush();
       SetState(CS_FLUSHING);
-      if (reset_after_frame_num_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
+      if (reset_point_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
         SetState(CS_FLUSHED);
         ResetDecoderAfterFlush();
       }
     }
-  } else if (decode_calls_per_second_ == 0) {
+  } else if (config_.decode_calls_per_second == 0) {
     DecodeNextFragment();
   }
 }
@@ -832,7 +670,7 @@ void GLRenderingVDAClient::NotifyFlushDone() {
   if (decoder_deleted())
     return;
 
-  if (reset_after_frame_num_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
+  if (reset_point_ == RESET_BEFORE_NOTIFY_FLUSH_DONE) {
     // In ResetBeforeNotifyFlushDone case client is not necessary to wait for
     // NotifyFlushDone(). But if client gets here, it should be always before
     // NotifyResetDone().
@@ -848,24 +686,32 @@ void GLRenderingVDAClient::NotifyResetDone() {
   if (decoder_deleted())
     return;
 
-  if (reset_after_frame_num_ == MID_STREAM_RESET) {
-    reset_after_frame_num_ = END_OF_STREAM_RESET;
-    DecodeNextFragment();
-    return;
-  } else if (reset_after_frame_num_ == START_OF_STREAM_RESET) {
-    reset_after_frame_num_ = END_OF_STREAM_RESET;
-    for (int i = 0; i < num_in_flight_decodes_; ++i)
+  switch (reset_point_) {
+    case DONE_RESET_AFTER_FIRST_CONFIG_INFO:
+    case MID_STREAM_RESET:
+      reset_point_ = END_OF_STREAM_RESET;
       DecodeNextFragment();
-    return;
+      return;
+    case START_OF_STREAM_RESET:
+      reset_point_ = END_OF_STREAM_RESET;
+      for (int i = 0; i < config_.num_in_flight_decodes; ++i)
+        DecodeNextFragment();
+      return;
+    case END_OF_STREAM_RESET:
+    case RESET_BEFORE_NOTIFY_FLUSH_DONE:
+      break;
+    case RESET_AFTER_FIRST_CONFIG_INFO:
+      NOTREACHED();
+      break;
   }
 
   if (remaining_play_throughs_) {
-    encoded_data_next_pos_to_decode_ = 0;
+    encoded_data_helper_->Rewind();
     FinishInitialization();
     return;
   }
 
-  rendering_helper_->Flush(window_id_);
+  rendering_helper_->Flush(config_.window_id);
 
   if (pending_textures_.empty()) {
     SetState(CS_RESET);
@@ -890,15 +736,10 @@ void GLRenderingVDAClient::OutputFrameDeliveryTimes(base::File* output) {
   }
 }
 
-static bool LookingAtNAL(const std::string& encoded, size_t pos) {
-  return encoded[pos] == 0 && encoded[pos + 1] == 0 && encoded[pos + 2] == 0 &&
-         encoded[pos + 3] == 1;
-}
-
 void GLRenderingVDAClient::SetState(ClientState new_state) {
   note_->Notify(new_state);
   state_ = new_state;
-  if (!remaining_play_throughs_ && new_state == delete_decoder_state_) {
+  if (!remaining_play_throughs_ && new_state == config_.delete_decoder_state) {
     LOG_ASSERT(!decoder_deleted());
     DeleteDecoder();
   }
@@ -908,15 +749,14 @@ void GLRenderingVDAClient::FinishInitialization() {
   SetState(CS_INITIALIZED);
   initialize_done_ticks_ = base::TimeTicks::Now();
 
-  if (reset_after_frame_num_ == START_OF_STREAM_RESET) {
-    reset_after_frame_num_ = MID_STREAM_RESET;
+  if (reset_point_ == START_OF_STREAM_RESET) {
     decoder_->Reset();
     return;
   }
 
-  for (int i = 0; i < num_in_flight_decodes_; ++i)
+  for (int i = 0; i < config_.num_in_flight_decodes; ++i)
     DecodeNextFragment();
-  DCHECK_EQ(outstanding_decodes_, num_in_flight_decodes_);
+  DCHECK_EQ(outstanding_decodes_, config_.num_in_flight_decodes);
 }
 
 void GLRenderingVDAClient::DeleteDecoder() {
@@ -924,121 +764,37 @@ void GLRenderingVDAClient::DeleteDecoder() {
     return;
   weak_vda_ptr_factory_->InvalidateWeakPtrs();
   decoder_.reset();
-  base::STLClearObject(&encoded_data_);
+
   active_textures_.clear();
 
   // Set state to CS_DESTROYED after decoder is deleted.
   SetState(CS_DESTROYED);
 }
 
-std::string GLRenderingVDAClient::GetBytesForFirstFragment(size_t start_pos,
-                                                           size_t* end_pos) {
-  if (profile_ < H264PROFILE_MAX) {
-    *end_pos = start_pos;
-    while (*end_pos + 4 < encoded_data_.size()) {
-      if ((encoded_data_[*end_pos + 4] & 0x1f) == 0x7)  // SPS start frame
-        return GetBytesForNextFragment(*end_pos, end_pos);
-      GetBytesForNextNALU(*end_pos, end_pos);
-      num_skipped_fragments_++;
-    }
-    *end_pos = start_pos;
-    return std::string();
-  }
-  DCHECK_LE(profile_, VP9PROFILE_MAX);
-  return GetBytesForNextFragment(start_pos, end_pos);
-}
-
-std::string GLRenderingVDAClient::GetBytesForNextFragment(size_t start_pos,
-                                                          size_t* end_pos) {
-  if (profile_ < H264PROFILE_MAX) {
-    *end_pos = start_pos;
-    GetBytesForNextNALU(*end_pos, end_pos);
-    if (start_pos != *end_pos) {
-      num_queued_fragments_++;
-    }
-    return encoded_data_.substr(start_pos, *end_pos - start_pos);
-  }
-  DCHECK_LE(profile_, VP9PROFILE_MAX);
-  return GetBytesForNextFrame(start_pos, end_pos);
-}
-
-void GLRenderingVDAClient::GetBytesForNextNALU(size_t start_pos,
-                                               size_t* end_pos) {
-  *end_pos = start_pos;
-  if (*end_pos + 4 > encoded_data_.size())
-    return;
-  LOG_ASSERT(LookingAtNAL(encoded_data_, start_pos));
-  *end_pos += 4;
-  while (*end_pos + 4 <= encoded_data_.size() &&
-         !LookingAtNAL(encoded_data_, *end_pos)) {
-    ++*end_pos;
-  }
-  if (*end_pos + 3 >= encoded_data_.size())
-    *end_pos = encoded_data_.size();
-}
-
-std::string GLRenderingVDAClient::GetBytesForNextFrame(size_t start_pos,
-                                                       size_t* end_pos) {
-  // Helpful description: http://wiki.multimedia.cx/index.php?title=IVF
-  std::string bytes;
-  if (start_pos == 0)
-    start_pos = 32;  // Skip IVF header.
-  *end_pos = start_pos;
-  uint32_t frame_size = *reinterpret_cast<uint32_t*>(&encoded_data_[*end_pos]);
-  *end_pos += 12;  // Skip frame header.
-  bytes.append(encoded_data_.substr(*end_pos, frame_size));
-  *end_pos += frame_size;
-  num_queued_fragments_++;
-  return bytes;
-}
-
-static bool FragmentHasConfigInfo(const uint8_t* data,
-                                  size_t size,
-                                  VideoCodecProfile profile) {
-  if (profile >= H264PROFILE_MIN && profile <= H264PROFILE_MAX) {
-    H264Parser parser;
-    parser.SetStream(data, size);
-    H264NALU nalu;
-    H264Parser::Result result = parser.AdvanceToNextNALU(&nalu);
-    if (result != H264Parser::kOk) {
-      // Let the VDA figure out there's something wrong with the stream.
-      return false;
-    }
-
-    return nalu.nal_unit_type == H264NALU::kSPS;
-  } else if (profile >= VP8PROFILE_MIN && profile <= VP9PROFILE_MAX) {
-    return (size > 0 && !(data[0] & 0x01));
-  }
-  // Shouldn't happen at this point.
-  LOG(FATAL) << "Invalid profile: " << GetProfileName(profile);
-  return false;
-}
-
 void GLRenderingVDAClient::DecodeNextFragment() {
   if (decoder_deleted())
     return;
-  if (encoded_data_next_pos_to_decode_ == encoded_data_.size())
+  if (encoded_data_helper_->ReachEndOfStream())
     return;
-  size_t end_pos;
   std::string next_fragment_bytes;
-  if (encoded_data_next_pos_to_decode_ == 0) {
-    next_fragment_bytes = GetBytesForFirstFragment(0, &end_pos);
-  } else {
-    next_fragment_bytes =
-        GetBytesForNextFragment(encoded_data_next_pos_to_decode_, &end_pos);
-  }
+  next_fragment_bytes = encoded_data_helper_->GetBytesForNextData();
   size_t next_fragment_size = next_fragment_bytes.size();
+  if (next_fragment_size == 0)
+    return;
 
+  num_queued_fragments_++;
   // Call Reset() just after Decode() if the fragment contains config info.
   // This tests how the VDA behaves when it gets a reset request before it has
   // a chance to ProvidePictureBuffers().
   bool reset_here = false;
-  if (reset_after_frame_num_ == RESET_AFTER_FIRST_CONFIG_INFO) {
-    reset_here = FragmentHasConfigInfo(
+  if (reset_point_ == RESET_AFTER_FIRST_CONFIG_INFO) {
+    reset_here = media::test::EncodedDataHelper::HasConfigInfo(
         reinterpret_cast<const uint8_t*>(next_fragment_bytes.data()),
-        next_fragment_size, profile_);
+        next_fragment_size, config_.profile);
+    // Set to DONE_RESET_AFTER_FIRST_CONFIG_INFO, to only Reset() for the first
+    // time.
     if (reset_here)
-      reset_after_frame_num_ = END_OF_STREAM_RESET;
+      reset_point_ = DONE_RESET_AFTER_FIRST_CONFIG_INFO;
   }
 
   // Populate the shared memory buffer w/ the fragment, duplicate its handle,
@@ -1059,24 +815,21 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   decoder_->Decode(bitstream_buffer);
   ++outstanding_decodes_;
   if (!remaining_play_throughs_ &&
-      -delete_decoder_state_ == next_bitstream_buffer_id_) {
+      -config_.delete_decoder_state == next_bitstream_buffer_id_) {
     DeleteDecoder();
   }
 
   if (reset_here) {
-    reset_after_frame_num_ = MID_STREAM_RESET;
     decoder_->Reset();
     // Restart from the beginning to re-Decode() the SPS we just sent.
-    encoded_data_next_pos_to_decode_ = 0;
-  } else {
-    encoded_data_next_pos_to_decode_ = end_pos;
+    encoded_data_helper_->Rewind();
   }
 
-  if (decode_calls_per_second_ > 0) {
+  if (config_.decode_calls_per_second > 0) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&GLRenderingVDAClient::DecodeNextFragment, AsWeakPtr()),
-        base::TimeDelta::FromSeconds(1) / decode_calls_per_second_);
+        base::TimeDelta::FromSeconds(1) / config_.decode_calls_per_second);
   }
 }
 
@@ -1206,7 +959,8 @@ void VideoDecodeAcceleratorTest::ParseAndReadTestVideoData(
       LOG_ASSERT(base::StringToInt(fields[5], &video_file->min_fps_render));
     if (!fields[6].empty())
       LOG_ASSERT(base::StringToInt(fields[6], &video_file->min_fps_no_render));
-    int profile = -1;
+    // Default to H264 baseline if no profile provided.
+    int profile = static_cast<int>(H264PROFILE_BASELINE);
     if (!fields[7].empty())
       LOG_ASSERT(base::StringToInt(fields[7], &profile));
     video_file->profile = static_cast<VideoCodecProfile>(profile);
@@ -1236,7 +990,7 @@ void VideoDecodeAcceleratorTest::UpdateTestVideoFileParams(
 
       video_file->num_frames += video_file->reset_after_frame_num;
     } else {
-      video_file->reset_after_frame_num = reset_point;
+      video_file->reset_after_frame_num = kNoMidStreamReset;
     }
 
     if (video_file->min_fps_render != -1)
@@ -1327,21 +1081,23 @@ static void AssertWaitForStateOrDeleted(
       << ", instead of " << expected_state;
 }
 
-// We assert a minimal number of concurrent decoders we expect to succeed.
-// Different platforms can support more concurrent decoders, so we don't assert
-// failure above this.
-enum { kMinSupportedNumConcurrentDecoders = 3 };
-
 // Test the most straightforward case possible: data is decoded from a single
 // chunk and rendered to the screen.
 TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
   size_t num_concurrent_decoders = std::get<0>(GetParam());
   const size_t num_in_flight_decodes = std::get<1>(GetParam());
   int num_play_throughs = std::get<2>(GetParam());
-  const int reset_point = std::get<3>(GetParam());
+  const ResetPoint reset_point = std::get<3>(GetParam());
   const int delete_decoder_state = std::get<4>(GetParam());
   bool test_reuse_delay = std::get<5>(GetParam());
   const bool render_as_thumbnails = std::get<6>(GetParam());
+
+  // We cannot render thumbnails without GL
+  if (!g_use_gl_renderer && render_as_thumbnails) {
+    LOG(WARNING) << "Skipping thumbnail test because GL is deactivated by "
+                    "--disable_rendering";
+    return;
+  }
 
   if (test_video_files_.size() > 1)
     num_concurrent_decoders = test_video_files_.size();
@@ -1355,17 +1111,6 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
   notes_.resize(num_concurrent_decoders);
   clients_.resize(num_concurrent_decoders);
 
-  RenderingHelperParams helper_params;
-  helper_params.rendering_fps = g_rendering_fps;
-  helper_params.render_as_thumbnails = render_as_thumbnails;
-  if (render_as_thumbnails) {
-    // Only one decoder is supported with thumbnail rendering
-    LOG_ASSERT(num_concurrent_decoders == 1U);
-    helper_params.thumbnails_page_size = kThumbnailsPageSize;
-    helper_params.thumbnail_size = kThumbnailSize;
-  }
-
-  helper_params.num_windows = num_concurrent_decoders;
   // First kick off all the decoders.
   for (size_t index = 0; index < num_concurrent_decoders; ++index) {
     TestVideoFile* video_file =
@@ -1374,23 +1119,40 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
         std::make_unique<ClientStateNotification<ClientState>>();
     notes_[index] = std::move(note);
 
-    int delay_after_frame_num = std::numeric_limits<int>::max();
+    int delay_reuse_after_frame_num = std::numeric_limits<int>::max();
     if (test_reuse_delay &&
         kMaxFramesToDelayReuse * 2 < video_file->num_frames) {
-      delay_after_frame_num = video_file->num_frames - kMaxFramesToDelayReuse;
+      delay_reuse_after_frame_num =
+          video_file->num_frames - kMaxFramesToDelayReuse;
     }
+    GLRenderingVDAClient::Config config;
+    config.window_id = index;
+    config.num_in_flight_decodes = num_in_flight_decodes;
+    config.num_play_throughs = num_play_throughs;
+    config.reset_point = reset_point;
+    config.reset_after_frame_num = video_file->reset_after_frame_num;
+    config.delete_decoder_state = delete_decoder_state;
+    config.frame_size = gfx::Size(video_file->width, video_file->height);
+    config.profile = video_file->profile;
+    config.fake_decoder = g_fake_decoder;
+    config.delay_reuse_after_frame_num = delay_reuse_after_frame_num;
+    config.render_as_thumbnails = render_as_thumbnails;
 
-    std::unique_ptr<GLRenderingVDAClient> client =
-        std::make_unique<GLRenderingVDAClient>(
-            index, &rendering_helper_, notes_[index].get(),
-            video_file->data_str, num_in_flight_decodes, num_play_throughs,
-            video_file->reset_after_frame_num, delete_decoder_state,
-            video_file->width, video_file->height, video_file->profile,
-            g_fake_decoder, delay_after_frame_num, 0, render_as_thumbnails);
-
-    clients_[index] = std::move(client);
+    clients_[index] = std::make_unique<GLRenderingVDAClient>(
+        std::move(config), video_file->data_str, &rendering_helper_,
+        notes_[index].get());
   }
 
+  RenderingHelperParams helper_params;
+  helper_params.rendering_fps = g_rendering_fps;
+  helper_params.render_as_thumbnails = render_as_thumbnails;
+  helper_params.num_windows = num_concurrent_decoders;
+  if (render_as_thumbnails) {
+    // Only one decoder is supported with thumbnail rendering
+    LOG_ASSERT(num_concurrent_decoders == 1U);
+    helper_params.thumbnails_page_size = kThumbnailsPageSize;
+    helper_params.thumbnail_size = kThumbnailSize;
+  }
   InitializeRenderingHelper(helper_params);
 
   for (size_t index = 0; index < num_concurrent_decoders; ++index) {
@@ -1449,12 +1211,11 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
     if (video_file->num_frames > 0) {
       // Expect the decoded frames may be more than the video frames as frames
       // could still be returned until resetting done.
-      if (video_file->reset_after_frame_num > 0)
+      if (reset_point == MID_STREAM_RESET)
         EXPECT_GE(client->num_decoded_frames(), video_file->num_frames);
       // In ResetBeforeNotifyFlushDone case the decoded frames may be less than
       // the video frames because decoder is reset before flush done.
-      else if (video_file->reset_after_frame_num !=
-               RESET_BEFORE_NOTIFY_FLUSH_DONE)
+      else if (reset_point != RESET_BEFORE_NOTIFY_FLUSH_DONE)
         EXPECT_EQ(client->num_decoded_frames(), video_file->num_frames);
     }
     if (reset_point == END_OF_STREAM_RESET) {
@@ -1483,30 +1244,15 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
     done.Wait();
 
     std::vector<unsigned char> rgb;
-    size_t num_pixels = rgba.size() / 4;
+    EXPECT_EQ(media::test::ConvertRGBAToRGB(rgba, &rgb), true)
+        << "RGBA frame had incorrect alpha";
 
-    rgb.resize(num_pixels * 3);
-    // Drop the alpha channel, but check as we go that it is all 0xff.
-    bool solid = true;
-    unsigned char* rgb_ptr = &rgb[0];
-    unsigned char* rgba_ptr = &rgba[0];
-    for (size_t i = 0; i < num_pixels; i++) {
-      *rgb_ptr++ = *rgba_ptr++;
-      *rgb_ptr++ = *rgba_ptr++;
-      *rgb_ptr++ = *rgba_ptr++;
-      solid = solid && (*rgba_ptr == 0xff);
-      rgba_ptr++;
-    }
-
-    EXPECT_EQ(solid, true) << "RGBA frame had incorrect alpha";
-
-    std::vector<std::string> golden_md5s;
     std::string md5_string = base::MD5String(
         base::StringPiece(reinterpret_cast<char*>(&rgb[0]), rgb.size()));
-    ReadGoldenThumbnailMD5s(test_video_files_[0].get(), &golden_md5s);
-    std::vector<std::string>::iterator match =
-        find(golden_md5s.begin(), golden_md5s.end(), md5_string);
-    if (match == golden_md5s.end()) {
+    base::FilePath filepath(test_video_files_[0]->file_name);
+    auto golden_md5s = media::test::ReadGoldenThumbnailMD5s(
+        filepath.AddExtension(FILE_PATH_LITERAL(".md5")));
+    if (!base::ContainsValue(golden_md5s, md5_string)) {
       // Convert raw RGBA into PNG for export.
       std::vector<unsigned char> png;
       gfx::PNGCodec::Encode(&rgba[0], gfx::PNGCodec::FORMAT_RGBA,
@@ -1514,9 +1260,6 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
                             kThumbnailsPageSize.width() * 4, true,
                             std::vector<gfx::PNGCodec::Comment>(), &png);
 
-      LOG(ERROR) << "Unknown thumbnails MD5: " << md5_string;
-
-      base::FilePath filepath(test_video_files_[0]->file_name);
       if (!g_thumbnail_output_dir.empty() &&
           base::DirectoryExists(g_thumbnail_output_dir)) {
         // Write bad thumbnails image to where --thumbnail_output_dir assigned.
@@ -1528,15 +1271,15 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
         //       directory.
         filepath = GetTestDataFile(filepath);
       }
-      filepath = filepath.AddExtension(FILE_PATH_LITERAL(".bad_thumbnails"));
-      filepath = filepath.AddExtension(FILE_PATH_LITERAL(".png"));
+      filepath =
+          filepath.AddExtension(FILE_PATH_LITERAL(".bad_thumbnails.png"));
       LOG(INFO) << "Write bad thumbnails image to: "
                 << filepath.value().c_str();
       int num_bytes = base::WriteFile(
           filepath, reinterpret_cast<char*>(&png[0]), png.size());
       EXPECT_EQ(num_bytes, static_cast<int>(png.size()));
+      LOG(FATAL) << "Unknown thumbnails MD5: " << md5_string;
     }
-    EXPECT_NE(match, golden_md5s.end());
   }
 
   // Output the frame delivery time to file
@@ -1687,22 +1430,20 @@ INSTANTIATE_TEST_CASE_P(
 INSTANTIATE_TEST_CASE_P(
     ResourceExhaustion,
     VideoDecodeAcceleratorParamTest,
-    ::testing::Values(
-        // +0 hack below to promote enum to int.
-        std::make_tuple(kMinSupportedNumConcurrentDecoders + 0,
-                        1,
-                        1,
-                        END_OF_STREAM_RESET,
-                        CS_RESET,
-                        false,
-                        false),
-        std::make_tuple(kMinSupportedNumConcurrentDecoders + 1,
-                        1,
-                        1,
-                        END_OF_STREAM_RESET,
-                        CS_RESET,
-                        false,
-                        false)));
+    ::testing::Values(std::make_tuple(kMinSupportedNumConcurrentDecoders,
+                                      1,
+                                      1,
+                                      END_OF_STREAM_RESET,
+                                      CS_RESET,
+                                      false,
+                                      false),
+                      std::make_tuple(kMinSupportedNumConcurrentDecoders + 1,
+                                      1,
+                                      1,
+                                      END_OF_STREAM_RESET,
+                                      CS_RESET,
+                                      false,
+                                      false)));
 
 // Allow MAYBE macro substitution.
 #define WRAPPED_INSTANTIATE_TEST_CASE_P(a, b, c) \
@@ -1725,12 +1466,18 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 // second.
 TEST_F(VideoDecodeAcceleratorTest, TestDecodeTimeMedian) {
   notes_.push_back(std::make_unique<ClientStateNotification<ClientState>>());
+
+  const TestVideoFile* video_file = test_video_files_[0].get();
+  GLRenderingVDAClient::Config config;
+  EXPECT_EQ(video_file->reset_after_frame_num, kNoMidStreamReset);
+  config.frame_size = gfx::Size(video_file->width, video_file->height);
+  config.profile = video_file->profile;
+  config.fake_decoder = g_fake_decoder;
+  config.decode_calls_per_second = kWebRtcDecodeCallsPerSecond;
+
   clients_.push_back(std::make_unique<GLRenderingVDAClient>(
-      0, &rendering_helper_, notes_[0].get(), test_video_files_[0]->data_str, 1,
-      1, test_video_files_[0]->reset_after_frame_num, CS_RESET,
-      test_video_files_[0]->width, test_video_files_[0]->height,
-      test_video_files_[0]->profile, g_fake_decoder,
-      std::numeric_limits<int>::max(), kWebRtcDecodeCallsPerSecond, false));
+      std::move(config), video_file->data_str, &rendering_helper_,
+      notes_[0].get()));
   RenderingHelperParams helper_params;
   helper_params.num_windows = 1;
   InitializeRenderingHelper(helper_params);
@@ -1753,12 +1500,17 @@ TEST_F(VideoDecodeAcceleratorTest, TestDecodeTimeMedian) {
 // corrupted videos.
 TEST_F(VideoDecodeAcceleratorTest, NoCrash) {
   notes_.push_back(std::make_unique<ClientStateNotification<ClientState>>());
+
+  const TestVideoFile* video_file = test_video_files_[0].get();
+  GLRenderingVDAClient::Config config;
+  EXPECT_EQ(video_file->reset_after_frame_num, kNoMidStreamReset);
+  config.frame_size = gfx::Size(video_file->width, video_file->height);
+  config.profile = video_file->profile;
+  config.fake_decoder = g_fake_decoder;
+
   clients_.push_back(std::make_unique<GLRenderingVDAClient>(
-      0, &rendering_helper_, notes_[0].get(), test_video_files_[0]->data_str, 1,
-      1, test_video_files_[0]->reset_after_frame_num, CS_RESET,
-      test_video_files_[0]->width, test_video_files_[0]->height,
-      test_video_files_[0]->profile, g_fake_decoder,
-      std::numeric_limits<int>::max(), 0, false));
+      std::move(config), video_file->data_str, &rendering_helper_,
+      notes_[0].get()));
   RenderingHelperParams helper_params;
   helper_params.num_windows = 1;
   InitializeRenderingHelper(helper_params);
@@ -1789,9 +1541,10 @@ class VDATestSuite : public base::TestSuite {
 #endif  // OS_WIN || OS_CHROMEOS
 
     media::g_env =
-        reinterpret_cast<media::VideoDecodeAcceleratorTestEnvironment*>(
+        reinterpret_cast<media::test::VideoDecodeAcceleratorTestEnvironment*>(
             testing::AddGlobalTestEnvironment(
-                new media::VideoDecodeAcceleratorTestEnvironment()));
+                new media::test::VideoDecodeAcceleratorTestEnvironment(
+                    g_use_gl_renderer)));
 
 #if defined(OS_CHROMEOS)
     ui::OzonePlatform::InitParams params;
@@ -1841,9 +1594,8 @@ int main(int argc, char** argv) {
       LOG_ASSERT(base::StringToDouble(input, &media::g_rendering_fps));
       continue;
     }
-    // TODO(owenlin): Remove this flag once it is not used in autotest.
     if (it->first == "disable_rendering") {
-      media::g_rendering_fps = 0;
+      media::g_use_gl_renderer = false;
       continue;
     }
 

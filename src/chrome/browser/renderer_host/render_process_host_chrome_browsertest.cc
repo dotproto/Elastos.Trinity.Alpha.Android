@@ -4,7 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
@@ -48,15 +47,7 @@ using content::WebContents;
 namespace {
 
 int RenderProcessHostCount() {
-  content::RenderProcessHost::iterator hosts =
-      content::RenderProcessHost::AllHostsIterator();
-  int count = 0;
-  while (!hosts.IsAtEnd()) {
-    if (hosts.GetCurrentValue()->HasConnection())
-      count++;
-    hosts.Advance();
-  }
-  return count;
+  return content::RenderProcessHost::GetCurrentRenderProcessCountForTesting();
 }
 
 WebContents* FindFirstDevToolsContents() {
@@ -108,7 +99,8 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
 
     WaitForLauncherThread();
     WaitForMessageProcessing(wc);
-    return ProcessFromHandle(wc->GetMainFrame()->GetProcess()->GetHandle());
+    return ProcessFromHandle(
+        wc->GetMainFrame()->GetProcess()->GetProcess().Handle());
   }
 
   // Loads the given url in a new background tab and returns the handle of its
@@ -125,7 +117,8 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
 
     WaitForLauncherThread();
     WaitForMessageProcessing(wc);
-    return ProcessFromHandle(wc->GetMainFrame()->GetProcess()->GetHandle());
+    return ProcessFromHandle(
+        wc->GetMainFrame()->GetProcess()->GetProcess().Handle());
   }
 
   // Ensures that the backgrounding / foregrounding gets a chance to run.
@@ -634,8 +627,10 @@ class ChromeRenderProcessHostBackgroundingTest
 
     // Create a new tab for the no audio page and confirm that the process of
     // each tab is different and that both are valid.
-    audio_process_ = ProcessFromHandle(
-        audio_tab_web_contents_->GetMainFrame()->GetProcess()->GetHandle());
+    audio_process_ = ProcessFromHandle(audio_tab_web_contents_->GetMainFrame()
+                                           ->GetProcess()
+                                           ->GetProcess()
+                                           .Handle());
     no_audio_process_ = ShowSingletonTab(no_audio_url_);
     ASSERT_NE(audio_process_.Pid(), no_audio_process_.Pid());
     ASSERT_TRUE(no_audio_process_.IsValid());

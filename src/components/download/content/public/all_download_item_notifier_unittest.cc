@@ -5,7 +5,7 @@
 #include "components/download/content/public/all_download_item_notifier.h"
 
 #include "base/macros.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,7 +20,7 @@ namespace {
 class MockNotifierObserver : public AllDownloadItemNotifier::Observer {
  public:
   MockNotifierObserver() {}
-  virtual ~MockNotifierObserver() {}
+  ~MockNotifierObserver() override {}
 
   MOCK_METHOD2(OnDownloadCreated,
                void(content::DownloadManager* manager, DownloadItem* item));
@@ -40,11 +40,11 @@ class AllDownloadItemNotifierTest : public testing::Test {
   AllDownloadItemNotifierTest()
       : download_manager_(new content::MockDownloadManager) {}
 
-  virtual ~AllDownloadItemNotifierTest() {}
+  ~AllDownloadItemNotifierTest() override {}
 
   content::MockDownloadManager& manager() { return *download_manager_.get(); }
 
-  content::MockDownloadItem& item() { return item_; }
+  download::MockDownloadItem& item() { return item_; }
 
   DownloadItem::Observer* NotifierAsItemObserver() const {
     return notifier_.get();
@@ -65,7 +65,7 @@ class AllDownloadItemNotifierTest : public testing::Test {
   void ClearNotifier() { notifier_.reset(); }
 
  private:
-  NiceMock<content::MockDownloadItem> item_;
+  NiceMock<download::MockDownloadItem> item_;
   std::unique_ptr<content::MockDownloadManager> download_manager_;
   std::unique_ptr<AllDownloadItemNotifier> notifier_;
   NiceMock<MockNotifierObserver> observer_;

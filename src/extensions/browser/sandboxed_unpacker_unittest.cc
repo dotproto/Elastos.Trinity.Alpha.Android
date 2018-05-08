@@ -121,8 +121,7 @@ class SandboxedUnpackerTest : public ExtensionsTest {
       : SandboxedUnpackerTest(content::TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   SandboxedUnpackerTest(content::TestBrowserThreadBundle::Options options)
-      : ExtensionsTest(
-            std::make_unique<content::TestBrowserThreadBundle>(options)) {}
+      : ExtensionsTest(options) {}
 
   void SetUp() override {
     ExtensionsTest::SetUp();
@@ -169,7 +168,7 @@ class SandboxedUnpackerTest : public ExtensionsTest {
 
   base::FilePath GetCrxFullPath(const std::string& crx_name) {
     base::FilePath full_path;
-    EXPECT_TRUE(PathService::Get(extensions::DIR_TEST_DATA, &full_path));
+    EXPECT_TRUE(base::PathService::Get(extensions::DIR_TEST_DATA, &full_path));
     full_path = full_path.AppendASCII("unpacker").AppendASCII(crx_name);
     EXPECT_TRUE(base::PathExists(full_path)) << full_path.value();
     return full_path;
@@ -354,7 +353,7 @@ TEST_F(SandboxedUnpackerTest, PassHashCheck) {
       extensions::switches::kEnableCrxHashCheck);
   SetupUnpacker(
       "good_l10n.crx",
-      "6fa171c726373785aa4fcd2df448c3db0420a95d5044fbee831f089b979c4068");
+      "614AE3D608F4C2185E9173293AB3F93EE7C7C79C9A2C3CF71F633386A3296A6C");
   // Check that there is no error message.
   EXPECT_EQ(base::string16(), GetInstallError());
 }

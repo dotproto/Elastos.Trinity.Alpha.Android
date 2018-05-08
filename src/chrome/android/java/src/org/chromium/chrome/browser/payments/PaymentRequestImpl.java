@@ -365,6 +365,9 @@ public class PaymentRequestImpl
      */
     private boolean mShouldSkipShowingPaymentRequestUi;
 
+    /** Whether PaymentRequest.show() was invoked with a user gesture. */
+    private boolean mIsUserGestureShow;
+
     /** The helper to create and fill the response to send to the merchant. */
     private PaymentResponseHelper mPaymentResponseHelper;
 
@@ -619,7 +622,7 @@ public class PaymentRequestImpl
      * Called by the merchant website to show the payment request to the user.
      */
     @Override
-    public void show() {
+    public void show(boolean isUserGesture) {
         if (mClient == null) return;
 
         if (mUI != null) {
@@ -659,6 +662,7 @@ public class PaymentRequestImpl
         mObservedTabModelSelector.addObserver(mSelectorObserver);
         mObservedTabModel.addObserver(mTabModelObserver);
 
+        mIsUserGestureShow = isUserGesture;
         buildUI(chromeActivity);
         if (!mShouldSkipShowingPaymentRequestUi) mUI.show();
 
@@ -672,11 +676,16 @@ public class PaymentRequestImpl
                 && mIsCurrentPaymentRequestShowing) {
             assert !mPaymentMethodsSection.isEmpty();
 
-            // Do not skip to payment app if it is not the only one or it's not pre-selected. Note
-            // that ServiceWorkerPaymentApp can not be pre-selected if its name and/or icon is
+            PaymentInstrument selectedInstrument =
+                    (PaymentInstrument) mPaymentMethodsSection.getSelectedItem();
+
+            // Do not skip to payment app if it is not the only one, it's not pre-selected, or if
+            // skip-UI requires a user gesture in show(), which was not present.
+            // Note that ServiceWorkerPaymentApp cannot be pre-selected if its name and/or icon is
             // missing.
-            if (mPaymentMethodsSection.getSize() > 1
-                    || mPaymentMethodsSection.getSelectedItem() == null) {
+            if (mPaymentMethodsSection.getSize() > 1 || selectedInstrument == null
+                    || (selectedInstrument.isUserGestureRequiredToSkipUi()
+                               && !mIsUserGestureShow)) {
                 mUI.show();
             } else {
                 mDidRecordShowEvent = true;
@@ -684,7 +693,7 @@ public class PaymentRequestImpl
                 mJourneyLogger.setEventOccurred(Event.SKIPPED_SHOW);
 
                 onPayClicked(null /* selectedShippingAddress */, null /* selectedShippingOption */,
-                        mPaymentMethodsSection.getItem(0));
+                        selectedInstrument);
             }
         }
     }

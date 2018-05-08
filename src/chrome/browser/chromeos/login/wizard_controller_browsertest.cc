@@ -4,7 +4,6 @@
 
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 
-#include "ash/public/cpp/accessibility_types.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -170,10 +169,10 @@ void SetUpCrasAndEnableChromeVox(int volume_percent, bool mute_on) {
   // is disabled.
   cras->SetOutputVolumePercent(volume_percent);
   cras->SetOutputMute(mute_on);
-  a11y->EnableSpokenFeedback(false, ash::A11Y_NOTIFICATION_NONE);
+  a11y->EnableSpokenFeedback(false);
 
   // Spoken feedback is enabled.
-  a11y->EnableSpokenFeedback(true, ash::A11Y_NOTIFICATION_NONE);
+  a11y->EnableSpokenFeedback(true);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -1054,8 +1053,7 @@ IN_PROC_BROWSER_TEST_F(WizardControllerBrokenLocalStateTest,
   // Emulates user click on the "Restart and Powerwash" button.
   ASSERT_EQ(0, fake_session_manager_client()->start_device_wipe_call_count());
   ASSERT_TRUE(content::ExecuteScript(
-      GetWebContents(),
-      "$('error-message-restart-and-powerwash-button').click();"));
+      GetWebContents(), "$('error-message-md-powerwash-button').click();"));
   ASSERT_EQ(1, fake_session_manager_client()->start_device_wipe_call_count());
 }
 
@@ -1266,14 +1264,23 @@ class WizardControllerDemoSetupTest : public WizardControllerFlowTest {
 
 IN_PROC_BROWSER_TEST_F(WizardControllerDemoSetupTest,
                        CloseDemoSetupShouldShowSignIn) {
-  LoginDisplayHost::default_host()->StartSignInScreen(LoginScreenContext());
-  EXPECT_NE(nullptr, ExistingUserController::current_controller());
+  CheckCurrentScreen(OobeScreen::SCREEN_OOBE_NETWORK);
+  WaitUntilJSIsReady();
 
-  ExistingUserController::current_controller()->OnStartDemoModeSetupScreen();
+  EXPECT_CALL(*mock_network_screen_, Hide()).Times(1);
+  EXPECT_CALL(*mock_demo_setup_screen_, Show()).Times(1);
+
+  WizardController::default_controller()->AdvanceToScreen(
+      OobeScreen::SCREEN_OOBE_DEMO_SETUP);
+
   CheckCurrentScreen(OobeScreen::SCREEN_OOBE_DEMO_SETUP);
 
+  EXPECT_CALL(*mock_demo_setup_screen_, Hide()).Times(1);
+  EXPECT_CALL(*mock_network_screen_, Show()).Times(1);
+
   OnExit(*mock_demo_setup_screen_, ScreenExitCode::DEMO_MODE_SETUP_CLOSED);
-  EXPECT_NE(nullptr, ExistingUserController::current_controller());
+
+  CheckCurrentScreen(OobeScreen::SCREEN_OOBE_NETWORK);
 }
 
 class WizardControllerOobeResumeTest : public WizardControllerTest {
@@ -1374,7 +1381,9 @@ IN_PROC_BROWSER_TEST_F(WizardControllerCellularFirstTest, CellularFirstFlow) {
 // TODO(updowndota): Add tests for Voice Interaction OptIn flow.
 
 // TODO(alemate): Add tests for Sync Consent UI.
-static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 34,
+
+// TODO(rsgingerrs): Add tests for Recommend Apps UI.
+static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 36,
               "tests for new control flow are missing");
 
 }  // namespace chromeos

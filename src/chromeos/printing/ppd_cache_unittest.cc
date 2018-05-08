@@ -10,7 +10,6 @@
 #include "base/hash.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -115,8 +114,8 @@ TEST_F(PpdCacheTest, HitAge) {
   cache->Store(kTestKey, kTestContents);
   scoped_task_environment_.RunUntilIdle();
 
-  cache->Find(kTestKey, base::Bind(&PpdCacheTest::CaptureFindResult,
-                                   base::Unretained(this)));
+  cache->Find(kTestKey, base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                       base::Unretained(this)));
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(captured_find_results_, 1);
   // The age should be well under a second, but accept anything under an hour.

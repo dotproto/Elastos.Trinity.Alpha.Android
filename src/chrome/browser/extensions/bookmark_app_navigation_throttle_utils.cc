@@ -6,8 +6,11 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "content/public/browser/browser_context.h"
@@ -28,32 +31,8 @@ bool IsWindowedBookmarkApp(const Extension* app,
   if (!app || !app->from_bookmark())
     return false;
 
-  if (GetLaunchContainer(extensions::ExtensionPrefs::Get(context), app) !=
-      LAUNCH_CONTAINER_WINDOW) {
-    return false;
-  }
-
-  return true;
-}
-
-scoped_refptr<const Extension> GetAppForURL(
-    const GURL& url,
-    const content::WebContents* web_contents) {
-  content::BrowserContext* context = web_contents->GetBrowserContext();
-  for (scoped_refptr<const extensions::Extension> app :
-       ExtensionRegistry::Get(context)->enabled_extensions()) {
-    if (!IsWindowedBookmarkApp(app.get(), context))
-      continue;
-
-    const UrlHandlerInfo* url_handler =
-        UrlHandlers::FindMatchingUrlHandler(app.get(), url);
-    if (!url_handler)
-      continue;
-
-    return app;
-  }
-
-  return nullptr;
+  return GetLaunchContainer(extensions::ExtensionPrefs::Get(context), app) ==
+         LAUNCH_CONTAINER_WINDOW;
 }
 
 }  // namespace
@@ -90,14 +69,19 @@ scoped_refptr<const Extension> GetAppForWindow(content::WebContents* source) {
 scoped_refptr<const Extension> GetTargetApp(content::WebContents* source,
                                             const GURL& target_url) {
   SCOPED_UMA_HISTOGRAM_TIMER("Extensions.BookmarkApp.GetTargetAppDuration");
-  return GetAppForURL(target_url, source);
+  return extensions::util::GetInstalledPwaForUrl(
+      source->GetBrowserContext(), target_url,
+      extensions::LAUNCH_CONTAINER_WINDOW);
 }
 
 scoped_refptr<const Extension> GetAppForMainFrameURL(
     content::WebContents* source) {
   SCOPED_UMA_HISTOGRAM_TIMER(
       "Extensions.BookmarkApp.GetAppForCurrentURLDuration");
-  return GetAppForURL(source->GetMainFrame()->GetLastCommittedURL(), source);
+  return extensions::util::GetInstalledPwaForUrl(
+      source->GetBrowserContext(),
+      source->GetMainFrame()->GetLastCommittedURL(),
+      extensions::LAUNCH_CONTAINER_WINDOW);
 }
 
 void OpenNewForegroundTab(content::NavigationHandle* navigation_handle) {
@@ -107,6 +91,21 @@ void OpenNewForegroundTab(content::NavigationHandle* navigation_handle) {
                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                     navigation_handle->GetPageTransition(),
                                     navigation_handle->IsRendererInitiated());
+  // Per the "Submit as entity body" algorithm
+  // (https://html.spec.whatwg.org/#submit-body), POST form submissions include
+  // the Content-Type header, so we forward it.
+  if (navigation_handle->GetResourceRequestBody()) {
+    std::string content_type;
+    navigation_handle->GetRequestHeaders().GetHeader(
+        net::HttpRequestHeaders::kContentType, &content_type);
+
+    net::HttpRequestHeaders content_type_header;
+    content_type_header.SetHeader(net::HttpRequestHeaders::kContentType,
+                                  content_type);
+
+    url_params.extra_headers = content_type_header.ToString();
+  }
+
   url_params.uses_post = navigation_handle->IsPost();
   url_params.post_data = navigation_handle->GetResourceRequestBody();
   url_params.redirect_chain = navigation_handle->GetRedirectChain();
@@ -116,6 +115,20 @@ void OpenNewForegroundTab(content::NavigationHandle* navigation_handle) {
       navigation_handle->WasStartedFromContextMenu();
 
   source->OpenURL(url_params);
+}
+
+void ReparentIntoPopup(content::WebContents* source, bool has_user_gesture) {
+  Browser* source_browser = chrome::FindBrowserWithWebContents(source);
+
+  Browser::CreateParams browser_params(
+      Browser::TYPE_POPUP, source_browser->profile(), has_user_gesture);
+  browser_params.initial_bounds = source_browser->override_bounds();
+  Browser* popup_browser = new Browser(browser_params);
+  TabStripModel* source_tabstrip = source_browser->tab_strip_model();
+  popup_browser->tab_strip_model()->AppendWebContents(
+      source_tabstrip->DetachWebContentsAt(source_tabstrip->active_index()),
+      true /* foreground */);
+  popup_browser->window()->Show();
 }
 
 }  // namespace extensions

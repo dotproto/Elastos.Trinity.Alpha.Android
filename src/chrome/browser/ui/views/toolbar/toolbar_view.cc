@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/i18n/number_formatting.h"
@@ -34,8 +35,8 @@
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/star_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
@@ -67,8 +68,11 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #include "chrome/browser/recovery/recovery_install_global_error_factory.h"
+#endif
+
+#if defined(OS_WIN)
 #include "chrome/browser/ui/views/conflicting_module_view_win.h"
 #include "chrome/browser/ui/views/critical_notification_bubble_view.h"
 #endif
@@ -93,7 +97,7 @@ int GetToolbarHorizontalPadding() {
   // button starts from the beginning of the view, and the app menu button ends
   // at the end of the view.
   using Md = ui::MaterialDesignController;
-  constexpr int kPaddings[] = {4, 8, 0};
+  constexpr int kPaddings[] = {4, 8, 0, 8};
   return kPaddings[Md::GetMode()];
 }
 
@@ -117,6 +121,7 @@ ToolbarView::ToolbarView(Browser* browser)
   chrome::AddCommandObserver(browser_, IDC_FORWARD, this);
   chrome::AddCommandObserver(browser_, IDC_RELOAD, this);
   chrome::AddCommandObserver(browser_, IDC_HOME, this);
+  chrome::AddCommandObserver(browser_, IDC_SHOW_AVATAR_MENU, this);
   chrome::AddCommandObserver(browser_, IDC_LOAD_NEW_TAB_PAGE, this);
 
   UpgradeDetector::GetInstance()->AddObserver(this);
@@ -129,6 +134,7 @@ ToolbarView::~ToolbarView() {
   chrome::RemoveCommandObserver(browser_, IDC_FORWARD, this);
   chrome::RemoveCommandObserver(browser_, IDC_RELOAD, this);
   chrome::RemoveCommandObserver(browser_, IDC_HOME, this);
+  chrome::RemoveCommandObserver(browser_, IDC_SHOW_AVATAR_MENU, this);
   chrome::RemoveCommandObserver(browser_, IDC_LOAD_NEW_TAB_PAGE, this);
 }
 
@@ -197,7 +203,13 @@ void ToolbarView::Init() {
   browser_actions_ =
       new BrowserActionsContainer(browser_, main_container, this);
 
-  app_menu_button_ = new AppMenuButton(this);
+// ChromeOS never shows a profile icon in the browser window.
+#if !defined(OS_CHROMEOS)
+  if (ui::MaterialDesignController::IsNewerMaterialUi())
+    avatar_ = new AvatarToolbarButton(browser_->profile(), this);
+#endif  // !defined(OS_CHROMEOS)
+
+  app_menu_button_ = new BrowserAppMenuButton(this);
   app_menu_button_->EnableCanvasFlippingForRTLUI(true);
   app_menu_button_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ACCNAME_APP));
@@ -212,6 +224,8 @@ void ToolbarView::Init() {
   AddChildView(home_);
   AddChildView(location_bar_);
   AddChildView(browser_actions_);
+  if (avatar_)
+    AddChildView(avatar_);
   AddChildView(app_menu_button_);
 
   LoadImages();
@@ -219,7 +233,7 @@ void ToolbarView::Init() {
   // Start global error services now so we set the icon on the menu correctly.
 #if !defined(OS_CHROMEOS)
   SigninGlobalErrorFactory::GetForProfile(browser_->profile());
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
   RecoveryInstallGlobalErrorFactory::GetForProfile(browser_->profile());
 #endif
 #endif  // OS_CHROMEOS
@@ -264,7 +278,7 @@ bool ToolbarView::IsAppMenuFocused() {
 
 #if defined(OS_CHROMEOS)
 void ToolbarView::ShowIntentPickerBubble(
-    const std::vector<IntentPickerBubbleView::AppInfo>& app_info,
+    std::vector<IntentPickerBubbleView::AppInfo> app_info,
     IntentPickerResponse callback) {
   IntentPickerView* intent_picker_view = location_bar()->intent_picker_view();
   if (intent_picker_view) {
@@ -274,8 +288,8 @@ void ToolbarView::ShowIntentPickerBubble(
     }
 
     views::Widget* bubble_widget = IntentPickerBubbleView::ShowBubble(
-        intent_picker_view, GetWebContents(), app_info,
-        false /* disable_stay_in_chrome */, callback);
+        intent_picker_view, GetWebContents(), std::move(app_info),
+        false /* disable_stay_in_chrome */, std::move(callback));
     if (bubble_widget && intent_picker_view)
       intent_picker_view->OnBubbleWidgetCreated(bubble_widget);
   }
@@ -409,6 +423,9 @@ void ToolbarView::EnabledStateChangedForCommand(int id, bool enabled) {
     case IDC_HOME:
       button = home_;
       break;
+    case IDC_SHOW_AVATAR_MENU:
+      button = avatar_;
+      break;
   }
   if (button)
     button->SetEnabled(enabled);
@@ -526,6 +543,10 @@ void ToolbarView::Layout() {
       width() - end_padding - app_menu_width -
       (browser_actions_->GetPreferredSize().IsEmpty() ? right_padding : 0) -
       next_element_x);
+  if (avatar_) {
+    available_width -= avatar_->GetPreferredSize().width();
+    available_width -= element_padding;
+  }
   // Don't allow the omnibox to shrink to the point of non-existence, so
   // subtract its minimum width from the available width to reserve it.
   const int browser_actions_width = browser_actions_->GetWidthForMaxWidth(
@@ -559,7 +580,14 @@ void ToolbarView::Layout() {
   //                required.
   browser_actions_->Layout();
 
-  // Extend the app menu to the screen's right edge in tablet mode just like
+  if (avatar_) {
+    avatar_->SetBounds(next_element_x, toolbar_button_y,
+                       avatar_->GetPreferredSize().width(),
+                       toolbar_button_height);
+    next_element_x = avatar_->bounds().right() + element_padding;
+  }
+
+  // Extend the app menu to the screen's right edge in maximized mode just like
   // we extend the back button to the left edge.
   if (maximized)
     app_menu_width += end_padding;
@@ -656,13 +684,30 @@ void ToolbarView::UpdateSeverity(AppMenuIconController::IconType type,
   }
 }
 
-// BrowserViewButtonProvider:
+// ToolbarButtonProvider:
 BrowserActionsContainer* ToolbarView::GetBrowserActionsContainer() {
   return browser_actions_;
 }
 
-views::MenuButton* ToolbarView::GetAppMenuButton() {
+AppMenuButton* ToolbarView::GetAppMenuButton() {
   return app_menu_button_;
+}
+
+void ToolbarView::FocusToolbar() {
+  SetPaneFocus(nullptr);
+}
+
+views::AccessiblePaneView* ToolbarView::GetAsAccessiblePaneView() {
+  return this;
+}
+
+BrowserRootView::DropIndex ToolbarView::GetDropIndex(
+    const ui::DropTargetEvent& event) {
+  return {browser_->tab_strip_model()->active_index(), false};
+}
+
+views::View* ToolbarView::GetViewForDrop() {
+  return this;
 }
 
 gfx::Size ToolbarView::GetSizeInternal(
@@ -712,8 +757,11 @@ void ToolbarView::LoadImages() {
   const SkColor disabled_color =
       tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON_INACTIVE);
 
+  browser_actions_->SetSeparatorColor(normal_color);
+
   const bool is_touch =
       ui::MaterialDesignController::IsTouchOptimizedUiEnabled();
+
   const gfx::VectorIcon& back_image =
       is_touch ? kBackArrowTouchIcon : vector_icons::kBackArrowIcon;
   back_->SetImage(views::Button::STATE_NORMAL,
@@ -732,6 +780,12 @@ void ToolbarView::LoadImages() {
       is_touch ? kNavigateHomeTouchIcon : kNavigateHomeIcon;
   home_->SetImage(views::Button::STATE_NORMAL,
                   gfx::CreateVectorIcon(home_image, normal_color));
+
+#if !defined(OS_CHROMEOS)
+  if (avatar_)
+    avatar_->UpdateIcon();
+#endif  // !defined(OS_CHROMEOS)
+
   app_menu_button_->UpdateIcon(false);
 
   const SkColor ink_drop_color = color_utils::BlendTowardOppositeLuma(
@@ -739,6 +793,8 @@ void ToolbarView::LoadImages() {
   back_->set_ink_drop_base_color(ink_drop_color);
   forward_->set_ink_drop_base_color(ink_drop_color);
   home_->set_ink_drop_base_color(ink_drop_color);
+  if (avatar_)
+    avatar_->set_ink_drop_base_color(ink_drop_color);
   app_menu_button_->set_ink_drop_base_color(ink_drop_color);
 
   reload_->LoadImages();

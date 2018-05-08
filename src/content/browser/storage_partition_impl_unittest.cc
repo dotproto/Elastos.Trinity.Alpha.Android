@@ -8,7 +8,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -28,14 +27,13 @@
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/test/mock_quota_manager.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-#include "base/memory/ptr_util.h"
 #include "ppapi/shared_impl/ppapi_constants.h"  // nogncheck
 #include "storage/browser/fileapi/async_file_util.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -45,6 +43,7 @@
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 using net::CanonicalCookie;
+using CookieDeletionInfo = net::CookieDeletionInfo;
 
 namespace content {
 namespace {
@@ -80,14 +79,6 @@ const uint32_t kAllQuotaRemoveMask =
     StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS |
     StoragePartition::REMOVE_DATA_MASK_INDEXEDDB |
     StoragePartition::REMOVE_DATA_MASK_WEBSQL;
-
-bool AlwaysTrueCookiePredicate(const net::CanonicalCookie& cookie) {
-  return true;
-}
-
-bool AlwaysFalseCookiePredicate(const net::CanonicalCookie& cookie) {
-  return false;
-}
 
 class AwaitCompletionHelper {
  public:
@@ -343,8 +334,8 @@ class RemovePluginPrivateDataTester {
     async_file_util->CreateOrOpen(
         std::move(operation_context), clearkey_file_,
         base::File::FLAG_OPEN | base::File::FLAG_WRITE,
-        base::Bind(&RemovePluginPrivateDataTester::OnFileOpened,
-                   base::Unretained(this), &file, &await_completion));
+        base::BindOnce(&RemovePluginPrivateDataTester::OnFileOpened,
+                       base::Unretained(this), &file, &await_completion));
     await_completion.BlockUntilNotified();
     return file;
   }
@@ -390,8 +381,8 @@ class RemovePluginPrivateDataTester {
         storage::QuotaManager::kNoLimit);
     file_util->EnsureFileExists(
         std::move(operation_context), file_url,
-        base::Bind(&RemovePluginPrivateDataTester::OnFileCreated,
-                   base::Unretained(this), &await_completion));
+        base::BindOnce(&RemovePluginPrivateDataTester::OnFileCreated,
+                       base::Unretained(this), &await_completion));
     await_completion.BlockUntilNotified();
     return file_url;
   }
@@ -405,8 +396,8 @@ class RemovePluginPrivateDataTester {
             filesystem_context_);
     file_util->DeleteFile(
         std::move(operation_context), file_url,
-        base::Bind(&RemovePluginPrivateDataTester::OnFileDeleted,
-                   base::Unretained(this), &await_completion));
+        base::BindOnce(&RemovePluginPrivateDataTester::OnFileDeleted,
+                       base::Unretained(this), &await_completion));
     await_completion.BlockUntilNotified();
   }
 
@@ -420,10 +411,10 @@ class RemovePluginPrivateDataTester {
     std::unique_ptr<storage::FileSystemOperationContext> operation_context =
         std::make_unique<storage::FileSystemOperationContext>(
             filesystem_context_);
-    file_util->Touch(std::move(operation_context), file_url, time_stamp,
-                     time_stamp,
-                     base::Bind(&RemovePluginPrivateDataTester::OnFileTouched,
-                                base::Unretained(this), &await_completion));
+    file_util->Touch(
+        std::move(operation_context), file_url, time_stamp, time_stamp,
+        base::BindOnce(&RemovePluginPrivateDataTester::OnFileTouched,
+                       base::Unretained(this), &await_completion));
     await_completion.BlockUntilNotified();
   }
 
@@ -574,16 +565,15 @@ void ClearCookies(content::StoragePartition* partition,
       delete_begin, delete_end, run_loop->QuitClosure());
 }
 
-void ClearCookiesWithMatcher(
-    content::StoragePartition* partition,
-    const base::Time delete_begin,
-    const base::Time delete_end,
-    const StoragePartition::CookieMatcherFunction& cookie_matcher,
-    base::RunLoop* run_loop) {
+void ClearCookiesMatchingInfo(content::StoragePartition* partition,
+                              CookieDeletionInfo delete_info,
+                              base::RunLoop* run_loop) {
+  base::Time delete_begin = delete_info.creation_range.start();
+  base::Time delete_end = delete_info.creation_range.end();
   partition->ClearData(StoragePartition::REMOVE_DATA_MASK_COOKIES,
                        StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
                        StoragePartition::OriginMatcherFunction(),
-                       cookie_matcher, delete_begin, delete_end,
+                       std::move(delete_info), delete_begin, delete_end,
                        run_loop->QuitClosure());
 }
 
@@ -1131,13 +1121,8 @@ TEST_F(StoragePartitionImplTest, RemoveCookieLastHour) {
   EXPECT_FALSE(tester.ContainsCookie());
 }
 
-TEST_F(StoragePartitionImplTest, RemoveCookieWithMatcher) {
+TEST_F(StoragePartitionImplTest, RemoveCookieWithDeleteInfo) {
   RemoveCookieTester tester(browser_context());
-  StoragePartition::CookieMatcherFunction true_predicate =
-      base::Bind(&AlwaysTrueCookiePredicate);
-
-  StoragePartition::CookieMatcherFunction false_predicate =
-      base::Bind(&AlwaysFalseCookiePredicate);
 
   tester.AddCookie();
   ASSERT_TRUE(tester.ContainsCookie());
@@ -1146,21 +1131,10 @@ TEST_F(StoragePartitionImplTest, RemoveCookieWithMatcher) {
       BrowserContext::GetDefaultStoragePartition(browser_context()));
   partition->SetURLRequestContext(browser_context()->GetRequestContext());
 
-  // Return false from our predicate, and make sure the cookies is still around.
-  base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ClearCookiesWithMatcher, partition, base::Time(),
-                     base::Time::Max(), std::move(false_predicate), &run_loop));
-  run_loop.RunUntilIdle();
-  EXPECT_TRUE(tester.ContainsCookie());
-
-  // Now we return true from our predicate.
   base::RunLoop run_loop2;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ClearCookiesWithMatcher, partition, base::Time(),
-                     base::Time::Max(), std::move(true_predicate), &run_loop2));
+      FROM_HERE, base::BindOnce(&ClearCookiesMatchingInfo, partition,
+                                CookieDeletionInfo(), &run_loop2));
   run_loop2.RunUntilIdle();
   EXPECT_FALSE(tester.ContainsCookie());
 }
@@ -1398,8 +1372,8 @@ TEST(StoragePartitionImplStaticTest, CreatePredicateForHostCookies) {
   GURL url3("https://www.google.com/");
 
   net::CookieOptions options;
-  net::CookieStore::CookiePredicate predicate =
-      StoragePartitionImpl::CreatePredicateForHostCookies(url);
+  CookieDeletionInfo delete_info;
+  delete_info.host = url.host();
 
   base::Time now = base::Time::Now();
   std::vector<std::unique_ptr<CanonicalCookie>> valid_cookies;
@@ -1415,9 +1389,9 @@ TEST(StoragePartitionImplStaticTest, CreatePredicateForHostCookies) {
   invalid_cookies.push_back(CanonicalCookie::Create(url3, "A=B", now, options));
 
   for (const auto& cookie : valid_cookies)
-    EXPECT_TRUE(predicate.Run(*cookie)) << cookie->DebugString();
+    EXPECT_TRUE(delete_info.Matches(*cookie)) << cookie->DebugString();
   for (const auto& cookie : invalid_cookies)
-    EXPECT_FALSE(predicate.Run(*cookie)) << cookie->DebugString();
+    EXPECT_FALSE(delete_info.Matches(*cookie)) << cookie->DebugString();
 }
 
 }  // namespace content

@@ -9,6 +9,7 @@
 
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/google/core/browser/google_url_tracker_client.h"
@@ -41,16 +42,30 @@ class GoogleURLTracker
   typedef base::CallbackList<void()> CallbackList;
   typedef CallbackList::Subscription Subscription;
 
-  // The constructor does different things depending on which of these values
-  // you pass it.  Hopefully these are self-explanatory.
+  // The mode of the tracker that controls how the tracker behaves and that must
+  // be passed to its constructor.
   enum Mode {
+    // Use current local Google TLD.
+    // Defer network requests to update TLD until 5 seconds after
+    // creation, to avoid an expensive fetch during Chrome startup.
     NORMAL_MODE,
-    UNIT_TEST_MODE,
+
+    // Always use www.google.com.
+    ALWAYS_DOT_COM_MODE,
   };
 
   static const char kDefaultGoogleHomepage[];
 
+  // Flag to disable /searchdomaincheck lookups in Chrome and instead always use
+  // google.com. The tracker should be used in ALWAYS_DOT_COM_MODE when this
+  // flag is enabled.
+  // For more details, see http://goto.google.com/chrome-no-searchdomaincheck.
+  static const base::Feature kNoSearchDomainCheck;
+
   // Only the GoogleURLTrackerFactory and tests should call this.
+  // Note: you *must* manually call Shutdown() before this instance gets
+  // destroyed if you want to create another instance in the same binary
+  // (e.g. in unit tests).
   GoogleURLTracker(std::unique_ptr<GoogleURLTrackerClient> client, Mode mode);
 
   ~GoogleURLTracker() override;

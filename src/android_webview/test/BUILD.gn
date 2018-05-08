@@ -26,6 +26,7 @@ android_apk("webview_instrumentation_apk") {
     "//android_webview:platform_service_bridge_upstream_implementation_java",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//components/heap_profiling:heap_profiling_java_test_support",
     "//components/policy/android:policy_java_test_support",
     "//content/public/android:content_java",
     "//third_party/android_support_test_runner:runner_java",
@@ -46,8 +47,10 @@ android_apk("webview_instrumentation_apk") {
     "shell/src/org/chromium/android_webview/test/AwJUnit4ClassRunner.java",
     "shell/src/org/chromium/android_webview/test/NullContentsClient.java",
     "shell/src/org/chromium/android_webview/test/SecondBrowserProcess.java",
+    "shell/src/org/chromium/android_webview/test/SkipSingleProcessTests.java",
     "shell/src/org/chromium/android_webview/test/TestContentProvider.java",
   ]
+
   shared_libraries = [
     ":libdrawgl",
     ":libstandalonelibwebviewchromium",
@@ -108,6 +111,7 @@ shared_library("libstandalonelibwebviewchromium") {
   ldflags = [ "-Wl,-shared,-Bsymbolic" ]
   deps = [
     "//android_webview:common",
+    "//components/heap_profiling:test_support",
   ]
   configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
   configs += [ "//build/config/android:hide_all_but_jni" ]
@@ -121,6 +125,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//android_webview:android_webview_java",
     "//android_webview:android_webview_platform_services_java",
     "//android_webview:android_webview_services_java",
+    "//android_webview:aw_variations_seed_server_aidl",
     "//android_webview/test/embedded_test_server:aw_net_java_test_support",
     "//base:base_java",
     "//base:base_java_test_support",
@@ -201,6 +206,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/FullScreenVideoTestAwContentsClient.java",
     "../javatests/src/org/chromium/android_webview/test/GeolocationTest.java",
     "../javatests/src/org/chromium/android_webview/test/GetTitleTest.java",
+    "../javatests/src/org/chromium/android_webview/test/HeapProfilingTest.java",
     "../javatests/src/org/chromium/android_webview/test/HttpAuthDatabaseTest.java",
     "../javatests/src/org/chromium/android_webview/test/HttpCacheTest.java",
     "../javatests/src/org/chromium/android_webview/test/KeySystemTest.java",
@@ -215,11 +221,14 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/RenderProcessGoneHelper.java",
     "../javatests/src/org/chromium/android_webview/test/SaveRestoreStateTest.java",
     "../javatests/src/org/chromium/android_webview/test/SafeBrowsingTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwUncaughtExceptionTest.java",
     "../javatests/src/org/chromium/android_webview/test/StandaloneAwQuotaManagerBridgeTest.java",
     "../javatests/src/org/chromium/android_webview/test/TestAwContents.java",
     "../javatests/src/org/chromium/android_webview/test/TestAwContentsClient.java",
     "../javatests/src/org/chromium/android_webview/test/TestAwServiceWorkerClient.java",
     "../javatests/src/org/chromium/android_webview/test/UserAgentTest.java",
+    "../javatests/src/org/chromium/android_webview/test/VariationsSeedLoaderTest.java",
+    "../javatests/src/org/chromium/android_webview/test/VariationsUtilsTest.java",
     "../javatests/src/org/chromium/android_webview/test/VisualStateTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebKitHitTestTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewAsynchronousFindApisTest.java",
@@ -228,6 +237,8 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/WebViewWebVrTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/CrashReceiverServiceTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/MinidumpUploaderTest.java",
+    "../javatests/src/org/chromium/android_webview/test/services/MockVariationsSeedServer.java",
+    "../javatests/src/org/chromium/android_webview/test/services/VariationsSeedServerTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/VisualStateCallbackTest.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwQuotaManagerBridgeTestUtil.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwTestTouchUtils.java",
@@ -237,6 +248,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/util/ImagePageGenerator.java",
     "../javatests/src/org/chromium/android_webview/test/util/JSUtils.java",
     "../javatests/src/org/chromium/android_webview/test/util/JavascriptEventObserver.java",
+    "../javatests/src/org/chromium/android_webview/test/util/VariationsTestUtils.java",
     "../javatests/src/org/chromium/android_webview/test/util/VideoSurfaceViewUtils.java",
     "../javatests/src/org/chromium/android_webview/test/util/VideoTestUtil.java",
     "../javatests/src/org/chromium/android_webview/test/util/VideoTestWebServer.java",

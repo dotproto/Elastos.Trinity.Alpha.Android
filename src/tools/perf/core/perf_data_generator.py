@@ -134,8 +134,8 @@ def get_waterfall_config():
        'perf_tests': [
          ('tracing_perftests', 'build73-b1--device2'),
          ('gpu_perftests', 'build73-b1--device2'),
-         #  ('cc_perftests', 'build73-b1--device2'),  # crbug.com/721757
          ('media_perftests', 'build74-b1--device7'),
+         ('components_perftests', 'build74-b1--device1'),
        ],
        'perf_tests_with_args': [
          ('angle_perftests', 'build73-b1--device4', ['--shard-timeout=300'],
@@ -163,58 +163,12 @@ def get_waterfall_config():
        'perf_tests': [
          ('tracing_perftests', 'build13-b1--device2'),
          ('gpu_perftests', 'build13-b1--device2'),
-         ('cc_perftests', 'build13-b1--device2'),
-        ]
-      }
-    ])
-
-  waterfall = add_tester(
-    waterfall, 'Android Nexus6 Perf', 'android-nexus6', 'android',
-    swarming=[
-      {
-       'os': 'Android',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build15-b1--device1', 'build15-b1--device2', 'build15-b1--device3',
-           'build15-b1--device4', 'build15-b1--device5', 'build15-b1--device6',
-           'build15-b1--device7',
-           'build16-b1--device1', 'build16-b1--device2', 'build16-b1--device3',
-           'build16-b1--device4', 'build16-b1--device5', 'build16-b1--device6',
-           'build16-b1--device7',
-           'build45-b1--device1', 'build45-b1--device2', 'build45-b1--device3',
-           'build45-b1--device4', 'build45-b1--device5', 'build45-b1--device6',
-           'build45-b1--device7',
-          ],
-       'perf_tests': [
-         ('tracing_perftests', 'build15-b1--device2'),
-         ('gpu_perftests', 'build16-b1--device2'),
-         ('cc_perftests', 'build45-b1--device2'),
-        ]
-      }
-    ])
-
-  waterfall = add_tester(
-    waterfall, 'Android Nexus7v2 Perf', 'android-nexus7v2', 'android',
-    swarming=[
-      {
-       'os': 'Android',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build9-b1--device1', 'build9-b1--device2', 'build9-b1--device3',
-           'build9-b1--device4', 'build9-b1--device5', 'build9-b1--device6',
-           'build9-b1--device7',
-           'build10-b1--device1', 'build10-b1--device2', 'build10-b1--device3',
-           'build10-b1--device4', 'build10-b1--device5', 'build10-b1--device6',
-           'build10-b1--device7',
-           'build49-b1--device1', 'build49-b1--device2', 'build49-b1--device3',
-           'build49-b1--device4', 'build49-b1--device5', 'build49-b1--device6',
-           'build49-b1--device7',
-          ],
-       'perf_tests': [
-         ('tracing_perftests', 'build9-b1--device2'),
-         ('gpu_perftests', 'build10-b1--device2'),
-         ('cc_perftests', 'build49-b1--device2'),
-        ]
+         ('components_perftests', 'build48-b1--device5'),
+        ],
+       'perf_tests_with_args': [
+         ('angle_perftests', 'build13-b1--device3', ['--shard-timeout=300'],
+           'angle_perftests'),
+       ]
       }
     ])
 
@@ -223,22 +177,24 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'pool': 'Chrome-perf',
+       'pool': 'chrome.tests.perf',
        'device_ids': [
-           'build17-b1--device1', 'build17-b1--device2', 'build17-b1--device3',
-           'build17-b1--device4', 'build17-b1--device5', 'build17-b1--device6',
-           'build17-b1--device7',
-           'build18-b1--device1', 'build18-b1--device2', 'build18-b1--device3',
-           'build18-b1--device4', 'build18-b1--device5', 'build18-b1--device6',
-           'build18-b1--device7',
-           'build47-b1--device1', 'build47-b1--device2', 'build47-b1--device3',
-           'build47-b1--device4', 'build47-b1--device5', 'build47-b1--device6',
-           'build47-b1--device7',
+           'build191-b7--device1', 'build191-b7--device2',
+           'build191-b7--device3', 'build191-b7--device4',
+           'build191-b7--device5', 'build191-b7--device6',
+           'build191-b7--device7',
+           'build192-b7--device1', 'build192-b7--device2',
+           'build192-b7--device3', 'build192-b7--device4',
+           'build192-b7--device5', 'build192-b7--device6',
+           'build192-b7--device7',
+           'build193-b7--device1', 'build193-b7--device2',
+           'build193-b7--device3', 'build193-b7--device4',
+           'build193-b7--device5', 'build193-b7--device6',
+           'build193-b7--device7',
           ],
        'perf_tests': [
-         ('tracing_perftests', 'build17-b1--device2'),
-         # ('gpu_perftests', 'build18-b1--device2'), https://crbug.com/775219
-         # ('cc_perftests', 'build47-b1--device2'), https://crbug.com/736150
+         ('tracing_perftests', 'build191-b7--device2'),
+         # ('gpu_perftests', 'build192-b7--device2'), https://crbug.com/775219
         ]
       }
     ])
@@ -248,20 +204,20 @@ def get_waterfall_config():
     'android', swarming=[
       {
        'os': 'Android',
-       'pool': 'Chrome-perf',
+       'pool': 'chrome.tests.perf-webview',
        'device_ids': [
-           'build164-b1--device1', 'build164-b1--device2',
-           'build164-b1--device3', 'build164-b1--device4',
-           'build164-b1--device5', 'build164-b1--device6',
-           'build164-b1--device7',
-           'build165-b1--device1', 'build165-b1--device2',
-           'build165-b1--device3', 'build165-b1--device4',
-           'build165-b1--device5', 'build165-b1--device6',
-           'build165-b1--device7',
-           'build166-b1--device1', 'build166-b1--device2',
-           'build166-b1--device3', 'build166-b1--device4',
-           'build166-b1--device5', 'build166-b1--device6',
-           'build166-b1--device7',
+           'build188-b7--device1', 'build188-b7--device2',
+           'build188-b7--device3', 'build188-b7--device4',
+           'build188-b7--device5', 'build188-b7--device6',
+           'build188-b7--device7',
+           'build189-b7--device1', 'build189-b7--device2',
+           'build189-b7--device3', 'build189-b7--device4',
+           'build189-b7--device5', 'build189-b7--device6',
+           'build189-b7--device7',
+           'build190-b7--device1', 'build190-b7--device2',
+           'build190-b7--device3', 'build190-b7--device4',
+           'build190-b7--device5', 'build190-b7--device6',
+           'build190-b7--device7',
           ],
       }
     ], replace_system_webview=True)
@@ -316,24 +272,8 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('media_perftests', 'build189-a9'),
-         ('views_perftests', 'build190-a9')]
-      }
-    ])
-  waterfall = add_tester(
-    waterfall, 'Win 8 Perf', 'chromium-rel-win8-dual', 'win',
-    swarming=[
-      {
-       'gpu': '102b:0532',
-       'os': 'Windows-2012ServerR2-SP0',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build143-m1', 'build144-m1',
-           'build145-m1', 'build146-m1', 'build147-m1'
-          ],
-       'perf_tests': [
-         ('load_library_perf_tests', 'build145-m1'),
-         ('performance_browser_tests', 'build145-m1'),
-         ('media_perftests', 'build146-m1')]
+         ('views_perftests', 'build190-a9'),
+         ('components_perftests', 'build191-a9')]
       }
     ])
   waterfall = add_tester(
@@ -352,44 +292,8 @@ def get_waterfall_config():
          ('load_library_perf_tests', 'build187-m1'),
          # crbug.com/735679
          # ('performance_browser_tests', 'build187-m1'),
-         ('media_perftests', 'build188-m1')]
-      }
-    ])
-  waterfall = add_tester(
-    waterfall, 'Win 7 x64 Perf',
-    'chromium-rel-win7-x64-dual', 'win',
-    swarming=[
-      {
-       'gpu': '102b:0532',
-       'os': 'Windows-2008ServerR2-SP1',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build138-m1', 'build139-m1',
-           'build140-m1', 'build141-m1', 'build142-m1'
-          ],
-       'perf_tests': [
-         ('load_library_perf_tests', 'build140-m1'),
-         ('performance_browser_tests', 'build140-m1')]
-      }
-    ])
-  waterfall = add_tester(
-    waterfall, 'Win 7 ATI GPU Perf',
-    'chromium-rel-win7-gpu-ati', 'win',
-    swarming=[
-      {
-       'gpu': '1002:6613',
-       'os': 'Windows-2008ServerR2-SP1',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build101-m1', 'build102-m1',
-           'build103-m1', 'build104-m1', 'build105-m1'
-          ],
-       'perf_tests': [
-         # crbug.com/785291
-         # ('angle_perftests', 'build103-m1'),
-         ('load_library_perf_tests', 'build103-m1'),
-         ('performance_browser_tests', 'build103-m1'),
-         ('media_perftests', 'build104-m1')]
+         ('media_perftests', 'build188-m1'),
+         ('components_perftests', 'build189-m1')]
       }
     ])
   waterfall = add_tester(
@@ -491,29 +395,6 @@ def get_waterfall_config():
       }
     ])
 
-  waterfall = add_tester(
-    waterfall, 'Linux Perf', 'linux-release', 'linux',
-    swarming=[
-      {
-       'gpu': '10de:1cb3',
-       'os': 'Ubuntu-14.04',
-       'pool': 'Chrome-perf',
-       'device_ids': [
-           'build27-a9', 'build28-a9', 'build29-a9',
-           'build30-a9', 'build31-a9',
-          ],
-       'perf_tests': [
-         # crbug.com/698831
-         # ('cc_perftests', 'build150-m1'),
-         ('load_library_perf_tests', 'build29-a9'),
-         ('net_perftests', 'build29-a9'),
-         ('tracing_perftests', 'build29-a9'),
-         ('media_perftests', 'build30-a9'),
-         ('views_perftests', 'build31-a9')
-       ]
-      }
-    ])
-
   return waterfall
 
 
@@ -547,6 +428,19 @@ def generate_isolate_script_entry(swarming_dimensions, test_args,
 BENCHMARKS_TO_OUTPUT_HISTOGRAMS = [
     'dummy_benchmark.noisy_benchmark_1',
     'dummy_benchmark.stable_benchmark_1',
+    'blink_perf.bindings',
+    'blink_perf.canvas',
+    'blink_perf.css',
+    'blink_perf.dom',
+    'blink_perf.events',
+    'blink_perf.image_decoder',
+    'blink_perf.layout',
+    'blink_perf.owp_storage',
+    'blink_perf.paint',
+    'blink_perf.parser',
+    'blink_perf.shadow_dom',
+    'blink_perf.svg',
+    'memory.top_10_mobile'
 ]
 
 
@@ -871,6 +765,8 @@ def generate_all_tests(waterfall):
 
 def update_all_tests(waterfall, file_path):
   tests = generate_all_tests(waterfall)
+  # Add in the migrated testers for the new recipe.
+  get_new_recipe_testers(NEW_PERF_RECIPE_MIGRATED_TESTERS, tests)
   with open(file_path, 'w') as fp:
     json.dump(tests, fp, indent=2, separators=(',', ': '), sort_keys=True)
     fp.write('\n')
@@ -894,18 +790,21 @@ NON_TELEMETRY_BENCHMARKS = {
         'piman@chromium.org, chrome-gpu-perf-owners@chromium.org',
         'Internals>GPU>ANGLE', False),
     'net_perftests': BenchmarkMetadata('xunjieli@chromium.org', None, False),
-    'cc_perftests': BenchmarkMetadata('enne@chromium.org', None, False),
     'gpu_perftests': BenchmarkMetadata(
         'reveman@chromium.org, chrome-gpu-perf-owners@chromium.org',
         'Internals>GPU', False),
     'tracing_perftests': BenchmarkMetadata(
         'kkraynov@chromium.org, primiano@chromium.org', None, False),
-    'load_library_perf_tests': BenchmarkMetadata(None, None, False),
+    'load_library_perf_tests': BenchmarkMetadata(
+        'xhwang@chromium.org, crouleau@chromium.org',
+        'Internals>Media>Encrypted', False),
     'media_perftests': BenchmarkMetadata('crouleau@chromium.org', None, False),
     'performance_browser_tests': BenchmarkMetadata(
         'miu@chromium.org', None, False),
     'views_perftests': BenchmarkMetadata(
-        'tapted@chromium.org', 'Internals>Views', False)
+        'tapted@chromium.org', 'Internals>Views', False),
+    'components_perftests': BenchmarkMetadata(
+        'csharrison@chromium.org', None, False)
 }
 
 
@@ -916,7 +815,8 @@ NON_WATERFALL_BENCHMARKS = {
     'sizes (linux)': BenchmarkMetadata('thestig@chromium.org', None, False),
     'resource_sizes': BenchmarkMetadata(
         'agrieve@chromium.org, rnephew@chromium.org, perezju@chromium.org',
-        None, False)
+        None, False),
+    'supersize_archive': BenchmarkMetadata('agrieve@chromium.org', None, False),
 }
 
 
@@ -953,6 +853,11 @@ def verify_all_tests_in_benchmark_csv(tests, benchmark_metadata):
     for s in scripts:
       name = s['name']
       name = re.sub('\\.reference$', '', name)
+      # TODO(eyaich): Determine new way to generate ownership based
+      # on the benchmark bot map instead of on the generated tests
+      # for new perf recipe.
+      if name is 'performance_test_suite':
+        continue
       test_names.add(name)
 
   # Disabled tests are filtered out of the waterfall json. Add them back here.
@@ -972,31 +877,16 @@ def verify_all_tests_in_benchmark_csv(tests, benchmark_metadata):
   _verify_benchmark_owners(benchmark_metadata)
 
 
-UNOWNED_BENCHMARK_FILE = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'unowned_benchmarks.txt'))
-
 # Verify that all benchmarks have owners except those on the whitelist.
 def _verify_benchmark_owners(benchmark_metadata):
   unowned_benchmarks = set()
-
   for benchmark_name in benchmark_metadata:
     if benchmark_metadata[benchmark_name].emails == None:
       unowned_benchmarks.add(benchmark_name)
 
-  # Read in the list of benchmarks that do not have owners.
-  # This list will eventually be empty (BUG=575762)
-  with open(UNOWNED_BENCHMARK_FILE) as f:
-    known_unowned_benchmarks = set(f.read().splitlines())
-
-  error_messages = []
-  for test in unowned_benchmarks - known_unowned_benchmarks:
-    error_messages.append('Benchmarks must have owners; Add owner to ' + test)
-  for test in known_unowned_benchmarks - unowned_benchmarks:
-    error_messages.append('Remove ' + test +
-        ' from %s' % UNOWNED_BENCHMARK_FILE)
-
-  assert unowned_benchmarks == known_unowned_benchmarks, (
-      'Please fix the following errors:\n'+ '\n'.join(error_messages))
+  assert not unowned_benchmarks, (
+      'All benchmarks must have owners. Please add owners for the following '
+      'benchmarks:\n%s' % '\n'.join(unowned_benchmarks))
 
 
 def update_benchmark_csv(file_path):
@@ -1054,49 +944,192 @@ def validate_tests(waterfall, waterfall_file, benchmark_file):
 # We will only be generating one entry per isolate in the new world.
 # Right now this is simply adding and/or updating chromium.perf.fyi.json
 # until migration is complete.  See crbug.com/757933 for more info.
+#
+# To add a new isolate, add an entry to the 'tests' section.  Supported
+# values in this json are:
+# isolate: the name of the isolate you are trigger
+# test_suite: name of the test suite if different than the isolate
+#     that you want to show up as the test name
+# extra_args: args that need to be passed to the script target
+#     of the isolate you are running.
+# shards: shard indices that you want the isolate to run on.  If omitted
+#     will run on all shards.
+# telemetry: boolean indicating if this is a telemetry test.  If omitted
+#     assumed to be true.
 NEW_PERF_RECIPE_FYI_TESTERS = {
   'testers' : {
-    'One Buildbot Step Test Builder': {
-      'isolate': 'telemetry_perf_tests_experimental',
-      'platform': 'linux',
-      'testing': True,
+    'Mac 10.13 Laptop High End': {
+      'tests': [
+        {
+          'isolate': 'performance_test_suite',
+          'num_shards': 26
+        },
+        {
+          'isolate': 'net_perftests',
+          'num_shards': 1,
+          'telemetry': False,
+        },
+        {
+          'isolate': 'views_perftests',
+          'num_shards': 1,
+          'telemetry': False,
+        }
+      ],
+      'platform': 'mac',
+      'dimension': {
+        'pool': 'Chrome-perf-fyi',
+        'os': 'Mac-10.13',
+        'gpu': '1002:6821'
+      },
       'device_ids': [
-          'swarm823-c4',
-          'swarm846-c4',
-          'swarm847-c4'
       ],
     },
-    'Mac 10.12 Laptop Low End': {
-      'isolate': 'performance_test_suite',
-      'platform': 'mac',
+    'One Buildbot Step Test Builder': {
+      'tests': [
+        {
+          'isolate': 'telemetry_perf_tests_without_chrome',
+          'extra_args': ['--xvfb'],
+          'num_shards': 3
+        },
+        {
+          'isolate': 'load_library_perf_tests',
+          'num_shards': 1,
+          'telemetry': False,
+        }
+      ],
+      'platform': 'linux',
+      'dimension': {
+        'gpu': 'none',
+        'pool': 'chrome.tests.perf-fyi',
+        'os': 'Linux',
+      },
+      'testing': True,
       'device_ids': [
-          'build195-a9', 'build196-a9', 'build197-a9', 'build198-a9',
-          'build199-a9', 'build200-a9', 'build201-a9', 'build202-a9',
-          'build203-a9', 'build204-a9', 'build205-a9', 'build206-a9',
-          'build207-a9', 'build208-a9', 'build209-a9', 'build210-a9',
-          'build211-a9', 'build212-a9', 'build213-a9', 'build214-a9',
-          'build215-a9', 'build216-a9', 'build217-a9', 'build218-a9',
-          'build219-a9', 'build220-a9'
+      ],
+    },
+    'Android Go': {
+      'tests': [
+        {
+          'name': 'performance_test_suite',
+          'isolate': 'performance_test_suite',
+          'num_shards': 14
+        }
+      ],
+      'platform': 'android',
+      'dimension': {
+        'device_os': 'O',
+        'device_type': 'gobo',
+        'pool': 'chrome.tests.perf-fyi',
+        'os': 'Android',
+      },
+      'device_ids': [
       ],
     }
   }
 }
 
 
-def add_common_test_properties(test, tester_config):
+NEW_PERF_RECIPE_MIGRATED_TESTERS = {
+  'testers' : {
+    'mac-10_12_laptop_low_end-perf': {
+      'tests': [
+        {
+          'isolate': 'performance_test_suite',
+        },
+        {
+          'isolate': 'load_library_perf_tests',
+          'shards': [0],
+          'telemetry': False,
+        }
+      ],
+      'platform': 'mac',
+      'dimension': {
+        'pool': 'chrome.tests.perf',
+        'os': 'Mac-10.12',
+        'gpu': '8086:1626'
+      },
+      'shards': 26,
+      'device_ids': [
+          'build41-a7', 'build42-a7', 'build43-a7', 'build44-a7',
+          'build45-a7', 'build46-a7', 'build47-a7', 'build48-a7',
+          'build49-a7', 'build50-a7', 'build51-a7', 'build52-a7',
+          'build53-a7', 'build54-a7', 'build55-a7', 'build56-a7',
+          'build57-a7', 'build58-a7', 'build59-a7', 'build60-a7',
+          'build61-a7', 'build62-a7', 'build63-a7', 'build64-a7',
+          'build65-a7', 'build66-a7'
+      ],
+    },
+    'linux-perf': {
+      'tests': [
+        # Add views_perftests, crbug.com/811766
+        {
+          'isolate': 'performance_test_suite',
+        },
+        {
+          'isolate': 'load_library_perf_tests',
+          'shards': [0],
+          'telemetry': False,
+        },
+        {
+          'isolate': 'net_perftests',
+          'shards': [1],
+          'telemetry': False,
+        },
+        {
+          'isolate': 'tracing_perftests',
+          'shards': [2],
+          'telemetry': False,
+        },
+        {
+          'isolate': 'media_perftests',
+          'shards': [3],
+          'telemetry': False,
+        }
+      ],
+      'platform': 'linux',
+      'dimension': {
+        'gpu': '10de:1cb3',
+        'os': 'Ubuntu-14.04',
+        'pool': 'chrome.tests.perf',
+      },
+      'device_ids': [
+          'build67-a7', 'build68-a7', 'build69-a7', 'build70-a7',
+          'build71-a7', 'build72-a7', 'build73-a7', 'build74-a7',
+          'build75-a7', 'build76-a7', 'build77-a7', 'build78-a7',
+          'build79-a7', 'build80-a7', 'build81-a7', 'build82-a7',
+          'build83-a7', 'build84-a7', 'build85-a7', 'build86-a7',
+          'build87-a7', 'build88-a7', 'build89-a7', 'build90-a7',
+          'build91-a7', 'build92-a7'
+      ],
+    }
+  }
+}
+def add_common_test_properties(test_entry, tester_config, test_spec):
   dimensions = []
+  index = 0
   for device_id in tester_config['device_ids']:
-    dimensions.append({'id': device_id})
-  test['trigger_script'] = {
+    run_on_shard = True
+    if test_spec.get('shards', False):
+      # If specific shards are specified, only generate
+      # a entry for the specified shards
+      if index not in test_spec['shards']:
+        run_on_shard = False
+    if run_on_shard:
+      dimensions.append({'id': device_id})
+    index = index + 1
+  test_entry['trigger_script'] = {
       'script': '//testing/trigger_scripts/perf_device_trigger.py',
       'args': [
-          '--multiple-trigger-configs',
-          json.dumps(dimensions),
           '--multiple-dimension-script-verbose',
           'True'
       ],
   }
-  test['merge'] = {
+  # Only want to append multiple-trigger-configs if we don't support
+  # soft device affinity
+  if len(dimensions):
+    test_entry['trigger_script']['args'].append('--multiple-trigger-configs')
+    test_entry['trigger_script']['args'].append(json.dumps(dimensions))
+  test_entry['merge'] = {
       'script': '//tools/perf/process_perf_results.py',
       'args': [
         '--service-account-file',
@@ -1106,7 +1139,7 @@ def add_common_test_properties(test, tester_config):
   return len(dimensions)
 
 
-def generate_performance_test_suite(tester_config):
+def generate_telemetry_args(tester_config):
   # First determine the browser that you need based on the tester
   browser_name = ''
   # For trybot testing we always use the reference build
@@ -1125,30 +1158,59 @@ def generate_performance_test_suite(tester_config):
 
   test_args = [
     '-v',
-    '--xvfb',
-    '--browser=%s' % browser_name
+    '--browser=%s' % browser_name,
+    '--upload-results'
   ]
+
+  if browser_name == 'android-webview':
+    test_args.append(
+        '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk')
 
   # Appending testing=true if we only want to run a subset of benchmarks
   # for quicker testing
   if tester_config.get('testing', False):
     test_args.append('--testing=true')
 
-  isolate_name = tester_config['isolate']
-  if browser_name == 'android-webview':
-    test_args.append(
-        '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk')
-    isolate_name = 'telemetry_perf_webview_tests'
+  return test_args
+
+def generate_non_telemetry_args():
+  # --non-telemetry tells run_performance_tests.py that this test needs
+  #   to be executed differently
+  # --migrated-test tells run_performance_test_wrapper that this has
+  #   non-telemetry test has been migrated to the new recipe.
+  return [
+    '--non-telemetry=true',
+    '--migrated-test=true'
+  ]
+
+def generate_performance_test(tester_config, test):
+  if test.get('telemetry', True):
+    test_args = generate_telemetry_args(tester_config)
+  else:
+    test_args = generate_non_telemetry_args()
+  # Append any additional args specific to an isolate
+  test_args += test.get('extra_args', [])
+  isolate_name = test['isolate']
+
+  # Check to see if the name is different than the isolate
+  test_suite = isolate_name
+  if test.get('test_suite', False):
+    test_suite = test['test_suite']
 
   result = {
     'args': test_args,
     'isolate_name': isolate_name,
-    'name': isolate_name,
+    'name': test_suite,
     'override_compile_targets': [
       isolate_name
     ]
   }
-  shards = add_common_test_properties(result, tester_config)
+  # For now we either get shards from the number of devices specified
+  # or a test entry needs to specify the num shards if it supports
+  # soft device affinity.
+  shards = add_common_test_properties(result, tester_config, test)
+  if not shards:
+    shards = test.get('num_shards')
   result['swarming'] = {
     # Always say this is true regardless of whether the tester
     # supports swarming. It doesn't hurt.
@@ -1158,9 +1220,7 @@ def generate_performance_test_suite(tester_config):
     'ignore_task_failure': False,
     'io_timeout': 30 * 60, # 30 minutes
     'dimension_sets': [
-      {
-        'pool': 'Chrome-perf-fyi',
-      }
+      tester_config['dimension']
     ],
     'upload_test_results': True,
     'shards': shards,
@@ -1168,7 +1228,7 @@ def generate_performance_test_suite(tester_config):
   return result
 
 
-def load_and_update_new_recipe_json():
+def load_and_update_new_recipe_fyi_json():
   tests = {}
   filename = 'chromium.perf.fyi.json'
   buildbot_dir = os.path.join(
@@ -1179,14 +1239,19 @@ def load_and_update_new_recipe_json():
   with open(fyi_filepath, 'w') as fp:
     # We have loaded what is there, we want to update or add
     # what we have listed here
-    testers = NEW_PERF_RECIPE_FYI_TESTERS
-    for tester, tester_config in testers['testers'].iteritems():
-      isolated_scripts = [generate_performance_test_suite(tester_config)]
-      tests[tester] = {
-        'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])
-      }
+    get_new_recipe_testers(NEW_PERF_RECIPE_FYI_TESTERS, tests)
     json.dump(tests, fp, indent=2, separators=(',', ': '), sort_keys=True)
     fp.write('\n')
+
+
+def get_new_recipe_testers(testers, tests):
+  for tester, tester_config in testers['testers'].iteritems():
+    isolated_scripts = []
+    for test in tester_config['tests']:
+      isolated_scripts.append(generate_performance_test(tester_config, test))
+    tests[tester] = {
+      'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])
+    }
 
 
 def main(args):
@@ -1218,7 +1283,7 @@ def main(args):
              'configs and benchmark.csv.') % sys.argv[0]
       return 1
   else:
-    load_and_update_new_recipe_json()
+    load_and_update_new_recipe_fyi_json()
     update_all_tests(get_waterfall_config(), waterfall_file)
     update_benchmark_csv(benchmark_file)
   return 0

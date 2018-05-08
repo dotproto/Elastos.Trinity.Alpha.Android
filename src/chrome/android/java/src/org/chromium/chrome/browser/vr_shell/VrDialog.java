@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.vr_shell;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Color;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -31,7 +32,9 @@ public class VrDialog extends FrameLayout {
         super(context);
         setLayoutParams(new FrameLayout.LayoutParams(
                 DIALOG_WIDTH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.LEFT));
+        setBackgroundColor(Color.WHITE);
         mVrDialogManager = vrDialogManager;
+        mVrDialogManager.setDialogFloating(false);
     }
 
     /**

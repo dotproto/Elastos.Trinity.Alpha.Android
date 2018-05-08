@@ -14,18 +14,18 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/common/appcache_interfaces.h"
-#include "content/common/weak_wrapper_shared_url_loader_factory.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/weak_wrapper_shared_url_loader_factory.h"
 #include "content/public/renderer/fixed_received_data.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
+#include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/test_request_peer.h"
 #include "net/base/net_errors.h"
@@ -37,8 +37,8 @@
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_referrer_policy.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -85,7 +85,7 @@ class ResourceDispatcherTest : public testing::Test,
     head.headers = new net::HttpResponseHeaders(raw_headers);
     head.mime_type = kTestPageMimeType;
     head.charset = kTestPageCharset;
-    client->OnReceiveResponse(head, {}, {});
+    client->OnReceiveResponse(head, {});
   }
 
   std::unique_ptr<network::ResourceRequest> CreateResourceRequest() {
@@ -116,11 +116,11 @@ class ResourceDispatcherTest : public testing::Test,
         new TestRequestPeer(dispatcher(), peer_context));
     int request_id = dispatcher()->StartAsync(
         std::move(request), 0,
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), url::Origin(),
-        TRAFFIC_ANNOTATION_FOR_TESTS, false, std::move(peer),
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+        TRAFFIC_ANNOTATION_FOR_TESTS, false, false, std::move(peer),
         base::MakeRefCounted<WeakWrapperSharedURLLoaderFactory>(this),
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
-        network::mojom::URLLoaderClientEndpointsPtr(),
+        nullptr /* navigation_response_override_params */,
         nullptr /* continue_navigation_function */);
     peer_context->request_id = request_id;
     return request_id;
@@ -180,6 +180,9 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
         const network::ResourceResponseInfo& info) override {
       response_info_ = info;
     }
+
+    void OnStartLoadingResponseBody(
+        mojo::ScopedDataPipeConsumerHandle body) override {}
 
     void OnDownloadedData(int len, int encoded_data_length) override {}
 
@@ -322,7 +325,7 @@ class TimeConversionTest : public ResourceDispatcherTest {
     ASSERT_EQ(1u, loader_and_clients_.size());
     auto client = std::move(loader_and_clients_[0].second);
     loader_and_clients_.clear();
-    client->OnReceiveResponse(response_head, {}, {});
+    client->OnReceiveResponse(response_head, {});
   }
 
   const network::ResourceResponseInfo& response_info() const {

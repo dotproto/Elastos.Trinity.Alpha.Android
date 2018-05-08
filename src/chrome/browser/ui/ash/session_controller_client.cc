@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/session_types.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
@@ -38,6 +39,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_type.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/equals_traits.h"
@@ -49,9 +51,9 @@
 using session_manager::Session;
 using session_manager::SessionManager;
 using session_manager::SessionState;
-using user_manager::UserManager;
 using user_manager::User;
 using user_manager::UserList;
+using user_manager::UserManager;
 
 namespace {
 
@@ -91,12 +93,16 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
   session->user_info->display_email = user.display_email();
   session->user_info->is_ephemeral =
       UserManager::Get()->IsUserNonCryptohomeDataEphemeral(user.GetAccountId());
-  if (profile)
+  if (profile) {
+    session->user_info->service_user_id =
+        content::BrowserContext::GetServiceUserIdFor(profile);
     session->user_info->is_new_profile = profile->IsNewProfile();
+  }
 
-  session->user_info->avatar = user.GetImage();
-  if (session->user_info->avatar.isNull()) {
-    session->user_info->avatar =
+  session->user_info->avatar = ash::mojom::UserAvatar::New();
+  session->user_info->avatar->image = user.GetImage();
+  if (session->user_info->avatar->image.isNull()) {
+    session->user_info->avatar->image =
         *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_LOGIN_DEFAULT_USER);
   }
@@ -338,13 +344,13 @@ bool SessionControllerClient::CanLockScreen() {
 
 // static
 bool SessionControllerClient::ShouldLockScreenAutomatically() {
-  // TODO(xiyuan): Observe prefs::kEnableAutoScreenLock and update ash.
+  // TODO(xiyuan): Observe ash::prefs::kEnableAutoScreenLock and update ash.
   // Tracked in http://crbug.com/670423
   const UserList logged_in_users = UserManager::Get()->GetLoggedInUsers();
   for (auto* user : logged_in_users) {
     Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
     if (profile &&
-        profile->GetPrefs()->GetBoolean(prefs::kEnableAutoScreenLock)) {
+        profile->GetPrefs()->GetBoolean(ash::prefs::kEnableAutoScreenLock)) {
       return true;
     }
   }
@@ -501,9 +507,9 @@ void SessionControllerClient::OnLoginUserProfilePrepared(Profile* profile) {
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar =
       std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar->Init(profile->GetPrefs());
-  pref_change_registrar->Add(prefs::kAllowScreenLock,
+  pref_change_registrar->Add(ash::prefs::kAllowScreenLock,
                              session_info_changed_closure);
-  pref_change_registrar->Add(prefs::kEnableAutoScreenLock,
+  pref_change_registrar->Add(ash::prefs::kEnableAutoScreenLock,
                              session_info_changed_closure);
   pref_change_registrars_.push_back(std::move(pref_change_registrar));
 

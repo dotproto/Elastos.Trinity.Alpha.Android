@@ -35,14 +35,15 @@ void URLRequestContextBuilderMojo::SetMojoProxyResolverFactory(
 URLRequestContextOwner URLRequestContextBuilderMojo::Create(
     mojom::NetworkContextParams* params,
     bool quic_disabled,
-    net::NetLog* net_log) {
+    net::NetLog* net_log,
+    net::NetworkQualityEstimator* network_quality_estimator) {
   return NetworkContext::ApplyContextParamsToBuilder(
-      this, params, quic_disabled, net_log,
+      this, params, quic_disabled, net_log, network_quality_estimator,
       nullptr /* out_static_user_agent_settings */);
 }
 
 std::unique_ptr<net::ProxyResolutionService>
-URLRequestContextBuilderMojo::CreateProxyService(
+URLRequestContextBuilderMojo::CreateProxyResolutionService(
     std::unique_ptr<net::ProxyConfigService> proxy_config_service,
     net::URLRequestContext* url_request_context,
     net::HostResolver* host_resolver,
@@ -57,7 +58,7 @@ URLRequestContextBuilderMojo::CreateProxyService(
         dhcp_fetcher_factory_->Create(url_request_context);
     std::unique_ptr<net::PacFileFetcher> pac_file_fetcher =
         std::make_unique<net::PacFileFetcherImpl>(url_request_context);
-    return CreateProxyServiceUsingMojoFactory(
+    return CreateProxyResolutionServiceUsingMojoFactory(
         std::move(mojo_proxy_resolver_factory_),
         std::move(proxy_config_service), std::move(pac_file_fetcher),
         std::move(dhcp_pac_file_fetcher), host_resolver, net_log,
@@ -65,7 +66,7 @@ URLRequestContextBuilderMojo::CreateProxyService(
   }
 #endif
 
-  return net::URLRequestContextBuilder::CreateProxyService(
+  return net::URLRequestContextBuilder::CreateProxyResolutionService(
       std::move(proxy_config_service), url_request_context, host_resolver,
       network_delegate, net_log);
 }

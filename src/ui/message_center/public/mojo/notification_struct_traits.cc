@@ -117,6 +117,11 @@ bool RichNotificationDataStructTraits::pinned(const RichNotificationData& r) {
 }
 
 // static
+bool RichNotificationDataStructTraits::renotify(const RichNotificationData& r) {
+  return r.renotify;
+}
+
+// static
 const base::string16& RichNotificationDataStructTraits::accessible_name(
     const RichNotificationData& r) {
   return r.accessible_name;
@@ -166,14 +171,17 @@ bool RichNotificationDataStructTraits::Read(RichNotificationDataDataView data,
   out->should_make_spoken_feedback_for_popup_updates =
       data.should_make_spoken_feedback_for_popup_updates();
   out->pinned = data.pinned();
+  out->renotify = data.renotify();
 
   // Look up the vector icon by ID. This will only work if RegisterVectorIcon
   // has been called with an appropriate icon.
   std::string icon_id;
   if (data.ReadVectorSmallImageId(&icon_id) && !icon_id.empty()) {
     out->vector_small_image = message_center::GetRegisteredVectorIcon(icon_id);
-    if (!out->vector_small_image)
+    if (!out->vector_small_image) {
       LOG(ERROR) << "Couldn't find icon: " + icon_id;
+      return false;
+    }
   }
 
   out->accent_color = data.accent_color();

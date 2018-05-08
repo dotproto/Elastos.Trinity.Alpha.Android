@@ -19,6 +19,7 @@
 #include "cc/test/render_pass_test_utils.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/render_pass_draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
@@ -377,13 +378,35 @@ class SurfaceAggregatorValidSurfaceTest : public SurfaceAggregatorTest {
 
   void SetUp() override {
     SurfaceAggregatorTest::SetUp();
-    root_local_surface_id_ = allocator_.GenerateId();
+    root_local_surface_id_ = allocator_.GetCurrentLocalSurfaceId();
     root_surface_ = manager_.surface_manager()->GetSurfaceForId(
         SurfaceId(support_->frame_sink_id(), root_local_surface_id_));
   }
 
   void TearDown() override {
     SurfaceAggregatorTest::TearDown();
+  }
+
+  // Verifies that if the |SharedQuadState::quad_layer_rect| can be covered by
+  // |DrawQuad::Rect| in the SharedQuadState.
+  void VerifyQuadCoverSQS(CompositorFrame* aggregated_frame) {
+    const SharedQuadState* shared_quad_state = nullptr;
+    gfx::Rect draw_quad_coverage;
+    for (size_t i = 0; i < aggregated_frame->render_pass_list.size(); ++i) {
+      for (auto quad =
+               aggregated_frame->render_pass_list[i]->quad_list.cbegin();
+           quad != aggregated_frame->render_pass_list[i]->quad_list.cend();
+           ++quad) {
+        if (shared_quad_state != quad->shared_quad_state) {
+          if (shared_quad_state)
+            EXPECT_EQ(shared_quad_state->quad_layer_rect, draw_quad_coverage);
+
+          shared_quad_state = quad->shared_quad_state;
+          draw_quad_coverage = quad->rect;
+        }
+        draw_quad_coverage.Union(quad->rect);
+      }
+    }
   }
 
   void AggregateAndVerify(Pass* expected_passes,
@@ -396,6 +419,7 @@ class SurfaceAggregatorValidSurfaceTest : public SurfaceAggregatorTest {
 
     TestPassesMatchExpectations(expected_passes, expected_pass_count,
                                 &aggregated_frame.render_pass_list);
+    VerifyQuadCoverSQS(&aggregated_frame);
 
     // Ensure no duplicate pass ids output.
     std::set<RenderPassId> used_passes;
@@ -509,29 +533,44 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, OpacityCopied) {
   SubmitCompositorFrame(embedded_support.get(), embedded_passes,
                         arraysize(embedded_passes), embedded_local_surface_id,
                         device_scale_factor);
-
-  Quad quads[] = {Quad::SurfaceQuad(embedded_surface_id, InvalidSurfaceId(),
-                                    SK_ColorWHITE, gfx::Rect(5, 5), .5f,
-                                    gfx::Transform(), false)};
-  Pass passes[] = {Pass(quads, arraysize(quads), SurfaceSize())};
-
-  SubmitCompositorFrame(support_.get(), passes, arraysize(passes),
-                        root_local_surface_id_, device_scale_factor);
-
   SurfaceId root_surface_id(support_->frame_sink_id(), root_local_surface_id_);
-  CompositorFrame aggregated_frame =
-      aggregator_.Aggregate(root_surface_id, GetNextDisplayTimeAndIncrement());
+  {
+    Quad quads[] = {Quad::SurfaceQuad(embedded_surface_id, InvalidSurfaceId(),
+                                      SK_ColorWHITE, gfx::Rect(5, 5), .5f,
+                                      gfx::Transform(), false)};
+    Pass passes[] = {Pass(quads, arraysize(quads), SurfaceSize())};
 
-  auto& render_pass_list = aggregated_frame.render_pass_list;
-  ASSERT_EQ(2u, render_pass_list.size());
-  auto& shared_quad_state_list = render_pass_list[0]->shared_quad_state_list;
-  ASSERT_EQ(2u, shared_quad_state_list.size());
-  EXPECT_EQ(1.f, shared_quad_state_list.ElementAt(0)->opacity);
-  EXPECT_EQ(1.f, shared_quad_state_list.ElementAt(1)->opacity);
+    SubmitCompositorFrame(support_.get(), passes, arraysize(passes),
+                          root_local_surface_id_, device_scale_factor);
 
-  auto& shared_quad_state_list2 = render_pass_list[1]->shared_quad_state_list;
-  ASSERT_EQ(1u, shared_quad_state_list2.size());
-  EXPECT_EQ(.5f, shared_quad_state_list2.ElementAt(0)->opacity);
+    CompositorFrame aggregated_frame = aggregator_.Aggregate(
+        root_surface_id, GetNextDisplayTimeAndIncrement());
+
+    auto& render_pass_list = aggregated_frame.render_pass_list;
+    EXPECT_EQ(2u, render_pass_list.size());
+
+    auto& shared_quad_state_list2 = render_pass_list[1]->shared_quad_state_list;
+    ASSERT_EQ(1u, shared_quad_state_list2.size());
+    EXPECT_EQ(.5f, shared_quad_state_list2.ElementAt(0)->opacity);
+  }
+
+  // For the case where opacity is close to 1.f, we treat it as opaque, and not
+  // use a render surface.
+  {
+    Quad quads[] = {Quad::SurfaceQuad(embedded_surface_id, InvalidSurfaceId(),
+                                      SK_ColorWHITE, gfx::Rect(5, 5), .9999f,
+                                      gfx::Transform(), false)};
+    Pass passes[] = {Pass(quads, arraysize(quads), SurfaceSize())};
+
+    SubmitCompositorFrame(support_.get(), passes, arraysize(passes),
+                          root_local_surface_id_, device_scale_factor);
+
+    CompositorFrame aggregated_frame = aggregator_.Aggregate(
+        root_surface_id, GetNextDisplayTimeAndIncrement());
+
+    auto& render_pass_list = aggregated_frame.render_pass_list;
+    EXPECT_EQ(1u, render_pass_list.size());
+  }
 }
 
 // Test that when surface is rotated and we need the render surface to apply the
@@ -1163,7 +1202,8 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, CopyRequest) {
                         device_scale_factor);
   auto copy_request = CopyOutputRequest::CreateStubForTesting();
   auto* copy_request_ptr = copy_request.get();
-  embedded_support->RequestCopyOfOutput(std::move(copy_request));
+  embedded_support->RequestCopyOfOutput(embedded_local_surface_id,
+                                        std::move(copy_request));
 
   Quad root_quads[] = {
       Quad::SolidColorQuad(SK_ColorWHITE, gfx::Rect(5, 5)),
@@ -1309,7 +1349,8 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, UnreferencedSurface) {
                         device_scale_factor);
   auto copy_request(CopyOutputRequest::CreateStubForTesting());
   auto* copy_request_ptr = copy_request.get();
-  embedded_support->RequestCopyOfOutput(std::move(copy_request));
+  embedded_support->RequestCopyOfOutput(embedded_local_surface_id,
+                                        std::move(copy_request));
 
   LocalSurfaceId parent_local_surface_id = allocator_.GenerateId();
   SurfaceId parent_surface_id(parent_support->frame_sink_id(),

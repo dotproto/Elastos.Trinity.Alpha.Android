@@ -30,6 +30,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/multiprocess_test.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
@@ -79,17 +80,13 @@ namespace {
 
 const char kSignalFileSlow[] = "SlowChildProcess.die";
 const char kSignalFileKill[] = "KilledChildProcess.die";
+const char kTestHelper[] = "test_child_process";
 
 #if defined(OS_POSIX)
 const char kSignalFileTerm[] = "TerminatedChildProcess.die";
 
-#if defined(OS_ANDROID)
-const char kShellPath[] = "/system/bin/sh";
-#elif defined(OS_FUCHSIA)
-const char kShellPath[] = "/boot/bin/sh";
+#if defined(OS_FUCHSIA)
 const char kSignalFileClone[] = "/tmp/ClonedTmpDir.die";
-#else
-const char kShellPath[] = "/bin/sh";
 #endif
 #endif  // defined(OS_POSIX)
 
@@ -143,6 +140,11 @@ const int kSuccess = 0;
 
 class ProcessUtilTest : public MultiProcessTest {
  public:
+  void SetUp() override {
+    ASSERT_TRUE(PathService::Get(DIR_ASSETS, &test_helper_path_));
+    test_helper_path_ = test_helper_path_.AppendASCII(kTestHelper);
+  }
+
 #if defined(OS_POSIX)
   // Spawn a child process that counts how many file descriptors are open.
   int CountOpenFDsInChild();
@@ -150,6 +152,9 @@ class ProcessUtilTest : public MultiProcessTest {
   // Converts the filename to a platform specific filepath.
   // On Android files can not be created in arbitrary directories.
   static std::string GetSignalFilePath(const char* filename);
+
+ protected:
+  base::FilePath test_helper_path_;
 };
 
 std::string ProcessUtilTest::GetSignalFilePath(const char* filename) {
@@ -237,11 +242,6 @@ MULTIPROCESS_TEST_MAIN(CheckTmpFileExists) {
 }
 
 TEST_F(ProcessUtilTest, SelectivelyClonedDir) {
-  // Selective cloning only works if the test executable is deployed as a
-  // package.
-  if (GetPackageRoot().empty())
-    return;
-
   const std::string signal_file =
       ProcessUtilTest::GetSignalFilePath(kSignalFileClone);
   remove(signal_file.c_str());
@@ -264,11 +264,6 @@ TEST_F(ProcessUtilTest, SelectivelyClonedDir) {
 // error code if it detects a directory other than "/tmp", so we can use that as
 // a signal that it successfully detected another entry in the root namespace.
 TEST_F(ProcessUtilTest, CloneAlternateDir) {
-  // Selective cloning only works if the test executable is deployed as a
-  // package.
-  if (GetPackageRoot().empty())
-    return;
-
   const std::string signal_file =
       ProcessUtilTest::GetSignalFilePath(kSignalFileClone);
   remove(signal_file.c_str());
@@ -369,7 +364,7 @@ MULTIPROCESS_TEST_MAIN(CrashingChildProcess) {
 
 // This test intentionally crashes, so we don't need to run it under
 // AddressSanitizer.
-#if defined(ADDRESS_SANITIZER) || defined(SYZYASAN)
+#if defined(ADDRESS_SANITIZER)
 #define MAYBE_GetTerminationStatusCrash DISABLED_GetTerminationStatusCrash
 #else
 #define MAYBE_GetTerminationStatusCrash GetTerminationStatusCrash
@@ -489,37 +484,48 @@ TEST_F(ProcessUtilTest, GetTerminationStatusSigTerm) {
 }
 #endif  // defined(OS_POSIX)
 
-#if defined(OS_WIN)
-// TODO(estade): if possible, port this test.
-TEST_F(ProcessUtilTest, GetAppOutput) {
-  // Let's create a decently long message.
-  std::string message;
-  for (int i = 0; i < 1025; i++) {  // 1025 so it does not end on a kilo-byte
-                                    // boundary.
-    message += "Hello!";
-  }
-  // cmd.exe's echo always adds a \r\n to its output.
-  std::string expected(message);
-  expected += "\r\n";
+TEST_F(ProcessUtilTest, EnsureTerminationUndying) {
+  test::ScopedTaskEnvironment task_environment;
 
-  FilePath cmd(L"cmd.exe");
-  CommandLine cmd_line(cmd);
-  cmd_line.AppendArg("/c");
-  cmd_line.AppendArg("echo " + message + "");
-  std::string output;
-  ASSERT_TRUE(GetAppOutput(cmd_line, &output));
-  EXPECT_EQ(expected, output);
+  Process child_process = SpawnChild("process_util_test_never_die");
+  ASSERT_TRUE(child_process.IsValid());
 
-  // Let's make sure stderr is ignored.
-  CommandLine other_cmd_line(cmd);
-  other_cmd_line.AppendArg("/c");
-  // http://msdn.microsoft.com/library/cc772622.aspx
-  cmd_line.AppendArg("echo " + message + " >&2");
-  output.clear();
-  ASSERT_TRUE(GetAppOutput(other_cmd_line, &output));
-  EXPECT_EQ("", output);
+  EnsureProcessTerminated(child_process.Duplicate());
+
+  // Allow a generous timeout, to cope with slow/loaded test bots.
+  EXPECT_TRUE(child_process.WaitForExitWithTimeout(
+      TestTimeouts::action_max_timeout(), nullptr));
 }
 
+MULTIPROCESS_TEST_MAIN(process_util_test_never_die) {
+  while (1) {
+    PlatformThread::Sleep(TimeDelta::FromSeconds(500));
+  }
+  return kSuccess;
+}
+
+TEST_F(ProcessUtilTest, EnsureTerminationGracefulExit) {
+  test::ScopedTaskEnvironment task_environment;
+
+  Process child_process = SpawnChild("process_util_test_die_immediately");
+  ASSERT_TRUE(child_process.IsValid());
+
+  // Wait for the child process to actually exit.
+  child_process.Duplicate().WaitForExitWithTimeout(
+      TestTimeouts::action_max_timeout(), nullptr);
+
+  EnsureProcessTerminated(child_process.Duplicate());
+
+  // Verify that the process is really, truly gone.
+  EXPECT_TRUE(child_process.WaitForExitWithTimeout(
+      TestTimeouts::action_max_timeout(), nullptr));
+}
+
+MULTIPROCESS_TEST_MAIN(process_util_test_die_immediately) {
+  return kSuccess;
+}
+
+#if defined(OS_WIN)
 // TODO(estade): if possible, port this test.
 TEST_F(ProcessUtilTest, LaunchAsUser) {
   UserTokenHandle token;
@@ -572,6 +578,54 @@ TEST_F(ProcessUtilTest, InheritSpecifiedHandles) {
   EXPECT_TRUE(event.TimedWait(TestTimeouts::action_max_timeout()));
 }
 #endif  // defined(OS_WIN)
+
+TEST_F(ProcessUtilTest, GetAppOutput) {
+  base::CommandLine command(test_helper_path_);
+  command.AppendArg("hello");
+  command.AppendArg("there");
+  command.AppendArg("good");
+  command.AppendArg("people");
+  std::string output;
+  EXPECT_TRUE(GetAppOutput(command, &output));
+  EXPECT_EQ("hello there good people", output);
+  output.clear();
+
+  const char* kEchoMessage = "blah";
+  command = base::CommandLine(test_helper_path_);
+  command.AppendArg("-x");
+  command.AppendArg("28");
+  command.AppendArg(kEchoMessage);
+  EXPECT_FALSE(GetAppOutput(command, &output));
+  EXPECT_EQ(kEchoMessage, output);
+}
+
+TEST_F(ProcessUtilTest, GetAppOutputWithExitCode) {
+  const char* kEchoMessage1 = "doge";
+  int exit_code = -1;
+  base::CommandLine command(test_helper_path_);
+  command.AppendArg(kEchoMessage1);
+  std::string output;
+  EXPECT_TRUE(GetAppOutputWithExitCode(command, &output, &exit_code));
+  EXPECT_EQ(kEchoMessage1, output);
+  EXPECT_EQ(0, exit_code);
+  output.clear();
+
+  const char* kEchoMessage2 = "pupper";
+  const int kExpectedExitCode = 42;
+  command = base::CommandLine(test_helper_path_);
+  command.AppendArg("-x");
+  command.AppendArg(base::IntToString(kExpectedExitCode));
+  command.AppendArg(kEchoMessage2);
+#if defined(OS_WIN)
+  // On Windows, anything that quits with a nonzero status code is handled as a
+  // "crash", so just ignore GetAppOutputWithExitCode's return value.
+  GetAppOutputWithExitCode(command, &output, &exit_code);
+#else
+  EXPECT_TRUE(GetAppOutputWithExitCode(command, &output, &exit_code));
+#endif
+  EXPECT_EQ(kEchoMessage2, output);
+  EXPECT_EQ(kExpectedExitCode, exit_code);
+}
 
 #if defined(OS_POSIX)
 
@@ -821,7 +875,9 @@ TEST_F(ProcessUtilTest, FDRemappingIncludesStdio) {
   EXPECT_EQ(0, exit_code);
 }
 
-#if defined(OS_FUCHSIA)
+// TODO(https://crbug.com/793412): Disable on Debug/component builds due to
+// process launch taking too long and triggering timeouts.
+#if defined(OS_FUCHSIA) && defined(NDEBUG)
 const uint16_t kStartupHandleId = 43;
 MULTIPROCESS_TEST_MAIN(ProcessUtilsVerifyHandle) {
   zx_handle_t handle =
@@ -856,11 +912,11 @@ TEST_F(ProcessUtilTest, LaunchWithHandleTransfer) {
   // Read from the pipe to verify that the child received it.
   zx_signals_t signals = 0;
   result = zx_object_wait_one(
-      handles[1], ZX_SOCKET_READABLE,
+      handles[1], ZX_SOCKET_READABLE | ZX_SOCKET_PEER_CLOSED,
       (base::TimeTicks::Now() + TestTimeouts::action_timeout()).ToZxTime(),
       &signals);
-  EXPECT_EQ(ZX_OK, result);
-  EXPECT_TRUE(signals & ZX_SOCKET_READABLE);
+  ASSERT_EQ(ZX_OK, result);
+  ASSERT_TRUE(signals & ZX_SOCKET_READABLE);
 
   size_t bytes_read = 0;
   char buf[16] = {0};
@@ -876,7 +932,7 @@ TEST_F(ProcessUtilTest, LaunchWithHandleTransfer) {
                                              &exit_code));
   EXPECT_EQ(0, exit_code);
 }
-#endif  // defined(OS_FUCHSIA)
+#endif  // defined(OS_FUCHSIA) && defined(NDEBUG)
 
 namespace {
 
@@ -920,130 +976,52 @@ const char kLargeString[] =
 }  // namespace
 
 TEST_F(ProcessUtilTest, LaunchProcess) {
-  EnvironmentMap env_changes;
-  std::vector<std::string> echo_base_test;
-  echo_base_test.emplace_back(kShellPath);
-  echo_base_test.emplace_back("-c");
-  echo_base_test.emplace_back("echo $BASE_TEST");
-
-  std::vector<std::string> print_env;
-  print_env.emplace_back("/usr/bin/env");
   const int no_clone_flags = 0;
   const bool no_clear_environ = false;
-
   const char kBaseTest[] = "BASE_TEST";
+  const std::vector<std::string> kPrintEnvCommand = {test_helper_path_.value(),
+                                                     "-e", kBaseTest};
 
+  EnvironmentMap env_changes;
   env_changes[kBaseTest] = "bar";
-  EXPECT_EQ("bar\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ("bar", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                     no_clear_environ, no_clone_flags));
   env_changes.clear();
 
   EXPECT_EQ(0, setenv(kBaseTest, "testing", 1 /* override */));
-  EXPECT_EQ("testing\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ("testing", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                         no_clear_environ, no_clone_flags));
 
   env_changes[kBaseTest] = std::string();
-  EXPECT_EQ("\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ("", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                  no_clear_environ, no_clone_flags));
 
   env_changes[kBaseTest] = "foo";
-  EXPECT_EQ("foo\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ("foo", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                     no_clear_environ, no_clone_flags));
 
   env_changes.clear();
   EXPECT_EQ(0, setenv(kBaseTest, kLargeString, 1 /* override */));
-  EXPECT_EQ(std::string(kLargeString) + "\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ(std::string(kLargeString),
+            TestLaunchProcess(kPrintEnvCommand, env_changes, no_clear_environ,
+                              no_clone_flags));
 
   env_changes[kBaseTest] = "wibble";
-  EXPECT_EQ("wibble\n",
-            TestLaunchProcess(
-                echo_base_test, env_changes, no_clear_environ, no_clone_flags));
+  EXPECT_EQ("wibble", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                        no_clear_environ, no_clone_flags));
 
 #if defined(OS_LINUX)
   // Test a non-trival value for clone_flags.
-  EXPECT_EQ("wibble\n", TestLaunchProcess(echo_base_test, env_changes,
-                                          no_clear_environ, CLONE_FS));
+  EXPECT_EQ("wibble", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                        no_clear_environ, CLONE_FS));
 
-  EXPECT_EQ(
-      "BASE_TEST=wibble\n",
-      TestLaunchProcess(
-          print_env, env_changes, true /* clear_environ */, no_clone_flags));
+  EXPECT_EQ("wibble",
+            TestLaunchProcess(kPrintEnvCommand, env_changes,
+                              true /* clear_environ */, no_clone_flags));
   env_changes.clear();
-  EXPECT_EQ(
-      "",
-      TestLaunchProcess(
-          print_env, env_changes, true /* clear_environ */, no_clone_flags));
+  EXPECT_EQ("", TestLaunchProcess(kPrintEnvCommand, env_changes,
+                                  true /* clear_environ */, no_clone_flags));
 #endif  // defined(OS_LINUX)
-}
-
-TEST_F(ProcessUtilTest, GetAppOutput) {
-  std::string output;
-
-// There's no `true` or `false` on these platforms, so use exit 0/exit 1
-// instead.
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
-  std::vector<std::string> argv;
-#if defined(OS_FUCHSIA)
-  // There's no sh in PATH on Fuchsia by default, so provide a full path to sh.
-  argv.emplace_back("/boot/bin/sh");
-#elif defined(OS_ANDROID)
-  argv.emplace_back("sh");  // Instead of /bin/sh, force path search to find it.
-#else
-#error Port.
-#endif
-  argv.emplace_back("-c");
-
-  argv.emplace_back("exit 0");
-  EXPECT_TRUE(GetAppOutput(CommandLine(argv), &output));
-  EXPECT_STREQ("", output.c_str());
-
-  argv[2] = "exit 1";
-  EXPECT_FALSE(GetAppOutput(CommandLine(argv), &output));
-  EXPECT_STREQ("", output.c_str());
-
-  argv[2] = "echo foobar42";
-  EXPECT_TRUE(GetAppOutput(CommandLine(argv), &output));
-  EXPECT_STREQ("foobar42\n", output.c_str());
-#else
-  EXPECT_TRUE(GetAppOutput(CommandLine(FilePath("true")), &output));
-  EXPECT_STREQ("", output.c_str());
-
-  EXPECT_FALSE(GetAppOutput(CommandLine(FilePath("false")), &output));
-
-  std::vector<std::string> argv;
-  argv.emplace_back("/bin/echo");
-  argv.emplace_back("-n");
-  argv.emplace_back("foobar42");
-  EXPECT_TRUE(GetAppOutput(CommandLine(argv), &output));
-  EXPECT_STREQ("foobar42", output.c_str());
-#endif  // defined(OS_ANDROID)
-}
-
-TEST_F(ProcessUtilTest, GetAppOutputWithExitCode) {
-  // Test getting output from a successful application.
-  std::vector<std::string> argv;
-  std::string output;
-  int exit_code;
-  argv.emplace_back(kShellPath);  // argv[0]
-  argv.emplace_back("-c");        // argv[1]
-  argv.emplace_back("echo foo");  // argv[2];
-  EXPECT_TRUE(GetAppOutputWithExitCode(CommandLine(argv), &output, &exit_code));
-  EXPECT_STREQ("foo\n", output.c_str());
-  EXPECT_EQ(exit_code, kSuccess);
-
-  // Test getting output from an application which fails with a specific exit
-  // code.
-  output.clear();
-  argv[2] = "echo foo; exit 2";
-  EXPECT_TRUE(GetAppOutputWithExitCode(CommandLine(argv), &output, &exit_code));
-  EXPECT_STREQ("foo\n", output.c_str());
-  EXPECT_EQ(exit_code, 2);
 }
 
 // There's no such thing as a parent process id on Fuchsia.
@@ -1053,60 +1031,6 @@ TEST_F(ProcessUtilTest, GetParentProcessId) {
   EXPECT_EQ(ppid, static_cast<ProcessId>(getppid()));
 }
 #endif  // !defined(OS_FUCHSIA)
-
-// TODO(port): port those unit tests.
-bool IsProcessDead(ProcessHandle child) {
-#if defined(OS_FUCHSIA)
-  // ProcessHandle is an zx_handle_t, not a pid on Fuchsia, so waitpid() doesn't
-  // make sense.
-  zx_signals_t signals;
-  // Timeout of 0 to check for termination, but non-blocking.
-  if (zx_object_wait_one(child, ZX_TASK_TERMINATED, 0, &signals) == ZX_OK) {
-    DCHECK(signals & ZX_TASK_TERMINATED);
-    return true;
-  }
-  return false;
-#else
-  // waitpid() will actually reap the process which is exactly NOT what we
-  // want to test for.  The good thing is that if it can't find the process
-  // we'll get a nice value for errno which we can test for.
-  const pid_t result = HANDLE_EINTR(waitpid(child, nullptr, WNOHANG));
-  return result == -1 && errno == ECHILD;
-#endif
-}
-
-TEST_F(ProcessUtilTest, DelayedTermination) {
-  Process child_process = SpawnChild("process_util_test_never_die");
-  ASSERT_TRUE(child_process.IsValid());
-  EnsureProcessTerminated(child_process.Duplicate());
-  int exit_code;
-  child_process.WaitForExitWithTimeout(TimeDelta::FromSeconds(5), &exit_code);
-
-  // Check that process was really killed.
-  EXPECT_TRUE(IsProcessDead(child_process.Handle()));
-}
-
-MULTIPROCESS_TEST_MAIN(process_util_test_never_die) {
-  while (1) {
-    sleep(500);
-  }
-  return kSuccess;
-}
-
-TEST_F(ProcessUtilTest, ImmediateTermination) {
-  Process child_process = SpawnChild("process_util_test_die_immediately");
-  ASSERT_TRUE(child_process.IsValid());
-  // Give it time to die.
-  sleep(2);
-  EnsureProcessTerminated(child_process.Duplicate());
-
-  // Check that process was really killed.
-  EXPECT_TRUE(IsProcessDead(child_process.Handle()));
-}
-
-MULTIPROCESS_TEST_MAIN(process_util_test_die_immediately) {
-  return kSuccess;
-}
 
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 class WriteToPipeDelegate : public LaunchOptions::PreExecDelegate {

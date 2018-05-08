@@ -7,6 +7,7 @@
 #include "base/base_paths.h"
 #include "base/path_service.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "ios/web_view/cwv_web_view_features.h"
 #include "ios/web_view/internal/app/application_context.h"
 #import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
 #include "ios/web_view/internal/translate/web_view_translate_service.h"
@@ -29,7 +30,7 @@ void WebViewWebMainParts::PreMainMessageLoopStart() {
       std::string(), nullptr, ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
 
   base::FilePath pak_file;
-  PathService::Get(base::DIR_MODULE, &pak_file);
+  base::PathService::Get(base::DIR_MODULE, &pak_file);
   pak_file = pak_file.Append(FILE_PATH_LITERAL("web_view_resources.pak"));
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       pak_file, ui::SCALE_FACTOR_NONE);
@@ -46,8 +47,10 @@ void WebViewWebMainParts::PreCreateThreads() {
 void WebViewWebMainParts::PreMainMessageLoopRun() {
   WebViewTranslateService::GetInstance()->Initialize();
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
   ContentSettingsPattern::SetNonWildcardDomainNonPortSchemes(
       /*schemes=*/nullptr, 0);
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
 }
 
 void WebViewWebMainParts::PostMainMessageLoopRun() {

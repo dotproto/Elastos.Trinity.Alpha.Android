@@ -63,11 +63,31 @@ class SmbProviderClientImpl : public SmbProviderClient {
   ~SmbProviderClientImpl() override {}
 
   void Mount(const base::FilePath& share_path,
+             const std::string& workgroup,
+             const std::string& username,
+             base::ScopedFD password_fd,
              MountCallback callback) override {
     smbprovider::MountOptionsProto options;
     options.set_path(share_path.value());
-    CallMethod(smbprovider::kMountMethod, options,
-               &SmbProviderClientImpl::HandleMountCallback, &callback);
+    options.set_workgroup(workgroup);
+    options.set_username(username);
+
+    dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
+                                 smbprovider::kMountMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(options);
+    writer.AppendFileDescriptor(password_fd.release());
+    CallMethod(&method_call, &SmbProviderClientImpl::HandleMountCallback,
+               &callback);
+  }
+
+  void Remount(const base::FilePath& share_path,
+               int32_t mount_id,
+               StatusCallback callback) override {
+    smbprovider::RemountOptionsProto options;
+    options.set_path(share_path.value());
+    options.set_mount_id(mount_id);
+    CallDefaultMethod(smbprovider::kRemountMethod, options, &callback);
   }
 
   void Unmount(int32_t mount_id, StatusCallback callback) override {
@@ -229,6 +249,16 @@ class SmbProviderClientImpl : public SmbProviderClient {
                &SmbProviderClientImpl::HandleGetDeleteListCallback, &callback);
   }
 
+  void GetShares(const base::FilePath& server_url,
+                 ReadDirectoryCallback callback) override {
+    smbprovider::GetSharesOptionsProto options;
+    options.set_server_url(server_url.value());
+    CallMethod(smbprovider::kGetSharesMethod, options,
+               &SmbProviderClientImpl::HandleProtoCallback<
+                   smbprovider::DirectoryEntryListProto>,
+               &callback);
+  }
+
  protected:
   // DBusClient override.
   void Init(dbus::Bus* bus) override {
@@ -262,7 +292,7 @@ class SmbProviderClientImpl : public SmbProviderClient {
                   Callback callback) {
     proxy_->CallMethod(
         method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(handler, GetWeakPtr(), base::Passed(callback)));
+        base::BindOnce(handler, GetWeakPtr(), std::move(*callback)));
   }
 
   // Calls the D-Bus method |name|, passing the |protobuf| as an argument.
@@ -285,7 +315,7 @@ class SmbProviderClientImpl : public SmbProviderClient {
         method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&SmbProviderClientImpl::HandleDefaultCallback,
                        GetWeakPtr(), method_call->GetMember(),
-                       base::Passed(callback)));
+                       std::move(*callback)));
   }
 
   // Handles D-Bus callback for mount.

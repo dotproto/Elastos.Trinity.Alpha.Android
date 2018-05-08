@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">住所1行目</translation>
 <translation id="1545749641540134597">QR コードをスキャンします</translation>
 <translation id="1580783302095112590">メールを送信しました。</translation>
+<translation id="1582732959743469162">この操作を行うと、現在進行中のダウンロードは停止します。</translation>
 <translation id="1612730193129642006">タブをグリッド表示</translation>
 <translation id="1644574205037202324">履歴</translation>
 <translation id="1646446875146297738">「トラッキング拒否」を有効にすると、リクエストが閲覧トラフィックに組み込まれます。その効果は、ウェブサイトがそのリクエストに応じるかどうか、およびそのリクエストがどのように解釈されるかによって異なります。
@@ -136,6 +137,7 @@
 <translation id="3393920035788932672">ポップアップ許可済み</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" />分</translation>
 <translation id="3448016392200048164">分割表示</translation>
+<translation id="3469166899695866866">ダウンロードを中止しますか？</translation>
 <translation id="3474624961160222204"><ph name="NAME" /> として続行</translation>
 <translation id="3474649192738347024">フォームに入力されました。</translation>
 <translation id="3478058380795961209">有効期限（月）</translation>
@@ -149,6 +151,7 @@
 <translation id="3588820906588687999">新しいタブで画像を開く</translation>
 <translation id="3603009562372709545">リンクのURLをコピー</translation>
 <translation id="3607167657931203000">自動入力のデータ</translation>
+<translation id="3609785682760573515">同期しています...</translation>
 <translation id="3628119975092896051">リーディング リストをオフラインで利用できます。リーディング リストにページを追加するには、<ph name="SHARE_OPENING_ICON" /> をタップします。</translation>
 <translation id="3638472932233958418">ウェブページのプリロード</translation>
 <translation id="3691593122358196899">「<ph name="FOLDER_TITLE" />」にブックマークしました</translation>
@@ -158,6 +161,7 @@
 <translation id="3789841737615482174">インストール</translation>
 <translation id="385051799172605136">戻る</translation>
 <translation id="3897092660631435901">メニュー</translation>
+<translation id="3915450441834151894">サイト情報</translation>
 <translation id="3928666092801078803">データを統合する</translation>
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3963231839620026525">新しいシークレット タブ</translation>
@@ -166,6 +170,7 @@
 <translation id="4002066346123236978">タイトル</translation>
 <translation id="4038354071007134711">この端末のアプリケーションではファイルを開けません。</translation>
 <translation id="4049507953662678203">ネットワークに接続していることを確認してから、もう一度お試しください。</translation>
+<translation id="4084682180776658562">ブックマーク</translation>
 <translation id="411254640334432676">ダウンロードできませんでした。</translation>
 <translation id="4121993058175073134">エクスポート データのみを送信するには、設定アプリでメール アカウントを設定してください。</translation>
 <translation id="4124987746317609294">期間</translation>
@@ -221,6 +226,7 @@
 <translation id="5197255632782567636">インターネット</translation>
 <translation id="5228579091201413441">同期を有効にする</translation>
 <translation id="5244474230056479698"><ph name="EMAIL" /> に同期しています</translation>
+<translation id="527973086555161537">ウェブをシークレット モードで閲覧するにはタブを開きます。</translation>
 <translation id="5300589172476337783">表示</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5327248766486351172">名前</translation>
@@ -284,6 +290,7 @@
 <translation id="633809752005859102">エラーが発生しました。原因を調査します。</translation>
 <translation id="6342069812937806050">たった今</translation>
 <translation id="6344783595350022745">テキストを消去</translation>
+<translation id="6346549652287021269">新たにダウンロードを開始しますか？</translation>
 <translation id="6362362396625799311">シークレット タブはありません</translation>
 <translation id="6374469231428023295">再試行</translation>
 <translation id="6380866119319257197">パスフレーズを忘れた場合や、この設定を変更する場合は、<ph name="BEGIN_LINK" />同期をリセット<ph name="END_LINK" />します</translation>
@@ -325,12 +332,14 @@
 <translation id="7031882061095297553">同期先</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7062545763355031412">同意してアカウントを切り替える</translation>
+<translation id="7102005569666697658">ダウンロードしています… <ph name="FILE_SIZE" /></translation>
 <translation id="7108338896283013870">非表示</translation>
 <translation id="7133798577887235672">氏名</translation>
 <translation id="7136892417564438900">カメラを使用できません</translation>
 <translation id="7159472599653637159">モバイルサイトをリクエスト</translation>
 <translation id="7167621057293532233">データ タイプ</translation>
 <translation id="7175593937868963913">メールの作成</translation>
+<translation id="7180611975245234373">更新</translation>
 <translation id="7189598951263744875">共有...</translation>
 <translation id="7203585745079012652">回答を音声で聞く</translation>
 <translation id="722055596168483966">Google サービスのカスタマイズ</translation>
@@ -349,6 +358,7 @@
 <translation id="750493650310597496">選択されていません</translation>
 <translation id="7514365320538308">ダウンロード</translation>
 <translation id="7537586195939242955">現在、Passbookにパスをインストールできません。</translation>
+<translation id="7554791636758816595">新しいタブ</translation>
 <translation id="7561196759112975576">常に使用</translation>
 <translation id="7603852183842204213">ブロックしたポップアップ: <ph name="NUMBER_OF_BLOCKED_POPUPS" /></translation>
 <translation id="7605594153474022051">同期が機能していません</translation>
@@ -360,6 +370,7 @@
 <translation id="7769602470925380267">同意してログアウトする</translation>
 <translation id="7772032839648071052">パスフレーズの確認</translation>
 <translation id="780301667611848630">いいえ</translation>
+<translation id="7856733331829174190">ダウンロードできませんでした</translation>
 <translation id="7859704718976024901">閲覧履歴</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">パスワードをエクスポート...</translation>
@@ -372,8 +383,10 @@
 <translation id="8023878949384262191">セクションを展開します。</translation>
 <translation id="8059533439631660104">セクションを折りたたみます。</translation>
 <translation id="806745655614357130">データを別に保持する</translation>
+<translation id="8073670137947914548">ダウンロードが完了しました</translation>
 <translation id="8076014560081431679">保存済みのサイト設定は削除されず、普段の閲覧行動を反映した設定などが残る場合があります。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">すべてのタブを閉じる</translation>
+<translation id="8114753159095730575">ファイルのダウンロードが利用可能です。画面の下の方にオプションがあります。</translation>
 <translation id="8205564605687841303">キャンセル</translation>
 <translation id="8225985093977202398">キャッシュされた画像とファイル</translation>
 <translation id="8261506727792406068">削除</translation>

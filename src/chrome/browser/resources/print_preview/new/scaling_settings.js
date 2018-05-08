@@ -5,7 +5,7 @@
 Polymer({
   is: 'print-preview-scaling-settings',
 
-  behaviors: [SettingsBehavior],
+  behaviors: [SettingsBehavior, print_preview_new.SettingsSectionBehavior],
 
   properties: {
     /** @type {Object} */
@@ -16,6 +16,9 @@ Polymer({
 
     /** @private {boolean} */
     inputValid_: Boolean,
+
+    /** @private {boolean} */
+    hideInput_: Boolean,
 
     disabled: Boolean,
   },
@@ -47,7 +50,7 @@ Polymer({
       // is valid, 1 call will occur due to the change to |currentValue_|. If
       // not, 2 calls will occur, since |inputValid_| will also change.
       this.fitToPageFlag_ = this.inputValid_ ? 1 : 2;
-      this.currentValue_ = this.documentInfo.fitToPageScaling;
+      this.currentValue_ = this.documentInfo.fitToPageScaling.toString();
     }
   },
 

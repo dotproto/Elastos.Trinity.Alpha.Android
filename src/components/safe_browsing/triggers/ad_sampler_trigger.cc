@@ -10,6 +10,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
@@ -20,6 +21,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(safe_browsing::AdSamplerTrigger);
 
@@ -102,7 +105,7 @@ AdSamplerTrigger::AdSamplerTrigger(
     content::WebContents* web_contents,
     TriggerManager* trigger_manager,
     PrefService* prefs,
-    net::URLRequestContextGetter* request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     history::HistoryService* history_service)
     : content::WebContentsObserver(web_contents),
       sampler_frequency_denominator_(GetSamplerFrequencyDenominator()),
@@ -110,7 +113,7 @@ AdSamplerTrigger::AdSamplerTrigger(
       finish_report_delay_ms_(kAdSampleCollectionPeriodMilliseconds),
       trigger_manager_(trigger_manager),
       prefs_(prefs),
-      request_context_(request_context),
+      url_loader_factory_(url_loader_factory),
       history_service_(history_service),
       task_runner_(content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::UI)),
@@ -123,14 +126,14 @@ void AdSamplerTrigger::CreateForWebContents(
     content::WebContents* web_contents,
     TriggerManager* trigger_manager,
     PrefService* prefs,
-    net::URLRequestContextGetter* request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     history::HistoryService* history_service) {
   DCHECK(web_contents);
   if (!FromWebContents(web_contents)) {
     web_contents->SetUserData(UserDataKey(),
                               base::WrapUnique(new AdSamplerTrigger(
                                   web_contents, trigger_manager, prefs,
-                                  request_context, history_service)));
+                                  url_loader_factory, history_service)));
   }
 }
 
@@ -173,7 +176,7 @@ void AdSamplerTrigger::CreateAdSampleReport() {
       web_contents()->GetMainFrame()->GetRoutingID());
 
   if (!trigger_manager_->StartCollectingThreatDetails(
-          TriggerType::AD_SAMPLE, web_contents(), resource, request_context_,
+          TriggerType::AD_SAMPLE, web_contents(), resource, url_loader_factory_,
           history_service_, error_options)) {
     UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName,
                               NO_SAMPLE_COULD_NOT_START_REPORT, MAX_ACTIONS);

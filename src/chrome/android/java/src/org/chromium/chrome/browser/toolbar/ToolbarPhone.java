@@ -852,7 +852,7 @@ public class ToolbarPhone extends ToolbarLayout
                     if (!DeviceClassManager.enableAccessibilityLayout()) return Color.TRANSPARENT;
                     int colorId = visualState == VisualState.TAB_SWITCHER_NORMAL
                             ? R.color.modern_primary_color
-                            : R.color.incognito_primary_color;
+                            : R.color.incognito_modern_primary_color;
                     return ApiCompatibilityUtils.getColor(res, colorId);
                 }
                 return ApiCompatibilityUtils.getColor(res, R.color.tab_switcher_background);
@@ -1066,12 +1066,10 @@ public class ToolbarPhone extends ToolbarLayout
         mLocationBarNtpOffsetLeft = 0;
         mLocationBarNtpOffsetRight = 0;
 
-        boolean isNtp = false;
         Tab currentTab = getToolbarDataProvider().getTab();
         if (currentTab != null) {
             NewTabPage ntp = getToolbarDataProvider().getNewTabPageForCurrentTab();
             if (ntp != null) {
-                isNtp = true;
                 ntp.setUrlFocusChangeAnimationPercent(mUrlFocusChangePercent);
             }
 
@@ -1102,7 +1100,8 @@ public class ToolbarPhone extends ToolbarLayout
 
         // Only transition theme colors if in static tab mode that is not the NTP. In practice this
         // only runs when you focus the omnibox on a web page.
-        if (mLocationBar.useModernDesign() && !isNtp && mTabSwitcherState == STATIC_TAB) {
+        if (mLocationBar.useModernDesign() && !isLocationBarShownInNTP()
+                && mTabSwitcherState == STATIC_TAB) {
             int defaultColor = ColorUtils.getDefaultThemeColor(getResources(), true, isIncognito());
             int defaultLocationBarColor = getLocationBarColorForToolbarColor(defaultColor);
             int primaryColor = getToolbarDataProvider().getPrimaryColor();
@@ -1217,11 +1216,18 @@ public class ToolbarPhone extends ToolbarLayout
 
         int leftBoundDifference = mNtpSearchBoxBounds.left - mLocationBarBackgroundBounds.left;
         int rightBoundDifference = mNtpSearchBoxBounds.right - mLocationBarBackgroundBounds.right;
+        int verticalInset = 0;
+        if (mLocationBar.useModernDesign()) {
+            verticalInset = (int) (getResources().getDimensionPixelSize(
+                                           R.dimen.ntp_search_box_bounds_vertical_inset_modern)
+                    * (1.f - mUrlExpansionPercent));
+        }
         mLocationBarBackgroundNtpOffset.set(
                 Math.round(leftBoundDifference * shrinkage),
                 locationBarTranslationY,
                 Math.round(rightBoundDifference * shrinkage),
                 locationBarTranslationY);
+        mLocationBarBackgroundNtpOffset.inset(0, verticalInset);
 
         // The omnibox background bounds are outset by |mLocationBarBackgroundCornerRadius| in the
         // fully expanded state (and only there!) to hide the rounded corners, so undo that before
@@ -2089,7 +2095,8 @@ public class ToolbarPhone extends ToolbarLayout
         // is only needed for RTL calculations, we proceed if the location bar is showing
         // LTR content.
         boolean isLocationBarRtl = ApiCompatibilityUtils.isLayoutRtl(mLocationBar);
-        if (!isLocationBarRtl || mUrlBar.getLayout() != null) {
+        if (!TextUtils.isEmpty(mUrlBar.getText())
+                && (!isLocationBarRtl || mUrlBar.getLayout() != null)) {
             int urlBarStartScrollX = 0;
             if (TextUtils.equals(mUrlBar.getText(), mUrlTextPreFocus)) {
                 urlBarStartScrollX = mUrlScrollXPositionPreFocus;

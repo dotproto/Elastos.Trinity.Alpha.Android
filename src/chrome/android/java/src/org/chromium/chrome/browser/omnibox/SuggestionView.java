@@ -358,8 +358,7 @@ class SuggestionView extends ViewGroup {
                 mContentsView.mTextLine2.setVisibility(INVISIBLE);
             }
             setSuggestedQuery(suggestionItem, true, urlShown, urlHighlighted);
-            setRefinable(!sameAsTyped
-                    && suggestionType != OmniboxSuggestionType.PHYSICAL_WEB_OVERFLOW);
+            setRefinable(!sameAsTyped);
         } else {
             @SuggestionIcon int suggestionIcon = SUGGESTION_ICON_MAGNIFIER;
             if (suggestionType == OmniboxSuggestionType.VOICE_SUGGEST) {
@@ -549,7 +548,7 @@ class SuggestionView extends ViewGroup {
                 }
                 classifications.add(0, new MatchClassification(0, MatchClassificationStyle.NONE));
 
-                if (DeviceFormFactor.isTablet()) {
+                if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                     TextPaint tp = mContentsView.mTextLine1.getPaint();
                     mContentsView.mRequiredWidth =
                             tp.measureText(fillIntoEdit, 0, fillIntoEdit.length());
@@ -711,7 +710,7 @@ class SuggestionView extends ViewGroup {
                                 @Override
                                 public void onClick(DialogInterface dialog, int which) {
                                     RecordUserAction.record("MobileOmniboxDeleteRequested");
-                                    mSuggestionDelegate.onDeleteSuggestion(mPosition);
+                                    mSuggestionDelegate.onDeleteSuggestion(mSuggestion, mPosition);
                                 }
                             };
                     b.setPositiveButton(android.R.string.ok, okListener);
@@ -771,7 +770,7 @@ class SuggestionView extends ViewGroup {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
 
-            if (DeviceFormFactor.isTablet()) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 // Use the same image transform matrix as the navigation icon to ensure the same
                 // scaling, which requires centering vertically based on the height of the
                 // navigation icon view and not the image itself.
@@ -857,7 +856,7 @@ class SuggestionView extends ViewGroup {
 
             // Align the text to be pixel perfectly aligned with the text in the url bar.
             boolean isRTL = ApiCompatibilityUtils.isLayoutRtl(this);
-            if (DeviceFormFactor.isTablet()) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 int textWidth = isRTL ? mTextRight : (r - l - mTextLeft);
                 final float maxRequiredWidth = mSuggestionDelegate.getMaxRequiredWidth();
                 final float maxMatchContentsWidth = mSuggestionDelegate.getMaxMatchContentsWidth();

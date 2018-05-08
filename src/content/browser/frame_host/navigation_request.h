@@ -36,10 +36,8 @@ class NavigationURLLoader;
 class NavigationData;
 class NavigationUIData;
 class SiteInstanceImpl;
-class StreamHandle;
 struct SubresourceLoaderParams;
 
-// PlzNavigate
 // A UI thread object that owns a navigation request until it commits. It
 // ensures the UI thread can start a navigation request in the
 // ResourceDispatcherHost (that lives on the IO thread).
@@ -107,7 +105,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       mojom::BeginNavigationParamsPtr begin_params,
       int current_history_list_offset,
       int current_history_list_length,
-      bool override_user_agent);
+      bool override_user_agent,
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
 
   ~NavigationRequest() override;
 
@@ -235,8 +234,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   void OnResponseStarted(
       const scoped_refptr<network::ResourceResponse>& response,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
-      std::unique_ptr<StreamHandle> body,
-      const net::SSLInfo& ssl_info,
       std::unique_ptr<NavigationData> navigation_data,
       const GlobalRequestID& request_id,
       bool is_download,
@@ -336,6 +333,9 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // NavigationUIData at the beginning of the navigation.
   std::unique_ptr<NavigationUIData> navigation_ui_data_;
 
+  // URLLoaderFactory to facilitate loading blob URLs.
+  scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory_;
+
   NavigationState state_;
 
   std::unique_ptr<NavigationURLLoader> loader_;
@@ -374,10 +374,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // Holds objects received from OnResponseStarted while the WillProcessResponse
   // checks are performed by the NavigationHandle. Once the checks have been
   // completed, these objects will be used to continue the navigation.
-  // The URLLoaderClientEndpointsPtr is used when the Network Service or
-  // NavigationMojoResponse is enabled. Otherwise the StreamHandle is used.
   scoped_refptr<network::ResourceResponse> response_;
-  std::unique_ptr<StreamHandle> body_;
   network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints_;
   net::SSLInfo ssl_info_;
   bool is_download_;

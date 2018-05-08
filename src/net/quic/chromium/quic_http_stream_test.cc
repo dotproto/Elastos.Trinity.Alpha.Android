@@ -55,12 +55,12 @@
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/socket_test_util.h"
 #include "net/spdy/chromium/spdy_http_utils.h"
-#include "net/spdy/core/spdy_frame_builder.h"
-#include "net/spdy/core/spdy_framer.h"
-#include "net/spdy/core/spdy_protocol.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/third_party/spdy/core/spdy_frame_builder.h"
+#include "net/third_party/spdy/core/spdy_framer.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -669,7 +669,7 @@ class QuicHttpStreamTest
 };
 
 INSTANTIATE_TEST_CASE_P(
-    VersionIncludeStreamDependencySequnece,
+    VersionIncludeStreamDependencySequence,
     QuicHttpStreamTest,
     ::testing::Combine(::testing::ValuesIn(AllSupportedTransportVersions()),
                        ::testing::Bool()));
@@ -1113,6 +1113,8 @@ TEST_P(QuicHttpStreamTest, LogGranularQuicErrorIfHandshakeNotConfirmed) {
   SetRequest("GET", "/", DEFAULT_PRIORITY);
   size_t spdy_request_headers_frame_length;
   QuicStreamOffset header_stream_offset = 0;
+  client_maker_.SetEncryptionLevel(ENCRYPTION_INITIAL);
+  client_maker_.SetLongHeaderType(ZERO_RTT_PROTECTED);
   AddWrite(InnerConstructRequestHeadersPacket(
       1, GetNthClientInitiatedStreamId(0), kIncludeVersion, kFin,
       DEFAULT_PRIORITY, &spdy_request_headers_frame_length,

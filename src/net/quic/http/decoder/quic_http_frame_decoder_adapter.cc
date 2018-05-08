@@ -25,14 +25,14 @@
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_string_utils.h"
-#include "net/spdy/core/hpack/hpack_decoder_adapter.h"
-#include "net/spdy/core/hpack/hpack_header_table.h"
-#include "net/spdy/core/http2_frame_decoder_adapter.h"
-#include "net/spdy/core/spdy_alt_svc_wire_format.h"
-#include "net/spdy/core/spdy_bug_tracker.h"
-#include "net/spdy/core/spdy_header_block.h"
-#include "net/spdy/core/spdy_headers_handler_interface.h"
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/core/hpack/hpack_decoder_adapter.h"
+#include "net/third_party/spdy/core/hpack/hpack_header_table.h"
+#include "net/third_party/spdy/core/http2_frame_decoder_adapter.h"
+#include "net/third_party/spdy/core/spdy_alt_svc_wire_format.h"
+#include "net/third_party/spdy/core/spdy_bug_tracker.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_headers_handler_interface.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 
 #if 0
 using ::ExtensionVisitorInterface;
@@ -453,11 +453,7 @@ void QuicHttpDecoderAdapter::OnSetting(
   }
   // TODO(quic): Consider whether to add support for handling unknown SETTINGS
   //     IDs, which currently cause a connection close.
-  if (GetQuicRestartFlag(http2_propagate_unknown_settings)) {
-    visitor()->OnSetting(setting_id, setting_fields.value);
-  } else {
-    visitor()->OnSettingOld(setting_id, setting_fields.value);
-  }
+  visitor()->OnSetting(setting_id, setting_fields.value);
 }
 
 void QuicHttpDecoderAdapter::OnSettingsEnd() {

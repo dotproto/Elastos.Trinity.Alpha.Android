@@ -15,12 +15,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/easy_unlock/short_lived_user_context.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/proximity_auth/screenlock_bridge.h"
 
 namespace base {
-class DictionaryValue;
 class ListValue;
 }  // namespace base
 
@@ -82,12 +81,9 @@ class EasyUnlockServiceRegular
   EasyUnlockService::Type GetType() const override;
   AccountId GetAccountId() const override;
   void LaunchSetup() override;
-  const base::DictionaryValue* GetPermitAccess() const override;
-  void SetPermitAccess(const base::DictionaryValue& permit) override;
   void ClearPermitAccess() override;
   const base::ListValue* GetRemoteDevices() const override;
   void SetRemoteDevices(const base::ListValue& devices) override;
-  void SetRemoteBleDevices(const base::ListValue& devices) override;
   void RunTurnOffFlow() override;
   void ResetTurnOffFlow() override;
   TurnOffFlowStatus GetTurnOffFlowStatus() const override;
@@ -96,8 +92,6 @@ class EasyUnlockServiceRegular
   void RecordEasySignInOutcome(const AccountId& account_id,
                                bool success) const override;
   void RecordPasswordLoginEvent(const AccountId& account_id) const override;
-  void StartAutoPairing(const AutoPairingResultCallback& callback) override;
-  void SetAutoPairingResult(bool success, const std::string& error) override;
   void InitializeInternal() override;
   void ShutdownInternal() override;
   bool IsAllowedInternal() const override;
@@ -105,7 +99,7 @@ class EasyUnlockServiceRegular
   bool IsChromeOSLoginEnabled() const override;
   void OnWillFinalizeUnlock(bool success) override;
   void OnSuspendDoneInternal() override;
-  void HandleUserReauth(const chromeos::UserContext& user_context) override;
+  void HandleUserReauth(const UserContext& user_context) override;
 
   // CryptAuthDeviceManager::Observer:
   void OnSyncStarted() override;
@@ -131,7 +125,7 @@ class EasyUnlockServiceRegular
 
   // Called with the user's credentials (e.g. username and password) after the
   // user reauthenticates to begin setup.
-  void OpenSetupAppAfterReauth(const chromeos::UserContext& user_context);
+  void OpenSetupAppAfterReauth(const UserContext& user_context);
 
   // Called after a cryptohome RemoveKey or RefreshKey operation to set the
   // proper hardlock state if the operation is successful.
@@ -139,11 +133,7 @@ class EasyUnlockServiceRegular
       EasyUnlockScreenlockStateHandler::HardlockState state_on_success,
       bool success);
 
-  std::unique_ptr<chromeos::ShortLivedUserContext> short_lived_user_context_;
-
-  // Updates local state with the preference from the user's profile, so they
-  // can be accessed on the sign-in screen.
-  void SyncProfilePrefsToLocalState();
+  std::unique_ptr<ShortLivedUserContext> short_lived_user_context_;
 
   // Returns the CryptAuthEnrollmentManager, which manages the profile's
   // CryptAuth enrollment.
@@ -161,8 +151,6 @@ class EasyUnlockServiceRegular
   std::unique_ptr<cryptauth::CryptAuthClient> cryptauth_client_;
   ScopedObserver<cryptauth::CryptAuthDeviceManager, EasyUnlockServiceRegular>
       scoped_crypt_auth_device_manager_observer_;
-
-  AutoPairingResultCallback auto_pairing_callback_;
 
   // True if the user just unlocked the screen using Easy Unlock. Reset once
   // the screen unlocks. Used to distinguish Easy Unlock-powered unlocks from

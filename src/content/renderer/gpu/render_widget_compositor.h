@@ -23,7 +23,7 @@
 #include "content/common/render_frame_metadata.mojom.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "third_party/WebKit/public/platform/WebLayerTreeView.h"
+#include "third_party/blink/public/platform/web_layer_tree_view.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace base {
@@ -135,7 +135,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   blink::WebSize GetViewportSize() const override;
   virtual blink::WebFloatPoint adjustEventPointForPinchZoom(
       const blink::WebFloatPoint& point) const;
-  void SetBackgroundColor(blink::WebColor color) override;
+  void SetBackgroundColor(SkColor color) override;
   void SetVisible(bool visible) override;
   void SetPageScaleFactorAndLimits(float page_scale_factor,
                                    float minimum,
@@ -148,11 +148,11 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void HeuristicsForGpuRasterizationUpdated(bool matches_heuristics) override;
   void SetNeedsBeginFrame() override;
   void DidStopFlinging() override;
-  void LayoutAndPaintAsync(
-      blink::WebLayoutAndPaintAsyncCallback* callback) override;
+  void LayoutAndPaintAsync(base::OnceClosure callback) override;
   void CompositeAndReadbackAsync(
-      blink::WebCompositeAndReadbackAsyncCallback* callback) override;
+      base::OnceCallback<void(const SkBitmap&)> callback) override;
   void SynchronouslyCompositeNoRasterForTesting() override;
+  void CompositeWithRasterForTesting() override;
   void SetDeferCommits(bool defer_commits) override;
   void RegisterViewportLayers(
       const blink::WebLayerTreeView::ViewportLayers& viewport_layers) override;
@@ -185,7 +185,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void RequestDecode(const PaintImage& image,
                      base::OnceCallback<void(bool)> callback) override;
 
-  void SetOverscrollBehavior(const blink::WebOverscrollBehavior&) override;
+  void SetOverscrollBehavior(const cc::OverscrollBehavior&) override;
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override;
@@ -254,7 +254,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   bool layer_tree_frame_sink_request_failed_while_invisible_ = false;
 
   bool in_synchronous_compositor_update_ = false;
-  blink::WebLayoutAndPaintAsyncCallback* layout_and_paint_async_callback_;
+  base::OnceClosure layout_and_paint_async_callback_;
 
   viz::FrameSinkId frame_sink_id_;
 

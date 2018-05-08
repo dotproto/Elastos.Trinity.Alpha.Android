@@ -167,11 +167,17 @@ void RootCompositorFrameSinkImpl::DisplayDidReceiveCALayerParams(
     display_client_->OnDisplayReceivedCALayerParams(ca_layer_params);
 }
 
+void RootCompositorFrameSinkImpl::DidSwapAfterSnapshotRequestReceived(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  display_client_->DidSwapAfterSnapshotRequestReceived(latency_info);
+}
+
 void RootCompositorFrameSinkImpl::DisplayDidDrawAndSwap() {}
 
 void RootCompositorFrameSinkImpl::OnClientConnectionLost() {
-  support_->frame_sink_manager()->OnClientConnectionLost(
-      support_->frame_sink_id());
+  // TODO(kylechar): I'm not sure what we need to do here. If |this| is
+  // destroyed then |display_| will be destroyed and we'll stop producing
+  // frames.
 }
 
 BeginFrameSource* RootCompositorFrameSinkImpl::begin_frame_source() {

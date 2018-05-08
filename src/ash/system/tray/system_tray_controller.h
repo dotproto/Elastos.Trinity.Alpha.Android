@@ -23,8 +23,6 @@ class ASH_EXPORT SystemTrayController : public mojom::SystemTray {
   SystemTrayController();
   ~SystemTrayController() override;
 
-  base::HourClockType hour_clock_type() const { return hour_clock_type_; }
-
   // Wrappers around the mojom::SystemTrayClient interface.
   void ShowSettings();
   void ShowBluetoothSettings();
@@ -51,6 +49,7 @@ class ASH_EXPORT SystemTrayController : public mojom::SystemTray {
   void ShowThirdPartyVpnCreate(const std::string& extension_id);
   void ShowArcVpnCreate(const std::string& app_id);
   void ShowNetworkSettings(const std::string& network_id);
+  void ShowMultiDeviceSetup();
   void RequestRestartForUpdate();
 
   // Binds the mojom::SystemTray interface to this object.
@@ -75,9 +74,6 @@ class ASH_EXPORT SystemTrayController : public mojom::SystemTray {
 
   // Bindings for users of the mojo interface.
   mojo::BindingSet<mojom::SystemTray> bindings_;
-
-  // The type of clock hour display: 12 or 24 hour.
-  base::HourClockType hour_clock_type_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayController);
 };

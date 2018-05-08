@@ -5,8 +5,10 @@
 #include "components/viz/service/display/display.h"
 
 #include <stddef.h>
+#include <limits>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/checked_math.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
@@ -22,13 +24,14 @@
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/gl_renderer.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/service/display/skia_renderer.h"
 #include "components/viz/service/display/software_renderer.h"
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -42,10 +45,12 @@ Display::Display(
     const FrameSinkId& frame_sink_id,
     std::unique_ptr<OutputSurface> output_surface,
     std::unique_ptr<DisplayScheduler> scheduler,
-    scoped_refptr<base::SingleThreadTaskRunner> current_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> current_task_runner,
+    SkiaOutputSurface* skia_output_surface)
     : bitmap_manager_(bitmap_manager),
       settings_(settings),
       frame_sink_id_(frame_sink_id),
+      skia_output_surface_(skia_output_surface),
       output_surface_(std::move(output_surface)),
       scheduler_(std::move(scheduler)),
       current_task_runner_(std::move(current_task_runner)) {
@@ -212,8 +217,10 @@ void Display::InitializeRenderer() {
           &settings_, output_surface_.get(), resource_provider_.get(),
           current_task_runner_);
     } else {
+      DCHECK(output_surface_);
       renderer_ = std::make_unique<SkiaRenderer>(
-          &settings_, output_surface_.get(), resource_provider_.get());
+          &settings_, output_surface_.get(), resource_provider_.get(),
+          skia_output_surface_);
     }
   } else if (output_surface_->vulkan_context_provider()) {
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -321,15 +328,6 @@ bool Display::DrawAndSwap() {
     TRACE_EVENT_INSTANT0("viz", "Size mismatch.", TRACE_EVENT_SCOPE_THREAD);
 
   bool should_draw = have_copy_requests || (have_damage && size_matches);
-
-  // If the surface is suspended then the resources to be used by the draw are
-  // likely destroyed.
-  if (output_surface_->SurfaceIsSuspendForRecycle()) {
-    TRACE_EVENT_INSTANT0("viz", "Surface is suspended for recycle.",
-                         TRACE_EVENT_SCOPE_THREAD);
-    should_draw = false;
-  }
-
   client_->DisplayWillDrawAndSwap(should_draw, frame.render_pass_list);
 
   if (should_draw) {
@@ -390,7 +388,9 @@ bool Display::DrawAndSwap() {
                                                  "Display::DrawAndSwap");
 
     cc::benchmark_instrumentation::IssueDisplayRenderingStatsEvent();
-    renderer_->SwapBuffers(std::move(frame.metadata.latency_info));
+    bool need_presentation_feedback = !presented_callbacks_.empty();
+    renderer_->SwapBuffers(std::move(frame.metadata.latency_info),
+                           need_presentation_feedback);
     if (scheduler_)
       scheduler_->DidSwapBuffers();
   } else {
@@ -490,6 +490,22 @@ void Display::DidReceivePresentationFeedback(
   active_presented_callbacks_.clear();
 }
 
+void Display::DidFinishLatencyInfo(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  std::vector<ui::LatencyInfo> latency_info_with_snapshot_component;
+  for (const auto& latency : latency_info) {
+    if (latency.FindLatency(ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT,
+                            nullptr)) {
+      latency_info_with_snapshot_component.push_back(latency);
+    }
+  }
+
+  if (!latency_info_with_snapshot_component.empty()) {
+    client_->DidSwapAfterSnapshotRequestReceived(
+        latency_info_with_snapshot_component);
+  }
+}
+
 void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   aggregator_->SetFullDamageForSurface(current_surface_id_);
   if (scheduler_) {
@@ -582,10 +598,10 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
       settings_.kMinimumDrawOcclusionSize.width() * device_scale_factor_;
 
   // Total quad area to be drawn on screen before applying draw occlusion.
-  size_t total_quad_area_shown_wo_occlusion_px = 0;
+  base::CheckedNumeric<uint64_t> total_quad_area_shown_wo_occlusion_px = 0;
 
   // Total area not draw skipped by draw occlusion.
-  size_t total_area_saved_in_px = 0;
+  base::CheckedNumeric<uint64_t> total_area_saved_in_px = 0;
 
   for (const auto& pass : frame->render_pass_list) {
     // TODO(yiyix): Add filter effects to draw occlusion calculation and perform
@@ -593,7 +609,7 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
     if (!pass->filters.IsEmpty() || !pass->background_filters.IsEmpty()) {
       for (auto* const quad : pass->quad_list) {
         total_quad_area_shown_wo_occlusion_px +=
-            quad->visible_rect.height() * quad->visible_rect.width();
+            quad->visible_rect.size().GetCheckedArea();
       }
       continue;
     }
@@ -603,7 +619,7 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
     if (pass != frame->render_pass_list.back()) {
       for (auto* const quad : pass->quad_list) {
         total_quad_area_shown_wo_occlusion_px +=
-            quad->visible_rect.height() * quad->visible_rect.width();
+            quad->visible_rect.size().GetCheckedArea();
       }
       continue;
     }
@@ -612,7 +628,7 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
     gfx::Rect occlusion_in_quad_content_space;
     for (auto quad = pass->quad_list.begin(); quad != quad_list_end;) {
       total_quad_area_shown_wo_occlusion_px +=
-          quad->visible_rect.height() * quad->visible_rect.width();
+          quad->visible_rect.size().GetCheckedArea();
 
       // Skip quad if it is a RenderPassDrawQuad because RenderPassDrawQuad is a
       // special type of DrawQuad where the visible_rect of shared quad state is
@@ -691,8 +707,7 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
         // Case 1: for simple transforms (scale or translation), define the
         // occlusion region in the quad content space. If the |quad| is not
         // shown on the screen, then remove |quad| from the compositor frame.
-        total_area_saved_in_px +=
-            quad->visible_rect.height() * quad->visible_rect.width();
+        total_area_saved_in_px += quad->visible_rect.size().GetCheckedArea();
         quad = pass->quad_list.EraseAndInvalidateAllPointers(quad);
 
       } else if (occlusion_in_quad_content_space.Intersects(
@@ -704,7 +719,7 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
         quad->visible_rect.Subtract(occlusion_in_quad_content_space);
         if (origin_rect != quad->visible_rect) {
           origin_rect.Subtract(quad->visible_rect);
-          total_area_saved_in_px += origin_rect.height() * origin_rect.width();
+          total_area_saved_in_px += origin_rect.size().GetCheckedArea();
         }
         ++quad;
       } else if (occlusion_in_quad_content_space.IsEmpty() &&
@@ -714,23 +729,26 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
         // Case 3: for non simple transforms, define the occlusion region in
         // target space. If the |quad| is not shown on the screen, then remove
         // |quad| from the compositor frame.
-        total_area_saved_in_px +=
-            quad->visible_rect.height() * quad->visible_rect.width();
+        total_area_saved_in_px += quad->visible_rect.size().GetCheckedArea();
         quad = pass->quad_list.EraseAndInvalidateAllPointers(quad);
       } else {
         ++quad;
       }
     }
   }
+
   UMA_HISTOGRAM_PERCENTAGE(
       "Compositing.Display.Draw.Occlusion.Percentage.Saved",
-      total_quad_area_shown_wo_occlusion_px == 0
+      total_quad_area_shown_wo_occlusion_px.ValueOrDefault(0) == 0
           ? 0
-          : total_area_saved_in_px * 100 /
-                total_quad_area_shown_wo_occlusion_px);
+          : static_cast<uint64_t>(total_area_saved_in_px.ValueOrDie()) * 100 /
+                static_cast<uint64_t>(
+                    total_quad_area_shown_wo_occlusion_px.ValueOrDie()));
+
   UMA_HISTOGRAM_COUNTS_1M(
       "Compositing.Display.Draw.Occlusion.Drawing.Area.Saved2",
-      total_area_saved_in_px);
+      static_cast<uint64_t>(total_area_saved_in_px.ValueOrDefault(
+          std::numeric_limits<uint64_t>::max())));
 }
 
 }  // namespace viz

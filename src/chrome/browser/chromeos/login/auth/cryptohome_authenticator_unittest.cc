@@ -14,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/auth/chrome_cryptohome_authenticator.h"
@@ -311,9 +310,9 @@ class CryptohomeAuthenticatorTest : public testing::Test {
 
   void ExpectGetKeyDataExCall(std::unique_ptr<int64_t> key_type,
                               std::unique_ptr<std::string> salt) {
-    cryptohome::KeyDefinition key_definition(std::string() /* secret */,
-                                             kCryptohomeGAIAKeyLabel,
-                                             cryptohome::PRIV_DEFAULT);
+    auto key_definition = cryptohome::KeyDefinition::CreateForPassword(
+        std::string() /* secret */, kCryptohomeGAIAKeyLabel,
+        cryptohome::PRIV_DEFAULT);
     key_definition.revision = 1;
     if (key_type) {
       key_definition.provider_data.push_back(

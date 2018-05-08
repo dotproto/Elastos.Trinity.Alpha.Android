@@ -6,11 +6,15 @@
 #define CC_TEST_PIXEL_TEST_H_
 
 #include "base/files/file_util.h"
+#include "base/single_thread_task_runner.h"
+#include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "components/viz/service/display/gl_renderer.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/skia_renderer.h"
 #include "components/viz/service/display/software_renderer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
@@ -19,14 +23,12 @@
 namespace viz {
 class CopyOutputResult;
 class DirectRenderer;
-class TestGpuMemoryBufferManager;
 class TestSharedBitmapManager;
 }
 
 namespace cc {
 class DisplayResourceProvider;
 class FakeOutputSurfaceClient;
-class LayerTreeResourceProvider;
 class OutputSurface;
 class TestInProcessContextProvider;
 
@@ -58,6 +60,17 @@ class PixelTest : public testing::Test {
     return output_surface_->context_provider();
   }
 
+  // Allocates a SharedMemory bitmap and registers it with the display
+  // compositor's SharedBitmapManager.
+  std::unique_ptr<base::SharedMemory> AllocateSharedBitmapMemory(
+      const viz::SharedBitmapId& id,
+      const gfx::Size& size);
+  // Uses AllocateSharedBitmapMemory() then registers a ResourceId with the
+  // |child_resource_provider_|, and copies the contents of |source| into the
+  // software resource backing.
+  viz::ResourceId AllocateAndFillSoftwareResource(const gfx::Size& size,
+                                                  const SkBitmap& source);
+
   LayerTreeSettings settings_;
   viz::RendererSettings renderer_settings_;
   gfx::Size device_viewport_size_;
@@ -65,7 +78,6 @@ class PixelTest : public testing::Test {
   std::unique_ptr<FakeOutputSurfaceClient> output_surface_client_;
   std::unique_ptr<viz::OutputSurface> output_surface_;
   std::unique_ptr<viz::TestSharedBitmapManager> shared_bitmap_manager_;
-  std::unique_ptr<viz::TestGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   std::unique_ptr<DisplayResourceProvider> resource_provider_;
   scoped_refptr<TestInProcessContextProvider> child_context_provider_;
   std::unique_ptr<LayerTreeResourceProvider> child_resource_provider_;
@@ -75,6 +87,7 @@ class PixelTest : public testing::Test {
 
   void SetUpGLWithoutRenderer(bool flipped_output_surface);
   void SetUpGLRenderer(bool flipped_output_surface);
+  void SetUpSkiaRenderer();
   void SetUpSoftwareRenderer();
 
   void EnableExternalStencilTest();
@@ -164,8 +177,14 @@ inline void RendererPixelTest<SoftwareRendererWithExpandedViewport>::SetUp() {
   SetUpSoftwareRenderer();
 }
 
+template <>
+inline void RendererPixelTest<viz::SkiaRenderer>::SetUp() {
+  SetUpSkiaRenderer();
+}
+
 typedef RendererPixelTest<viz::GLRenderer> GLRendererPixelTest;
 typedef RendererPixelTest<viz::SoftwareRenderer> SoftwareRendererPixelTest;
+typedef RendererPixelTest<viz::SkiaRenderer> SkiaRendererPixelTest;
 
 }  // namespace cc
 

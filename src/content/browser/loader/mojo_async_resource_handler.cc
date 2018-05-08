@@ -12,10 +12,9 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "content/browser/loader/downloaded_temp_file_impl.h"
-#include "content/browser/loader/navigation_metrics.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -41,9 +40,24 @@ constexpr size_t kMinAllocationSize = 2 * net::kMaxBytesToSniff;
 
 constexpr size_t kMaxChunkSize = 32 * 1024;
 
-void NotReached(network::mojom::URLLoaderRequest mojo_request,
-                network::mojom::URLLoaderClientPtr url_loader_client) {
-  NOTREACHED();
+// Records histograms for the time spent between several events in the
+// MojoAsyncResourceHandler for a navigation.
+// - |response_started| is when the response's headers and metadata are
+//   available. Loading is paused at this time.
+// - |proceed_with_response| is when loading is resumed.
+// - |first_read_completed| is when the first part of the body has been read.
+void RecordNavigationResourceHandlerMetrics(
+    base::TimeTicks response_started,
+    base::TimeTicks proceed_with_response,
+    base::TimeTicks first_read_completed) {
+  UMA_HISTOGRAM_TIMES(
+      "Navigation.ResourceHandler."
+      "ResponseStartedUntilProceedWithResponse",
+      proceed_with_response - response_started);
+  UMA_HISTOGRAM_TIMES(
+      "Navigation.ResourceHandler."
+      "ProceedWithResponseUntilFirstReadCompleted",
+      first_read_completed - proceed_with_response);
 }
 
 }  // namespace
@@ -121,13 +135,6 @@ MojoAsyncResourceHandler::MojoAsyncResourceHandler(
   // the callback will never be called after |this| is destroyed.
   binding_.set_connection_error_with_reason_handler(base::BindOnce(
       &MojoAsyncResourceHandler::Cancel, base::Unretained(this)));
-
-  if (IsResourceTypeFrame(resource_type)) {
-    GetRequestInfo()->set_on_transfer(base::Bind(
-        &MojoAsyncResourceHandler::OnTransfer, weak_factory_.GetWeakPtr()));
-  } else {
-    GetRequestInfo()->set_on_transfer(base::Bind(&NotReached));
-  }
 }
 
 MojoAsyncResourceHandler::~MojoAsyncResourceHandler() {
@@ -194,12 +201,13 @@ void MojoAsyncResourceHandler::OnResponseStarted(
                                      response->head.download_file_path);
   }
 
-  base::Optional<net::SSLInfo> ssl_info;
-  if (url_loader_options_ &
-      network::mojom::kURLLoadOptionSendSSLInfoWithResponse)
-    ssl_info = request()->ssl_info();
+  if ((url_loader_options_ &
+       network::mojom::kURLLoadOptionSendSSLInfoWithResponse) &&
+      request()->ssl_info().cert) {
+    response->head.ssl_info = request()->ssl_info();
+  }
 
-  url_loader_client_->OnReceiveResponse(response->head, std::move(ssl_info),
+  url_loader_client_->OnReceiveResponse(response->head,
                                         std::move(downloaded_file_ptr));
 
   net::IOBufferWithSize* metadata = GetResponseMetadata(request());
@@ -635,16 +643,6 @@ MojoAsyncResourceHandler::CreateUploadProgressTracker(
     network::UploadProgressTracker::UploadProgressReportCallback callback) {
   return std::make_unique<network::UploadProgressTracker>(
       from_here, std::move(callback), request());
-}
-
-void MojoAsyncResourceHandler::OnTransfer(
-    network::mojom::URLLoaderRequest mojo_request,
-    network::mojom::URLLoaderClientPtr url_loader_client) {
-  binding_.Unbind();
-  binding_.Bind(std::move(mojo_request));
-  binding_.set_connection_error_with_reason_handler(base::BindOnce(
-      &MojoAsyncResourceHandler::Cancel, base::Unretained(this)));
-  url_loader_client_ = std::move(url_loader_client);
 }
 
 void MojoAsyncResourceHandler::SendUploadProgress(

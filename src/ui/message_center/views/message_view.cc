@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -17,6 +18,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/features.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -94,7 +96,11 @@ MessageView::~MessageView() {}
 
 void MessageView::UpdateWithNotification(const Notification& notification) {
   pinned_ = notification.pinned();
-  accessible_name_ = CreateAccessibleName(notification);
+  base::string16 new_accessible_name = CreateAccessibleName(notification);
+  if (new_accessible_name != accessible_name_) {
+    accessible_name_ = new_accessible_name;
+    NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+  }
   slide_out_controller_.set_enabled(!GetPinned());
 }
 
@@ -122,6 +128,21 @@ void MessageView::SetIsNested() {
           -gfx::ShadowValue::GetMargin(shadow.values)));
     }
   }
+}
+
+bool MessageView::IsCloseButtonFocused() const {
+  auto* control_buttons_view = GetControlButtonsView();
+  return control_buttons_view ? control_buttons_view->IsCloseButtonFocused()
+                              : false;
+}
+
+void MessageView::RequestFocusOnCloseButton() {
+  auto* control_buttons_view = GetControlButtonsView();
+  if (!control_buttons_view)
+    return;
+
+  control_buttons_view->RequestFocusOnCloseButton();
+  UpdateControlButtonsVisibility();
 }
 
 void MessageView::SetExpanded(bool expanded) {
@@ -162,6 +183,14 @@ void MessageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       l10n_util::GetStringUTF8(
           IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
   node_data->SetName(accessible_name_);
+}
+
+bool MessageView::OnMousePressed(const ui::MouseEvent& event) {
+  return true;
+}
+
+bool MessageView::OnMouseDragged(const ui::MouseEvent& event) {
+  return true;
 }
 
 void MessageView::OnMouseReleased(const ui::MouseEvent& event) {
@@ -284,7 +313,7 @@ void MessageView::OnSlideOut() {
         notification_id_, true /* mark_notification_as_read */);
   } else {
     MessageCenter::Get()->RemoveNotification(notification_id_,
-                                             false /* by_user */);
+                                             true /* by_user */);
   }
 }
 
@@ -299,7 +328,7 @@ void MessageView::OnCloseButtonPressed() {
                                            true /* by_user */);
 }
 
-void MessageView::OnSettingsButtonPressed(const ui::LocatedEvent& event) {
+void MessageView::OnSettingsButtonPressed(const ui::Event& event) {
   MessageCenter::Get()->ClickOnSettingsButton(notification_id_);
 }
 

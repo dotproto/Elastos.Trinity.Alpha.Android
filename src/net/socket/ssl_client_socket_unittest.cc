@@ -104,11 +104,11 @@ class ReadBufferingStreamSocket : public WrappedStreamSocket {
   // Socket implementation:
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
 
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
 
   // Sets the internal buffer to |size|. This must not be greater than
   // the largest value supplied to Read() - that is, it does not handle
@@ -136,7 +136,7 @@ class ReadBufferingStreamSocket : public WrappedStreamSocket {
   int buffer_size_;
 
   scoped_refptr<IOBuffer> user_read_buf_;
-  CompletionCallback user_read_callback_;
+  CompletionOnceCallback user_read_callback_;
 };
 
 ReadBufferingStreamSocket::ReadBufferingStreamSocket(
@@ -153,11 +153,11 @@ void ReadBufferingStreamSocket::SetBufferSize(int size) {
 
 int ReadBufferingStreamSocket::Read(IOBuffer* buf,
                                     int buf_len,
-                                    const CompletionCallback& callback) {
+                                    CompletionOnceCallback callback) {
   DCHECK(!user_read_buf_);
   if (buffer_size_ == 0)
-    return transport_->Read(buf, buf_len, callback);
-  int rv = ReadIfReady(buf, buf_len, callback);
+    return transport_->Read(buf, buf_len, std::move(callback));
+  int rv = ReadIfReady(buf, buf_len, std::move(callback));
   if (rv == ERR_IO_PENDING)
     user_read_buf_ = buf;
   return rv;
@@ -165,10 +165,10 @@ int ReadBufferingStreamSocket::Read(IOBuffer* buf,
 
 int ReadBufferingStreamSocket::ReadIfReady(IOBuffer* buf,
                                            int buf_len,
-                                           const CompletionCallback& callback) {
+                                           CompletionOnceCallback callback) {
   DCHECK(!user_read_buf_);
   if (buffer_size_ == 0)
-    return transport_->ReadIfReady(buf, buf_len, callback);
+    return transport_->ReadIfReady(buf, buf_len, std::move(callback));
 
   if (read_buffer_->RemainingCapacity() == 0) {
     memcpy(buf->data(), read_buffer_->StartOfBuffer(),
@@ -183,7 +183,7 @@ int ReadBufferingStreamSocket::ReadIfReady(IOBuffer* buf,
   state_ = STATE_READ;
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING)
-    user_read_callback_ = callback;
+    user_read_callback_ = std::move(callback);
   return rv;
 }
 
@@ -249,7 +249,7 @@ void ReadBufferingStreamSocket::OnReadCompleted(int result) {
   if (result == ERR_IO_PENDING)
     return;
   user_read_buf_ = nullptr;
-  base::ResetAndReturn(&user_read_callback_).Run(result);
+  std::move(user_read_callback_).Run(result);
 }
 
 // Simulates synchronously receiving an error during Read() or Write()
@@ -262,13 +262,13 @@ class SynchronousErrorStreamSocket : public WrappedStreamSocket {
   // Socket implementation:
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
 
   // Sets the next Read() call and all future calls to return |error|.
@@ -303,29 +303,29 @@ class SynchronousErrorStreamSocket : public WrappedStreamSocket {
 
 int SynchronousErrorStreamSocket::Read(IOBuffer* buf,
                                        int buf_len,
-                                       const CompletionCallback& callback) {
+                                       CompletionOnceCallback callback) {
   if (have_read_error_)
     return pending_read_error_;
-  return transport_->Read(buf, buf_len, callback);
+  return transport_->Read(buf, buf_len, std::move(callback));
 }
 
-int SynchronousErrorStreamSocket::ReadIfReady(
-    IOBuffer* buf,
-    int buf_len,
-    const CompletionCallback& callback) {
+int SynchronousErrorStreamSocket::ReadIfReady(IOBuffer* buf,
+                                              int buf_len,
+                                              CompletionOnceCallback callback) {
   if (have_read_error_)
     return pending_read_error_;
-  return transport_->ReadIfReady(buf, buf_len, callback);
+  return transport_->ReadIfReady(buf, buf_len, std::move(callback));
 }
 
 int SynchronousErrorStreamSocket::Write(
     IOBuffer* buf,
     int buf_len,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   if (have_write_error_)
     return pending_write_error_;
-  return transport_->Write(buf, buf_len, callback, traffic_annotation);
+  return transport_->Write(buf, buf_len, std::move(callback),
+                           traffic_annotation);
 }
 
 // FakeBlockingStreamSocket wraps an existing StreamSocket and simulates the
@@ -341,13 +341,13 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
   // Socket implementation:
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
 
   int pending_read_result() const { return pending_read_result_; }
@@ -389,6 +389,9 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
   // Finishes the current read.
   void ReturnReadResult();
 
+  // Callback for writes.
+  void CallPendingWriteCallback(int result);
+
   // True if read callbacks are blocked.
   bool should_block_read_ = false;
 
@@ -396,7 +399,7 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
   std::string read_if_ready_buf_;
 
   // Non-null if there is a pending ReadIfReady().
-  CompletionCallback read_if_ready_callback_;
+  CompletionOnceCallback read_if_ready_callback_;
 
   // The buffer for the pending read, or NULL if not consumed.
   scoped_refptr<IOBuffer> pending_read_buf_;
@@ -405,7 +408,7 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
   int pending_read_buf_len_ = -1;
 
   // The user callback for the pending read call.
-  CompletionCallback pending_read_callback_;
+  CompletionOnceCallback pending_read_callback_;
 
   // The result for the blocked read callback, or ERR_IO_PENDING if not
   // completed.
@@ -421,7 +424,7 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
   scoped_refptr<IOBuffer> pending_write_buf_;
 
   // The callback for the pending write call.
-  CompletionCallback pending_write_callback_;
+  CompletionOnceCallback pending_write_callback_;
 
   // The length for the pending write, or -1 if not scheduled.
   int pending_write_len_ = -1;
@@ -432,7 +435,7 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
 
 int FakeBlockingStreamSocket::Read(IOBuffer* buf,
                                    int len,
-                                   const CompletionCallback& callback) {
+                                   CompletionOnceCallback callback) {
   DCHECK(!pending_read_buf_);
   DCHECK(pending_read_callback_.is_null());
   DCHECK_EQ(ERR_IO_PENDING, pending_read_result_);
@@ -446,7 +449,7 @@ int FakeBlockingStreamSocket::Read(IOBuffer* buf,
     // Save the callback to be called later.
     pending_read_buf_ = buf;
     pending_read_buf_len_ = len;
-    pending_read_callback_ = callback;
+    pending_read_callback_ = std::move(callback);
     // Save the read result.
     if (rv != ERR_IO_PENDING) {
       OnReadCompleted(rv);
@@ -458,7 +461,7 @@ int FakeBlockingStreamSocket::Read(IOBuffer* buf,
 
 int FakeBlockingStreamSocket::ReadIfReady(IOBuffer* buf,
                                           int len,
-                                          const CompletionCallback& callback) {
+                                          CompletionOnceCallback callback) {
   if (!read_if_ready_buf_.empty()) {
     // If ReadIfReady() is used, asynchronous reads with a large enough buffer
     // and no BlockReadResult() are supported by this class. Explicitly check
@@ -478,20 +481,20 @@ int FakeBlockingStreamSocket::ReadIfReady(IOBuffer* buf,
   if (rv > 0)
     memcpy(buf->data(), buf_copy->data(), rv);
   if (rv == ERR_IO_PENDING)
-    read_if_ready_callback_ = callback;
+    read_if_ready_callback_ = std::move(callback);
   return rv;
 }
 
 int FakeBlockingStreamSocket::Write(
     IOBuffer* buf,
     int len,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(buf);
   DCHECK_LE(0, len);
 
   if (!should_block_write_)
-    return transport_->Write(buf, len, callback, traffic_annotation);
+    return transport_->Write(buf, len, std::move(callback), traffic_annotation);
 
   // Schedule the write, but do nothing.
   DCHECK(!pending_write_buf_.get());
@@ -500,7 +503,7 @@ int FakeBlockingStreamSocket::Write(
   DCHECK(!callback.is_null());
   pending_write_buf_ = buf;
   pending_write_len_ = len;
-  pending_write_callback_ = callback;
+  pending_write_callback_ = std::move(callback);
 
   // Stop the write loop, if any.
   if (write_loop_)
@@ -553,6 +556,10 @@ void FakeBlockingStreamSocket::BlockWrite() {
   should_block_write_ = true;
 }
 
+void FakeBlockingStreamSocket::CallPendingWriteCallback(int rv) {
+  std::move(pending_write_callback_).Run(rv);
+}
+
 void FakeBlockingStreamSocket::UnblockWrite() {
   DCHECK(should_block_write_);
   should_block_write_ = false;
@@ -562,15 +569,16 @@ void FakeBlockingStreamSocket::UnblockWrite() {
   if (!pending_write_buf_.get())
     return;
 
-  int rv =
-      transport_->Write(pending_write_buf_.get(), pending_write_len_,
-                        pending_write_callback_, TRAFFIC_ANNOTATION_FOR_TESTS);
+  int rv = transport_->Write(
+      pending_write_buf_.get(), pending_write_len_,
+      base::BindOnce(&FakeBlockingStreamSocket::CallPendingWriteCallback,
+                     base::Unretained(this)),
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+
   pending_write_buf_ = NULL;
   pending_write_len_ = -1;
-  if (rv == ERR_IO_PENDING) {
-    pending_write_callback_.Reset();
-  } else {
-    base::ResetAndReturn(&pending_write_callback_).Run(rv);
+  if (rv != ERR_IO_PENDING) {
+    std::move(pending_write_callback_).Run(rv);
   }
 }
 
@@ -609,7 +617,7 @@ void FakeBlockingStreamSocket::CompleteReadIfReady(scoped_refptr<IOBuffer> buf,
   DCHECK(!should_block_read_);
   if (rv > 0)
     read_if_ready_buf_ = std::string(buf->data(), buf->data() + rv);
-  base::ResetAndReturn(&read_if_ready_callback_).Run(rv > 0 ? OK : rv);
+  std::move(read_if_ready_callback_).Run(rv > 0 ? OK : rv);
 }
 
 void FakeBlockingStreamSocket::ReturnReadResult() {
@@ -617,7 +625,7 @@ void FakeBlockingStreamSocket::ReturnReadResult() {
   pending_read_result_ = ERR_IO_PENDING;
   pending_read_buf_ = nullptr;
   pending_read_buf_len_ = -1;
-  base::ResetAndReturn(&pending_read_callback_).Run(result);
+  std::move(pending_read_callback_).Run(result);
 }
 
 // CountingStreamSocket wraps an existing StreamSocket and maintains a count of
@@ -633,16 +641,17 @@ class CountingStreamSocket : public WrappedStreamSocket {
   // Socket implementation:
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override {
+           CompletionOnceCallback callback) override {
     read_count_++;
-    return transport_->Read(buf, buf_len, callback);
+    return transport_->Read(buf, buf_len, std::move(callback));
   }
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override {
     write_count_++;
-    return transport_->Write(buf, buf_len, callback, traffic_annotation);
+    return transport_->Write(buf, buf_len, std::move(callback),
+                             traffic_annotation);
   }
 
   int read_count() const { return read_count_; }
@@ -663,7 +672,7 @@ class DeleteSocketCallback : public TestCompletionCallbackBase {
                              base::Unretained(this))) {}
   ~DeleteSocketCallback() override = default;
 
-  const CompletionCallback& callback() const { return callback_; }
+  CompletionOnceCallback callback() const { return callback_; }
 
  private:
   void OnComplete(int result) {
@@ -692,13 +701,13 @@ class FailingChannelIDStore : public ChannelIDStore {
   }
   void SetChannelID(std::unique_ptr<ChannelID> channel_id) override {}
   void DeleteChannelID(const std::string& server_identifier,
-                       const base::Closure& completion_callback) override {}
+                       base::OnceClosure completion_callback) override {}
   void DeleteForDomainsCreatedBetween(
       const base::Callback<bool(const std::string&)>& domain_predicate,
       base::Time delete_begin,
       base::Time delete_end,
-      const base::Closure& completion_callback) override {}
-  void DeleteAll(const base::Closure& completion_callback) override {}
+      base::OnceClosure completion_callback) override {}
+  void DeleteAll(base::OnceClosure completion_callback) override {}
   void GetAllChannelIDs(const GetChannelIDListCallback& callback) override {}
   int GetChannelIDCount() override { return 0; }
   void SetForceKeepSessionState() override {}
@@ -719,13 +728,13 @@ class AsyncFailingChannelIDStore : public ChannelIDStore {
   }
   void SetChannelID(std::unique_ptr<ChannelID> channel_id) override {}
   void DeleteChannelID(const std::string& server_identifier,
-                       const base::Closure& completion_callback) override {}
+                       base::OnceClosure completion_callback) override {}
   void DeleteForDomainsCreatedBetween(
       const base::Callback<bool(const std::string&)>& domain_predicate,
       base::Time delete_begin,
       base::Time delete_end,
-      const base::Closure& completion_callback) override {}
-  void DeleteAll(const base::Closure& completion_callback) override {}
+      base::OnceClosure completion_callback) override {}
+  void DeleteAll(base::OnceClosure completion_callback) override {}
   void GetAllChannelIDs(const GetChannelIDListCallback& callback) override {}
   int GetChannelIDCount() override { return 0; }
   void SetForceKeepSessionState() override {}
@@ -804,8 +813,10 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
 
 class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
  public:
-  MOCK_METHOD1(IsCTRequiredForHost,
-               CTRequirementLevel(const std::string& host));
+  MOCK_METHOD3(IsCTRequiredForHost,
+               CTRequirementLevel(const std::string& host,
+                                  const X509Certificate* chain,
+                                  const HashValueVector& hashes));
 };
 
 class SSLClientSocketTest : public PlatformTest {
@@ -949,10 +960,10 @@ class SSLClientSocketReadTest : public SSLClientSocketTest,
   int Read(StreamSocket* socket,
            IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) {
+           CompletionOnceCallback callback) {
     if (read_if_ready_enabled())
-      return socket->ReadIfReady(buf, buf_len, callback);
-    return socket->Read(buf, buf_len, callback);
+      return socket->ReadIfReady(buf, buf_len, std::move(callback));
+    return socket->Read(buf, buf_len, std::move(callback));
   }
 
   // Wait for Read()/ReadIfReady() to complete.
@@ -2314,7 +2325,7 @@ TEST_F(SSLClientSocketTest, VerifyReturnChainProperlyOrdered) {
                                     X509Certificate::FORMAT_AUTO);
   ASSERT_EQ(3U, certs.size());
 
-  ASSERT_TRUE(certs[0]->Equals(unverified_certs[0].get()));
+  ASSERT_TRUE(certs[0]->EqualsExcludingChain(unverified_certs[0].get()));
 
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> temp_intermediates;
   temp_intermediates.push_back(
@@ -2448,7 +2459,9 @@ TEST_F(SSLClientSocketCertRequestInfoTest, CertKeyTypes) {
   EXPECT_EQ(CLIENT_CERT_ECDSA_SIGN, request_info->cert_key_types[1]);
 }
 
-TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsEnabledTLSExtension) {
+// Tests that the Certificate Transparency (RFC 6962) TLS extension is
+// supported.
+TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsTLSExtension) {
   // Encoding of SCT List containing 'test'.
   base::StringPiece sct_ext("\x00\x06\x00\x04test", 8);
 
@@ -2457,7 +2470,6 @@ TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsEnabledTLSExtension) {
   ASSERT_TRUE(StartTestServer(ssl_options));
 
   SSLConfig ssl_config;
-  ssl_config.signed_cert_timestamps_enabled = true;
 
   MockCTVerifier ct_verifier;
   SetCTVerifier(&ct_verifier);
@@ -2610,8 +2622,9 @@ TEST_F(SSLClientSocketTest, CTCompliantEVHistogram) {
       static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS), 1);
 }
 
-// Test that enabling Signed Certificate Timestamps enables OCSP stapling.
-TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsEnabledOCSP) {
+// Tests that OCSP stapling is requested, as per Certificate Transparency (RFC
+// 6962).
+TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsEnablesOCSP) {
   SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.staple_ocsp_response = true;
   // The test server currently only knows how to generate OCSP responses
@@ -2621,32 +2634,12 @@ TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsEnabledOCSP) {
   ASSERT_TRUE(StartTestServer(ssl_options));
 
   SSLConfig ssl_config;
-  // Enabling Signed Cert Timestamps ensures we request OCSP stapling for
-  // Certificate Transparency verification regardless of whether the platform
-  // is able to process the OCSP status itself.
-  ssl_config.signed_cert_timestamps_enabled = true;
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   EXPECT_THAT(rv, IsOk());
 
   EXPECT_TRUE(sock_->stapled_ocsp_response_received_);
-}
-
-TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsDisabled) {
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.signed_cert_timestamps_tls_ext = "test";
-
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLConfig ssl_config;
-  ssl_config.signed_cert_timestamps_enabled = false;
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_THAT(rv, IsOk());
-
-  EXPECT_FALSE(sock_->signed_cert_timestamps_received_);
 }
 
 // Tests that IsConnectedAndIdle and WasEverUsed behave as expected.
@@ -3481,12 +3474,12 @@ TEST_F(SSLClientSocketTest, CTIsRequired) {
   // Set up CT
   MockRequireCTDelegate require_ct_delegate;
   transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_, _, _))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::NOT_REQUIRED));
   EXPECT_CALL(
       require_ct_delegate,
-      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
+      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host(), _, _))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::REQUIRED));
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
@@ -3796,9 +3789,13 @@ TEST_F(SSLClientSocketTest, CTRequiredHistogramNonCompliantLocalRoot) {
   cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
 
   // Set up the CT requirement and failure to comply.
+  base::ScopedClosureRunner cleanup(base::BindOnce(
+      &TransportSecurityState::SetShouldRequireCTForTesting, nullptr));
+  bool require_ct = true;
+  TransportSecurityState::SetShouldRequireCTForTesting(&require_ct);
   MockRequireCTDelegate require_ct_delegate;
   transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_, _, _))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::REQUIRED));
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
@@ -3938,12 +3935,12 @@ TEST_F(SSLClientSocketTest, PKPMoreImportantThanCT) {
   // Set up CT.
   MockRequireCTDelegate require_ct_delegate;
   transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
-  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_, _, _))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::NOT_REQUIRED));
   EXPECT_CALL(
       require_ct_delegate,
-      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
+      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host(), _, _))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::REQUIRED));
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))

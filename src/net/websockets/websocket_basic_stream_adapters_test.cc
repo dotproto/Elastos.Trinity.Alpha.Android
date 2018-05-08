@@ -25,6 +25,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
+#include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/spdy/chromium/spdy_session.h"
 #include "net/spdy/chromium/spdy_session_key.h"
 #include "net/spdy/chromium/spdy_test_util_common.h"
@@ -65,6 +66,7 @@ class WebSocketClientSocketHandleAdapterTest : public Test {
             nullptr,
             "test_shard",
             nullptr,
+            &websocket_endpoint_lock_manager_,
             HttpNetworkSession::NORMAL_SOCKET_POOL)),
         transport_params_(base::MakeRefCounted<TransportSocketParams>(
             host_port_pair_,
@@ -98,6 +100,7 @@ class WebSocketClientSocketHandleAdapterTest : public Test {
   std::unique_ptr<ClientSocketPoolManagerImpl> socket_pool_manager_;
   scoped_refptr<TransportSocketParams> transport_params_;
   scoped_refptr<SSLSocketParams> ssl_params_;
+  WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
 };
 
 TEST_F(WebSocketClientSocketHandleAdapterTest, Uninitialized) {
@@ -284,7 +287,7 @@ TEST_F(WebSocketClientSocketHandleAdapterTest, AsyncReadAndWrite) {
 
 class MockDelegate : public WebSocketSpdyStreamAdapter::Delegate {
  public:
-  virtual ~MockDelegate() = default;
+  ~MockDelegate() override = default;
   MOCK_METHOD0(OnHeadersSent, void());
   MOCK_METHOD1(OnHeadersReceived, void(const SpdyHeaderBlock&));
   MOCK_METHOD1(OnClose, void(int));

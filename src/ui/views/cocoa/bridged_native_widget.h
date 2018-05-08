@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #import "ui/accelerated_widget_mac/accelerated_widget_mac.h"
+#include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/compositor/layer_owner.h"
 #import "ui/views/cocoa/bridged_native_widget_owner.h"
@@ -70,10 +71,6 @@ class VIEWS_EXPORT BridgedNativeWidget
   // based on its current style mask.
   static gfx::Size GetWindowSizeForClientSize(NSWindow* window,
                                               const gfx::Size& size);
-
-  // Whether an event monitor should be used to intercept window drag events.
-  // Evalutes to |true| on macOS 10.10 and older.
-  static bool ShouldUseDragEventMonitor();
 
   // Creates one side of the bridge. |parent| must not be NULL.
   explicit BridgedNativeWidget(NativeWidgetMac* parent);
@@ -161,17 +158,6 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Called by the NSWindowDelegate when the window becomes or resigns key.
   void OnWindowKeyStatusChangedTo(bool is_key);
-
-  // Returns true if the |event| should initiate a window drag.
-  bool ShouldDragWindow(NSEvent* event);
-
-  // Called when the application receives a mouse-down, but before the event is
-  // processed by NSWindow. Returning true here will cause the event to be
-  // cancelled and reposted at the CGSessionEventTap level. This is used to
-  // determine whether a mouse-down should drag the window. Only called when
-  // ShouldUseDragEventMonitor() returns true.
-  // Virtual for testing.
-  virtual bool ShouldRepostPendingLeftMouseDown(NSEvent* event);
 
   // Called by NativeWidgetMac when the window size constraints change.
   void OnSizeConstraintsChanged();
@@ -264,13 +250,6 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Show the window using -[NSApp beginSheet:..], modal for the parent window.
   void ShowAsModalSheet();
 
-  // Sets mouseDownCanMoveWindow on |bridged_view_| and triggers the NSWindow to
-  // update its draggable region.
-  void SetDraggable(bool draggable);
-
-  // Called by |mouse_down_monitor_| to close a bubble.
-  void OnRightMouseDownWithBubble(NSEvent* event);
-
   // Overridden from CocoaMouseCaptureDelegate:
   void PostCapturedEvent(NSEvent* event) override;
   void OnMouseCaptureLost() override;
@@ -293,9 +272,7 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Overridden from ui::AcceleratedWidgetMac:
   NSView* AcceleratedWidgetGetNSView() const override;
-  void AcceleratedWidgetGetVSyncParameters(
-      base::TimeTicks* timebase, base::TimeDelta* interval) const override;
-  void AcceleratedWidgetSwapCompleted() override;
+  void AcceleratedWidgetCALayerParamsUpdated() override;
 
   // Overridden from BridgedNativeWidgetOwner:
   NSWindow* GetNSWindow() override;
@@ -324,6 +301,7 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   base::scoped_nsobject<NSView> compositor_superview_;
   std::unique_ptr<ui::AcceleratedWidgetMac> compositor_widget_;
+  std::unique_ptr<ui::DisplayCALayerTree> display_ca_layer_tree_;
   std::unique_ptr<ui::Compositor> compositor_;
   viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
 
@@ -359,9 +337,6 @@ class VIEWS_EXPORT BridgedNativeWidget
   // modal windows, the window's alpha value is set to 0, till the frame from
   // the compositor arrives to avoid "blinking".
   bool initial_visibility_suppressed_ = false;
-
-  // Right mouse down monitor for bubble widget.
-  id mouse_down_monitor_;
 
   AssociatedViews associated_views_;
 

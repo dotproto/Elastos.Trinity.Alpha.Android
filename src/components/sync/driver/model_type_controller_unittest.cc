@@ -49,7 +49,7 @@ class TestModelTypeProcessor : public FakeModelTypeChangeProcessor,
 
   // ModelTypeChangeProcessor implementation.
   void OnSyncStarting(const ModelErrorHandler& error_handler,
-                      const StartCallback& callback) override {
+                      StartCallback callback) override {
     std::unique_ptr<ActivationContext> activation_context =
         std::make_unique<ActivationContext>();
     activation_context->model_type_state.set_initial_sync_done(
@@ -57,7 +57,7 @@ class TestModelTypeProcessor : public FakeModelTypeChangeProcessor,
     activation_context->type_processor =
         std::make_unique<ModelTypeProcessorProxy>(
             weak_factory_.GetWeakPtr(), base::ThreadTaskRunnerHandle::Get());
-    callback.Run(std::move(activation_context));
+    std::move(callback).Run(std::move(activation_context));
   }
   void DisableSync() override { (*disable_sync_call_count_)++; }
 
@@ -149,7 +149,7 @@ class ModelTypeControllerTest : public testing::Test, public FakeSyncClient {
     PumpUIThread();
   }
 
-  base::WeakPtr<ModelTypeSyncBridge> GetSyncBridgeForModelType(
+  base::WeakPtr<ModelTypeControllerDelegate> GetControllerDelegateForModelType(
       ModelType type) override {
     return bridge_->AsWeakPtr();
   }
@@ -235,9 +235,7 @@ class ModelTypeControllerTest : public testing::Test, public FakeSyncClient {
     association_callback_called_ = true;
   }
 
-  std::unique_ptr<ModelTypeChangeProcessor> CreateProcessor(
-      ModelType type,
-      ModelTypeSyncBridge* bridge) {
+  std::unique_ptr<ModelTypeChangeProcessor> CreateProcessor() {
     std::unique_ptr<TestModelTypeProcessor> processor =
         std::make_unique<TestModelTypeProcessor>(&disable_sync_call_count_);
     processor_ = processor.get();
@@ -246,8 +244,7 @@ class ModelTypeControllerTest : public testing::Test, public FakeSyncClient {
 
   void InitializeModelTypeSyncBridge() {
     if (model_thread_.task_runner()->BelongsToCurrentThread()) {
-      bridge_ = std::make_unique<StubModelTypeSyncBridge>(base::Bind(
-          &ModelTypeControllerTest::CreateProcessor, base::Unretained(this)));
+      bridge_ = std::make_unique<StubModelTypeSyncBridge>(CreateProcessor());
     } else {
       model_thread_.task_runner()->PostTask(
           FROM_HERE,

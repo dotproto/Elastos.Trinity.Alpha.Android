@@ -1132,7 +1132,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
   content::RenderWidgetHostView* child_view =
       ChildFrameAt(active_web_contents->GetMainFrame(), 0)->GetView();
 
-  ContextMenuWaiter menu_waiter(content::NotificationService::AllSources());
+  ContextMenuWaiter menu_waiter;
 
   // Declaring a lambda to send a right-button mouse event to the embedder
   // frame.
@@ -1212,21 +1212,25 @@ class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
   void SetupMainTab() {
     // Add a fresh new WebContents for which we add our own version of the
     // ChromePasswordManagerClient that uses a custom TestAutofillClient.
-    content::WebContents* new_contents = content::WebContents::Create(
-        content::WebContents::CreateParams(browser()
-                                               ->tab_strip_model()
-                                               ->GetActiveWebContents()
-                                               ->GetBrowserContext()));
+    std::unique_ptr<content::WebContents> new_contents =
+        content::WebContents::Create(
+            content::WebContents::CreateParams(browser()
+                                                   ->tab_strip_model()
+                                                   ->GetActiveWebContents()
+                                                   ->GetBrowserContext()));
     ASSERT_TRUE(new_contents);
-    ASSERT_FALSE(ChromePasswordManagerClient::FromWebContents(new_contents));
+    ASSERT_FALSE(
+        ChromePasswordManagerClient::FromWebContents(new_contents.get()));
 
     // Create ChromePasswordManagerClient and verify it exists for the new
     // WebContents.
     ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
-        new_contents, &test_autofill_client_);
-    ASSERT_TRUE(ChromePasswordManagerClient::FromWebContents(new_contents));
+        new_contents.get(), &test_autofill_client_);
+    ASSERT_TRUE(
+        ChromePasswordManagerClient::FromWebContents(new_contents.get()));
 
-    browser()->tab_strip_model()->AppendWebContents(new_contents, true);
+    browser()->tab_strip_model()->AppendWebContents(std::move(new_contents),
+                                                    true);
   }
 
   TestAutofillClient& autofill_client() { return test_autofill_client_; }

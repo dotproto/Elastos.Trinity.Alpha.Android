@@ -19,10 +19,10 @@
 #include "mojo/public/cpp/bindings/lib/map_serialization.h"
 #include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
+#include "mojo/public/cpp/bindings/map_traits_flat_map.h"
 #include "mojo/public/cpp/bindings/map_traits_stl.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/string_traits_stl.h"
-#include "mojo/public/cpp/bindings/string_traits_string16.h"
 #include "mojo/public/cpp/bindings/string_traits_string_piece.h"
 
 namespace mojo {

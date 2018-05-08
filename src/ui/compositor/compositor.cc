@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -40,6 +39,7 @@
 #include "components/viz/host/renderer_settings_creation.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
@@ -48,6 +48,7 @@
 #include "ui/compositor/external_begin_frame_client.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator_collection.h"
+#include "ui/compositor/overscroll/scroll_input_handler.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/icc_profile.h"
@@ -162,14 +163,15 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
 
-  if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
-    settings.preferred_tile_format = viz::RGBA_4444;
+  settings.use_rgba_4444 =
+      command_line->HasSwitch(switches::kUIEnableRGBA4444Textures);
 
 #if defined(OS_MACOSX)
   // Using CoreAnimation to composite requires using GpuMemoryBuffers, which
   // require zero copy.
   settings.resource_settings.use_gpu_memory_buffer_resources =
       settings.use_zero_copy;
+  settings.enable_elastic_overscroll = true;
 #endif
 
   settings.memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
@@ -200,6 +202,11 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
+
+  if (base::FeatureList::IsEnabled(features::kUiCompositorScrollWithLayers)) {
+    scroll_input_handler_.reset(
+        new ScrollInputHandler(host_->GetInputHandler()));
+  }
 
   animation_timeline_ =
       cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
@@ -336,7 +343,13 @@ void Compositor::ScheduleRedrawRect(const gfx::Rect& damage_rect) {
 }
 
 void Compositor::DisableSwapUntilResize() {
+  DCHECK(context_factory_private_);
   context_factory_private_->ResizeDisplay(this, gfx::Size());
+}
+
+void Compositor::ReenableSwap() {
+  DCHECK(context_factory_private_);
+  context_factory_private_->ResizeDisplay(this, size_);
 }
 
 void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
@@ -351,6 +364,11 @@ void Compositor::SetScaleAndSize(float scale,
   DCHECK_GT(scale, 0);
   bool device_scale_factor_changed = device_scale_factor_ != scale;
   device_scale_factor_ = scale;
+
+  if (size_ != size_in_pixel && local_surface_id.is_valid()) {
+    // A new LocalSurfaceId must be set when the compositor size changes.
+    DCHECK_NE(local_surface_id, host_->local_surface_id());
+  }
 
   if (!size_in_pixel.IsEmpty()) {
     size_ = size_in_pixel;
@@ -412,12 +430,18 @@ bool Compositor::IsVisible() {
 }
 
 bool Compositor::ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) {
-  return host_->GetInputHandler()->ScrollLayerTo(layer_id, offset);
+  auto input_handler = host_->GetInputHandler();
+  // TODO(crbug.com/838873): Handle the case where this weak pointer is invalid.
+  DCHECK(input_handler);
+  return input_handler->ScrollLayerTo(layer_id, offset);
 }
 
 bool Compositor::GetScrollOffsetForLayer(int layer_id,
                                          gfx::ScrollOffset* offset) const {
-  return host_->GetInputHandler()->GetScrollOffsetForLayer(layer_id, offset);
+  auto input_handler = host_->GetInputHandler();
+  // TODO(crbug.com/838873): Handle the case where this weak pointer is invalid.
+  DCHECK(input_handler);
+  return input_handler->GetScrollOffsetForLayer(layer_id, offset);
 }
 
 void Compositor::SetAuthoritativeVSyncInterval(

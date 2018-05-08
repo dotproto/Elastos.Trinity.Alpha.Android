@@ -61,6 +61,12 @@ const base::FilePath kSafeListPath =
         .Append(FILE_PATH_LITERAL("auditor"))
         .Append(FILE_PATH_LITERAL("safe_list.txt"));
 
+const base::FilePath kClangToolSwitchesPath =
+    base::FilePath(FILE_PATH_LITERAL("tools"))
+        .Append(FILE_PATH_LITERAL("traffic_annotation"))
+        .Append(FILE_PATH_LITERAL("auditor"))
+        .Append(FILE_PATH_LITERAL("traffic_annotation_extractor_switches.txt"));
+
 // The folder that includes the latest Clang built-in library. Inside this
 // folder, there should be another folder with version number, like
 // '.../lib/clang/6.0.0', which would be passed to the clang tool.
@@ -108,6 +114,16 @@ TrafficAnnotationAuditor::TrafficAnnotationAuditor(
   DCHECK(!source_path.empty());
   DCHECK(!build_path.empty());
   DCHECK(!clang_tool_path.empty());
+
+  base::FilePath switches_file =
+      base::MakeAbsoluteFilePath(source_path_.Append(kClangToolSwitchesPath));
+  std::string file_content;
+  if (base::ReadFileToString(switches_file, &file_content)) {
+    clang_tool_switches_ = base::SplitString(
+        file_content, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  } else {
+    LOG(ERROR) << "Could not read " << kClangToolSwitchesPath;
+  }
 }
 
 TrafficAnnotationAuditor::~TrafficAnnotationAuditor() = default;
@@ -129,7 +145,8 @@ bool TrafficAnnotationAuditor::RunClangTool(
     const std::vector<std::string>& path_filters,
     bool filter_files_based_on_heuristics,
     bool use_compile_commands,
-    bool rerun_on_errors) {
+    bool rerun_on_errors,
+    const base::FilePath& errors_file) {
   if (!safe_list_loaded_ && !LoadSafeList())
     return false;
 
@@ -159,13 +176,13 @@ bool TrafficAnnotationAuditor::RunClangTool(
       options_file,
       "--generate-compdb --tool=traffic_annotation_extractor -p=%s "
       "--tool-path=%s "
-      "--tool-arg=--extra-arg=-resource-dir=%s "
-      "--tool-arg=--extra-arg=-Wno-comment "
-      "--tool-arg=--extra-arg=-Wno-tautological-unsigned-enum-zero-compare "
-      "--tool-arg=--extra-arg=-Wno-tautological-constant-compare ",
+      "--tool-arg=--extra-arg=-resource-dir=%s ",
       build_path_.MaybeAsASCII().c_str(),
       base::MakeAbsoluteFilePath(clang_tool_path_).MaybeAsASCII().c_str(),
       base::MakeAbsoluteFilePath(GetClangLibraryPath()).MaybeAsASCII().c_str());
+
+  for (const std::string& item : clang_tool_switches_)
+    fprintf(options_file, "--tool-arg=--extra-arg=%s ", item.c_str());
 
   if (use_compile_commands)
     fprintf(options_file, "--all ");
@@ -194,8 +211,16 @@ bool TrafficAnnotationAuditor::RunClangTool(
 
   // If running clang tool had no output, it means that the script running it
   // could not perform the task.
-  if (clang_tool_raw_output_.empty())
+  if (clang_tool_raw_output_.empty()) {
     result = false;
+  } else if (!result) {
+    // If clang tool had errors but also returned results, the errors can be
+    // ignored as we do not separate platform specific files here and processing
+    // them fails. This is a post-build test and if there exists any actual
+    // compile error, it should be noted when the code is built.
+    printf("WARNING: Ignoring clang tool's returned errors.\n");
+    result = true;
+  }
 
   if (!result) {
     if (use_compile_commands && !clang_tool_raw_output_.empty()) {
@@ -216,7 +241,7 @@ bool TrafficAnnotationAuditor::RunClangTool(
       if (!base::ReadFileToString(options_filepath, &options_file_text))
         options_file_text = "Could not read options file.";
 
-      LOG(ERROR) << base::StringPrintf(
+      std::string error_message = base::StringPrintf(
           "Calling clang tool returned false from %s\nCommandline: %s\n\n"
           "Returned output: %s\n\nPartial options file: %s\n",
           source_path_.MaybeAsASCII().c_str(),
@@ -226,6 +251,16 @@ bool TrafficAnnotationAuditor::RunClangTool(
           cmdline.GetCommandLineString().c_str(),
 #endif
           tool_errors.c_str(), options_file_text.substr(0, 1024).c_str());
+
+      if (errors_file.empty()) {
+        LOG(ERROR) << error_message;
+      } else {
+        if (base::WriteFile(errors_file, error_message.c_str(),
+                            error_message.length()) == -1) {
+          LOG(ERROR) << "Writing error message to file failed:\n"
+                     << error_message;
+        }
+      }
     }
   }
 
@@ -245,7 +280,13 @@ void TrafficAnnotationAuditor::GenerateFilesListForClangTool(
   // to the running script and the files in the safe list will be later removed
   // from the results.
   if (!filter_files_based_on_heuristics || use_compile_commands) {
-    *file_paths = path_filters;
+    // If no path filter is specified, return current location. The clang tool
+    // will be run from the repository 'src' folder and hence this will point to
+    // repository root.
+    if (path_filters.empty())
+      file_paths->push_back("./");
+    else
+      *file_paths = path_filters;
     return;
   }
 
@@ -365,6 +406,10 @@ bool TrafficAnnotationAuditor::ParseClangToolRawOutput() {
     if (block_type == "ANNOTATION") {
       AnnotationInstance new_annotation;
       result = new_annotation.Deserialize(lines, current, end_line);
+      if (IsSafeListed(new_annotation.proto.source().file(),
+                       AuditorException::ExceptionType::ALL)) {
+        result = AuditorResult(AuditorResult::Type::RESULT_IGNORE);
+      }
       switch (result.type()) {
         case AuditorResult::Type::RESULT_OK:
           extracted_annotations_.push_back(new_annotation);
@@ -387,11 +432,19 @@ bool TrafficAnnotationAuditor::ParseClangToolRawOutput() {
     } else if (block_type == "CALL") {
       CallInstance new_call;
       result = new_call.Deserialize(lines, current, end_line);
+      if (IsSafeListed(new_call.file_path,
+                       AuditorException::ExceptionType::ALL)) {
+        result = AuditorResult(AuditorResult::Type::RESULT_IGNORE);
+      }
       if (result.IsOK())
         extracted_calls_.push_back(new_call);
     } else if (block_type == "ASSIGNMENT") {
       AssignmentInstance new_assignment;
       result = new_assignment.Deserialize(lines, current, end_line);
+      if (IsSafeListed(new_assignment.file_path,
+                       AuditorException::ExceptionType::ALL)) {
+        result = AuditorResult(AuditorResult::Type::RESULT_IGNORE);
+      }
       if (result.IsOK() &&
           !IsSafeListed(base::StringPrintf(
                             "%s@%s", new_assignment.function_context.c_str(),

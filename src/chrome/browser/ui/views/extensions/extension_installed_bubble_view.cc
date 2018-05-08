@@ -9,8 +9,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -25,6 +23,7 @@
 #include "chrome/browser/ui/extensions/extension_installed_bubble.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
+#include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/sync/bubble_sync_promo_view.h"
 #include "chrome/browser/ui/views_mode_controller.h"
@@ -49,7 +48,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #endif
@@ -92,6 +90,7 @@ views::View* AnchorViewForBrowser(ExtensionInstalledBubble* controller,
       BrowserActionsContainer* container =
           browser_view->toolbar()->browser_actions();
       // Hitting this DCHECK means |ShouldShow| failed.
+      DCHECK(container);
       DCHECK(!container->animating());
 
       reference_view = container->GetViewForId(controller->extension()->id());
@@ -108,7 +107,7 @@ views::View* AnchorViewForBrowser(ExtensionInstalledBubble* controller,
 
   // Default case.
   if (!reference_view || !reference_view->visible())
-    return browser_view->button_provider()->GetAppMenuButton();
+    return browser_view->toolbar_button_provider()->GetAppMenuButton();
   return reference_view;
 }
 #else  // OS_MACOSX && !MAC_VIEWS_BROWSER
@@ -157,7 +156,8 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
   void Init() override;
 
   // BubbleSyncPromoDelegate:
-  void OnEnableSync(const AccountInfo& account_info) override;
+  void OnEnableSync(const AccountInfo& account_info,
+                    bool is_default_promo_account) override;
 
   // views::LinkListener:
   void LinkClicked(views::Link* source, int event_flags) override;
@@ -237,23 +237,26 @@ views::View* ExtensionInstalledBubbleView::CreateFootnoteView() {
   if (!(controller_->options() & ExtensionInstalledBubble::SIGN_IN_PROMO))
     return nullptr;
 
-  base::RecordAction(
-      base::UserMetricsAction("Signin_Impression_FromExtensionInstallBubble"));
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   Profile* profile = browser()->profile();
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
     return new DiceBubbleSyncPromoView(
-        profile, this, IDS_EXTENSION_INSTALLED_DICE_PROMO_SIGNIN_MESSAGE,
+        profile, this,
+        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+        IDS_EXTENSION_INSTALLED_DICE_PROMO_SIGNIN_MESSAGE,
         IDS_EXTENSION_INSTALLED_DICE_PROMO_SYNC_MESSAGE);
   } else {
-    return new BubbleSyncPromoView(this,
-                                   IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
-                                   IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
+    return new BubbleSyncPromoView(
+        this,
+        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+        IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
+        IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
   }
 #else
-  return new BubbleSyncPromoView(this,
-                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
-                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
+  return new BubbleSyncPromoView(
+      this, signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+      IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
+      IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
 #endif
 }
 
@@ -317,10 +320,12 @@ void ExtensionInstalledBubbleView::Init() {
   }
 }
 
-void ExtensionInstalledBubbleView::OnEnableSync(const AccountInfo& account) {
-  signin_ui_util::EnableSync(
+void ExtensionInstalledBubbleView::OnEnableSync(const AccountInfo& account,
+                                                bool is_default_promo_account) {
+  signin_ui_util::EnableSyncFromPromo(
       browser(), account,
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+      is_default_promo_account);
   CloseBubble(BUBBLE_CLOSE_NAVIGATED);
 }
 
@@ -362,8 +367,6 @@ void ExtensionInstalledBubbleUi::Show(BubbleReference bubble_reference) {
 
   views::BubbleDialogDelegateView::CreateBubble(bubble_view_)->Show();
   bubble_view_->GetWidget()->AddObserver(this);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_Impression_FromExtensionInstallBubble"));
 }
 
 void ExtensionInstalledBubbleUi::Close() {
@@ -403,7 +406,7 @@ bool ExtensionInstalledBubble::ShouldShow() {
         BrowserView::GetBrowserViewForBrowser(browser())
             ->toolbar()
             ->browser_actions();
-    return !container->animating();
+    return container && !container->animating();
   }
   return true;
 }

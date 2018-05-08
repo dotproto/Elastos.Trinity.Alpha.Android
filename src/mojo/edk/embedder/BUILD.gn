@@ -10,10 +10,9 @@ source_set("embedder_unittests") {
 
   sources = [
     "embedder_unittest.cc",
-    "platform_shared_buffer_unittest.cc",
   ]
 
-  if (is_posix && !is_fuchsia) {
+  if (is_posix) {
     sources += [ "platform_channel_pair_posix_unittest.cc" ]
   }
 

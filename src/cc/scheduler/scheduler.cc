@@ -8,7 +8,6 @@
 
 #include "base/auto_reset.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -659,7 +658,6 @@ void Scheduler::DrawIfPossible() {
       begin_impl_frame_tracker_.DangerousMethodCurrentOrLast().frame_time,
       client_->CompositedAnimationsCount(),
       client_->MainThreadAnimationsCount(),
-      client_->MainThreadCompositableAnimationsCount(),
       client_->CurrentFrameHadRAF(), client_->NextFrameHasPendingRAF());
 }
 
@@ -678,7 +676,6 @@ void Scheduler::DrawForced() {
       begin_impl_frame_tracker_.DangerousMethodCurrentOrLast().frame_time,
       client_->CompositedAnimationsCount(),
       client_->MainThreadAnimationsCount(),
-      client_->MainThreadCompositableAnimationsCount(),
       client_->CurrentFrameHadRAF(), client_->NextFrameHasPendingRAF());
 }
 

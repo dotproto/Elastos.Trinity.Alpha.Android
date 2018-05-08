@@ -285,24 +285,7 @@ void QuicStream::WriteOrBufferData(
 
 void QuicStream::OnCanWrite() {
   if (HasPendingRetransmission()) {
-    const bool session_unblocks_stream = session_->session_unblocks_stream();
     WritePendingRetransmission();
-    if (session_unblocks_stream) {
-      // Exit early to allow other streams to write pending retransmissions if
-      // any.
-      return;
-    }
-    if (HasPendingRetransmission()) {
-      // Stream did not finish retransmission, session will unblock this stream
-      // later.
-      return;
-    }
-    const bool fin_only = !HasBufferedData() && fin_buffered_ && !fin_sent_;
-    if ((!flow_controller_.IsBlocked() && HasBufferedData()) || fin_only) {
-      // Stream finished retransmission. If there is new data which can be sent,
-      // tell the session to unblock this stream later.
-      session_->MarkConnectionLevelWriteBlocked(id_);
-    }
     // Exit early to allow other streams to write pending retransmissions if
     // any.
     return;
@@ -396,7 +379,6 @@ QuicConsumedData QuicStream::WritevData(const struct iovec* iov,
 }
 
 QuicConsumedData QuicStream::WriteMemSlices(QuicMemSliceSpan span, bool fin) {
-  DCHECK(session_->can_use_slices());
   QuicConsumedData consumed_data(0, false);
   if (span.empty() && !fin) {
     QUIC_BUG << "span.empty() && !fin";
@@ -470,13 +452,13 @@ void QuicStream::CloseReadSide() {
   if (read_side_closed_) {
     return;
   }
-  QUIC_DLOG(INFO) << ENDPOINT << "Done reading from stream " << id();
+  QUIC_DVLOG(1) << ENDPOINT << "Done reading from stream " << id();
 
   read_side_closed_ = true;
   sequencer_.ReleaseBuffer();
 
   if (write_side_closed_) {
-    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream " << id();
+    QUIC_DVLOG(1) << ENDPOINT << "Closing stream " << id();
     session_->CloseStream(id());
   }
 }
@@ -485,11 +467,11 @@ void QuicStream::CloseWriteSide() {
   if (write_side_closed_) {
     return;
   }
-  QUIC_DLOG(INFO) << ENDPOINT << "Done writing to stream " << id();
+  QUIC_DVLOG(1) << ENDPOINT << "Done writing to stream " << id();
 
   write_side_closed_ = true;
   if (read_side_closed_) {
-    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream " << id();
+    QUIC_DVLOG(1) << ENDPOINT << "Closing stream " << id();
     session_->CloseStream(id());
   }
 }
@@ -508,7 +490,7 @@ HandshakeProtocol QuicStream::handshake_protocol() const {
 }
 
 void QuicStream::StopReading() {
-  QUIC_DLOG(INFO) << ENDPOINT << "Stop reading from stream " << id();
+  QUIC_DVLOG(1) << ENDPOINT << "Stop reading from stream " << id();
   sequencer_.StopReading();
 }
 
@@ -550,18 +532,8 @@ void QuicStream::OnClose() {
 
 void QuicStream::OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) {
   if (flow_controller_.UpdateSendWindowOffset(frame.byte_offset)) {
-    if (session_->session_unblocks_stream()) {
-      QUIC_FLAG_COUNT(quic_reloadable_flag_quic_streams_unblocked_by_session2);
-      // Let session unblock this stream.
-      session_->MarkConnectionLevelWriteBlocked(id_);
-    } else {
-      // Writing can be done again!
-      // TODO(rjshade): This does not respect priorities (e.g. multiple
-      //                outstanding POSTs are unblocked on arrival of
-      //                SHLO with initial window).
-      // As long as the connection is not flow control blocked, write on!
-      OnCanWrite();
-    }
+    // Let session unblock this stream.
+    session_->MarkConnectionLevelWriteBlocked(id_);
   }
 }
 
@@ -604,12 +576,8 @@ void QuicStream::AddBytesConsumed(QuicByteCount bytes) {
 
 void QuicStream::UpdateSendWindowOffset(QuicStreamOffset new_window) {
   if (flow_controller_.UpdateSendWindowOffset(new_window)) {
-    if (session_->session_unblocks_stream()) {
-      // Let session unblock this stream.
-      session_->MarkConnectionLevelWriteBlocked(id_);
-    } else {
-      OnCanWrite();
-    }
+    // Let session unblock this stream.
+    session_->MarkConnectionLevelWriteBlocked(id_);
   }
 }
 

@@ -7,7 +7,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -63,7 +63,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
         frames_captured_(0) {}
 
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &test_dir_));
+    ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &test_dir_));
   }
 
   // Attempts to set up the source surface.  Returns false if unsupported on the
@@ -157,8 +157,7 @@ class CommitBeforeSwapAckSentHelper
       ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
       service_manager::mojom::InterfaceProviderRequest*
           interface_provider_request) override {
-    base::MessageLoop::ScopedNestableTaskAllower allow(
-        base::MessageLoop::current());
+    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
     frame_observer_->WaitForAnyFrameSubmission();
   }
 
@@ -761,14 +760,14 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestHiDPI,
                          kContentHeight, kScrollAmount));
 
   SET_UP_SURFACE_OR_PASS_TEST("\"DONE\"");
+  RenderFrameSubmissionObserver observer_(
+      GetRenderWidgetHost()->render_frame_metadata_provider());
+  observer_.WaitForScrollOffsetAtTop(false);
+
   if (!ShouldContinueAfterTestURLLoad())
     return;
 
-  RenderWidgetHostViewBase* rwhv = GetRenderWidgetHostView();
-  gfx::Vector2dF scroll_offset = rwhv->GetLastScrollOffset();
-
-  EXPECT_EQ(scroll_offset.x(), 0);
-  EXPECT_EQ(scroll_offset.y(), kScrollAmount);
+  EXPECT_FALSE(GetRenderWidgetHostView()->IsScrollOffsetAtTop());
 }
 
 #if defined(OS_CHROMEOS)

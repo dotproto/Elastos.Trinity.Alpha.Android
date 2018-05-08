@@ -9,9 +9,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/files/file.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
@@ -58,35 +55,15 @@ const char kInvalidTicketPrintError[] = "INVALID_TICKET";
 
 const char kProvisionalUsbLabel[] = "provisional-usb";
 
-// Updates |job| with raster file path, size and last modification time.
-// Returns the updated print job.
-std::unique_ptr<extensions::PrinterProviderPrintJob>
-UpdateJobFileInfoOnWorkerThread(
-    const base::FilePath& raster_path,
-    std::unique_ptr<extensions::PrinterProviderPrintJob> job) {
-  if (base::GetFileInfo(raster_path, &job->file_info))
-    job->document_path = raster_path;
-  return job;
-}
-
-// Callback to PWG raster conversion.
-// Posts a task to update print job with info about file containing converted
-// PWG raster data.
+// Updates |job| with raster data. Returns the updated print job.
 void UpdateJobFileInfo(std::unique_ptr<extensions::PrinterProviderPrintJob> job,
                        ExtensionPrinterHandler::PrintJobCallback callback,
-                       bool success,
-                       const base::FilePath& pwg_file_path) {
-  if (!success) {
-    std::move(callback).Run(std::move(job));
-    return;
-  }
-
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&UpdateJobFileInfoOnWorkerThread, pwg_file_path,
-                     std::move(job)),
-      std::move(callback));
+                       base::ReadOnlySharedMemoryRegion pwg_region) {
+  auto data =
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(pwg_region);
+  if (data)
+    job->document_bytes = data;
+  std::move(callback).Run(std::move(job));
 }
 
 bool HasUsbPrinterProviderPermissions(const Extension* extension) {
@@ -185,7 +162,7 @@ void ExtensionPrinterHandler::StartPrint(
     const base::string16& job_title,
     const std::string& ticket_json,
     const gfx::Size& page_size,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     PrintCallback callback) {
   auto print_job = std::make_unique<extensions::PrinterProviderPrintJob>();
   print_job->printer_id = destination_id;
@@ -265,20 +242,23 @@ void ExtensionPrinterHandler::ConvertToPWGRaster(
     const gfx::Size& page_size,
     std::unique_ptr<extensions::PrinterProviderPrintJob> job,
     PrintJobCallback callback) {
-  if (!pwg_raster_converter_) {
+  if (!pwg_raster_converter_)
     pwg_raster_converter_ = PwgRasterConverter::CreateDefault();
-  }
+
+  printing::PwgRasterSettings bitmap_settings =
+      PwgRasterConverter::GetBitmapSettings(printer_description, ticket);
   pwg_raster_converter_->Start(
       data.get(),
-      PwgRasterConverter::GetConversionSettings(printer_description, page_size),
-      PwgRasterConverter::GetBitmapSettings(printer_description, ticket),
+      PwgRasterConverter::GetConversionSettings(printer_description, page_size,
+                                                bitmap_settings.use_color),
+      bitmap_settings,
       base::BindOnce(&UpdateJobFileInfo, std::move(job), std::move(callback)));
 }
 
 void ExtensionPrinterHandler::DispatchPrintJob(
     PrintCallback callback,
     std::unique_ptr<extensions::PrinterProviderPrintJob> print_job) {
-  if (print_job->document_path.empty() && !print_job->document_bytes) {
+  if (!print_job->document_bytes) {
     WrapPrintCallback(std::move(callback), base::Value(kInvalidDataPrintError));
     return;
   }

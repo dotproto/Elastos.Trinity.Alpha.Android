@@ -11,6 +11,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
@@ -51,10 +52,14 @@ namespace test {
 class EventProcessorTestApi;
 }
 
-// Processes events sent to the Window Service from the native platform. Updates
-// internal state associated with events (such as mouse, keyboard state,
-// capture, focus...). EventProcessorDelegate handles dispatching to the
-// appropriate client.
+// EventProcessor is responsible for processing events and maintaining event
+// related state: capture, cursor, last mouse location... EventProcessor informs
+// EventProcessorDelegate of interesting state changes and uses an
+// EventDispatcher for the actual dispatch. EventProcessor uses EventTargeter
+// to determine the actual target. EventProcessor handles a single event at a
+// time, and it may asynchronously process the event (EventTargeter may work
+// asynchronously). A single event may result in multiple calls to
+// EventDispatcher::DispatchEvent().
 class EventProcessor : public ServerWindowDrawnTrackerObserver,
                        public DragCursorUpdater,
                        public EventTargeterDelegate {
@@ -108,7 +113,7 @@ class EventProcessor : public ServerWindowDrawnTrackerObserver,
       ServerWindow* window,
       DragTargetConnection* source_connection,
       int32_t drag_pointer,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data,
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data,
       uint32_t drag_operations);
   void CancelDragDrop();
   void EndDragDrop();

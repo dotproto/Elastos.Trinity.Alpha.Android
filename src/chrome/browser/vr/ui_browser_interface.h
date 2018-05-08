@@ -30,6 +30,18 @@ class UiBrowserInterface {
   virtual void ExitFullscreen() = 0;
   virtual void Navigate(GURL gurl, NavigationMethod method) = 0;
   virtual void NavigateBack() = 0;
+  virtual void NavigateForward() = 0;
+  virtual void ReloadTab() = 0;
+  virtual void OpenNewTab(bool incognito) = 0;
+  virtual void OpenBookmarks() = 0;
+  virtual void OpenRecentTabs() = 0;
+  virtual void OpenHistory() = 0;
+  virtual void OpenDownloads() = 0;
+  virtual void OpenShare() = 0;
+  virtual void OpenSettings() = 0;
+  virtual void CloseAllTabs() = 0;
+  virtual void CloseAllIncognitoTabs() = 0;
+  virtual void OpenFeedback() = 0;
   virtual void ExitCct() = 0;
   virtual void CloseHostedDialog() = 0;
   virtual void OnUnsupportedMode(UiUnsupportedMode mode) = 0;
@@ -39,6 +51,7 @@ class UiBrowserInterface {
   virtual void SetVoiceSearchActive(bool active) = 0;
   virtual void StartAutocomplete(const AutocompleteRequest& request) = 0;
   virtual void StopAutocomplete() = 0;
+  virtual void ShowPageInfo() = 0;
 };
 
 }  // namespace vr

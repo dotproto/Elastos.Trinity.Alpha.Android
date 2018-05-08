@@ -31,9 +31,9 @@
 #include "net/spdy/chromium/spdy_http_utils.h"
 #include "net/spdy/chromium/spdy_session_pool.h"
 #include "net/spdy/chromium/spdy_stream.h"
-#include "net/spdy/core/spdy_alt_svc_wire_format.h"
-#include "net/spdy/core/spdy_framer.h"
 #include "net/test/gtest_util.h"
+#include "net/third_party/spdy/core/spdy_alt_svc_wire_format.h"
+#include "net/third_party/spdy/core/spdy_framer.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -557,13 +557,13 @@ class FakeSpdySessionClientSocket : public MockClientSocket {
 
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override {
+           CompletionOnceCallback callback) override {
     return read_result_;
   }
 
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override {
     return ERR_IO_PENDING;
   }
@@ -573,7 +573,7 @@ class FakeSpdySessionClientSocket : public MockClientSocket {
 
   // The functions below are not expected to be called.
 
-  int Connect(const CompletionCallback& callback) override {
+  int Connect(CompletionOnceCallback callback) override {
     ADD_FAILURE();
     return ERR_UNEXPECTED;
   }

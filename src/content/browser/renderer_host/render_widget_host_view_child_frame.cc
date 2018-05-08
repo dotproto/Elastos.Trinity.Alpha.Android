@@ -10,7 +10,6 @@
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -25,6 +24,7 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/display_util.h"
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
@@ -40,7 +40,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "services/service_manager/runner/common/client_util.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -241,6 +241,17 @@ bool RenderWidgetHostViewChildFrame::IsSurfaceAvailableForCopy() const {
   return has_frame_;
 }
 
+void RenderWidgetHostViewChildFrame::EnsureSurfaceSynchronizedForLayoutTest() {
+  // The capture sequence number which would normally be updated here is
+  // actually retrieved from the frame connector.
+}
+
+uint32_t RenderWidgetHostViewChildFrame::GetCaptureSequenceNumber() const {
+  if (!frame_connector_)
+    return 0u;
+  return frame_connector_->capture_sequence_number();
+}
+
 void RenderWidgetHostViewChildFrame::Show() {
   if (!host()->is_hidden())
     return;
@@ -315,11 +326,22 @@ gfx::Size RenderWidgetHostViewChildFrame::GetVisibleViewportSize() const {
     if (parent_view)
       return parent_view->GetVisibleViewportSize();
   }
-  return GetViewBounds().size();
+
+  gfx::Rect bounds = GetViewBounds();
+
+  // It doesn't make sense to set insets on an OOP iframe. The only time this
+  // should happen is when the virtual keyboard comes up on a <webview>.
+  if (is_guest)
+    bounds.Inset(insets_);
+
+  return bounds.size();
 }
 
-gfx::Vector2dF RenderWidgetHostViewChildFrame::GetLastScrollOffset() const {
-  return last_scroll_offset_;
+void RenderWidgetHostViewChildFrame::SetInsets(const gfx::Insets& insets) {
+  // Insets are used only for <webview> and are used to let the UI know it's
+  // being obscured (for e.g. by the virtual keyboard).
+  insets_ = insets;
+  host()->SynchronizeVisualProperties(!insets_.IsEmpty());
 }
 
 gfx::NativeView RenderWidgetHostViewChildFrame::GetNativeView() const {
@@ -415,7 +437,14 @@ void RenderWidgetHostViewChildFrame::Destroy() {
 
 void RenderWidgetHostViewChildFrame::SetTooltipText(
     const base::string16& tooltip_text) {
-  frame_connector_->GetRootRenderWidgetHostView()->SetTooltipText(tooltip_text);
+  if (!frame_connector_)
+    return;
+
+  auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+  if (!root_view)
+    return;
+
+  root_view->GetCursorManager()->SetTooltipTextForView(this, tooltip_text);
 }
 
 RenderWidgetHostViewBase* RenderWidgetHostViewChildFrame::GetParentView() {
@@ -605,7 +634,6 @@ void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
   DCHECK(!enable_viz_);
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
-  last_scroll_offset_ = frame.metadata.root_scroll_offset;
   current_surface_size_ = frame.size_in_pixels();
   current_surface_scale_factor_ = frame.device_scale_factor();
 
@@ -617,11 +645,6 @@ void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
       HasEmbedderChanged()) {
     last_received_local_surface_id_ = local_surface_id;
     SendSurfaceInfoToEmbedder();
-  }
-
-  if (selection_controller_client_) {
-    selection_controller_client_->UpdateSelectionBoundsIfNeeded(
-        frame.metadata.selection, current_device_scale_factor_);
   }
 
   ProcessFrameSwappedCallbacks();
@@ -863,8 +886,9 @@ void RenderWidgetHostViewChildFrame::CopyFromSurface(
         gfx::Vector2d(output_size.width(), output_size.height()));
   }
 
-  GetHostFrameSinkManager()->RequestCopyOfOutput(frame_sink_id_,
-                                                 std::move(request));
+  GetHostFrameSinkManager()->RequestCopyOfOutput(
+      viz::SurfaceId(frame_sink_id_, last_received_local_surface_id_),
+      std::move(request));
 }
 
 void RenderWidgetHostViewChildFrame::ReclaimResources(
@@ -875,6 +899,7 @@ void RenderWidgetHostViewChildFrame::ReclaimResources(
 
 void RenderWidgetHostViewChildFrame::OnBeginFrame(
     const viz::BeginFrameArgs& args) {
+  host_->ProgressFling(args.frame_time);
   if (renderer_compositor_frame_sink_)
     renderer_compositor_frame_sink_->OnBeginFrame(args);
 }
@@ -909,9 +934,24 @@ RenderWidgetHostViewChildFrame::GetTouchSelectionControllerClientManager() {
   return root_view->GetTouchSelectionControllerClientManager();
 }
 
+void RenderWidgetHostViewChildFrame::OnRenderFrameMetadataChanged() {
+  RenderWidgetHostViewBase::OnRenderFrameMetadataChanged();
+  if (selection_controller_client_) {
+    const cc::RenderFrameMetadata& metadata =
+        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
+    selection_controller_client_->UpdateSelectionBoundsIfNeeded(
+        metadata.selection, current_device_scale_factor_);
+  }
+}
+
 void RenderWidgetHostViewChildFrame::SetWantsAnimateOnlyBeginFrames() {
   if (support_)
     support_->SetWantsAnimateOnlyBeginFrames();
+}
+
+void RenderWidgetHostViewChildFrame::TakeFallbackContentFrom(
+    RenderWidgetHostView* view) {
+  // This method only makes sense for top-level views.
 }
 
 InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
@@ -995,17 +1035,29 @@ void RenderWidgetHostViewChildFrame::GetScreenInfo(
     DisplayUtil::GetDefaultScreenInfo(screen_info);
 }
 
+void RenderWidgetHostViewChildFrame::EnableAutoResize(
+    const gfx::Size& min_size,
+    const gfx::Size& max_size) {
+  if (frame_connector_)
+    frame_connector_->EnableAutoResize(min_size, max_size);
+}
+
+void RenderWidgetHostViewChildFrame::DisableAutoResize(
+    const gfx::Size& new_size) {
+  // For child frames, the size comes from the parent when auto-resize is
+  // disabled so we ignore |new_size| here.
+  if (frame_connector_)
+    frame_connector_->DisableAutoResize();
+}
+
 viz::ScopedSurfaceIdAllocator
 RenderWidgetHostViewChildFrame::ResizeDueToAutoResize(
     const gfx::Size& new_size,
-    uint64_t sequence_number) {
-  // TODO(cblume): This doesn't currently suppress allocation.
-  // It maintains existing behavior while using the suppression style.
-  // This will be addressed in a follow-up patch.
-  // See https://crbug.com/805073
+    const viz::LocalSurfaceId& local_surface_id) {
   base::OnceCallback<void()> allocation_task = base::BindOnce(
-      &RenderWidgetHostViewChildFrame::OnResizeDueToAutoResizeComplete,
-      weak_factory_.GetWeakPtr(), new_size, sequence_number);
+      base::IgnoreResult(
+          &RenderWidgetHostViewChildFrame::OnResizeDueToAutoResizeComplete),
+      weak_factory_.GetWeakPtr(), local_surface_id);
   return viz::ScopedSurfaceIdAllocator(std::move(allocation_task));
 }
 
@@ -1089,17 +1141,13 @@ bool RenderWidgetHostViewChildFrame::CanBecomeVisible() {
 }
 
 void RenderWidgetHostViewChildFrame::OnResizeDueToAutoResizeComplete(
-    const gfx::Size& new_size,
-    uint64_t sequence_number) {
+    viz::LocalSurfaceId local_surface_id) {
   if (frame_connector_)
-    frame_connector_->ResizeDueToAutoResize(new_size, sequence_number);
+    frame_connector_->ResizeDueToAutoResize(local_surface_id);
 }
 
 void RenderWidgetHostViewChildFrame::DidNavigate() {
-  if (host()->auto_resize_enabled()) {
-    host()->DidAllocateLocalSurfaceIdForAutoResize(
-        host()->last_auto_resize_request_number());
-  }
+  host()->SynchronizeVisualProperties();
 }
 
 }  // namespace content

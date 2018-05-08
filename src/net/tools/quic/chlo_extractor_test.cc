@@ -47,12 +47,13 @@ class TestDelegate : public ChloExtractor::Delegate {
 class ChloExtractorTest : public QuicTest {
  public:
   ChloExtractorTest() {
+    SetQuicReloadableFlag(quic_respect_ietf_header, true);
     header_.connection_id = 42;
     header_.connection_id_length = PACKET_8BYTE_CONNECTION_ID;
     header_.version_flag = true;
     header_.version = AllSupportedVersions().front();
     header_.reset_flag = false;
-    header_.packet_number_length = PACKET_6BYTE_PACKET_NUMBER;
+    header_.packet_number_length = PACKET_4BYTE_PACKET_NUMBER;
     header_.packet_number = 1;
   }
 

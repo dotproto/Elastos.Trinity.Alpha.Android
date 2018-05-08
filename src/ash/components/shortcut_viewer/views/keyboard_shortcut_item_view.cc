@@ -11,6 +11,7 @@
 #include "ash/components/shortcut_viewer/keyboard_shortcut_viewer_metadata.h"
 #include "ash/components/shortcut_viewer/vector_icons/vector_icons.h"
 #include "ash/components/shortcut_viewer/views/bubble_view.h"
+#include "ash/components/strings/grit/ash_components_strings.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -20,15 +21,13 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/styled_label.h"
-
 namespace keyboard_shortcut_viewer {
 
 namespace {
 
 // Creates the separator view between bubble views of modifiers and key.
 std::unique_ptr<views::View> CreateSeparatorView() {
-  constexpr SkColor kSeparatorColor =
-      SkColorSetARGBMacro(0xFF, 0x1A, 0x73, 0xE8);
+  constexpr SkColor kSeparatorColor = SkColorSetARGB(0xFF, 0x1A, 0x73, 0xE8);
   constexpr int kIconSize = 16;
 
   std::unique_ptr<views::ImageView> separator_view =
@@ -73,12 +72,25 @@ KeyboardShortcutItemView::KeyboardShortcutItemView(
   const size_t shortcut_key_codes_size = item.shortcut_key_codes.size();
   offsets.reserve(shortcut_key_codes_size);
   replacement_strings.reserve(shortcut_key_codes_size);
-  for (ui::KeyboardCode key_code : item.shortcut_key_codes)
-    replacement_strings.emplace_back(GetStringForKeyboardCode(key_code));
+  bool has_invalid_dom_key = false;
+  for (ui::KeyboardCode key_code : item.shortcut_key_codes) {
+    const base::string16& dom_key_string = GetStringForKeyboardCode(key_code);
+    // If the |key_code| has no mapped |dom_key_string|, we use alternative
+    // string to indicate that the shortcut is not supported by current keyboard
+    // layout.
+    if (dom_key_string.empty()) {
+      replacement_strings.clear();
+      has_invalid_dom_key = true;
+      break;
+    }
+    replacement_strings.emplace_back(dom_key_string);
+  }
 
   base::string16 shortcut_string;
   if (replacement_strings.empty()) {
-    shortcut_string = l10n_util::GetStringUTF16(item.shortcut_message_id);
+    shortcut_string = l10n_util::GetStringUTF16(has_invalid_dom_key
+                                                    ? IDS_KSV_KEY_NO_MAPPING
+                                                    : item.shortcut_message_id);
   } else {
     shortcut_string = l10n_util::GetStringFUTF16(item.shortcut_message_id,
                                                  replacement_strings, &offsets);

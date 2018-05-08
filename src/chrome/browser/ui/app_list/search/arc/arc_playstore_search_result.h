@@ -9,31 +9,33 @@
 #include <string>
 #include <vector>
 
-#include "ash/app_list/model/search/search_result.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/ui/app_list/app_context_menu_delegate.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "components/arc/common/app.mojom.h"
 
 class AppListControllerDelegate;
 class ArcPlayStoreAppContextMenu;
 class Profile;
 
+namespace arc {
+class IconDecodeRequest;
+}  // namespace arc
+
 namespace app_list {
 
-class IconDecodeRequest;
-
-class ArcPlayStoreSearchResult : public SearchResult,
+class ArcPlayStoreSearchResult : public ChromeSearchResult,
                                  public AppContextMenuDelegate {
  public:
   ArcPlayStoreSearchResult(arc::mojom::AppDiscoveryResultPtr data,
                            Profile* profile,
-                           AppListControllerDelegate* list_controller_);
+                           AppListControllerDelegate* list_controller);
   ~ArcPlayStoreSearchResult() override;
 
-  // app_list::SearchResult overrides:
-  std::unique_ptr<SearchResult> Duplicate() const override;
-  ui::MenuModel* GetContextMenuModel() override;
+  // ChromeSearchResult overrides:
+  std::unique_ptr<ChromeSearchResult> Duplicate() const override;
+  void GetContextMenuModel(GetMenuModelCallback callback) override;
   void Open(int event_flags) override;
 
   // app_list::AppContextMenuDelegate overrides:
@@ -54,7 +56,7 @@ class ArcPlayStoreSearchResult : public SearchResult,
   }
 
   arc::mojom::AppDiscoveryResultPtr data_;
-  std::unique_ptr<IconDecodeRequest> icon_decode_request_;
+  std::unique_ptr<arc::IconDecodeRequest> icon_decode_request_;
 
   // |profile_| is owned by ProfileInfo.
   Profile* const profile_;

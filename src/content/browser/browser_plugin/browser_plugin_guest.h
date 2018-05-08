@@ -30,17 +30,18 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "content/common/edit_command.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "content/public/common/screen_info.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/platform/WebFocusType.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebDragStatus.h"
-#include "third_party/WebKit/public/web/WebImeTextSpan.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/platform/web_focus_type.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/web/web_drag_status.h"
+#include "third_party/blink/public/web/web_ime_text_span.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
@@ -71,6 +72,7 @@ class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
 class SiteInstance;
 struct DropData;
+struct FrameVisualProperties;
 struct ScreenInfo;
 struct TextInputState;
 
@@ -178,8 +180,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   BrowserPluginGuestManager* GetBrowserPluginGuestManager() const;
 
-  void ResizeDueToAutoResize(const gfx::Size& new_size,
-                             uint64_t sequence_number);
+  void EnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
+  void DisableAutoResize();
+  void ResizeDueToAutoResize(
+      const gfx::Size& new_size,
+      const viz::LocalSurfaceId& child_allocated_surface_id);
 
   // WebContentsObserver implementation.
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
@@ -318,7 +323,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // fewer GPU and CPU resources.
   //
   // When every WebContents in a RenderProcessHost is hidden, it will lower
-  // the priority of the process (see RenderProcessHostImpl::WidgetHidden).
+  // the priority of the process (see
+  // RenderProcessHostImpl::UpdateClientPriority).
   //
   // It will also send a message to the guest renderer process to cleanup
   // resources such as dropping back buffers and adjusting memory limits (if in
@@ -330,11 +336,10 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void OnSetVisibility(int instance_id, bool visible);
   void OnUnlockMouse();
   void OnUnlockMouseAck(int instance_id);
-  void OnUpdateResizeParams(int instance_id,
-                            const gfx::Rect& frame_rect,
-                            const ScreenInfo& screen_info,
-                            uint64_t sequence_number,
-                            const viz::LocalSurfaceId& local_surface_id);
+  void OnSynchronizeVisualProperties(
+      int instance_id,
+      const viz::LocalSurfaceId& local_surface_id,
+      const FrameVisualProperties& visual_properties);
 
   void OnTextInputStateChanged(const TextInputState& params);
   void OnImeSetComposition(
@@ -347,12 +352,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                        int relative_cursor_pos);
   void OnImeFinishComposingText(int instance_id, bool keep_selection);
   void OnExtendSelectionAndDelete(int instance_id, int before, int after);
-  void OnImeCancelComposition();
-#if defined(OS_MACOSX) || defined(USE_AURA)
-  void OnImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds);
-#endif
 
   // Message handlers for messages from guest.
   void OnHandleInputEventAck(
@@ -454,6 +453,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   viz::LocalSurfaceId local_surface_id_;
   ScreenInfo screen_info_;
+  uint32_t capture_sequence_number_ = 0u;
 
   // Weak pointer used to ask GeolocationPermissionContext about geolocation
   // permission.

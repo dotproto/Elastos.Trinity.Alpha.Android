@@ -45,35 +45,6 @@ viz::mojom::FrameSinkVideoCapturerPtrInfo CreateCapturer() {
   return capturer.PassInterface();
 }
 
-// Adapter for a VideoFrameReceiver to get access to the mojo SharedBufferHandle
-// for a frame.
-class HandleMover
-    : public media::VideoCaptureDevice::Client::Buffer::HandleProvider {
- public:
-  explicit HandleMover(mojo::ScopedSharedBufferHandle handle)
-      : handle_(std::move(handle)) {}
-  ~HandleMover() final {}
-
-  mojo::ScopedSharedBufferHandle GetHandleForInterProcessTransit(
-      bool read_only) final {
-    return std::move(handle_);
-  }
-
-  base::SharedMemoryHandle GetNonOwnedSharedMemoryHandleForLegacyIPC() final {
-    NOTREACHED();
-    return base::SharedMemoryHandle();
-  }
-
-  std::unique_ptr<media::VideoCaptureBufferHandle> GetHandleForInProcessAccess()
-      final {
-    NOTREACHED();
-    return nullptr;
-  }
-
- private:
-  mojo::ScopedSharedBufferHandle handle_;
-};
-
 // Adapter for a VideoFrameReceiver to notify once frame consumption is
 // complete. VideoFrameReceiver requires owning an object that it will destroy
 // once consumption is complete. This class adapts between that scheme and
@@ -258,19 +229,19 @@ void FrameSinkVideoCaptureDevice::OnFrameCaptured(
 
   // Set the INTERACTIVE_CONTENT frame metadata.
   media::VideoFrameMetadata modified_metadata;
-  if (info->metadata) {
-    modified_metadata.MergeInternalValuesFrom(*info->metadata);
-  }
+  modified_metadata.MergeInternalValuesFrom(info->metadata);
   modified_metadata.SetBoolean(media::VideoFrameMetadata::INTERACTIVE_CONTENT,
                                cursor_renderer_->IsUserInteractingWithView());
-  info->metadata = modified_metadata.CopyInternalValues();
+  info->metadata = modified_metadata.GetInternalValues().Clone();
 
   // Pass the video frame to the VideoFrameReceiver. This is done by first
   // passing the shared memory buffer handle and then notifying it that a new
   // frame is ready to be read from the buffer.
-  receiver_->OnNewBufferHandle(
-      static_cast<BufferId>(slot_index),
-      std::make_unique<HandleMover>(std::move(buffer)));
+  media::mojom::VideoBufferHandlePtr buffer_handle =
+      media::mojom::VideoBufferHandle::New();
+  buffer_handle->set_shared_buffer_handle(std::move(buffer));
+  receiver_->OnNewBuffer(static_cast<BufferId>(slot_index),
+                         std::move(buffer_handle));
   receiver_->OnFrameReadyInBuffer(
       static_cast<BufferId>(slot_index), slot_index,
       std::make_unique<ScopedFrameDoneHelper>(
@@ -297,8 +268,7 @@ void FrameSinkVideoCaptureDevice::OnStopped() {
 }
 
 void FrameSinkVideoCaptureDevice::OnTargetChanged(
-    const viz::FrameSinkId& frame_sink_id,
-    gfx::NativeView native_view) {
+    const viz::FrameSinkId& frame_sink_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   target_ = frame_sink_id;
@@ -308,20 +278,12 @@ void FrameSinkVideoCaptureDevice::OnTargetChanged(
   if (capturer_ && frame_sink_id.is_valid()) {
     capturer_->ChangeTarget(frame_sink_id);
   }
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&CursorRenderer::SetTargetView,
-                     cursor_renderer_->GetWeakPtr(), native_view));
 }
 
 void FrameSinkVideoCaptureDevice::OnTargetPermanentlyLost() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   target_ = viz::FrameSinkId();
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&CursorRenderer::SetTargetView,
-                     cursor_renderer_->GetWeakPtr(), gfx::NativeView()));
 
   OnFatalError("Capture target has been permanently lost.");
 }

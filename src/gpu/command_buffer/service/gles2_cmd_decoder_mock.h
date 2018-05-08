@@ -39,7 +39,7 @@ class MockGLES2Decoder : public GLES2Decoder {
  public:
   MockGLES2Decoder(CommandBufferServiceBase* command_buffer_service,
                    Outputter* outputter);
-  virtual ~MockGLES2Decoder();
+  ~MockGLES2Decoder() override;
 
   base::WeakPtr<DecoderContext> AsWeakPtr() override;
 
@@ -160,6 +160,9 @@ class MockGLES2Decoder : public GLES2Decoder {
                     uint32_t texture_target,
                     gl::GLImage* image,
                     bool can_bind_to_sampler));
+  MOCK_METHOD1(
+      SetCopyTextureResourceManagerForTest,
+      void(CopyTextureCHROMIUMResourceManager* copy_texture_resource_manager));
 
  private:
   base::WeakPtrFactory<MockGLES2Decoder> weak_ptr_factory_;

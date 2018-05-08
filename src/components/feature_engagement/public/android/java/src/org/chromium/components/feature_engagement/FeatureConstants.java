@@ -13,8 +13,8 @@ public final class FeatureConstants {
     public static final String DOWNLOAD_PAGE_SCREENSHOT_FEATURE = "IPH_DownloadPageScreenshot";
     public static final String DOWNLOAD_HOME_FEATURE = "IPH_DownloadHome";
     public static final String CHROME_HOME_EXPAND_FEATURE = "IPH_ChromeHomeExpand";
-    public static final String CHROME_HOME_MENU_HEADER_FEATURE = "IPH_ChromeHomeMenuHeader";
     public static final String CHROME_HOME_PULL_TO_REFRESH_FEATURE = "IPH_ChromeHomePullToRefresh";
+    public static final String CONTEXTUAL_SUGGESTIONS_FEATURE = "IPH_ContextualSuggestions";
     public static final String DATA_SAVER_PREVIEW_FEATURE = "IPH_DataSaverPreview";
     public static final String DATA_SAVER_DETAIL_FEATURE = "IPH_DataSaverDetail";
 
@@ -43,6 +43,12 @@ public final class FeatureConstants {
      * An IPH feature for encouraging users to opt-in for Contextual Search.
      */
     public static final String CONTEXTUAL_SEARCH_OPT_IN_FEATURE = "IPH_ContextualSearchOptIn";
+
+    /**
+     * An IPH feature indicating to users that there are settings for downloads and they are
+     * accessible through Downloads Home.
+     */
+    public static final String DOWNLOAD_SETTINGS_FEATURE = "IPH_DownloadSettings";
 
     /**
      * Do not instantiate.

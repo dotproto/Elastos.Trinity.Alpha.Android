@@ -13,11 +13,11 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/flat_set.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -40,17 +40,17 @@
 #include "content/public/renderer/render_view.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebAutofillClient.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_autofill_client.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/gurl.h"
@@ -78,6 +78,66 @@ bool FillDataContainsFillableUsername(const PasswordFormFillData& fill_data) {
   return !fill_data.username_field.name.empty() &&
          (!fill_data.additional_logins.empty() ||
           !fill_data.username_field.value.empty());
+}
+
+// Checks if the prefilled value of the username element is one of the known
+// values possibly used as placeholders. The list of possible placeholder
+// values comes from popular sites exhibiting this issue.
+// TODO(crbug.com/832622): Remove this once a stable solution is in place.
+bool PossiblePrefilledUsernameValue(const std::string& username_value) {
+  // Explicitly create a |StringFlatSet| when constructing
+  // kPrefilledUsernameValues to work around GCC bug 84849, which causes the
+  // initializer list not to be properly forwarded to base::flat_set's
+  // constructor.
+  using StringFlatSet = base::flat_set<std::string, std::less<>>;
+  static base::NoDestructor<StringFlatSet> kPrefilledUsernameValues(
+      StringFlatSet({"3~15个字符,中文字符7个以内",
+                     "Benutzername",
+                     "Digite seu CPF ou e-mail",
+                     "DS Logon Username",
+                     "Email Address",
+                     "email address",
+                     "Email masih kosong",
+                     "Email/手機號碼",
+                     "Enter User Name",
+                     "Identifiant",
+                     "Kullanıcı Adı",
+                     "Kunden-ID",
+                     "Nick",
+                     "Nom Utilisateur",
+                     "Rut",
+                     "Siret",
+                     "this is usually your email address",
+                     "UID/用戶名/Email",
+                     "User Id",
+                     "User Name",
+                     "Username",
+                     "username",
+                     "username or email",
+                     "Username or email:",
+                     "Username/Email",
+                     "Usuario",
+                     "Your email address",
+                     "Имя",
+                     "Логин",
+                     "Логин...",
+                     "כתובת דוא''ל",
+                     "اسم العضو",
+                     "اسم المستخدم",
+                     "الاسم",
+                     "نام کاربری",
+                     "メールアドレス",
+                     "用户名",
+                     "用户名/Email",
+                     "請輸入身份證字號",
+                     "请用微博帐号登录",
+                     "请输入手机号或邮箱",
+                     "请输入邮箱或手机号",
+                     "邮箱/手机/展位号"}));
+
+  return kPrefilledUsernameValues->find(
+             base::TrimWhitespaceASCII(username_value, base::TRIM_ALL)) !=
+         kPrefilledUsernameValues->end();
 }
 
 // Returns true if password form has username and password fields with either
@@ -469,10 +529,25 @@ bool IsPublicSuffixDomainMatch(const std::string& url1,
          gurl1.port() == gurl2.port();
 }
 
-// Annotate |forms| with form and field signatures as HTML attributes.
-void AnnotateFormsWithSignatures(
-    blink::WebVector<blink::WebFormElement> forms) {
-  for (blink::WebFormElement form : forms) {
+// Annotate |fields| with field signatures as HTML attributes.
+void AnnotateFieldsWithSignatures(
+    std::vector<blink::WebFormControlElement>* fields) {
+  for (blink::WebFormControlElement& control_element : *fields) {
+    FieldSignature field_signature = CalculateFieldSignatureByNameAndType(
+        control_element.NameForAutofill().Utf16(),
+        control_element.FormControlTypeForAutofill().Utf8());
+    control_element.SetAttribute(
+        blink::WebString::FromASCII(kDebugAttributeForFieldSignature),
+        blink::WebString::FromUTF8(base::NumberToString(field_signature)));
+  }
+}
+
+// Annotate |forms| and all fields in the |frame| with form and field signatures
+// as HTML attributes.
+void AnnotateFormsAndFieldsWithSignatures(
+    blink::WebLocalFrame* frame,
+    blink::WebVector<blink::WebFormElement>* forms) {
+  for (blink::WebFormElement& form : *forms) {
     std::unique_ptr<PasswordForm> password_form(
         CreatePasswordFormFromWebForm(form, nullptr, nullptr, nullptr));
     if (password_form) {
@@ -480,26 +555,16 @@ void AnnotateFormsWithSignatures(
           blink::WebString::FromASCII(kDebugAttributeForFormSignature),
           blink::WebString::FromUTF8(base::NumberToString(
               CalculateFormSignature(password_form->form_data))));
-
-      std::vector<blink::WebFormControlElement> control_elements =
-          form_util::ExtractAutofillableElementsInForm(form);
-
-      if (control_elements.size() != password_form->form_data.fields.size())
-        return;
-
-      for (size_t i = 0; i < control_elements.size(); ++i) {
-        blink::WebFormControlElement control_element = control_elements[i];
-
-        const FormFieldData& field = password_form->form_data.fields[i];
-        if (field.name != control_element.NameForAutofill().Utf16())
-          continue;
-        control_element.SetAttribute(
-            blink::WebString::FromASCII(kDebugAttributeForFieldSignature),
-            blink::WebString::FromUTF8(
-                base::NumberToString(CalculateFieldSignatureForField(field))));
-      }
     }
+    std::vector<blink::WebFormControlElement> form_fields =
+        form_util::ExtractAutofillableElementsInForm(form);
+    AnnotateFieldsWithSignatures(&form_fields);
   }
+
+  std::vector<blink::WebFormControlElement> unowned_elements =
+      form_util::GetUnownedAutofillableFormFieldElements(
+          frame->GetDocument().All(), nullptr);
+  AnnotateFieldsWithSignatures(&unowned_elements);
 }
 
 // Returns true iff there is a password field in |frame|.
@@ -1091,7 +1156,7 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
   frame->GetDocument().Forms(forms);
 
   if (IsShowAutofillSignaturesEnabled())
-    AnnotateFormsWithSignatures(forms);
+    AnnotateFormsAndFieldsWithSignatures(frame, &forms);
   if (logger)
     logger->LogNumber(Logger::STRING_NUMBER_OF_ALL_FORMS, forms.size());
 
@@ -1100,6 +1165,11 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
     if (IsGaiaReauthenticationForm(form)) {
       // Bail if this is a GAIA passwords site reauthentication form, so that
       // page will be ignored.
+      return;
+    }
+    if (IsGaiaWithSkipSavePasswordForm(form)) {
+      // Bail if this is a GAIA enable Chrome sync flow, so that page will be
+      // ignored.
       return;
     }
     if (only_visible) {
@@ -1716,14 +1786,11 @@ void PasswordAutofillAgent::ProvisionallySavePassword(
 
   provisionally_saved_form_.Set(std::move(password_form), form, element);
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kManualSaving)) {
-    if (has_password) {
-      GetPasswordManagerDriver()->ShowManualFallbackForSaving(
-          provisionally_saved_form_.password_form());
-    } else {
-      GetPasswordManagerDriver()->HideManualFallbackForSaving();
-    }
+  if (has_password) {
+    GetPasswordManagerDriver()->ShowManualFallbackForSaving(
+        provisionally_saved_form_.password_form());
+  } else {
+    GetPasswordManagerDriver()->HideManualFallbackForSaving();
   }
 }
 
@@ -1745,7 +1812,8 @@ bool PasswordAutofillAgent::FillUserNameAndPassword(
 
   // |current_username| is the username for credentials that are going to be
   // autofilled. It is selected according to the algorithm:
-  // 1. If the page already contain a non-empty value in |username_element|,
+  // 1. If the page already contains a non-empty value in |username_element|
+  // that is not found in the list of values known to be used as placeholders,
   // this is adopted and not overridden.
   // 2. Default username from |fill_data| if the username field is
   // autocompletable.
@@ -1753,7 +1821,8 @@ bool PasswordAutofillAgent::FillUserNameAndPassword(
   // not autocompletable (no username case).
   base::string16 current_username;
   if (!username_element->IsNull()) {
-    if (!username_element->Value().IsEmpty())
+    if (!username_element->Value().IsEmpty() &&
+        !PossiblePrefilledUsernameValue(username_element->Value().Utf8()))
       current_username = username_element->Value().Utf16();
     else if (IsElementAutocompletable(*username_element))
       current_username = fill_data.username_field.value;
@@ -1777,8 +1846,12 @@ bool PasswordAutofillAgent::FillUserNameAndPassword(
   // Input matches the username, fill in required values.
   if (!username_element->IsNull() &&
       IsElementAutocompletable(*username_element)) {
-    // Fill username only when it's not empty and not set by the page.
-    if (!username.empty() && username_element->Value().IsEmpty()) {
+    // Fill a non-empty username if it is safe to override the value of the
+    // username element. It is safe to override if the value is empty or a known
+    // placeholder value.
+    if (!username.empty() &&
+        (username_element->Value().IsEmpty() ||
+         PossiblePrefilledUsernameValue(username_element->Value().Utf8()))) {
       username_element->SetSuggestedValue(
           blink::WebString::FromUTF16(username));
       registration_callback.Run(username_element);

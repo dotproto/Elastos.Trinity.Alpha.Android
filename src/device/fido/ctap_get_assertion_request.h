@@ -13,6 +13,7 @@
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "device/fido/fido_constants.h"
 #include "device/fido/public_key_credential_descriptor.h"
 
 namespace device {
@@ -24,14 +25,19 @@ class COMPONENT_EXPORT(DEVICE_FIDO) CtapGetAssertionRequest {
  public:
   CtapGetAssertionRequest(std::string rp_id,
                           std::vector<uint8_t> client_data_hash);
+  CtapGetAssertionRequest(const CtapGetAssertionRequest& that);
   CtapGetAssertionRequest(CtapGetAssertionRequest&& that);
+  CtapGetAssertionRequest& operator=(const CtapGetAssertionRequest& other);
   CtapGetAssertionRequest& operator=(CtapGetAssertionRequest&& other);
   ~CtapGetAssertionRequest();
 
+  // Serializes GetAssertion request parameter into CBOR encoded map with
+  // integer keys and CBOR encoded values as defined by the CTAP spec.
+  // https://drafts.fidoalliance.org/fido-2/latest/fido-client-to-authenticator-protocol-v2.0-wd-20180305.html#authenticatorGetAssertion
   std::vector<uint8_t> EncodeAsCBOR() const;
 
-  CtapGetAssertionRequest& SetUserVerificationRequired(
-      bool user_verfication_required);
+  CtapGetAssertionRequest& SetUserVerification(
+      UserVerificationRequirement user_verfication);
   CtapGetAssertionRequest& SetUserPresenceRequired(bool user_presence_required);
   CtapGetAssertionRequest& SetAllowList(
       std::vector<PublicKeyCredentialDescriptor> allow_list);
@@ -43,8 +49,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) CtapGetAssertionRequest {
     return client_data_hash_;
   }
 
-  bool user_verification_required() const {
-    return user_verification_required_;
+  UserVerificationRequirement user_verification() const {
+    return user_verification_;
   }
 
   bool user_presence_required() const { return user_presence_required_; }
@@ -62,14 +68,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) CtapGetAssertionRequest {
  private:
   std::string rp_id_;
   std::vector<uint8_t> client_data_hash_;
-  bool user_verification_required_ = false;
+  UserVerificationRequirement user_verification_ =
+      UserVerificationRequirement::kPreferred;
   bool user_presence_required_ = true;
 
   base::Optional<std::vector<PublicKeyCredentialDescriptor>> allow_list_;
   base::Optional<std::vector<uint8_t>> pin_auth_;
   base::Optional<uint8_t> pin_protocol_;
-
-  DISALLOW_COPY_AND_ASSIGN(CtapGetAssertionRequest);
 };
 
 }  // namespace device

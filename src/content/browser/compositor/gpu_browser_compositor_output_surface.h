@@ -11,8 +11,9 @@
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/gpu_vsync_begin_frame_source.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace viz {
 class CompositorOverlayCandidateValidator;
@@ -56,9 +57,6 @@ class GpuBrowserCompositorOutputSurface
 
   // BrowserCompositorOutputSurface implementation.
   void OnReflectorChanged() override;
-#if defined(OS_MACOSX)
-  void SetSurfaceSuspendedForRecycle(bool suspended) override;
-#endif
 
   // viz::OutputSurface implementation.
   void BindToClient(viz::OutputSurfaceClient* client) override;
@@ -76,7 +74,6 @@ class GpuBrowserCompositorOutputSurface
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
 
-  bool SurfaceIsSuspendForRecycle() const override;
   void SetDrawRectangle(const gfx::Rect& rect) override;
 
   // GpuVSyncControl implementation.
@@ -102,6 +99,7 @@ class GpuBrowserCompositorOutputSurface
   bool has_set_draw_rectangle_since_last_resize_ = false;
   gfx::Size size_;
   LatencyInfoCache latency_info_cache_;
+  ui::LatencyTracker latency_tracker_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GpuBrowserCompositorOutputSurface);

@@ -28,7 +28,6 @@
 #include "components/password_manager/sync/browser/password_model_worker.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/search_engines/search_engine_data_type_controller.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
@@ -39,6 +38,7 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
+#include "components/sync_sessions/session_sync_bridge.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "ios/chrome/browser/application_context.h"
@@ -54,7 +54,6 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
@@ -156,22 +155,13 @@ void IOSChromeSyncClient::Initialize() {
 
   // Component factory may already be set in tests.
   if (!GetSyncApiComponentFactory()) {
-    const GURL sync_service_url = syncer::GetSyncServiceURL(
-        *base::CommandLine::ForCurrentProcess(), ::GetChannel());
-    ProfileOAuth2TokenService* token_service =
-        OAuth2TokenServiceFactory::GetForBrowserState(browser_state_);
-
-    net::URLRequestContextGetter* url_request_context_getter =
-        browser_state_->GetRequestContext();
-
     component_factory_.reset(new browser_sync::ProfileSyncComponentsFactoryImpl(
         this, ::GetChannel(), ::GetVersionString(),
         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET,
         *base::CommandLine::ForCurrentProcess(),
-        prefs::kSavingBrowserHistoryDisabled, sync_service_url,
+        prefs::kSavingBrowserHistoryDisabled,
         web::WebThread::GetTaskRunnerForThread(web::WebThread::UI), db_thread_,
-        token_service, url_request_context_getter, web_data_service_,
-        password_store_));
+        web_data_service_, password_store_));
   }
 }
 
@@ -321,8 +311,8 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   }
 }
 
-base::WeakPtr<syncer::ModelTypeSyncBridge>
-IOSChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
+base::WeakPtr<syncer::ModelTypeControllerDelegate>
+IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
       return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
@@ -348,6 +338,11 @@ IOSChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
     case syncer::USER_EVENTS:
       return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
           ->GetSyncBridge()
+          ->AsWeakPtr();
+    case syncer::SESSIONS:
+      return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+                 browser_state_)
+          ->GetSessionSyncBridge()
           ->AsWeakPtr();
     default:
       NOTREACHED();

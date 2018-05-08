@@ -240,11 +240,8 @@ void SpellcheckService::LoadHunspellDictionaries() {
 
   for (const auto& dictionary : dictionaries) {
     hunspell_dictionaries_.push_back(
-        std::make_unique<SpellcheckHunspellDictionary>(
-            dictionary,
-            content::BrowserContext::GetDefaultStoragePartition(context_)
-                ->GetURLRequestContext(),
-            this));
+        std::make_unique<SpellcheckHunspellDictionary>(dictionary, context_,
+                                                       this));
     hunspell_dictionaries_.back()->AddObserver(this);
     hunspell_dictionaries_.back()->Load();
   }
@@ -340,7 +337,7 @@ void SpellcheckService::InitForAllRenderers() {
           content::RenderProcessHost::AllHostsIterator());
        !i.IsAtEnd(); i.Advance()) {
     content::RenderProcessHost* process = i.GetCurrentValue();
-    if (process && process->GetHandle())
+    if (process && process->GetProcess().Handle())
       InitForRenderer(process->GetChildIdentity());
   }
 }

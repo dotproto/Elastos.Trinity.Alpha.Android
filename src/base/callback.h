@@ -34,7 +34,8 @@
 //   }, 1);
 //   // Run() only needs the remaining unbound argument |y|.
 //   printf("1 + 2 = %d\n", std::move(cb).Run(2));  // Prints 3
-//   printf("cb is null? %s\n", cb ? "true" : "false");  // Prints true
+//   printf("cb is null? %s\n",
+//          cb.is_null() ? "true" : "false");  // Prints true
 //   std::move(cb).Run(2);  // Crashes since |cb| has already run.
 //
 // Callbacks also support cancellation. A common use is binding the receiver
@@ -56,7 +57,7 @@ class OnceCallback<R(Args...)> : public internal::CallbackBase {
   using PolymorphicInvoke = R (*)(internal::BindStateBase*,
                                   internal::PassingTraitsType<Args>...);
 
-  OnceCallback() : internal::CallbackBase(nullptr) {}
+  constexpr OnceCallback() = default;
 
   explicit OnceCallback(internal::BindStateBase* bind_state)
       : internal::CallbackBase(bind_state) {}
@@ -103,7 +104,7 @@ class RepeatingCallback<R(Args...)> : public internal::CallbackBaseCopyable {
   using PolymorphicInvoke = R (*)(internal::BindStateBase*,
                                   internal::PassingTraitsType<Args>...);
 
-  RepeatingCallback() : internal::CallbackBaseCopyable(nullptr) {}
+  constexpr RepeatingCallback() = default;
 
   explicit RepeatingCallback(internal::BindStateBase* bind_state)
       : internal::CallbackBaseCopyable(bind_state) {}

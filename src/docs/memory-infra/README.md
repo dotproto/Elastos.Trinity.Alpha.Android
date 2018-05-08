@@ -91,7 +91,7 @@ and it is discounted from malloc and the blue columns.
 
 <!-- TODO(primiano): Improve this. https://crbug.com/??? -->
 
-[oilpan]:     /third_party/WebKit/Source/platform/heap/BlinkGCDesign.md
+[oilpan]:     /third_party/blink/renderer/platform/heap/BlinkGCDesign.md
 [discardable]:base/memory/discardable_memory.h
 [cc-memory]:  probe-cc.md
 [gpu-memory]: probe-gpu.md
@@ -114,7 +114,6 @@ amount of memory used.
 
  * [Adding MemoryInfra Tracing to a Component](adding_memory_infra_tracing.md)
  * [GPU Memory Tracing](probe-gpu.md)
- * [Heap Profiler Internals](heap_profiler_internals.md)
  * [Heap Profiling with MemoryInfra](heap_profiler.md)
  * [Startup Tracing with MemoryInfra](memory_infra_startup_tracing.md)
 

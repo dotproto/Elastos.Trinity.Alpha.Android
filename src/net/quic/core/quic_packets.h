@@ -26,6 +26,7 @@
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/platform/api/quic_string_piece.h"
+#include "net/quic/platform/api/quic_uint128.h"
 
 namespace net {
 
@@ -68,7 +69,10 @@ struct QUIC_EXPORT_PRIVATE QuicPacketHeader {
   // public flags.
   QuicConnectionId connection_id;
   QuicConnectionIdLength connection_id_length;
+  // This is only used for Google QUIC.
   bool reset_flag;
+  // For Google QUIC, version flag in packets from the server means version
+  // negotiation packet. For IETF QUIC, version flag means long header.
   bool version_flag;
   QuicPacketNumberLength packet_number_length;
   ParsedQuicVersion version;
@@ -76,6 +80,13 @@ struct QUIC_EXPORT_PRIVATE QuicPacketHeader {
   // packet, |nonce| will be empty.
   DiversificationNonce* nonce;
   QuicPacketNumber packet_number;
+  // Only used if this is an IETF QUIC packet.
+  QuicIetfPacketHeaderForm form;
+  // Short packet type is reflected in packet_number_length.
+  QuicLongHeaderType long_packet_type;
+  // Stores last 16 bytes of a this packet, used to check whether this packet is
+  // a stateless reset packet on decryption failure.
+  QuicUint128 possible_stateless_reset_token;
 };
 
 struct QUIC_EXPORT_PRIVATE QuicPublicResetPacket {
@@ -95,6 +106,17 @@ struct QUIC_EXPORT_PRIVATE QuicVersionNegotiationPacket {
 
   QuicConnectionId connection_id;
   ParsedQuicVersionVector versions;
+};
+
+struct QUIC_EXPORT_PRIVATE QuicIetfStatelessResetPacket {
+  QuicIetfStatelessResetPacket();
+  QuicIetfStatelessResetPacket(const QuicPacketHeader& header,
+                               QuicUint128 token);
+  QuicIetfStatelessResetPacket(const QuicIetfStatelessResetPacket& other);
+  ~QuicIetfStatelessResetPacket();
+
+  QuicPacketHeader header;
+  QuicUint128 stateless_reset_token;
 };
 
 class QUIC_EXPORT_PRIVATE QuicData {

@@ -14,7 +14,7 @@
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -85,6 +85,9 @@ class CONTENT_EXPORT ServiceWorkerHandle
   const int handle_id_;
   scoped_refptr<ServiceWorkerVersion> version_;
   mojo::AssociatedBindingSet<blink::mojom::ServiceWorkerObjectHost> bindings_;
+  // Mojo connection to the content::WebServiceWorkerImpl in the renderer, which
+  // corresponds to the ServiceWorker JavaScript object.
+  blink::mojom::ServiceWorkerObjectAssociatedPtr remote_object_;
 
   base::WeakPtrFactory<ServiceWorkerHandle> weak_ptr_factory_;
 

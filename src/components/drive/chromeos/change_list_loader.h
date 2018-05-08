@@ -38,6 +38,7 @@ class JobScheduler;
 
 namespace internal {
 
+class AboutResourceLoader;
 class ChangeList;
 class ChangeListLoaderObserver;
 class ChangeListProcessor;
@@ -72,57 +73,6 @@ class LoaderController {
 
   base::WeakPtrFactory<LoaderController> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(LoaderController);
-};
-
-// This class is responsible to load AboutResource from the server and cache it.
-class AboutResourceLoader {
- public:
-  explicit AboutResourceLoader(JobScheduler* scheduler);
-  ~AboutResourceLoader();
-
-  // Returns the cached about resource.
-  // NULL is returned if the cache is not available.
-  const google_apis::AboutResource* cached_about_resource() const {
-    return cached_about_resource_.get();
-  }
-
-  // Gets the 'latest' about resource and asynchronously runs |callback|. I.e.,
-  // 1) If the last call to UpdateAboutResource call is in-flight, wait for it.
-  // 2) Otherwise, if the resource is cached, just returns the cached value.
-  // 3) If neither of the above hold, queries the API server by calling
-  //   |UpdateAboutResource|.
-  void GetAboutResource(const google_apis::AboutResourceCallback& callback);
-
-  // Gets the about resource from the server, and caches it if successful. This
-  // function calls JobScheduler::GetAboutResource internally. The cache will be
-  // used in |GetAboutResource|.
-  void UpdateAboutResource(const google_apis::AboutResourceCallback& callback);
-
- private:
-  // Part of UpdateAboutResource().
-  // This function should be called when the latest about resource is being
-  // fetched from the server. The retrieved about resource is cloned, and one is
-  // cached and the other is passed to callbacks associated with |task_id|.
-  void UpdateAboutResourceAfterGetAbout(
-      int task_id,
-      google_apis::DriveApiErrorCode status,
-      std::unique_ptr<google_apis::AboutResource> about_resource);
-
-  JobScheduler* scheduler_;
-  std::unique_ptr<google_apis::AboutResource> cached_about_resource_;
-
-  // Identifier to denote the latest UpdateAboutResource call.
-  int current_update_task_id_;
-  // Mapping from each UpdateAboutResource task ID to the corresponding
-  // callbacks. Note that there will be multiple callbacks for a single task
-  // when GetAboutResource is called before the task completes.
-  std::map<int, std::vector<google_apis::AboutResourceCallback> >
-      pending_callbacks_;
-
-  base::ThreadChecker thread_checker_;
-
-  base::WeakPtrFactory<AboutResourceLoader> weak_ptr_factory_;
-  DISALLOW_COPY_AND_ASSIGN(AboutResourceLoader);
 };
 
 // ChangeListLoader is used to load the change list, the full resource list,
@@ -196,15 +146,25 @@ class ChangeListLoader {
   // ================= Implementation for change list loading =================
 
   // Part of LoadFromServerIfNeeded().
-  // Starts loading the change list since |start_changestamp|, or the full
-  // resource list if |start_changestamp| is zero.
-  void LoadChangeListFromServer(int64_t start_changestamp);
+  // Starts loading the change list since |local_changestamp|, or the full
+  // resource list if |start_changestamp| is zero. If there's no changes since
+  // then, and there are no new team drives changes to apply from
+  // team_drives_change_lists, finishes early.
+  // TODO(sashab): Currently, team_drives_change_lists always contains all of
+  // the team drives. Update this so team_drives_change_lists is only filled
+  // when the TD flag is newly turned on or local data cleared. crbug.com/829154
+  void LoadChangeListFromServer(
+      std::unique_ptr<google_apis::AboutResource> about_resource,
+      int64_t local_changestamp,
+      FileError error,
+      std::vector<std::unique_ptr<ChangeList>> team_drives_change_lists);
 
   // Part of LoadChangeListFromServer().
   // Called when the entire change list is loaded.
   void LoadChangeListFromServerAfterLoadChangeList(
       std::unique_ptr<google_apis::AboutResource> about_resource,
       bool is_delta_update,
+      std::vector<std::unique_ptr<ChangeList>> team_drives_change_lists,
       FileError error,
       std::vector<std::unique_ptr<ChangeList>> change_lists);
 

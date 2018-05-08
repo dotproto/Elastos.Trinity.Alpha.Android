@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -80,12 +79,7 @@ class LazyBackgroundTaskQueueTest : public ExtensionsTest {
   // Creates and registers an extension without a background page.
   scoped_refptr<Extension> CreateSimpleExtension() {
     scoped_refptr<Extension> extension =
-        ExtensionBuilder()
-            .SetManifest(DictionaryBuilder()
-                             .Set("name", "No background")
-                             .Set("version", "1")
-                             .Set("manifest_version", 2)
-                             .Build())
+        ExtensionBuilder("No background")
             .SetID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             .Build();
     ExtensionRegistry::Get(browser_context())->AddEnabled(extension);
@@ -95,17 +89,8 @@ class LazyBackgroundTaskQueueTest : public ExtensionsTest {
   // Creates and registers an extension with a lazy background page.
   scoped_refptr<Extension> CreateLazyBackgroundExtension() {
     scoped_refptr<Extension> extension =
-        ExtensionBuilder()
-            .SetManifest(
-                DictionaryBuilder()
-                    .Set("name", "Lazy background")
-                    .Set("version", "1")
-                    .Set("manifest_version", 2)
-                    .Set("background", DictionaryBuilder()
-                                           .Set("page", "background.html")
-                                           .SetBoolean("persistent", false)
-                                           .Build())
-                    .Build())
+        ExtensionBuilder("Lazy background")
+            .SetBackgroundPage(ExtensionBuilder::BackgroundPage::EVENT)
             .SetID("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
             .Build();
     ExtensionRegistry::Get(browser_context())->AddEnabled(extension);

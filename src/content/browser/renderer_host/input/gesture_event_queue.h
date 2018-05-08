@@ -17,7 +17,7 @@
 #include "content/common/content_export.h"
 #include "content/public/common/input_event_ack_source.h"
 #include "content/public/common/input_event_ack_state.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 class GestureEventQueueTest;
@@ -72,7 +72,6 @@ class CONTENT_EXPORT GestureEventQueue {
 
   // Both |client| and |touchpad_client| must outlive the GestureEventQueue.
   GestureEventQueue(GestureEventQueueClient* client,
-                    TouchpadTapSuppressionControllerClient* touchpad_client,
                     FlingControllerClient* fling_client,
                     const Config& config);
   ~GestureEventQueue();
@@ -110,11 +109,15 @@ class CONTENT_EXPORT GestureEventQueue {
       const GestureEventWithLatencyInfo& gesture_event) const;
 
   // Calls |fling_controller_.ProgressFling| to advance an active fling on every
-  // begin frame.
-  void ProgressFling(base::TimeTicks current_time);
+  // begin frame and returns the current fling velocity if a fling is active.
+  gfx::Vector2dF ProgressFling(base::TimeTicks current_time);
 
   // Calls |fling_controller_.StopFling| to halt an active fling if such exists.
   void StopFling();
+
+  bool FlingCancellationIsDeferred() const;
+
+  bool TouchscreenFlingInProgress() const;
 
   void set_debounce_interval_time_ms_for_testing(int interval_ms) {
     debounce_interval_ = base::TimeDelta::FromMilliseconds(interval_ms);
@@ -179,9 +182,6 @@ class CONTENT_EXPORT GestureEventQueue {
   // remain at the head of the queue until ack'ed.
   size_t EventsInFlightCount() const;
 
-  // TODO(818214): Remove once the cause of the hang is identified.
-  void ReportPossibleHang(const blink::WebGestureEvent& event);
-
   // The receiver of all forwarded gesture events.
   GestureEventQueueClient* client_;
 
@@ -232,13 +232,6 @@ class CONTENT_EXPORT GestureEventQueue {
   // events that happen immediately after touchscreen/touchpad fling canceling
   // taps.
   FlingController fling_controller_;
-
-  // Diagnostic for the hang in https://crbug.com/818214
-  // Meaningful only when processing_acks_ is true.
-  // TODO(818214): Remove once the cause of the hang is identified.
-  base::TimeTicks processing_acks_start_;
-  int processing_acks_iterations_ = 0;
-  bool did_report_hang_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(GestureEventQueue);
 };

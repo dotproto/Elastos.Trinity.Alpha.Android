@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/access_policy_delegate.h"
+#include "services/ui/ws/async_event_dispatcher.h"
 #include "services/ui/ws/drag_source.h"
 #include "services/ui/ws/drag_target_connection.h"
 #include "services/ui/ws/ids.h"
@@ -74,7 +75,8 @@ class WindowTree : public mojom::WindowTree,
                    public AccessPolicyDelegate,
                    public mojom::WindowManagerClient,
                    public DragSource,
-                   public DragTargetConnection {
+                   public DragTargetConnection,
+                   public AsyncEventDispatcher {
  public:
   WindowTree(WindowServer* window_server,
              bool is_for_embedding,
@@ -206,14 +208,6 @@ class WindowTree : public mojom::WindowTree,
                          const WindowTreeAndWindowId& tree_and_window_id,
                          const base::UnguessableToken& token);
 
-  // Dispatches an event to the client. |callback| is run with the result from
-  // the client.
-  using DispatchEventCallback = base::OnceCallback<void(mojom::EventResult)>;
-  void DispatchInputEvent(ServerWindow* target,
-                          const ui::Event& event,
-                          const EventLocation& event_location,
-                          DispatchEventCallback callback);
-
   bool IsWaitingForNewTopLevelWindow(uint32_t wm_change_id);
   viz::FrameSinkId OnWindowManagerCreatedTopLevelWindow(
       uint32_t wm_change_id,
@@ -228,10 +222,7 @@ class WindowTree : public mojom::WindowTree,
   // ack from the client is received |callback| is Run().
   using AcceleratorCallback = base::OnceCallback<void(
       mojom::EventResult,
-      const std::unordered_map<std::string, std::vector<uint8_t>>&)>;
-  void OnAccelerator(uint32_t accelerator_id,
-                     const ui::Event& event,
-                     AcceleratorCallback callback);
+      const base::flat_map<std::string, std::vector<uint8_t>>&)>;
   void OnEventOccurredOutsideOfModalWindow(const ServerWindow* modal_window);
 
   // Called when the cursor touch visibility bit changes. This is only called
@@ -422,10 +413,10 @@ class WindowTree : public mojom::WindowTree,
   // |event_ack_id_| and returns it.
   uint32_t GenerateEventAckId();
 
-  void DispatchInputEventImpl(ServerWindow* target,
-                              const ui::Event& event,
-                              const EventLocation& event_location,
-                              DispatchEventCallback callback);
+  void DispatchEventImpl(ServerWindow* target,
+                         const ui::Event& event,
+                         const EventLocation& event_location,
+                         DispatchEventCallback callback);
 
   // Returns true if the client has a pointer watcher and this event matches.
   bool EventMatchesPointerWatcher(const ui::Event& event) const;
@@ -465,16 +456,25 @@ class WindowTree : public mojom::WindowTree,
   mojom::WindowTreeClientPtr GetAndRemoveScheduledEmbedWindowTreeClient(
       const base::UnguessableToken& token);
 
+  // AsyncEventDispatcher:
+  void DispatchEvent(ServerWindow* target,
+                     const ui::Event& event,
+                     const EventLocation& event_location,
+                     DispatchEventCallback callback) override;
+  void DispatchAccelerator(uint32_t accelerator_id,
+                           const ui::Event& event,
+                           AcceleratorCallback callback) override;
+
   // WindowTree:
-  void NewWindow(uint32_t change_id,
-                 Id transport_window_id,
-                 const base::Optional<
-                     std::unordered_map<std::string, std::vector<uint8_t>>>&
-                     transport_properties) override;
+  void NewWindow(
+      uint32_t change_id,
+      Id transport_window_id,
+      const base::Optional<base::flat_map<std::string, std::vector<uint8_t>>>&
+          transport_properties) override;
   void NewTopLevelWindow(
       uint32_t change_id,
       Id transport_window_id,
-      const std::unordered_map<std::string, std::vector<uint8_t>>&
+      const base::flat_map<std::string, std::vector<uint8_t>>&
           transport_properties) override;
   void DeleteWindow(uint32_t change_id, Id transport_window_id) override;
   void AddWindow(uint32_t change_id, Id parent_id, Id child_id) override;
@@ -567,7 +567,7 @@ class WindowTree : public mojom::WindowTree,
       uint32_t change_id,
       Id source_window_id,
       const gfx::Point& screen_location,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
+      const base::flat_map<std::string, std::vector<uint8_t>>& drag_data,
       const SkBitmap& drag_image,
       const gfx::Vector2d& drag_image_offset,
       uint32_t drag_operation,
@@ -629,11 +629,10 @@ class WindowTree : public mojom::WindowTree,
   void WmSetCursorTouchVisible(bool enabled) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
-  void OnAcceleratorAck(
-      uint32_t event_id,
-      mojom::EventResult result,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& properties)
-      override;
+  void OnAcceleratorAck(uint32_t event_id,
+                        mojom::EventResult result,
+                        const base::flat_map<std::string, std::vector<uint8_t>>&
+                            properties) override;
 
   // AccessPolicyDelegate:
   bool HasRootForAccessPolicy(const ServerWindow* window) const override;
@@ -653,7 +652,7 @@ class WindowTree : public mojom::WindowTree,
 
   // DragTargetConnection:
   void PerformOnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data)
       override;
   void PerformOnDragEnter(
       const ServerWindow* window,

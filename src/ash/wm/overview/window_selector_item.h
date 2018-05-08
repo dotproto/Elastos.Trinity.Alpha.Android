@@ -22,12 +22,12 @@ namespace gfx {
 class SlideAnimation;
 }
 
-namespace views {
-class ImageButton;
+namespace ui {
+class Shadow;
 }
 
-namespace wm {
-class Shadow;
+namespace views {
+class ImageButton;
 }
 
 namespace ash {
@@ -49,7 +49,8 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
     void ResetListener() { listener_ = nullptr; }
 
    protected:
-    // views::ImageButton:
+    // views::Button:
+    std::unique_ptr<views::InkDrop> CreateInkDrop() override;
     std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
     std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
         const override;
@@ -182,12 +183,29 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   void HandlePressEvent(const gfx::Point& location_in_screen);
   void HandleReleaseEvent(const gfx::Point& location_in_screen);
   void HandleDragEvent(const gfx::Point& location_in_screen);
-  void ActivateDraggedWindow(const gfx::Point& location_in_screen);
+  void HandleLongPressEvent(const gfx::Point& location_in_screen);
+  void HandleFlingStartEvent(const gfx::Point& location_in_screen,
+                             float velocity_x,
+                             float velocity_y);
+  void ActivateDraggedWindow();
   void ResetDraggedWindowGesture();
+
+  // Checks if this item is current being dragged.
+  bool IsDragItem();
+
+  // Called after a positioning transform animation ends. Checks to see if the
+  // animation was triggered by a drag end event. If so, inserts the window back
+  // to its original stacking order so that the order of windows is the same as
+  // when entering overview.
+  void OnDragAnimationCompleted();
 
   // Sets the bounds of the window shadow. If |bounds_in_screen| is nullopt,
   // the shadow is hidden.
   void SetShadowBounds(base::Optional<gfx::Rect> bounds_in_screen);
+
+  // Changes the opacity of all the windows the item owns.
+  void SetOpacity(float opacity);
+  float GetOpacity();
 
   void set_should_animate_when_entering(bool should_animate) {
     should_animate_when_entering_ = should_animate;
@@ -211,8 +229,13 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
 
   WindowGrid* window_grid() { return window_grid_; }
 
+  void set_should_restack_on_animation_end(bool val) {
+    should_restack_on_animation_end_ = val;
+  }
+
   float GetCloseButtonOpacityForTesting();
   float GetTitlebarOpacityForTesting();
+  gfx::Rect GetShadowBoundsForTesting();
 
  private:
   class CaptionContainerView;
@@ -241,9 +264,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // by |animation_type|.
   void SetItemBounds(const gfx::Rect& target_bounds,
                      OverviewAnimationType animation_type);
-
-  // Changes the opacity of all the windows the item owns.
-  void SetOpacity(float opacity);
 
   // Creates the window label.
   void CreateWindowLabel(const base::string16& title);
@@ -281,10 +301,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // it visible while dragging around.
   void StartDrag();
 
-  // Called after dragging. Inserts the window back to its original stacking
-  // order so that the order of windows is the same as when entering overview.
-  void EndDrag();
-
   // True if the item is being shown in the overview, false if it's being
   // filtered.
   bool dimmed_;
@@ -306,11 +322,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // True when |this| item is visually selected. Item header is made transparent
   // when the item is selected.
   bool selected_;
-
-  // Has a value if last seen tap down event was on the title bar. Behavior of
-  // subsequent drags/tap up differ if the original event was on the overview
-  // title.
-  base::Optional<gfx::Point> tap_down_event_on_title_;
 
   // A widget that covers the |transform_window_|. The widget has
   // |caption_container_view_| as its contents view. The widget is backed by a
@@ -367,12 +378,14 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // its exiting animation.
   bool should_be_observed_when_exiting_ = false;
 
+  // True if after an animation, we need to reorder the stacking order of the
+  // widgets.
+  bool should_restack_on_animation_end_ = false;
+
   // The shadow around the overview window. Shadows the original window, not
   // |item_widget_|. Done here instead of on the original window because of the
   // rounded edges mask applied on entering overview window.
-  std::unique_ptr<::wm::Shadow> shadow_;
-
-  bool event_on_title_ = false;
+  std::unique_ptr<ui::Shadow> shadow_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowSelectorItem);
 };

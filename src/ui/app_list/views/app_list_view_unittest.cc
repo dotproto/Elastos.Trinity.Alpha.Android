@@ -13,16 +13,15 @@
 #include <vector>
 
 #include "ash/app_list/model/search/search_box_model.h"
+#include "ash/public/cpp/app_list/answer_card_contents_registry.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/test/app_list_test_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
@@ -44,6 +43,7 @@
 #include "ui/app_list/views/search_result_view.h"
 #include "ui/app_list/views/suggestions_container_view.h"
 #include "ui/app_list/views/test/apps_grid_view_test_api.h"
+#include "ui/aura/env.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
 #include "ui/compositor/layer_animator.h"
@@ -82,17 +82,12 @@ void CheckView(views::View* subview) {
 
 class TestStartPageSearchResult : public TestSearchResult {
  public:
-  TestStartPageSearchResult() : menu_model_(nullptr) {
+  TestStartPageSearchResult() {
     set_display_type(ash::SearchResultDisplayType::kRecommendation);
   }
-  ~TestStartPageSearchResult() override {}
-
-  ui::MenuModel* GetContextMenuModel() override { return &menu_model_; }
+  ~TestStartPageSearchResult() override = default;
 
  private:
-  // A fake menu mode for context menu test.
-  ui::SimpleMenuModel menu_model_;
-
   DISALLOW_COPY_AND_ASSIGN(TestStartPageSearchResult);
 };
 
@@ -195,6 +190,19 @@ class AppListViewFocusTest : public views::ViewsTestBase,
         base::i18n::SetICUDefaultLocale("he");
     }
 
+    // Creates AnswerCardContentsRegistry and registers a fake answer card
+    // view for classic ash. Otherwise, the answer card view will not be
+    // created. Revisit this when the test runs in mash.
+    if (aura::Env::GetInstanceDontCreate() &&
+        aura::Env::GetInstanceDontCreate()->mode() == aura::Env::Mode::LOCAL) {
+      answer_card_contents_registry_ =
+          std::make_unique<AnswerCardContentsRegistry>();
+      fake_answer_card_view_ = std::make_unique<views::View>();
+      fake_answer_card_view_->set_owned_by_client();
+      fake_answer_card_token_ = answer_card_contents_registry_->Register(
+          fake_answer_card_view_.get());
+    }
+
     // Initialize app list view.
     delegate_.reset(new AppListTestViewDelegate);
     view_ = new AppListView(delegate_.get());
@@ -268,16 +276,19 @@ class AppListViewFocusTest : public views::ViewsTestBase,
     SearchModel::SearchResults* results =
         delegate_->GetSearchModel()->results();
     results->DeleteAll();
-    double relevance = result_types.size();
+    double display_score = result_types.size();
     for (const auto& data : result_types) {
-      // Set the relevance of the results in each group in decreasing order (so
-      // the earlier groups have higher relevance, and therefore appear first).
-      relevance -= 0.5;
+      // Set the display score of the results in each group in decreasing order
+      // (so the earlier groups have higher display score, and therefore appear
+      // first).
+      display_score -= 0.5;
       for (int i = 0; i < data.second; ++i) {
         std::unique_ptr<TestSearchResult> result =
             std::make_unique<TestSearchResult>();
         result->set_display_type(data.first);
-        result->set_relevance(relevance);
+        result->set_display_score(display_score);
+        if (data.first == ash::SearchResultDisplayType::kCard)
+          result->set_answer_card_contents_token(fake_answer_card_token_);
         results->Add(std::move(result));
       }
     }
@@ -462,6 +473,11 @@ class AppListViewFocusTest : public views::ViewsTestBase,
   std::unique_ptr<AppsGridViewTestApi> test_api_;
   // Restores the locale to default when destructor is called.
   base::test::ScopedRestoreICUDefaultLocale restore_locale_;
+
+  std::unique_ptr<AnswerCardContentsRegistry> answer_card_contents_registry_;
+  std::unique_ptr<views::View> fake_answer_card_view_;
+  base::UnguessableToken fake_answer_card_token_;
+
   DISALLOW_COPY_AND_ASSIGN(AppListViewFocusTest);
 };
 
@@ -1555,34 +1571,43 @@ TEST_F(AppListViewTest, FolderViewToPeeking) {
                    ->IsInFolderView());
 }
 
-// Tests that when a click or tap event propagates to the AppListView, if the
-// event location is within the bounds of AppsGridView, do not close the
-// AppListView.
+// Tests that a tap or click in an empty region of the AppsGridView closes the
+// AppList.
 TEST_F(AppListViewTest, TapAndClickWithinAppsGridView) {
   Initialize(0, false, false);
-  delegate_->GetTestModel()->PopulateApps(kInitialItems);
+  // Populate the AppList with a small number of apps so there is an empty
+  // region to click.
+  delegate_->GetTestModel()->PopulateApps(6);
   Show();
   view_->SetState(AppListViewState::FULLSCREEN_ALL_APPS);
   EXPECT_EQ(AppListViewState::FULLSCREEN_ALL_APPS, view_->app_list_state());
-  ContentsView* contents_view = view_->app_list_main_view()->contents_view();
-  AppsContainerView* container_view = contents_view->GetAppsContainerView();
-  const gfx::Rect grid_view_bounds =
-      container_view->apps_grid_view()->GetBoundsInScreen();
-  gfx::Point target_point = grid_view_bounds.origin();
-  target_point.Offset(100, 100);
-  ASSERT_TRUE(grid_view_bounds.Contains(target_point));
+  AppsGridView* apps_grid_view = view_->app_list_main_view()
+                                     ->contents_view()
+                                     ->GetAppsContainerView()
+                                     ->apps_grid_view();
+  AppsGridViewTestApi test_api(apps_grid_view);
 
-  // Tests gesture tap within apps grid view doesn't close app list view.
-  ui::GestureEvent tap(target_point.x(), target_point.y(), 0, base::TimeTicks(),
+  // Get the point of the first empty region (where app #7 would be) and tap on
+  // it, the AppList should close.
+  const gfx::Point empty_region =
+      test_api.GetItemTileRectOnCurrentPageAt(2, 2).CenterPoint();
+  ui::GestureEvent tap(empty_region.x(), empty_region.y(), 0, base::TimeTicks(),
                        ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  ui::Event::DispatcherApi tap_dispatcher_api(static_cast<ui::Event*>(&tap));
+  tap_dispatcher_api.set_target(view_);
   view_->OnGestureEvent(&tap);
-  EXPECT_EQ(AppListViewState::FULLSCREEN_ALL_APPS, view_->app_list_state());
+  EXPECT_EQ(AppListViewState::CLOSED, view_->app_list_state());
 
-  // Tests mouse click within apps grid view doesn't close app list view.
-  ui::MouseEvent mouse_click(ui::ET_MOUSE_PRESSED, target_point, target_point,
+  Show();
+
+  // Click on the same empty region, the AppList should close again.
+  ui::MouseEvent mouse_click(ui::ET_MOUSE_PRESSED, empty_region, empty_region,
                              base::TimeTicks(), 0, 0);
+  ui::Event::DispatcherApi mouse_click_dispatcher_api(
+      static_cast<ui::Event*>(&mouse_click));
+  mouse_click_dispatcher_api.set_target(view_);
   view_->OnMouseEvent(&mouse_click);
-  EXPECT_EQ(AppListViewState::FULLSCREEN_ALL_APPS, view_->app_list_state());
+  EXPECT_EQ(AppListViewState::CLOSED, view_->app_list_state());
 }
 
 // Tests that search box should not become a rectangle during drag.
@@ -1669,58 +1694,6 @@ TEST_F(AppListViewTest, DisplayTest) {
   EXPECT_EQ(expected, delegate_->GetModel()->state());
 }
 
-// Tests that the start page view operates correctly.
-TEST_F(AppListViewTest, StartPageTest) {
-  Initialize(0, false, false);
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
-#if 0
-  EXPECT_FALSE(view_->GetWidget()->IsVisible());
-  EXPECT_EQ(-1, GetPaginationModel()->total_pages());
-  AppListTestModel* model = delegate_->GetTestModel();
-  model->PopulateApps(3);
-
-  Show();
-
-  AppListMainView* main_view = view_->app_list_main_view();
-  StartPageView* start_page_view =
-      main_view->contents_view()->start_page_view();
-  // Checks on the main view.
-  EXPECT_NO_FATAL_FAILURE(CheckView(main_view));
-  EXPECT_NO_FATAL_FAILURE(CheckView(main_view->contents_view()));
-  EXPECT_NO_FATAL_FAILURE(CheckView(start_page_view));
-
-  // Show the start page view.
-  EXPECT_TRUE(SetAppListState(ash::AppListState::kStateStart));
-  gfx::Size view_size(view_->GetPreferredSize());
-
-  // Hiding and showing the search box should not affect the app list's
-  // preferred size. This is a regression test for http://crbug.com/386912.
-  EXPECT_EQ(view_size.ToString(), view_->GetPreferredSize().ToString());
-
-  // Check tiles hide and show on deletion and addition.
-  EXPECT_TRUE(SetAppListState(ash::AppListState::kStateStart));
-  model->results()->Add(std::make_unique<TestStartPageSearchResult>());
-  start_page_view->UpdateForTesting();
-  EXPECT_EQ(1u, GetVisibleViews(start_page_view->tile_views()));
-  model->results()->DeleteAll();
-  start_page_view->UpdateForTesting();
-  EXPECT_EQ(0u, GetVisibleViews(start_page_view->tile_views()));
-
-  // Tiles should not update when the start page is not active but should be
-  // correct once the start page is shown.
-  EXPECT_TRUE(SetAppListState(ash::AppListState::kStateApps));
-  model->results()->Add(std::make_unique<TestStartPageSearchResult>());
-  start_page_view->UpdateForTesting();
-  EXPECT_EQ(0u, GetVisibleViews(start_page_view->tile_views()));
-  EXPECT_TRUE(SetAppListState(ash::AppListState::kStateStart));
-  EXPECT_EQ(1u, GetVisibleViews(start_page_view->tile_views()));
-#endif
-}
-
 // Tests switching rapidly between multiple pages of the launcher.
 TEST_F(AppListViewTest, PageSwitchingAnimationTest) {
   Initialize(0, false, false);
@@ -1751,13 +1724,10 @@ TEST_F(AppListViewTest, PageSwitchingAnimationTest) {
 }
 
 // Tests that the correct views are displayed for showing search results.
-TEST_F(AppListViewTest, SearchResultsTest) {
+TEST_F(AppListViewTest, DISABLED_SearchResultsTest) {
   Initialize(0, false, false);
   // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
   // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
   AppListTestModel* model = delegate_->GetTestModel();
@@ -1819,13 +1789,10 @@ TEST_F(AppListViewTest, SearchResultsTest) {
 }
 
 // Tests that the back button navigates through the app list correctly.
-TEST_F(AppListViewTest, BackTest) {
+TEST_F(AppListViewTest, DISABLED_BackTest) {
   Initialize(0, false, false);
   // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
   // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
 
@@ -1876,13 +1843,10 @@ TEST_F(AppListViewTest, BackTest) {
 }
 
 // Tests that the correct views are displayed for showing search results.
-TEST_F(AppListViewTest, AppListOverlayTest) {
+TEST_F(AppListViewTest, DISABLED_AppListOverlayTest) {
   Initialize(0, false, false);
   // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
   // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
   Show();
 
   AppListMainView* main_view = view_->app_list_main_view();
@@ -1901,13 +1865,10 @@ TEST_F(AppListViewTest, AppListOverlayTest) {
 
 // Tests that even if initialize is called again with a different initial page,
 // that different initial page is respected.
-TEST_F(AppListViewTest, MultiplePagesReinitializeOnInputPage) {
+TEST_F(AppListViewTest, DISABLED_MultiplePagesReinitializeOnInputPage) {
   Initialize(0, false, false);
   // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
   // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
   delegate_->GetTestModel()->PopulateApps(kInitialItems);
 
   // Show and close the widget once.

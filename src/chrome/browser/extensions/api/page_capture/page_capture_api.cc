@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
@@ -210,7 +209,7 @@ void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnUI(bool success) {
 
   web_contents->GenerateMHTML(
       content::MHTMLGenerationParams(mhtml_path_),
-      base::Bind(&PageCaptureSaveAsMHTMLFunction::MHTMLGenerated, this));
+      base::BindOnce(&PageCaptureSaveAsMHTMLFunction::MHTMLGenerated, this));
 }
 
 void PageCaptureSaveAsMHTMLFunction::MHTMLGenerated(int64_t mhtml_file_size) {

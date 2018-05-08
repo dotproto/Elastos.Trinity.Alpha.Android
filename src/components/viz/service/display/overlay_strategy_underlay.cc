@@ -28,7 +28,8 @@ bool OverlayStrategyUnderlay::Attempt(
   for (auto it = quad_list.begin(); it != quad_list.end(); ++it) {
     cc::OverlayCandidate candidate;
     if (!cc::OverlayCandidate::FromDrawQuad(
-            resource_provider, output_color_matrix, *it, &candidate)) {
+            resource_provider, output_color_matrix, *it, &candidate) ||
+      !candidate.is_opaque) {
       continue;
     }
 
@@ -36,6 +37,7 @@ bool OverlayStrategyUnderlay::Attempt(
     cc::OverlayCandidateList new_candidate_list = *candidate_list;
     new_candidate_list.push_back(candidate);
     new_candidate_list.back().plane_z_order = -1;
+    new_candidate_list.front().is_opaque = false;
 
     // Check for support.
     capability_checker_->CheckOverlaySupport(&new_candidate_list);

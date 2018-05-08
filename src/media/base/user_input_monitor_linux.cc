@@ -16,7 +16,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "media/base/keyboard_event_counter.h"
@@ -32,7 +32,7 @@ namespace {
 // UserInputMonitorLinux since it needs to be deleted on the IO thread.
 class UserInputMonitorLinuxCore
     : public base::SupportsWeakPtr<UserInputMonitorLinuxCore>,
-      public base::MessageLoop::DestructionObserver {
+      public base::MessageLoopCurrent::DestructionObserver {
  public:
   explicit UserInputMonitorLinuxCore(
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
@@ -41,7 +41,7 @@ class UserInputMonitorLinuxCore
   // DestructionObserver overrides.
   void WillDestroyCurrentMessageLoop() override;
 
-  size_t GetKeyPressCount() const;
+  uint32_t GetKeyPressCount() const;
   void StartMonitor();
   void StopMonitor();
 
@@ -67,14 +67,14 @@ class UserInputMonitorLinuxCore
   DISALLOW_COPY_AND_ASSIGN(UserInputMonitorLinuxCore);
 };
 
-class UserInputMonitorLinux : public UserInputMonitor {
+class UserInputMonitorLinux : public UserInputMonitorBase {
  public:
   explicit UserInputMonitorLinux(
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
   ~UserInputMonitorLinux() override;
 
   // Public UserInputMonitor overrides.
-  size_t GetKeyPressCount() const override;
+  uint32_t GetKeyPressCount() const override;
 
  private:
   // Private UserInputMonitor overrides.
@@ -105,10 +105,9 @@ UserInputMonitorLinuxCore::~UserInputMonitorLinuxCore() {
 void UserInputMonitorLinuxCore::WillDestroyCurrentMessageLoop() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   StopMonitor();
-  StopMonitor();
 }
 
-size_t UserInputMonitorLinuxCore::GetKeyPressCount() const {
+uint32_t UserInputMonitorLinuxCore::GetKeyPressCount() const {
   return counter_.GetKeyPressCount();
 }
 
@@ -187,7 +186,7 @@ void UserInputMonitorLinuxCore::StartMonitor() {
 
   // Start observing message loop destruction if we start monitoring the first
   // event.
-  base::MessageLoop::current()->AddDestructionObserver(this);
+  base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
 
   // Fetch pending events if any.
   OnXEvent();
@@ -200,8 +199,6 @@ void UserInputMonitorLinuxCore::StopMonitor() {
     XFree(x_record_range_);
     x_record_range_ = NULL;
   }
-  if (x_record_range_)
-    return;
 
   // Context must be disabled via the control channel because we can't send
   // any X protocol traffic over the data channel while it's recording.
@@ -221,8 +218,9 @@ void UserInputMonitorLinuxCore::StopMonitor() {
     XCloseDisplay(x_control_display_);
     x_control_display_ = NULL;
   }
+
   // Stop observing message loop destruction if no event is being monitored.
-  base::MessageLoop::current()->RemoveDestructionObserver(this);
+  base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
 }
 
 void UserInputMonitorLinuxCore::OnXEvent() {
@@ -271,27 +269,27 @@ UserInputMonitorLinux::~UserInputMonitorLinux() {
     delete core_;
 }
 
-size_t UserInputMonitorLinux::GetKeyPressCount() const {
+uint32_t UserInputMonitorLinux::GetKeyPressCount() const {
   return core_->GetKeyPressCount();
 }
 
 void UserInputMonitorLinux::StartKeyboardMonitoring() {
   io_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserInputMonitorLinuxCore::StartMonitor, core_->AsWeakPtr()));
+      FROM_HERE, base::BindOnce(&UserInputMonitorLinuxCore::StartMonitor,
+                                core_->AsWeakPtr()));
 }
 
 void UserInputMonitorLinux::StopKeyboardMonitoring() {
   io_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserInputMonitorLinuxCore::StopMonitor, core_->AsWeakPtr()));
+      FROM_HERE, base::BindOnce(&UserInputMonitorLinuxCore::StopMonitor,
+                                core_->AsWeakPtr()));
 }
 
 }  // namespace
 
 std::unique_ptr<UserInputMonitor> UserInputMonitor::Create(
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
   return std::make_unique<UserInputMonitorLinux>(io_task_runner);
 }
 

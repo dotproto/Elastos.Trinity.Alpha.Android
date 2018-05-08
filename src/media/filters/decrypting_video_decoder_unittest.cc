@@ -37,11 +37,11 @@ const int kDecodingDelay = 3;
 static scoped_refptr<DecoderBuffer> CreateFakeEncryptedBuffer() {
   const int buffer_size = 16;  // Need a non-empty buffer;
   scoped_refptr<DecoderBuffer> buffer(new DecoderBuffer(buffer_size));
-  buffer->set_decrypt_config(std::unique_ptr<DecryptConfig>(new DecryptConfig(
+  buffer->set_decrypt_config(DecryptConfig::CreateCencConfig(
       std::string(reinterpret_cast<const char*>(kFakeKeyId),
                   arraysize(kFakeKeyId)),
       std::string(reinterpret_cast<const char*>(kFakeIv), arraysize(kFakeIv)),
-      std::vector<SubsampleEntry>())));
+      {}));
   return buffer;
 }
 
@@ -59,9 +59,7 @@ class DecryptingVideoDecoderTest : public testing::Test {
             VideoFrame::CreateBlackFrame(TestVideoConfig::NormalCodedSize())),
         null_video_frame_(scoped_refptr<VideoFrame>()) {}
 
-  virtual ~DecryptingVideoDecoderTest() {
-    Destroy();
-  }
+  ~DecryptingVideoDecoderTest() override { Destroy(); }
 
   enum CdmType { CDM_WITHOUT_DECRYPTOR, CDM_WITH_DECRYPTOR };
 
@@ -107,7 +105,7 @@ class DecryptingVideoDecoderTest : public testing::Test {
   }
 
   // Decode |buffer| and expect DecodeDone to get called with |status|.
-  void DecodeAndExpect(const scoped_refptr<DecoderBuffer>& buffer,
+  void DecodeAndExpect(scoped_refptr<DecoderBuffer> buffer,
                        DecodeStatus status) {
     EXPECT_CALL(*this, DecodeDone(status));
     decoder_->Decode(buffer,
@@ -118,7 +116,7 @@ class DecryptingVideoDecoderTest : public testing::Test {
 
   // Helper function to simulate the decrypting and decoding process in the
   // |decryptor_| with a decoding delay of kDecodingDelay buffers.
-  void DecryptAndDecodeVideo(const scoped_refptr<DecoderBuffer>& encrypted,
+  void DecryptAndDecodeVideo(scoped_refptr<DecoderBuffer> encrypted,
                              const Decryptor::VideoDecodeCB& video_decode_cb) {
     num_decrypt_and_decode_calls_++;
     if (!encrypted->end_of_stream())

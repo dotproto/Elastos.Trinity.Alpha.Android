@@ -7,10 +7,11 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "mojo/common/data_pipe_drainer.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
@@ -30,10 +31,9 @@ class URLLoaderThrottle;
 class WebPackagePrefetchHandler;
 
 // PrefetchURLLoader which basically just keeps draining the data.
-class CONTENT_EXPORT PrefetchURLLoader
-    : public network::mojom::URLLoader,
-      public network::mojom::URLLoaderClient,
-      public mojo::common::DataPipeDrainer::Client {
+class CONTENT_EXPORT PrefetchURLLoader : public network::mojom::URLLoader,
+                                         public network::mojom::URLLoaderClient,
+                                         public mojo::DataPipeDrainer::Client {
  public:
   using URLLoaderThrottlesGetter = base::RepeatingCallback<
       std::vector<std::unique_ptr<content::URLLoaderThrottle>>()>;
@@ -42,10 +42,13 @@ class CONTENT_EXPORT PrefetchURLLoader
   // |request_context_getter| may be used when a prefetch handler
   // needs to additionally create a request (e.g. for fetching certificate
   // if the prefetch was for a signed exchange).
+  // |frame_tree_node_id_getter| is called only on UI thread when NetworkService
+  // is not enabled, but can be also called on IO thread otherwise.
   PrefetchURLLoader(
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
+      base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
       const network::ResourceRequest& resource_request,
       network::mojom::URLLoaderClientPtr client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -67,7 +70,6 @@ class CONTENT_EXPORT PrefetchURLLoader
   // network::mojom::URLLoaderClient overrides:
   void OnReceiveResponse(
       const network::ResourceResponseHead& head,
-      const base::Optional<net::SSLInfo>& ssl_info,
       network::mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const network::ResourceResponseHead& head) override;
@@ -81,12 +83,14 @@ class CONTENT_EXPORT PrefetchURLLoader
       mojo::ScopedDataPipeConsumerHandle body) override;
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
-  // mojo::common::DataPipeDrainer::Client overrides:
+  // mojo::DataPipeDrainer::Client overrides:
   // This just does nothing but keep reading.
   void OnDataAvailable(const void* data, size_t num_bytes) override {}
   void OnDataComplete() override {}
 
   void OnNetworkConnectionError();
+
+  const base::RepeatingCallback<int(void)> frame_tree_node_id_getter_;
 
   scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory_;
 
@@ -105,7 +109,7 @@ class CONTENT_EXPORT PrefetchURLLoader
   ResourceContext* resource_context_;
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
 
-  std::unique_ptr<mojo::common::DataPipeDrainer> pipe_drainer_;
+  std::unique_ptr<mojo::DataPipeDrainer> pipe_drainer_;
 
   std::unique_ptr<WebPackagePrefetchHandler> web_package_prefetch_handler_;
 

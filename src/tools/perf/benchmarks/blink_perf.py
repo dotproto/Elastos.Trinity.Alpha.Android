@@ -24,7 +24,7 @@ from telemetry.value import trace
 
 
 BLINK_PERF_BASE_DIR = os.path.join(path_util.GetChromiumSrcDir(),
-                                   'third_party', 'WebKit', 'PerformanceTests')
+                                   'third_party', 'blink', 'perf_tests')
 SKIPPED_FILE = os.path.join(BLINK_PERF_BASE_DIR, 'Skipped')
 
 EventBoundary = collections.namedtuple('EventBoundary',
@@ -230,6 +230,7 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
                            'blink_perf.js'), 'r') as f:
       self._blink_perf_js = f.read()
     self._extra_chrome_categories = None
+    self._enable_systrace = None
 
   def WillNavigateToPage(self, page, tab):
     del tab  # unused
@@ -249,6 +250,8 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
       options.AppendExtraBrowserArgs('--expose-internals-for-testing')
     if options.extra_chrome_categories:
       self._extra_chrome_categories = options.extra_chrome_categories
+    if options.enable_systrace:
+      self._enable_systrace = True
 
   def _ContinueTestRunWithTracing(self, tab):
     tracing_categories = tab.EvaluateJavaScript(
@@ -262,6 +265,8 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
     if self._extra_chrome_categories:
       config.chrome_trace_config.category_filter.AddFilterString(
           self._extra_chrome_categories)
+    if self._enable_systrace:
+      config.chrome_trace_config.SetEnableSystrace()
     tab.browser.platform.tracing_controller.StartTracing(config)
     tab.EvaluateJavaScript('testRunner.scheduleTestRun()')
     tab.WaitForJavaScriptCondition('testRunner.isDone')
@@ -339,10 +344,6 @@ class _BlinkPerfBenchmark(perf_benchmark.PerfBenchmark):
 
   test = _BlinkPerfMeasurement
 
-  @classmethod
-  def Name(cls):
-    return 'blink_perf.' + cls.tag
-
   def CreateStorySet(self, options):
     path = os.path.join(BLINK_PERF_BASE_DIR, self.subdir)
     return CreateStorySetFromPath(path, SKIPPED_FILE)
@@ -352,19 +353,30 @@ class _BlinkPerfBenchmark(perf_benchmark.PerfBenchmark):
                          'yukishiino@chromium.org',
                          'haraken@chromium.org'])
 class BlinkPerfBindings(_BlinkPerfBenchmark):
-  tag = 'bindings'
-  subdir = 'Bindings'
+  subdir = 'bindings'
 
-@benchmark.Owner(emails=['rune@opera.com'])
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.bindings'
+
+
+@benchmark.Owner(emails=['futhark@chromium.org'])
 class BlinkPerfCSS(_BlinkPerfBenchmark):
-  tag = 'css'
-  subdir = 'CSS'
+  subdir = 'css'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.css'
+
 
 
 @benchmark.Owner(emails=['junov@chromium.org'])
 class BlinkPerfCanvas(_BlinkPerfBenchmark):
-  tag = 'canvas'
-  subdir = 'Canvas'
+  subdir = 'canvas'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.canvas'
 
   def CreateStorySet(self, options):
     path = os.path.join(BLINK_PERF_BASE_DIR, self.subdir)
@@ -383,20 +395,30 @@ class BlinkPerfCanvas(_BlinkPerfBenchmark):
                          'yukishiino@chromium.org',
                          'haraken@chromium.org'])
 class BlinkPerfDOM(_BlinkPerfBenchmark):
-  tag = 'dom'
-  subdir = 'DOM'
+  subdir = 'dom'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.dom'
 
 
 @benchmark.Owner(emails=['hayato@chromium.org'])
 class BlinkPerfEvents(_BlinkPerfBenchmark):
-  tag = 'events'
-  subdir = 'Events'
+  subdir = 'events'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.events'
 
 
 @benchmark.Owner(emails=['cblume@chromium.org'])
 class BlinkPerfImageDecoder(_BlinkPerfBenchmark):
   tag = 'image_decoder'
-  subdir = 'ImageDecoder'
+  subdir = 'image_decoder'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.image_decoder'
 
   def SetExtraBrowserOptions(self, options):
     options.AppendExtraBrowserArgs([
@@ -406,14 +428,20 @@ class BlinkPerfImageDecoder(_BlinkPerfBenchmark):
 
 @benchmark.Owner(emails=['eae@chromium.org'])
 class BlinkPerfLayout(_BlinkPerfBenchmark):
-  tag = 'layout'
-  subdir = 'Layout'
+  subdir = 'layout'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.layout'
 
 
 @benchmark.Owner(emails=['dmurph@chromium.org'])
 class BlinkPerfOWPStorage(_BlinkPerfBenchmark):
-  tag = 'owp_storage'
-  subdir = 'OWPStorage'
+  subdir = 'owp_storage'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.owp_storage'
 
   # This ensures that all blobs >= 20MB will be transported by files.
   def SetExtraBrowserOptions(self, options):
@@ -427,25 +455,37 @@ class BlinkPerfOWPStorage(_BlinkPerfBenchmark):
 
 @benchmark.Owner(emails=['wangxianzhu@chromium.org'])
 class BlinkPerfPaint(_BlinkPerfBenchmark):
-  tag = 'paint'
-  subdir = 'Paint'
+  subdir = 'paint'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.paint'
 
 
 @benchmark.Owner(emails=['jbroman@chromium.org',
                          'yukishiino@chromium.org',
                          'haraken@chromium.org'])
 class BlinkPerfParser(_BlinkPerfBenchmark):
-  tag = 'parser'
-  subdir = 'Parser'
+  subdir = 'parser'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.parser'
 
 
 @benchmark.Owner(emails=['kouhei@chromium.org', 'fs@opera.com'])
 class BlinkPerfSVG(_BlinkPerfBenchmark):
-  tag = 'svg'
-  subdir = 'SVG'
+  subdir = 'svg'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.svg'
 
 
 @benchmark.Owner(emails=['hayato@chromium.org'])
 class BlinkPerfShadowDOM(_BlinkPerfBenchmark):
-  tag = 'shadow_dom'
-  subdir = 'ShadowDOM'
+  subdir = 'shadow_dom'
+
+  @classmethod
+  def Name(cls):
+    return 'blink_perf.shadow_dom'

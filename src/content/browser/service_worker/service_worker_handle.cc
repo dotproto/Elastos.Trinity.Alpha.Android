@@ -4,7 +4,6 @@
 
 #include "content/browser/service_worker/service_worker_handle.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
@@ -176,8 +175,7 @@ ServiceWorkerHandle::~ServiceWorkerHandle() {
 
 void ServiceWorkerHandle::OnVersionStateChanged(ServiceWorkerVersion* version) {
   DCHECK(version);
-  provider_host_->SendServiceWorkerStateChangedMessage(
-      handle_id_,
+  remote_object_->StateChanged(
       mojo::ConvertTo<blink::mojom::ServiceWorkerState>(version->status()));
 }
 
@@ -190,6 +188,7 @@ ServiceWorkerHandle::CreateObjectInfo() {
       mojo::ConvertTo<blink::mojom::ServiceWorkerState>(version_->status());
   info->version_id = version_->version_id();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
+  info->request = mojo::MakeRequest(&remote_object_);
   return info;
 }
 

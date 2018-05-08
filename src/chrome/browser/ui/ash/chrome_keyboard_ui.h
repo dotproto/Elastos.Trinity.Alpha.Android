@@ -24,15 +24,13 @@ class Window;
 namespace gfx {
 class Rect;
 }
-namespace wm {
-class Shadow;
-}
 namespace content {
 class BrowserContext;
 class WebContents;
 }  // namespace content
 namespace ui {
 class InputMethod;
+class Shadow;
 }
 
 // Subclass of KeyboardUI. It is used by KeyboardController to get
@@ -82,7 +80,7 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
 
   const aura::Window* GetKeyboardRootWindow() const;
 
-  virtual content::WebContents* CreateWebContents();
+  virtual std::unique_ptr<content::WebContents> CreateWebContents();
 
  private:
   friend class TestApi;
@@ -126,7 +124,7 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
   const GURL default_url_;
 
   std::unique_ptr<content::WebContents> keyboard_contents_;
-  std::unique_ptr<wm::Shadow> shadow_;
+  std::unique_ptr<ui::Shadow> shadow_;
 
   std::unique_ptr<keyboard::KeyboardControllerObserver> observer_;
   std::unique_ptr<WindowBoundsChangeObserver> window_bounds_observer_;

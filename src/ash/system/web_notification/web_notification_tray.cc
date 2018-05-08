@@ -8,6 +8,7 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/message_center/message_center_bubble.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
@@ -27,7 +28,6 @@
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -40,15 +40,10 @@
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 namespace {
-
-// Menu commands
-constexpr int kToggleQuietMode = 0;
-constexpr int kEnableQuietModeDay = 2;
 
 constexpr int kMaximumSmallIconCount = 3;
 
@@ -349,14 +344,14 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings,
     // TODO(yoshiki): Support non-primary desktop on multi-display environment.
     Shell::Get()->GetPrimaryRootWindowController()->sidebar()->Show(mode);
   } else {
-    MessageCenterBubble* message_center_bubble = new MessageCenterBubble(
-        message_center(), message_center_ui_controller_.get());
+    MessageCenterBubble* message_center_bubble =
+        new MessageCenterBubble(message_center());
 
     // In the horizontal case, message center starts from the top of the shelf.
     // In the vertical case, it starts from the bottom of WebNotificationTray.
-    const int max_height =
-        (shelf()->IsHorizontalAlignment() ? shelf()->GetIdealBounds().y()
-                                          : GetBoundsInScreen().bottom());
+    const int max_height = (shelf()->IsHorizontalAlignment()
+                                ? shelf()->GetUserWorkAreaBounds().height()
+                                : GetBoundsInScreen().bottom());
     // Sets the maximum height, considering the padding from the top edge of
     // screen. This padding should be applied in all types of shelf alignment.
     message_center_bubble->SetMaxHeight(max_height - kPaddingFromScreenTop);
@@ -414,7 +409,7 @@ bool WebNotificationTray::ShowPopups() {
   if (IsMessageCenterVisible())
     return false;
 
-  popup_collection_->DoUpdateIfPossible();
+  popup_collection_->DoUpdate();
   return true;
 }
 
@@ -450,6 +445,16 @@ void WebNotificationTray::UpdateAfterShelfAlignmentChange() {
   // Destroy any existing popup bubbles and rebuilt if necessary.
   message_center_ui_controller_->HidePopupBubble();
   message_center_ui_controller_->ShowPopupBubble();
+}
+
+void WebNotificationTray::UpdateAfterRootWindowBoundsChange(
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds) {
+  TrayBackgroundView::UpdateAfterRootWindowBoundsChange(old_bounds, new_bounds);
+  // Hide the message center bubble, since the bounds may not have enough to
+  // show the current size of the message center. This handler is invoked when
+  // the screen is rotated or the screen size is changed.
+  message_center_ui_controller_->HideMessageCenterBubble();
 }
 
 void WebNotificationTray::AnchorUpdated() {
@@ -521,28 +526,6 @@ bool WebNotificationTray::ShowNotifierSettings() {
   }
   return ShowMessageCenterInternal(true /* show_settings */,
                                    false /* show_by_click */);
-}
-
-bool WebNotificationTray::IsCommandIdChecked(int command_id) const {
-  if (command_id != kToggleQuietMode)
-    return false;
-  return message_center()->IsQuietMode();
-}
-
-bool WebNotificationTray::IsCommandIdEnabled(int command_id) const {
-  return true;
-}
-
-void WebNotificationTray::ExecuteCommand(int command_id, int event_flags) {
-  if (command_id == kToggleQuietMode) {
-    bool in_quiet_mode = message_center()->IsQuietMode();
-    message_center()->SetQuietMode(!in_quiet_mode);
-    return;
-  }
-  base::TimeDelta expires_in = command_id == kEnableQuietModeDay
-                                   ? base::TimeDelta::FromDays(1)
-                                   : base::TimeDelta::FromHours(1);
-  message_center()->EnterQuietModeWithExpire(expires_in);
 }
 
 void WebNotificationTray::OnMessageCenterContentsChanged() {

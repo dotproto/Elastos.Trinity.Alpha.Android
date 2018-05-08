@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/drag_controller.h"
@@ -169,7 +168,7 @@ void EventProcessor::SetDragDropSourceWindow(
     ServerWindow* window,
     DragTargetConnection* source_connection,
     int32_t drag_pointer,
-    const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data,
+    const base::flat_map<std::string, std::vector<uint8_t>>& mime_data,
     uint32_t drag_operations) {
   CancelImplicitCaptureExcept(nullptr, kInvalidClientId);
   drag_controller_ = std::make_unique<DragController>(

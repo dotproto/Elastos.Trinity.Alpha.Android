@@ -7,8 +7,11 @@
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
 #include <stdint.h>
+
+#include <string>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
@@ -18,7 +21,6 @@
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -35,6 +37,7 @@
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/viz/client/frame_eviction_manager.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -54,6 +57,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/public/browser/android/compositor.h"
@@ -62,10 +66,11 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/command_buffer/common/swap_buffers_flags.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_surface_tracker.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
@@ -77,6 +82,7 @@
 #include "ui/gfx/ca_layer_params.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_utils.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace content {
 
@@ -242,7 +248,7 @@ void CreateContextProviderAfterGpuChannelEstablished(
           stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, support_grcontext,
-          shared_memory_limits, attributes, nullptr /* shared_context */,
+          shared_memory_limits, attributes,
           ui::command_buffer_metrics::CONTEXT_TYPE_UNKNOWN);
   callback.Run(std::move(context_provider));
 }
@@ -269,11 +275,14 @@ class AndroidOutputSurface
     if (latency_info_cache_.WillSwap(std::move(frame.latency_info)))
       GetCommandBufferProxy()->SetSnapshotRequested();
 
+    uint32_t flags = 0;
+    if (frame.need_presentation_feedback)
+      flags |= gpu::SwapBuffersFlags::kPresentationFeedback;
     if (frame.sub_buffer_rect) {
       DCHECK(frame.sub_buffer_rect->IsEmpty());
-      context_provider_->ContextSupport()->CommitOverlayPlanes();
+      context_provider_->ContextSupport()->CommitOverlayPlanes(flags);
     } else {
-      context_provider_->ContextSupport()->Swap();
+      context_provider_->ContextSupport()->Swap(flags);
     }
   }
 
@@ -281,6 +290,7 @@ class AndroidOutputSurface
   void LatencyInfoCompleted(
       const std::vector<ui::LatencyInfo>& latency_info) override {
     RenderWidgetHostImpl::OnGpuSwapBuffersCompleted(latency_info);
+    latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
   }
 
   void BindToClient(viz::OutputSurfaceClient* client) override {
@@ -326,7 +336,6 @@ class AndroidOutputSurface
   gfx::BufferFormat GetOverlayBufferFormat() const override {
     return gfx::BufferFormat::RGBX_8888;
   }
-  bool SurfaceIsSuspendForRecycle() const override { return false; }
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
 
@@ -362,6 +371,7 @@ class AndroidOutputSurface
   base::Closure swap_buffers_callback_;
   std::unique_ptr<viz::OverlayCandidateValidator> overlay_candidate_validator_;
   LatencyInfoCache latency_info_cache_;
+  ui::LatencyTracker latency_tracker_;
 
   base::WeakPtrFactory<AndroidOutputSurface> weak_ptr_factory_;
 };
@@ -543,11 +553,6 @@ void CompositorImpl::SetRootWindow(gfx::NativeWindow root_window) {
   root_window_ = root_window;
   root_window_->SetLayer(root_layer ? root_layer : cc::Layer::Create());
   root_window_->GetLayer()->SetBounds(size_);
-  if (!readback_layer_tree_) {
-    readback_layer_tree_ = cc::Layer::Create();
-    readback_layer_tree_->SetHideLayerAndSubtree(true);
-  }
-  root_window->GetLayer()->AddChild(readback_layer_tree_);
   root_window->AttachCompositor(this);
   if (!host_) {
     CreateLayerTreeHost();
@@ -660,11 +665,13 @@ void CompositorImpl::SetVisible(bool visible) {
           root_window_->GetBeginFrameSource());
     }
     display_.reset();
+    EnqueueLowEndBackgroundCleanup();
   } else {
     host_->SetVisible(true);
     has_submitted_frame_since_became_visible_ = false;
     if (layer_tree_frame_sink_request_pending_)
       HandlePendingLayerTreeFrameSinkRequest();
+    low_end_background_cleanup_task_.Cancel();
   }
 }
 
@@ -802,7 +809,6 @@ void CompositorImpl::OnGpuChannelEstablished(
                              ->GetDisplayNearestWindow(root_window_)
                              .color_space();
 
-  ui::ContextProviderCommandBuffer* shared_context = nullptr;
   auto context_provider =
       base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
@@ -813,7 +819,6 @@ void CompositorImpl::OnGpuChannelEstablished(
           GetCompositorContextSharedMemoryLimits(root_window_),
           GetCompositorContextAttributes(display_color_space_,
                                          requires_alpha_channel_),
-          shared_context,
           ui::command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
   auto result = context_provider->BindToCurrentThread();
   LOG_IF(FATAL, result == gpu::ContextResult::kFatalFailure)
@@ -870,8 +875,7 @@ void CompositorImpl::InitializeDisplay(
       frame_sink_id_, GetHostFrameSinkManager(), manager, display_.get(),
       nullptr /* display_client */, context_provider,
       nullptr /* worker_context_provider */, task_runner,
-      gpu_memory_buffer_manager, viz::ServerSharedBitmapManager::current(),
-      features::IsVizHitTestingEnabled());
+      gpu_memory_buffer_manager, features::IsVizHitTestingEnabled());
 
   display_->SetVisible(true);
   display_->Resize(size_);
@@ -925,8 +929,17 @@ void CompositorImpl::DidCommit() {
   root_window_->OnCompositingDidCommit();
 }
 
-void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
-  readback_layer_tree_->AddChild(layer);
+base::WeakPtr<ui::WindowAndroidCompositor> CompositorImpl::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+void CompositorImpl::IncrementReadbackRequestCount() {
+  pending_readback_request_count_++;
+}
+
+void CompositorImpl::DecrementReadbackRequestCount() {
+  DCHECK_GT(pending_readback_request_count_, 0u);
+  pending_readback_request_count_--;
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(
@@ -988,7 +1001,7 @@ void CompositorImpl::OnDisplayMetricsChanged(const display::Display& display,
 }
 
 bool CompositorImpl::HavePendingReadbacks() {
-  return !readback_layer_tree_->children().empty();
+  return pending_readback_request_count_ > 0u;
 }
 
 std::unique_ptr<ui::CompositorLock> CompositorImpl::GetCompositorLock(
@@ -1004,6 +1017,37 @@ bool CompositorImpl::IsDrawingFirstVisibleFrame() const {
 void CompositorImpl::OnCompositorLockStateChanged(bool locked) {
   if (host_)
     host_->SetDeferCommits(locked);
+}
+
+void CompositorImpl::EnqueueLowEndBackgroundCleanup() {
+  if (base::SysInfo::IsLowEndDevice()) {
+    low_end_background_cleanup_task_.Reset(
+        base::BindOnce(&CompositorImpl::DoLowEndBackgroundCleanup,
+                       weak_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, low_end_background_cleanup_task_.callback(),
+        base::TimeDelta::FromSeconds(5));
+  }
+}
+
+void CompositorImpl::DoLowEndBackgroundCleanup() {
+  // When we become visible, we immediately cancel the callback that runs this
+  // code.
+  DCHECK(!host_->IsVisible());
+
+  // First, evict all unlocked frames, allowing resources to be reclaimed.
+  viz::FrameEvictionManager::GetInstance()->PurgeAllUnlockedFrames();
+
+  // Next, notify the GPU process to do background processing, which will
+  // lose all renderer contexts.
+  content::GpuProcessHost::CallOnIO(
+      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+      false /* force_create */,
+      base::BindRepeating([](content::GpuProcessHost* host) {
+        if (host) {
+          host->gpu_service()->OnBackgrounded();
+        }
+      }));
 }
 
 }  // namespace content

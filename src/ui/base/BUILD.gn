@@ -125,8 +125,6 @@ component("base") {
     "cocoa/focus_tracker.mm",
     "cocoa/focus_window_set.h",
     "cocoa/focus_window_set.mm",
-    "cocoa/fullscreen_window_manager.h",
-    "cocoa/fullscreen_window_manager.mm",
     "cocoa/hover_button.h",
     "cocoa/hover_button.mm",
     "cocoa/hover_image_button.h",
@@ -212,7 +210,6 @@ component("base") {
     "l10n/l10n_util_collator.h",
     "l10n/l10n_util_mac.h",
     "l10n/l10n_util_mac.mm",
-    "l10n/l10n_util_posix.cc",
     "l10n/l10n_util_win.cc",
     "l10n/l10n_util_win.h",
     "l10n/time_format.cc",
@@ -312,15 +309,8 @@ component("base") {
     "win/message_box_win.h",
     "win/mouse_wheel_util.cc",
     "win/mouse_wheel_util.h",
-    "win/on_screen_keyboard_display_manager_stub.cc",
-    "win/on_screen_keyboard_display_manager_stub.h",
-    "win/on_screen_keyboard_display_manager_tab_tip.cc",
-    "win/on_screen_keyboard_display_manager_tab_tip.h",
     "win/open_file_name_win.cc",
     "win/open_file_name_win.h",
-    "win/osk_display_manager.cc",
-    "win/osk_display_manager.h",
-    "win/osk_display_observer.h",
     "win/scoped_ole_initializer.cc",
     "win/scoped_ole_initializer.h",
     "win/shell.cc",
@@ -333,6 +323,10 @@ component("base") {
     "window_open_disposition.h",
     "work_area_watcher_observer.h",
   ]
+
+  if (is_posix) {
+    sources += [ "l10n/l10n_util_posix.cc" ]
+  }
 
   if (!is_ios) {
     sources += [
@@ -403,6 +397,7 @@ component("base") {
   if (is_fuchsia) {
     sources += [
       "idle/idle_fuchsia.cc",
+      "l10n/l10n_util_posix.cc",
       "resource/resource_bundle_fuchsia.cc",
     ]
   }
@@ -857,7 +852,6 @@ test("ui_base_unittests") {
       "cocoa/controls/hyperlink_button_cell_unittest.mm",
       "cocoa/controls/hyperlink_text_view_unittest.mm",
       "cocoa/focus_tracker_unittest.mm",
-      "cocoa/fullscreen_window_manager_unittest.mm",
       "cocoa/hover_button_unittest.mm",
       "cocoa/hover_image_button_unittest.mm",
       "cocoa/menu_controller_unittest.mm",
@@ -886,6 +880,7 @@ test("ui_base_unittests") {
       "ime/input_method_base_unittest.cc",
       "ime/input_method_chromeos_unittest.cc",
       "ime/win/imm32_manager_unittest.cc",
+      "ime/win/on_screen_keyboard_display_manager_unittest.cc",
       "ime/win/tsf_input_scope_unittest.cc",
       "ime/win/tsf_text_store_unittest.cc",
     ]
@@ -940,7 +935,6 @@ test("ui_base_unittests") {
       "win/direct_manipulation_unittest.cc",
       "win/hwnd_subclass_unittest.cc",
       "win/open_file_name_win_unittest.cc",
-      "win/osk_display_manager_unittest.cc",
     ]
 
     ldflags = [

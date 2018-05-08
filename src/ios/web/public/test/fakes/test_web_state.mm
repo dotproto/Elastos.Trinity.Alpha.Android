@@ -4,13 +4,17 @@
 
 #import "ios/web/public/test/fakes/test_web_state.h"
 
+#import <Foundation/Foundation.h>
 #include <stdint.h>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#import "ios/web/public/crw_navigation_item_storage.h"
+#import "ios/web/public/crw_session_storage.h"
+#import "ios/web/public/serializable_user_data_manager.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
-#include "ios/web/public/web_state/web_state_observer.h"
+#import "ios/web/public/web_state/web_state_policy_decider.h"
 #include "ui/gfx/image/image.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -42,6 +46,10 @@ TestWebState::TestWebState()
 TestWebState::~TestWebState() {
   for (auto& observer : observers_)
     observer.WebStateDestroyed(this);
+  for (auto& observer : policy_deciders_)
+    observer.WebStateDestroyed();
+  for (auto& observer : policy_deciders_)
+    observer.ResetWebState();
 };
 
 WebStateDelegate* TestWebState::GetDelegate() {
@@ -105,7 +113,13 @@ TestWebState::GetSessionCertificatePolicyCache() {
 }
 
 CRWSessionStorage* TestWebState::BuildSessionStorage() {
-  return nil;
+  std::unique_ptr<web::SerializableUserData> serializable_user_data =
+      web::SerializableUserDataManager::FromWebState(this)
+          ->CreateSerializableUserData();
+  CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
+  [session_storage setSerializableUserData:std::move(serializable_user_data)];
+  session_storage.itemStorages = @[ [[CRWNavigationItemStorage alloc] init] ];
+  return session_storage;
 }
 
 void TestWebState::SetNavigationManager(
@@ -138,8 +152,8 @@ CRWJSInjectionReceiver* TestWebState::GetJSInjectionReceiver() const {
 void TestWebState::ExecuteJavaScript(const base::string16& javascript) {}
 
 void TestWebState::ExecuteJavaScript(const base::string16& javascript,
-                                     const JavaScriptResultCallback& callback) {
-  callback.Run(nullptr);
+                                     JavaScriptResultCallback callback) {
+  std::move(callback).Run(nullptr);
 }
 
 void TestWebState::ExecuteUserJavaScript(NSString* javaScript) {}
@@ -264,6 +278,12 @@ void TestWebState::OnDocumentSubmitted(const std::string& form_name,
   }
 }
 
+void TestWebState::OnBackForwardStateChanged() {
+  for (auto& observer : observers_) {
+    observer.DidChangeBackForwardState(this);
+  }
+}
+
 void TestWebState::OnVisibleSecurityStateChanged() {
   for (auto& observer : observers_) {
     observer.DidChangeVisibleSecurityState(this);
@@ -284,6 +304,24 @@ CRWContentView* TestWebState::GetTransientContentView() {
   return transient_content_view_;
 }
 
+bool TestWebState::ShouldAllowRequest(NSURLRequest* request,
+                                      ui::PageTransition transition) {
+  for (auto& policy_decider : policy_deciders_) {
+    if (!policy_decider.ShouldAllowRequest(request, transition))
+      return false;
+  }
+  return true;
+}
+
+bool TestWebState::ShouldAllowResponse(NSURLResponse* response,
+                                       bool for_main_frame) {
+  for (auto& policy_decider : policy_deciders_) {
+    if (!policy_decider.ShouldAllowResponse(response, for_main_frame))
+      return false;
+  }
+  return true;
+}
+
 void TestWebState::SetCurrentURL(const GURL& url) {
   url_ = url;
 }
@@ -298,6 +336,14 @@ void TestWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
 
 CRWWebViewProxyType TestWebState::GetWebViewProxy() const {
   return web_view_proxy_;
+}
+
+void TestWebState::AddPolicyDecider(WebStatePolicyDecider* decider) {
+  policy_deciders_.AddObserver(decider);
+}
+
+void TestWebState::RemovePolicyDecider(WebStatePolicyDecider* decider) {
+  policy_deciders_.RemoveObserver(decider);
 }
 
 WebStateInterfaceProvider* TestWebState::GetWebStateInterfaceProvider() {

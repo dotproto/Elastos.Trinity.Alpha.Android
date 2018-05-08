@@ -223,9 +223,10 @@ void TabletModeController::RemoveObserver(TabletModeObserver* observer) {
 }
 
 bool TabletModeController::ShouldAutoHideTitlebars(views::Widget* widget) {
+  DCHECK(widget);
   const bool tablet_mode = IsTabletModeWindowManagerEnabled();
-  if (!tablet_mode || !widget)
-    return tablet_mode;
+  if (!tablet_mode)
+    return false;
 
   return widget->IsMaximized() ||
          wm::GetWindowState(widget->GetNativeWindow())->IsSnapped();
@@ -529,7 +530,8 @@ bool TabletModeController::CanUseUnstableLidAngle() const {
   return elapsed_time >= kUnstableLidAngleDuration;
 }
 
-void TabletModeController::SetTickClockForTest(base::TickClock* tick_clock) {
+void TabletModeController::SetTickClockForTest(
+    const base::TickClock* tick_clock) {
   DCHECK(tick_clock_);
   tick_clock_ = tick_clock;
 }

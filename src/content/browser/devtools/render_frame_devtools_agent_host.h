@@ -19,7 +19,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
+#include "third_party/blink/public/web/devtools_agent.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "services/device/public/mojom/wake_lock.mojom.h"
@@ -73,6 +73,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   static bool WillCreateURLLoaderFactory(
       RenderFrameHostImpl* rfh,
       bool is_navigation,
+      bool has_suggested_download_filename,
       network::mojom::URLLoaderFactoryRequest* loader_factory_request);
 
   static void OnNavigationRequestWillBeSent(
@@ -139,6 +140,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void DidDetachInterstitialPage() override;
   void OnVisibilityChanged(content::Visibility visibility) override;
   void DidReceiveCompositorFrame() override;
+  void OnPageScaleFactorChanged(float page_scale_factor) override;
 
   bool IsChildFrame();
   bool IsFrameHostAllowedForRestrictedSessions();

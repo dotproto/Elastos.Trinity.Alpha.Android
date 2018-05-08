@@ -18,8 +18,8 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_util.h"
-#include "net/spdy/platform/api/spdy_string.h"
-#include "net/spdy/platform/api/spdy_string_piece.h"
+#include "net/third_party/spdy/platform/api/spdy_string.h"
+#include "net/third_party/spdy/platform/api/spdy_string_piece.h"
 
 namespace net {
 
@@ -114,7 +114,7 @@ void CreateSpdyHeadersFromHttpRequestForWebSocket(
     const HttpRequestHeaders& request_headers,
     SpdyHeaderBlock* headers) {
   (*headers)[kHttp2MethodHeader] = "CONNECT";
-  (*headers)[kHttp2AuthorityHeader] = GetHostAndPort(url);
+  (*headers)[kHttp2AuthorityHeader] = GetHostAndOptionalPort(url);
   (*headers)[kHttp2SchemeHeader] = "https";
   (*headers)[kHttp2PathHeader] = url.PathForRequest();
   (*headers)[kHttp2ProtocolHeader] = "websocket";

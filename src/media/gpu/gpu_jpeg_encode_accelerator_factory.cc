@@ -5,10 +5,11 @@
 #include "media/gpu/gpu_jpeg_encode_accelerator_factory.h"
 
 #include "base/bind.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "media/base/media_switches.h"
-#include "media/gpu/features.h"
+#include "media/gpu/buildflags.h"
 
 #if BUILDFLAG(USE_V4L2_CODEC) && defined(ARCH_CPU_ARM_FAMILY)
 #define USE_V4L2_JEA

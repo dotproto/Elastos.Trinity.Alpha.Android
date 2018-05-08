@@ -9,8 +9,6 @@
 #include <string>
 
 #include "ash/public/interfaces/app_list.mojom.h"
-#include "base/command_line.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +17,6 @@
 
 class AppListClientImpl;
 class AppListControllerDelegateImpl;
-class AppListViewDelegate;
 
 namespace app_list {
 class SearchModel;
@@ -30,27 +27,12 @@ template <typename T>
 struct DefaultSingletonTraits;
 }
 
-namespace test {
-class AppListServiceImplTestApi;
-}
-
 // An implementation of AppListService.
 class AppListServiceImpl : public AppListService {
  public:
   ~AppListServiceImpl() override;
 
   static AppListServiceImpl* GetInstance();
-
-  // Constructor used for testing.
-  AppListServiceImpl(const base::CommandLine& command_line,
-                     PrefService* local_state);
-
-  // Lazily create the Chrome AppListViewDelegate and set it to the current user
-  // profile.
-  AppListViewDelegate* GetViewDelegate();
-
-  void RecordAppListLaunch();
-  static void RecordAppListAppLaunch();
 
   // AppListService overrides:
   Profile* GetCurrentAppListProfile() override;
@@ -79,29 +61,19 @@ class AppListServiceImpl : public AppListService {
 
   // Returns a pointer to control the app list views in ash.
   ash::mojom::AppListController* GetAppListController();
+  AppListClientImpl* GetAppListClient();
 
   // TODO(hejq): Search model migration is not done yet. Chrome still accesses
   //             it directly in non-mus+ash mode.
   app_list::SearchModel* GetSearchModelFromAsh();
 
- protected:
-  AppListServiceImpl();
-
-  // Perform startup checks shared between desktop implementations of the app
-  // list. Currently this checks command line flags to enable or disable the app
-  // list, and records UMA stats delayed from a previous Chrome process.
-  void PerformStartupChecks();
-
  private:
-  friend class test::AppListServiceImplTestApi;
   friend struct base::DefaultSingletonTraits<AppListServiceImpl>;
-  static void SendAppListStats();
 
+  AppListServiceImpl();
   std::string GetProfileName();
 
-  base::CommandLine command_line_;
   PrefService* local_state_;
-  std::unique_ptr<AppListViewDelegate> view_delegate_;
 
   AppListControllerDelegateImpl controller_delegate_;
   ash::mojom::AppListController* app_list_controller_ = nullptr;

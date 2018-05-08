@@ -160,7 +160,7 @@ TEST_F(ContentResourceProviderTest, VerifyCorrectProxyUsed) {
   } tests[] = {
       {GURL("http://www.google.com/main-frame"),
        content::RESOURCE_TYPE_MAIN_FRAME,
-       ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
+       ResourceTypeProvider::CONTENT_TYPE_MAIN_FRAME},
       {GURL("http://www.google.com/sub-frame"),
        content::RESOURCE_TYPE_SUB_FRAME,
        ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
@@ -201,10 +201,6 @@ TEST_F(ContentResourceProviderTest, VerifyCorrectProxyUsed) {
         CreateRequestByType(test.gurl, test.resource_type);
     request->Start();
     base::RunLoop().RunUntilIdle();
-
-    histogram_tester.ExpectUniqueSample(
-        "DataReductionProxy.ResourceContentType", test.expected_content_type,
-        1);
 
     EXPECT_EQ(test.expected_content_type,
               content_resource_type_provider()->GetContentType(request->url()));
@@ -241,7 +237,7 @@ TEST_F(ContentResourceProviderTest, SetAndGetContentResourceTypeContent) {
   } tests[] = {
       {GURL("http://www.google.com/main-frame"),
        content::RESOURCE_TYPE_MAIN_FRAME,
-       ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
+       ResourceTypeProvider::CONTENT_TYPE_MAIN_FRAME},
       {GURL("http://www.google.com/sub-frame"),
        content::RESOURCE_TYPE_SUB_FRAME,
        ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
@@ -282,10 +278,6 @@ TEST_F(ContentResourceProviderTest, SetAndGetContentResourceTypeContent) {
         CreateRequestByType(test.gurl, test.resource_type);
     request->Start();
     base::RunLoop().RunUntilIdle();
-
-    histogram_tester.ExpectUniqueSample(
-        "DataReductionProxy.ResourceContentType", test.expected_content_type,
-        1);
 
     EXPECT_EQ(test.expected_content_type,
               content_resource_type_provider()->GetContentType(request->url()));
@@ -327,7 +319,7 @@ TEST_F(ContentResourceProviderTest, FetchDirect) {
   } tests[] = {
       {GURL("http://www.google.com/main-frame"),
        content::RESOURCE_TYPE_MAIN_FRAME,
-       ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
+       ResourceTypeProvider::CONTENT_TYPE_MAIN_FRAME},
       {GURL("http://www.google.com/sub-frame"),
        content::RESOURCE_TYPE_SUB_FRAME,
        ResourceTypeProvider::CONTENT_TYPE_UNKNOWN},
@@ -368,10 +360,6 @@ TEST_F(ContentResourceProviderTest, FetchDirect) {
         CreateRequestByType(test.gurl, test.resource_type);
     request->Start();
     base::RunLoop().RunUntilIdle();
-
-    histogram_tester.ExpectUniqueSample(
-        "DataReductionProxy.ResourceContentType", test.expected_content_type,
-        1);
 
     EXPECT_EQ(test.expected_content_type,
               content_resource_type_provider()->GetContentType(request->url()));

@@ -13,11 +13,16 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "chromecast/browser/cast_content_window.h"
+#include "chromecast/graphics/cast_window_manager.h"
+#include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
 
 namespace chromecast {
 
 class CastWindowManager;
+
+using shell::VisibilityPriority;
 
 // A simplified interface for loading and displaying WebContents in cast_shell.
 class CastWebView {
@@ -42,6 +47,15 @@ class CastWebView {
         const base::string16& message,
         int32_t line_no,
         const base::string16& source_id) = 0;
+
+    // Invoked by CastWebView when WebContentsDelegate::RunBluetoothChooser is
+    // called. Returns a BluetoothChooser, a class used to solicit bluetooth
+    // device selection from the user for WebBluetooth applications. If a
+    // delegate does not provide an implementation, WebBluetooth will not be
+    // supported for that CastWebView.
+    virtual std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
+        content::RenderFrameHost* frame,
+        const content::BluetoothChooser::EventHandler& event_handler);
   };
 
   // Observer interface for tracking CastWebView lifetime.
@@ -100,9 +114,12 @@ class CastWebView {
   virtual void ClosePage(const base::TimeDelta& shutdown_delay) = 0;
 
   // Adds the page to the window manager and makes it visible to the user if
-  // |is_visible| is true.
-  virtual void CreateWindow(CastWindowManager* window_manager,
-                            bool is_visible) = 0;
+  // |is_visible| is true. |z_order| determines how this window is layered in
+  // relationt other windows (higher value == more foreground).
+  virtual void InitializeWindow(CastWindowManager* window_manager,
+                                bool is_visible,
+                                CastWindowManager::WindowId z_order,
+                                VisibilityPriority initial_priority) = 0;
 
   // Observer interface:
   void AddObserver(Observer* observer);

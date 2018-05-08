@@ -8,13 +8,14 @@
 
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/presenter/app_list_presenter_delegate_factory.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/shell.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_metrics.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/views/app_list_main_view.h"
@@ -99,15 +100,17 @@ aura::Window* AppListPresenterImpl::GetWindow() {
 void AppListPresenterImpl::Show(int64_t display_id,
                                 base::TimeTicks event_time_stamp) {
   if (is_visible_) {
-    if (display_id != GetDisplayId())
+    // Launcher is always visible on the internal display when home launcher is
+    // enabled in tablet mode.
+    if (display_id != GetDisplayId() &&
+        !controller_->IsHomeLauncherEnabledInTabletMode()) {
       Dismiss(event_time_stamp);
+    }
     return;
   }
 
   is_visible_ = true;
   RequestPresentationTime(display_id, event_time_stamp);
-  NotifyTargetVisibilityChanged(GetTargetVisibility());
-  NotifyVisibilityChanged(GetTargetVisibility(), display_id);
 
   if (view_) {
     ScheduleAnimation();
@@ -123,6 +126,8 @@ void AppListPresenterImpl::Show(int64_t display_id,
   }
   presenter_delegate_->OnShown(display_id);
   view_delegate_->ViewShown(display_id);
+  NotifyTargetVisibilityChanged(GetTargetVisibility());
+  NotifyVisibilityChanged(GetTargetVisibility(), display_id);
 }
 
 void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
@@ -135,8 +140,6 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
   is_visible_ = false;
   const int64_t display_id = GetDisplayId();
   RequestPresentationTime(display_id, event_time_stamp);
-  NotifyTargetVisibilityChanged(GetTargetVisibility());
-  NotifyVisibilityChanged(GetTargetVisibility(), display_id);
   // The dismissal may have occurred in response to the app list losing
   // activation. Otherwise, our widget is currently active. When the animation
   // completes we'll hide the widget, changing activation. If a menu is shown
@@ -149,6 +152,8 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
   view_delegate_->ViewClosing();
   presenter_delegate_->OnDismissed();
   ScheduleAnimation();
+  NotifyTargetVisibilityChanged(GetTargetVisibility());
+  NotifyVisibilityChanged(GetTargetVisibility(), display_id);
   base::RecordAction(base::UserMetricsAction("Launcher_Dismiss"));
 }
 
@@ -219,6 +224,10 @@ void AppListPresenterImpl::SetView(AppListView* view) {
   widget->AddObserver(this);
   aura::client::GetFocusClient(widget->GetNativeView())->AddObserver(this);
   view_->GetAppsPaginationModel()->AddObserver(this);
+
+  // Sync the |onscreen_keyboard_shown_| in case |view_| is not initiated when
+  // the on-screen is shown.
+  view_->set_onscreen_keyboard_shown(controller_->onscreen_keyboard_shown());
   view_->ShowWhenReady();
 }
 
@@ -314,7 +323,8 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
     aura::Window* applist_container = applist_window->parent();
     if (applist_container->Contains(lost_focus) &&
         (!gained_focus || !applist_container->Contains(gained_focus)) &&
-        !switches::ShouldNotDismissOnBlur()) {
+        !switches::ShouldNotDismissOnBlur() &&
+        !controller_->IsHomeLauncherEnabledInTabletMode()) {
       Dismiss(base::TimeTicks());
     }
   }

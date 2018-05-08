@@ -18,7 +18,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/histogram_tester.h"
@@ -85,6 +84,7 @@ struct TestScenario {
   const char* response_mime_type;
   MimeType canonical_mime_type;
   bool include_no_sniff_header;
+  bool simulate_range_response;
   AccessControlAllowOriginHeader cors_response;
   // |packets| specifies the response data which may arrive over the course of
   // several writes.
@@ -165,6 +165,8 @@ struct TestScenario {
             << "\n  canonical_mime_type = " << scenario.canonical_mime_type
             << "\n  include_no_sniff    = "
             << (scenario.include_no_sniff_header ? "true" : "false")
+            << "\n  range_response      = "
+            << (scenario.simulate_range_response ? "true" : "false")
             << "\n  cors_response       = " << cors_response
             << "\n  packets             = " << packets
             << "\n  verdict             = " << verdict
@@ -206,8 +208,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -221,8 +224,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                    // initiator_origin
         OriginHeader::kOmit,                    // cors_request
         "text/html",                            // response_mime_type
-        MimeType::kInvalid,                     // canonical_mime_type
+        MimeType::kInvalidMimeType,             // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {")]}',\n[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kAllow,                                        // verdict
@@ -236,8 +240,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                    // initiator_origin
         OriginHeader::kOmit,                    // cors_request
         "text/json",                            // response_mime_type
-        MimeType::kInvalid,                     // canonical_mime_type
+        MimeType::kInvalidMimeType,             // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {")]}'\n[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kAllow,                                       // verdict
@@ -253,6 +258,7 @@ const TestScenario kScenarios[] = {
         "application/javascript",               // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"var x=3;"},                           // packets
         Verdict::kAllow,                        // verdict
@@ -266,8 +272,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",               // initiator_origin
         OriginHeader::kInclude,            // cors_request
         "text/html",                       // response_mime_type
-        MimeType::kInvalid,                // canonical_mime_type
+        MimeType::kInvalidMimeType,        // canonical_mime_type
         false,                             // include_no_sniff_header
+        false,                             // simulate_range_response
         AccessControlAllowOriginHeader::kAllowInitiatorOrigin,  // cors_response
         {"<html><head>this should sniff as HTML"},              // packets
         Verdict::kAllow,                                        // verdict
@@ -281,8 +288,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kInclude,                     // cors_request
         "application/rss+xml",                      // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kAllowAny,  // cors_response
         {"<?xml version=\"1.0\" encoding=\"UTF-8\" ?>"},  // packets
         Verdict::kAllow,                                  // verdict
@@ -296,8 +304,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                         // initiator_origin
         OriginHeader::kInclude,                      // cors_request
         "text/json",                                 // response_mime_type
-        MimeType::kInvalid,                          // canonical_mime_type
+        MimeType::kInvalidMimeType,                  // canonical_mime_type
         false,                                       // include_no_sniff_header
+        false,                                       // simulate_range_response
         AccessControlAllowOriginHeader::kAllowNull,  // cors_response
         {"{\"x\" : 3}"},                             // packets
         Verdict::kAllow,                             // verdict
@@ -311,8 +320,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -326,8 +336,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -341,8 +352,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
-        false,                                      // include_no_sniff_header
+        MimeType::kHtml,                            // canonical_mime_type
+        true,                                       // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -356,8 +368,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",             // initiator_origin
         OriginHeader::kInclude,          // cors_request
         "text/html",                     // response_mime_type
-        MimeType::kInvalid,              // canonical_mime_type
-        false,                           // include_no_sniff_header
+        MimeType::kInvalidMimeType,      // canonical_mime_type
+        true,                            // include_no_sniff_header
+        false,                           // simulate_range_response
         AccessControlAllowOriginHeader::kAllowInitiatorOrigin,  // cors_response
         {"<html><head>this should sniff as HTML"},              // first_chunk
         Verdict::kAllow,                                        // verdict
@@ -371,8 +384,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kInclude,                     // cors_request
         "application/javascript",                   // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         true,                                       // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kAllowAny,  // cors_response
         {")]}'\n[true, false]"},                    // packets
         Verdict::kAllow,                            // verdict
@@ -388,6 +402,7 @@ const TestScenario kScenarios[] = {
         "application/javascript",               // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"{ \"key\"", ": true }"},              // packets
         Verdict::kBlock,                        // verdict
@@ -403,6 +418,7 @@ const TestScenario kScenarios[] = {
         "image/png",                            // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {},                                     // packets
         Verdict::kAllow,                        // verdict
@@ -418,6 +434,7 @@ const TestScenario kScenarios[] = {
         "image/png",                            // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {},                                     // packets
         Verdict::kAllow,                        // verdict
@@ -435,6 +452,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"foo({\"x\" : 3})"},                   // packets
         Verdict::kAllow,                        // verdict
@@ -450,6 +468,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"var x = 3;"},                         // packets
         Verdict::kAllow,                        // verdict
@@ -465,6 +484,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"{", "    \n", "var x = 3;\n", "console.log('hello');"},  // packets
         Verdict::kAllow,                                           // verdict
@@ -481,6 +501,7 @@ const TestScenario kScenarios[] = {
         "text/json",                            // response_mime_type
         MimeType::kJson,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"invoke({ \"key\": true });"},         // packets
         Verdict::kAllow,                        // verdict
@@ -496,6 +517,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"[1, 2, {}, true, false, \"yay\"]"},   // packets
         Verdict::kAllow,                        // verdict
@@ -511,6 +533,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"[1, 2, {}, true, false, \"yay\"]", ".map(x => console.log(x))",
          ".map(x => console.log(x));"},  // packets
@@ -527,6 +550,7 @@ const TestScenario kScenarios[] = {
         "application/xml",                      // response_mime_type
         MimeType::kXml,                         // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"Won't sniff as XML"},                 // packets
         Verdict::kAllow,                        // verdict
@@ -539,9 +563,10 @@ const TestScenario kScenarios[] = {
         RESOURCE_TYPE_XHR,                      // resource_type
         "http://www.a.com/",                    // initiator_origin
         OriginHeader::kOmit,                    // cors_request
-        "text/x-json",                          // response_mime_type
+        "text/json",                            // response_mime_type
         MimeType::kJson,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"Won't sniff as JSON"},                // packets
         Verdict::kAllow,                        // verdict
@@ -557,6 +582,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"<htm"},                               // packets
         Verdict::kAllow,                        // verdict
@@ -572,6 +598,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {kHTMLWithTooLongComment},              // packets
         Verdict::kAllow,                        // verdict
@@ -587,6 +614,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {},                                     // packets
         Verdict::kAllow,                        // verdict
@@ -600,8 +628,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -615,8 +644,9 @@ const TestScenario kScenarios[] = {
         "http://www.a.com/",                        // initiator_origin
         OriginHeader::kOmit,                        // cors_request
         "text/html",                                // response_mime_type
-        MimeType::kInvalid,                         // canonical_mime_type
+        MimeType::kInvalidMimeType,                 // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kAllow,                            // verdict
@@ -634,6 +664,7 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         true,                                       // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -649,6 +680,7 @@ const TestScenario kScenarios[] = {
         "text/html; charset=utf-8",                 // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         true,                                       // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -664,6 +696,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"Wouldn't sniff as HTML"},             // packets
         Verdict::kBlock,                        // verdict
@@ -679,6 +712,7 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         true,                                       // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -696,6 +730,7 @@ const TestScenario kScenarios[] = {
         "text/html",                       // response_mime_type
         MimeType::kHtml,                   // canonical_mime_type
         false,                             // include_no_sniff_header
+        false,                             // simulate_range_response
         AccessControlAllowOriginHeader::kAllowExampleDotCom,  // cors_response
         {"<hTmL><head>this should sniff as HTML"},            // packets
         Verdict::kBlock,                                      // verdict
@@ -715,6 +750,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {},                                     // packets
         Verdict::kBlock,                        // verdict
@@ -732,6 +768,7 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -747,6 +784,7 @@ const TestScenario kScenarios[] = {
         "application/xml",                      // response_mime_type
         MimeType::kXml,                         // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"<?xml version=\"1.0\" encoding=\"UTF-8\" ?>"},  // packets
         Verdict::kBlock,                                  // verdict
@@ -762,6 +800,7 @@ const TestScenario kScenarios[] = {
         "application/json",                     // response_mime_type
         MimeType::kJson,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"{\"x\" : 3}"},                        // packets
         Verdict::kBlock,                        // verdict
@@ -777,6 +816,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                                 // response_mime_type
         MimeType::kPlain,                             // canonical_mime_type
         false,                                        // include_no_sniff_header
+        false,                                        // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,        // cors_response
         {"    ", "\t", "{", "\"x\" ", "  ", ": 3}"},  // packets
         Verdict::kBlock,                              // verdict
@@ -792,6 +832,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"    ", "\t", "<", "?", "x", "m", "l", ">"},  // packets
         Verdict::kBlock,                               // verdict
@@ -807,6 +848,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"    <!--", "\t -", "-", "->", "<", "s", "c", "r", "i", "p",
          "t"},            // packets
@@ -823,6 +865,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                           // response_mime_type
         MimeType::kPlain,                       // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"    <!--", " <?xml ", "-->", "<", "h", "e", "a", "d"},  // packets
         Verdict::kBlock,                                          // verdict
@@ -838,6 +881,7 @@ const TestScenario kScenarios[] = {
         "text/plain",                               // response_mime_type
         MimeType::kPlain,                           // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -853,6 +897,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"<!doc", "type html><html itemscope=\"\" ",
          "itemtype=\"http://schema.org/SearchResultsPage\" ",
@@ -870,6 +915,7 @@ const TestScenario kScenarios[] = {
         "text/html",                       // response_mime_type
         MimeType::kHtml,                   // canonical_mime_type
         false,                             // include_no_sniff_header
+        false,                             // simulate_range_response
         AccessControlAllowOriginHeader::kAllowExampleDotCom,  // cors_response
         {"<hTmL><head>this should sniff as HTML"},            // packets
         Verdict::kBlock,                                      // verdict
@@ -885,6 +931,7 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // first_chunk
         Verdict::kBlock,                            // verdict
@@ -900,6 +947,7 @@ const TestScenario kScenarios[] = {
         "text/json",                            // response_mime_type
         MimeType::kJson,                        // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {")]", "}'\n[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kBlock,                                           // verdict
@@ -915,6 +963,7 @@ const TestScenario kScenarios[] = {
         "audio/x-wav",                          // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {")]", "}'\n[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kBlock,                                           // verdict
@@ -930,6 +979,7 @@ const TestScenario kScenarios[] = {
         "application/javascript",               // response_mime_type
         MimeType::kOthers,                      // canonical_mime_type
         false,                                  // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {"for(;;)", ";[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kBlock,                                             // verdict
@@ -945,6 +995,7 @@ const TestScenario kScenarios[] = {
         "text/html",                            // response_mime_type
         MimeType::kHtml,                        // canonical_mime_type
         true,                                   // include_no_sniff_header
+        false,                                  // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,  // cors_response
         {")]", "}'\n[true, true, false, \"user@chromium.org\"]"},  // packets
         Verdict::kBlock,                                           // verdict
@@ -961,6 +1012,7 @@ const TestScenario kScenarios[] = {
         "application/javascript",          // response_mime_type
         MimeType::kOthers,                 // canonical_mime_type
         true,                              // include_no_sniff_header
+        false,                             // simulate_range_response
         AccessControlAllowOriginHeader::kAllowExampleDotCom,  // cors_response
         {")]}'\n[true, false]"},                              // packets
         Verdict::kBlock,                                      // verdict
@@ -976,6 +1028,7 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
@@ -991,10 +1044,43 @@ const TestScenario kScenarios[] = {
         "text/html",                                // response_mime_type
         MimeType::kHtml,                            // canonical_mime_type
         false,                                      // include_no_sniff_header
+        false,                                      // simulate_range_response
         AccessControlAllowOriginHeader::kOmit,      // cors_response
         {"<html><head>this should sniff as HTML"},  // packets
         Verdict::kBlock,                            // verdict
         0,                                          // verdict_packet
+    },
+    {
+        "Allowed: text/plain 206 media",
+        __LINE__,
+        "http://www.b.com/movie.txt",           // target_url
+        RESOURCE_TYPE_MEDIA,                    // resource_type
+        "http://www.a.com/",                    // initiator_origin
+        OriginHeader::kOmit,                    // cors_request
+        "text/plain",                           // response_mime_type
+        MimeType::kPlain,                       // canonical_mime_type
+        false,                                  // include_no_sniff_header
+        true,                                   // simulate_range_response
+        AccessControlAllowOriginHeader::kOmit,  // cors_response
+        {"movie content"},                      // packets
+        Verdict::kAllow,                        // verdict
+        -1,                                     // verdict_packet
+    },
+    {
+        "Blocked: text/html 206 media",
+        __LINE__,
+        "http://www.b.com/movie.html",           // target_url
+        RESOURCE_TYPE_MEDIA,                     // resource_type
+        "http://www.a.com/",                     // initiator_origin
+        OriginHeader::kOmit,                     // cors_request
+        "text/html",                             // response_mime_type
+        MimeType::kHtml,                         // canonical_mime_type
+        false,                                   // include_no_sniff_header
+        true,                                    // simulate_range_response
+        AccessControlAllowOriginHeader::kOmit,   // cors_response
+        {"simulated *middle*-of-html content"},  // packets
+        Verdict::kBlock,                         // verdict
+        -1,                                      // verdict_packet
     },
 };
 
@@ -1105,12 +1191,14 @@ class CrossSiteDocumentResourceHandlerTest
   scoped_refptr<network::ResourceResponse> CreateResponse(
       const char* response_mime_type,
       bool include_no_sniff_header,
+      bool simulate_range_response,
       AccessControlAllowOriginHeader cors_response,
       const char* initiator_origin) {
     scoped_refptr<network::ResourceResponse> response =
         base::MakeRefCounted<network::ResourceResponse>();
     scoped_refptr<net::HttpResponseHeaders> response_headers =
-        base::MakeRefCounted<net::HttpResponseHeaders>("");
+        base::MakeRefCounted<net::HttpResponseHeaders>(
+            simulate_range_response ? "HTTP/1.1 206 OK" : "HTTP/1.1 200 OK");
 
     // Content-Type header.
     std::string charset;
@@ -1126,6 +1214,12 @@ class CrossSiteDocumentResourceHandlerTest
     // No sniff header.
     if (include_no_sniff_header)
       response_headers->AddHeader("X-Content-Type-Options: nosniff");
+
+    // Range response.  The product code doesn't currently look at the exact
+    // range specified, so we can get away with testing with arbitrary/random
+    // values.
+    if (simulate_range_response)
+      response_headers->AddHeader("Content-Range: bytes 200-1000/67589");
 
     // CORS header.
     if (cors_response == AccessControlAllowOriginHeader::kAllowAny) {
@@ -1231,7 +1325,8 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, ResponseBlocking) {
   // Set up response based on scenario.
   scoped_refptr<network::ResourceResponse> response = CreateResponse(
       scenario.response_mime_type, scenario.include_no_sniff_header,
-      scenario.cors_response, scenario.initiator_origin);
+      scenario.simulate_range_response, scenario.cors_response,
+      scenario.initiator_origin);
 
   ASSERT_EQ(MockResourceLoader::Status::IDLE,
             mock_loader_->OnResponseStarted(response));
@@ -1239,7 +1334,7 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, ResponseBlocking) {
   // Verify MIME type was classified correctly.
   ASSERT_TRUE(document_blocker_->has_response_started_);
   EXPECT_EQ(scenario.canonical_mime_type,
-            document_blocker_->canonical_mime_type_);
+            document_blocker_->analyzer_->canonical_mime_type());
 
   // Verify that we will sniff content into a different buffer if sniffing is
   // needed.  Note that the different buffer is used even for blocking cases
@@ -1247,7 +1342,7 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, ResponseBlocking) {
   // handler doesn't look at the data in that case, but there's no way to verify
   // it in the test.
   bool expected_to_sniff = scenario.verdict_packet >= 0;
-  ASSERT_EQ(expected_to_sniff, document_blocker_->needs_sniffing_);
+  ASSERT_EQ(expected_to_sniff, document_blocker_->analyzer_->needs_sniffing());
 
   // Verify that we correctly decide whether to block based on headers.  Note
   // that this includes cases that will later be allowed after sniffing.
@@ -1423,27 +1518,27 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, ResponseBlocking) {
     case MimeType::kOthers:
       bucket = "Others";
       break;
-    case MimeType::kInvalid:
+    case MimeType::kInvalidMimeType:
       DCHECK_EQ(Verdict::kAllow, scenario.verdict);
       DCHECK_EQ(-1, scenario.verdict_packet);
       bucket = "No blocking = no bucket";
       break;
   }
   int start_action = static_cast<int>(
-      CrossSiteDocumentResourceHandler::Action::kResponseStarted);
+      network::CrossOriginReadBlocking::Action::kResponseStarted);
   int end_action = -1;
   if (should_be_blocked && expected_to_sniff) {
     end_action = static_cast<int>(
-        CrossSiteDocumentResourceHandler::Action::kBlockedAfterSniffing);
+        network::CrossOriginReadBlocking::Action::kBlockedAfterSniffing);
   } else if (should_be_blocked && !expected_to_sniff) {
     end_action = static_cast<int>(
-        CrossSiteDocumentResourceHandler::Action::kBlockedWithoutSniffing);
+        network::CrossOriginReadBlocking::Action::kBlockedWithoutSniffing);
   } else if (!should_be_blocked && expected_to_sniff) {
     end_action = static_cast<int>(
-        CrossSiteDocumentResourceHandler::Action::kAllowedAfterSniffing);
+        network::CrossOriginReadBlocking::Action::kAllowedAfterSniffing);
   } else if (!should_be_blocked && !expected_to_sniff) {
     end_action = static_cast<int>(
-        CrossSiteDocumentResourceHandler::Action::kAllowedWithoutSniffing);
+        network::CrossOriginReadBlocking::Action::kAllowedWithoutSniffing);
   } else {
     NOTREACHED();
   }
@@ -1521,7 +1616,8 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, OnWillReadDefer) {
   // Set up response based on scenario.
   scoped_refptr<network::ResourceResponse> response = CreateResponse(
       scenario.response_mime_type, scenario.include_no_sniff_header,
-      scenario.cors_response, scenario.initiator_origin);
+      scenario.simulate_range_response, scenario.cors_response,
+      scenario.initiator_origin);
 
   ASSERT_EQ(MockResourceLoader::Status::IDLE,
             mock_loader_->OnResponseStarted(response));
@@ -1533,7 +1629,7 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, OnWillReadDefer) {
   // it in the test.
   bool expected_to_sniff =
       (scenario.verdict_packet != kVerdictPacketForHeadersBasedVerdict);
-  ASSERT_EQ(expected_to_sniff, document_blocker_->needs_sniffing_);
+  ASSERT_EQ(expected_to_sniff, document_blocker_->analyzer_->needs_sniffing());
 
   // Cause the TestResourceHandler to defer when OnWillRead is called, to make
   // sure the test scenarios still work when the downstream handler's buffer
@@ -1662,7 +1758,8 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, MimeSnifferInterop) {
   // Set up response based on scenario.
   scoped_refptr<network::ResourceResponse> response = CreateResponse(
       scenario.response_mime_type, scenario.include_no_sniff_header,
-      scenario.cors_response, scenario.initiator_origin);
+      scenario.simulate_range_response, scenario.cors_response,
+      scenario.initiator_origin);
 
   // Call OnResponseStarted.  Note that MimeSniffingResourceHandler will not
   // immediately forward the call to CrossSiteDocumentResourceHandler.
@@ -1714,9 +1811,9 @@ TEST_P(CrossSiteDocumentResourceHandlerTest, MimeSnifferInterop) {
   // CrossSiteDocumentResourceHandler's behavior.
   ASSERT_TRUE(document_blocker_->has_response_started_);
   EXPECT_EQ(scenario.canonical_mime_type,
-            document_blocker_->canonical_mime_type_);
-  EXPECT_EQ(expected_to_sniff, document_blocker_->needs_sniffing_);
-  EXPECT_EQ(expected_to_block_based_on_headers,
+            document_blocker_->analyzer_->canonical_mime_type());
+  EXPECT_EQ(expected_to_sniff, document_blocker_->analyzer_->needs_sniffing());
+  ASSERT_EQ(expected_to_block_based_on_headers,
             document_blocker_->should_block_based_on_headers_);
 
   // Ensure that all or none of the data arrived.

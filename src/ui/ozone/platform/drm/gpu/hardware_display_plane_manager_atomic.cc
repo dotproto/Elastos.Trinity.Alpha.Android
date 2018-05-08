@@ -4,10 +4,14 @@
 
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h"
 
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+
 #include "base/bind.h"
 #include "base/files/platform_file.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_atomic.h"
@@ -75,7 +79,7 @@ bool HardwareDisplayPlaneManagerAtomic::Commit(
 
   if (!drm_->CommitProperties(plane_list->atomic_property_set.get(), flags,
                               crtcs.size(),
-                              base::Bind(&AtomicPageFlipCallback, crtcs))) {
+                              base::BindOnce(&AtomicPageFlipCallback, crtcs))) {
     if (!test_only) {
       PLOG(ERROR) << "Failed to commit properties for page flip.";
     } else {
@@ -109,13 +113,57 @@ bool HardwareDisplayPlaneManagerAtomic::DisableOverlayPlanes(
   // to get the pageflip callback. In this case we don't need to be notified
   // at the next page flip, so the list of crtcs can be empty.
   std::vector<base::WeakPtr<CrtcController>> crtcs;
-  bool ret = drm_->CommitProperties(plane_list->atomic_property_set.get(),
-                                    DRM_MODE_ATOMIC_NONBLOCK, crtcs.size(),
-                                    base::Bind(&AtomicPageFlipCallback, crtcs));
+  bool ret = drm_->CommitProperties(
+      plane_list->atomic_property_set.get(), DRM_MODE_ATOMIC_NONBLOCK,
+      crtcs.size(), base::BindOnce(&AtomicPageFlipCallback, crtcs));
   PLOG_IF(ERROR, !ret) << "Failed to commit properties for page flip.";
 
   plane_list->atomic_property_set.reset(drmModeAtomicAlloc());
   return ret;
+}
+
+bool HardwareDisplayPlaneManagerAtomic::SetColorCorrectionOnAllCrtcPlanes(
+    uint32_t crtc_id,
+    ScopedDrmColorCtmPtr ctm_blob_data) {
+  ScopedDrmAtomicReqPtr property_set(drmModeAtomicAlloc());
+  uint32_t blob_id = 0;
+  int fd = drm_->get_fd();
+  int ret = drmModeCreatePropertyBlob(fd, ctm_blob_data.get(),
+                                      sizeof(drm_color_ctm), &blob_id);
+  DCHECK(!ret && blob_id);
+  ScopedDrmPropertyBlob property_blob(fd, blob_id);
+
+  const int crtc_index = LookupCrtcIndex(crtc_id);
+  DCHECK_GE(crtc_index, 0);
+  const int crtc_bit = 1 << crtc_index;
+
+  ScopedDrmPlaneResPtr plane_resources(drmModeGetPlaneResources(fd));
+  DCHECK(plane_resources);
+  bool all_planes_ctm = true;
+  for (uint32_t i = 0; i < plane_resources->count_planes; ++i) {
+    ScopedDrmPlanePtr drm_plane(
+        drmModeGetPlane(fd, plane_resources->planes[i]));
+    DCHECK(drm_plane);
+
+    // This assumes planes can belong only to one crtc.
+    if (!(drm_plane->possible_crtcs & crtc_bit))
+      continue;
+    ScopedDrmObjectPropertyPtr plane_props(drmModeObjectGetProperties(
+        fd, plane_resources->planes[i], DRM_MODE_OBJECT_PLANE));
+    DCHECK(plane_props);
+    ScopedDrmPropertyPtr property(
+        FindDrmProperty(fd, plane_props.get(), "PLANE_CTM"));
+    if (property) {
+      int ret = drmModeAtomicAddProperty(
+          property_set.get(), plane_resources->planes[i], property->prop_id,
+          property_blob.blob_id);
+      LOG_IF(ERROR, ret < 0) << "Failed to set PLANE_CTM property.";
+    }
+    all_planes_ctm = all_planes_ctm && property;
+  }
+  drm_->CommitProperties(property_set.get(), DRM_MODE_ATOMIC_NONBLOCK, 0,
+                         DrmDevice::PageFlipCallback());
+  return all_planes_ctm;
 }
 
 bool HardwareDisplayPlaneManagerAtomic::ValidatePrimarySize(
@@ -142,7 +190,7 @@ bool HardwareDisplayPlaneManagerAtomic::SetPlaneData(
     CrtcController* crtc) {
   HardwareDisplayPlaneAtomic* atomic_plane =
       static_cast<HardwareDisplayPlaneAtomic*>(hw_plane);
-  uint32_t framebuffer_id = overlay.z_order
+  uint32_t framebuffer_id = overlay.enable_blend
                                 ? overlay.buffer->GetFramebufferId()
                                 : overlay.buffer->GetOpaqueFramebufferId();
   if (!atomic_plane->SetPlaneData(plane_list->atomic_property_set.get(),

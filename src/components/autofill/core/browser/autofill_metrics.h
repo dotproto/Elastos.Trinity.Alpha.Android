@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_METRICS_H_
 
 #include <stddef.h>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -151,6 +152,26 @@ class AutofillMetrics {
     NUM_SUBMITTED_SERVER_CARD_EXPIRATION_STATUS_METRICS,
   };
 
+  // Metric to measure if a card for which upload was offered is already stored
+  // as a local card on the device or if it has not yet been seen.
+  enum UploadOfferedCardOriginMetric {
+    // Credit card upload was offered for a local card already on the device.
+    OFFERING_UPLOAD_OF_LOCAL_CARD,
+    // Credit card upload was offered for a newly-seen credit card.
+    OFFERING_UPLOAD_OF_NEW_CARD,
+    NUM_UPLOAD_OFFERED_CARD_ORIGIN_METRICS,
+  };
+
+  // Metric to measure if a card for which upload was accepted is already stored
+  // as a local card on the device or if it has not yet been seen.
+  enum UploadAcceptedCardOriginMetric {
+    // The user accepted upload of a local card already on the device.
+    USER_ACCEPTED_UPLOAD_OF_LOCAL_CARD,
+    // The user accepted upload of a newly-seen credit card.
+    USER_ACCEPTED_UPLOAD_OF_NEW_CARD,
+    NUM_UPLOAD_ACCEPTED_CARD_ORIGIN_METRICS,
+  };
+
   // Metrics to measure user interaction with the save credit card prompt.
   //
   // SAVE_CARD_PROMPT_DISMISS_FOCUS is not stored explicitly, but can be
@@ -182,14 +203,14 @@ class AutofillMetrics {
     // The prompt was dismissed because the user clicked a legal message link.
     SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
 
-    // The following _CVC_FIX_FLOW_ metrics are independent of the ones above.
-    // For instance, accepting the CVC fix flow will trigger both
+    // The following _CVC_FIX_FLOW_ metrics are independent of the ones above,
+    // and were relevant when the CVC fix flow was active M62-M64. During that
+    // time, for instance, accepting the CVC fix flow would trigger both
     // SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED as well as
-    // SAVE_CARD_PROMPT_END_ACCEPTED.  They are split apart in order to track
+    // SAVE_CARD_PROMPT_END_ACCEPTED.  They were split apart in order to track
     // acceptance/abandonment rates of the multi-stage dialog user experience.
-
-    // SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_DENIED is an impossible state because
-    // the CVC fix flow uses a close button instead of a cancel button.
+    // (SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_DENIED was an impossible state because
+    // the CVC fix flow uses a close button instead of a cancel button.)
 
     // The prompt moved to a second stage that requested CVC from the user.
     SAVE_CARD_PROMPT_CVC_FIX_FLOW_SHOWN,
@@ -663,7 +684,9 @@ class AutofillMetrics {
                       QualityMetricType metric_type,
                       ServerFieldType predicted_type,
                       ServerFieldType actual_type);
-    void LogFormSubmitted(AutofillFormSubmittedState state,
+    void LogFormSubmitted(bool is_for_credit_card,
+                          const std::set<FormType>& form_types,
+                          AutofillFormSubmittedState state,
                           const base::TimeTicks& form_parsed_timestamp);
 
     // We initialize |url_| with the form's URL when we log the first form
@@ -701,13 +724,23 @@ class AutofillMetrics {
                               ukm::SourceId source_id,
                               const GURL& url);
 
+  static void LogSubmittedCardStateMetric(SubmittedCardStateMetric metric);
+
   // If a credit card that matches a server card (unmasked or not) was submitted
   // on a form, logs whether the submitted card's expiration date matched the
   // server card's known expiration date.
   static void LogSubmittedServerCardExpirationStatusMetric(
       SubmittedServerCardExpirationStatusMetric metric);
 
-  static void LogSubmittedCardStateMetric(SubmittedCardStateMetric metric);
+  // When credit card upload is offered, logs whether the card being offered is
+  // already a local card on the device or not.
+  static void LogUploadOfferedCardOriginMetric(
+      UploadOfferedCardOriginMetric metric);
+
+  // When credit card upload is accepted, logs whether the card being accepted
+  // is already a local card on the device or not.
+  static void LogUploadAcceptedCardOriginMetric(
+      UploadAcceptedCardOriginMetric metric);
 
   // |upload_decision_metrics| is a bitmask of |CardUploadDecisionMetric|.
   static void LogCardUploadDecisionMetrics(int upload_decision_metrics);
@@ -890,6 +923,8 @@ class AutofillMetrics {
   // state of the form.
   static void LogAutofillFormSubmittedState(
       AutofillFormSubmittedState state,
+      bool is_for_credit_card,
+      const std::set<FormType>& form_types,
       const base::TimeTicks& form_parsed_timestamp,
       FormInteractionsUkmLogger* form_interactions_ukm_logger);
 
@@ -926,10 +961,19 @@ class AutofillMetrics {
 
   // Logs the developer engagement ukm for the specified |url| and autofill
   // fields in the form structure. |developer_engagement_metrics| is a bitmask
-  // of |AutofillMetrics::DeveloperEngagementMetric|.
+  // of |AutofillMetrics::DeveloperEngagementMetric|. |is_for_credit_card| is
+  // true if the form is a credit card form. |form_types| is set of
+  // FormType recorded for the page. This will be stored as a bit vector
+  // in UKM.
   static void LogDeveloperEngagementUkm(ukm::UkmRecorder* ukm_recorder,
                                         const GURL& url,
+                                        bool is_for_credit_card,
+                                        std::set<FormType> form_types,
                                         int developer_engagement_metrics);
+
+  // Log the number of hidden or presentational 'select' fields that were
+  // autofilled to support synthetic fields.
+  static void LogHiddenOrPresentationalSelectFieldsFilled();
 
   // Logs the the |ukm_entry_name| with the specified |url| and the specified
   // |metrics|. Returns whether the ukm was sucessfully logged.
@@ -937,6 +981,9 @@ class AutofillMetrics {
                      const GURL& url,
                      const std::string& ukm_entry_name,
                      const std::vector<std::pair<const char*, int>>& metrics);
+
+  // Converts form type to bit vector to store in UKM.
+  static int64_t FormTypesToBitVector(const std::set<FormType>& form_types);
 
   // Utility to log autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.

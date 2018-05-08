@@ -17,11 +17,11 @@
 #include "build/build_config.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/pdf_metafile_skia.h"
-#include "third_party/WebKit/public/platform/WebCanvas.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
+#include "third_party/blink/public/platform/web_canvas.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/size.h"
 
 struct PrintMsg_Print_Params;
@@ -182,10 +182,8 @@ class PrintRenderFrameHelper
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // Message handlers ---------------------------------------------------------
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnPrintPages();
   void OnPrintForSystemDialog();
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnInitiatePrintPreview(bool has_selection);
   void OnPrintPreview(const base::DictionaryValue& settings);
@@ -228,14 +226,12 @@ class PrintRenderFrameHelper
 
   // Main printing code -------------------------------------------------------
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Print with the system dialog.
   // |is_scripted| should be true when the call is coming from window.print().
   // WARNING: |this| may be gone after this method returns.
   void Print(blink::WebLocalFrame* frame,
              const blink::WebNode& node,
              bool is_scripted);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Notification when printing is done - signal tear-down/free resources.
   void DidFinishPrinting(PrintingResult result);
@@ -264,7 +260,6 @@ class PrintRenderFrameHelper
                            const base::DictionaryValue& passed_job_settings);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Get final print settings from the user.
   // WARNING: |this| may be gone after this method returns.
   void GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
@@ -272,11 +267,9 @@ class PrintRenderFrameHelper
                                 int expected_pages_count,
                                 bool is_scripted,
                                 PrintMsg_PrintPages_Params* print_settings);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Page Printing / Rendering ------------------------------------------------
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnFramePreparedForPrintPages();
   void PrintPages();
   bool PrintPagesNative(blink::WebLocalFrame* frame, int page_count);
@@ -284,7 +277,6 @@ class PrintRenderFrameHelper
   // Render the frame for printing.
   bool RenderPagesForPrint(blink::WebLocalFrame* frame,
                            const blink::WebNode& node);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Platform-specific helper function for rendering page(s) to |metafile|.
   void PrintPageInternal(const PrintMsg_Print_Params& params,

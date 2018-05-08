@@ -21,6 +21,7 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/extension_management.h"
+#include "chrome/browser/extensions/forced_extensions/installation_tracker.h"
 #include "chrome/browser/extensions/install_gate.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/upgrade_observer.h"
@@ -656,6 +657,8 @@ class ExtensionService
   // A callback to be called when all external providers are ready and their
   // extensions have been installed. Normally this is a null callback, but
   // is used in external provider related tests.
+  // TODO(mxnguyen): Change |external_updates_finished_callback_| to
+  // OnceClosure.
   base::Closure external_updates_finished_callback_;
 
   // Set when the browser is terminating. Prevents us from installing or
@@ -695,6 +698,9 @@ class ExtensionService
 
   // Helper to register and unregister extensions.
   extensions::ExtensionRegistrar extension_registrar_;
+
+  // Tracker of enterprise policy forced installation.
+  extensions::InstallationTracker forced_extensions_tracker_;
 
   using InstallGateRegistry = std::map<extensions::ExtensionPrefs::DelayReason,
                                        extensions::InstallGate*>;

@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/single_thread_task_runner.h"
 #include "cc/resources/display_resource_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
@@ -40,6 +41,7 @@ class DirectRenderer;
 class DisplayClient;
 class OutputSurface;
 class SharedBitmapManager;
+class SkiaOutputSurface;
 class SoftwareRenderer;
 
 class VIZ_SERVICE_EXPORT DisplayObserver {
@@ -61,12 +63,15 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // case, DrawAndSwap must be called externally when needed.
   // The |current_task_runner| may be null if the Display is on a thread without
   // a MessageLoop.
+  // TODO(penghuang): Remove skia_output_surface when all DirectRenderer
+  // subclasses are replaced by SkiaRenderer.
   Display(SharedBitmapManager* bitmap_manager,
           const RendererSettings& settings,
           const FrameSinkId& frame_sink_id,
           std::unique_ptr<OutputSurface> output_surface,
           std::unique_ptr<DisplayScheduler> scheduler,
-          scoped_refptr<base::SingleThreadTaskRunner> current_task_runner);
+          scoped_refptr<base::SingleThreadTaskRunner> current_task_runner,
+          SkiaOutputSurface* skia_output_surface = nullptr);
 
   ~Display() override;
 
@@ -109,6 +114,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void DidReceivePresentationFeedback(
       uint64_t swap_id,
       const gfx::PresentationFeedback& feedback) override;
+  void DidFinishLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   // LatestLocalSurfaceIdLookupDelegate implementation.
   LocalSurfaceId GetSurfaceAtAggregation(
@@ -144,6 +151,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   bool swapped_since_resize_ = false;
   bool output_is_secure_ = false;
 
+  SkiaOutputSurface* skia_output_surface_;
   std::unique_ptr<OutputSurface> output_surface_;
   std::unique_ptr<DisplayScheduler> scheduler_;
   std::unique_ptr<cc::DisplayResourceProvider> resource_provider_;

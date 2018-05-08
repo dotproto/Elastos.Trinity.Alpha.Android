@@ -17,8 +17,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -73,10 +72,6 @@
 #if defined(OS_POSIX)
 #include "base/posix/global_descriptors.h"
 #include "content/public/common/content_descriptors.h"
-#endif
-
-#if defined(OS_MACOSX)
-#include "base/allocator/allocator_interception_mac.h"
 #endif
 
 namespace content {
@@ -213,7 +208,7 @@ void QuitClosure::BindToMainThread() {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner(
       base::ThreadTaskRunnerHandle::Get());
   base::Closure quit_closure =
-      base::MessageLoop::current()->QuitWhenIdleClosure();
+      base::MessageLoopCurrent::Get()->QuitWhenIdleClosure();
   closure_ = base::Bind(&QuitClosure::PostClosure, task_runner, quit_closure);
   cond_var_.Signal();
 }
@@ -433,7 +428,7 @@ void ChildThreadImpl::Init(const Options& options) {
   TRACE_EVENT0("startup", "ChildThreadImpl::Init");
   g_lazy_tls.Pointer()->Set(this);
   on_channel_error_called_ = false;
-  message_loop_ = base::MessageLoop::current();
+  main_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   // We must make sure to instantiate the IPC Logger *before* we create the
   // channel, otherwise we can get a callback on the IO thread which creates
@@ -477,8 +472,8 @@ void ChildThreadImpl::Init(const Options& options) {
   }
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
-  thread_safe_sender_ = new ThreadSafeSender(
-      message_loop_->task_runner(), sync_message_filter_.get());
+  thread_safe_sender_ =
+      new ThreadSafeSender(main_thread_runner_, sync_message_filter_.get());
 
   auto registry = std::make_unique<service_manager::BinderRegistry>();
   registry->AddInterface(base::Bind(&ChildHistogramFetcherFactoryImpl::Create),
@@ -521,9 +516,15 @@ void ChildThreadImpl::Init(const Options& options) {
   if (!base::PowerMonitor::Get() && service_manager_connection_) {
     auto power_monitor_source =
         std::make_unique<device::PowerMonitorBroadcastSource>(
-            GetConnector(), GetIOTaskRunner());
+            GetIOTaskRunner());
+    auto* source_ptr = power_monitor_source.get();
     power_monitor_.reset(
         new base::PowerMonitor(std::move(power_monitor_source)));
+    // The two-phase init is necessary to ensure that the process-wide
+    // PowerMonitor is set before the power monitor source receives incoming
+    // communication from the browser process (see https://crbug.com/821790 for
+    // details)
+    source_ptr->Init(GetConnector());
   }
 
 #if defined(OS_POSIX)
@@ -557,15 +558,7 @@ void ChildThreadImpl::Init(const Options& options) {
       connection_timeout = temp;
   }
 
-#if defined(OS_MACOSX)
-  if (base::CommandLine::InitializedForCurrentProcess() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableHeapProfiling)) {
-    base::allocator::PeriodicallyShimNewMallocZones();
-  }
-#endif
-
-  message_loop_->task_runner()->PostDelayedTask(
+  main_thread_runner_->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ChildThreadImpl::EnsureConnected,
                      channel_connected_factory_->GetWeakPtr()),
@@ -603,7 +596,7 @@ void ChildThreadImpl::InitTracing() {
   channel_->AddFilter(new tracing::ChildTraceMessageFilter(
       ChildProcess::current()->io_task_runner()));
 
-  chrome_trace_event_agent_ = std::make_unique<tracing::ChromeTraceEventAgent>(
+  trace_event_agent_ = tracing::TraceEventAgent::Create(
       GetConnector(), false /* request_clock_sync_marker_on_android */);
 }
 
@@ -648,7 +641,7 @@ void ChildThreadImpl::OnChannelError() {
 }
 
 bool ChildThreadImpl::Send(IPC::Message* msg) {
-  DCHECK(message_loop_->task_runner()->BelongsToCurrentThread());
+  DCHECK(main_thread_runner_->BelongsToCurrentThread());
   if (!channel_) {
     delete msg;
     return false;
@@ -676,11 +669,10 @@ mojom::FontCacheWin* ChildThreadImpl::GetFontCacheWin() {
 #elif defined(OS_MACOSX)
 bool ChildThreadImpl::LoadFont(const base::string16& font_name,
                                float font_point_size,
-                               uint32_t* out_buffer_size,
                                mojo::ScopedSharedBufferHandle* out_font_data,
                                uint32_t* out_font_id) {
-  return GetFontLoaderMac()->LoadFont(
-      font_name, font_point_size, out_buffer_size, out_font_data, out_font_id);
+  return GetFontLoaderMac()->LoadFont(font_name, font_point_size, out_font_data,
+                                      out_font_id);
 }
 
 mojom::FontLoaderMac* ChildThreadImpl::GetFontLoaderMac() {
@@ -709,7 +701,7 @@ service_manager::Connector* ChildThreadImpl::GetConnector() {
 }
 
 IPC::MessageRouter* ChildThreadImpl::GetRouter() {
-  DCHECK(message_loop_->task_runner()->BelongsToCurrentThread());
+  DCHECK(main_thread_runner_->BelongsToCurrentThread());
   return &router_;
 }
 
@@ -754,7 +746,9 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
   if (interface_name == mojom::RouteProvider::Name_) {
     DCHECK(!route_provider_binding_.is_bound());
     route_provider_binding_.Bind(
-        mojom::RouteProviderAssociatedRequest(std::move(handle)));
+        mojom::RouteProviderAssociatedRequest(std::move(handle)),
+        ipc_task_runner_ ? ipc_task_runner_
+                         : base::ThreadTaskRunnerHandle::Get());
   } else {
     LOG(ERROR) << "Request for unknown Channel-associated interface: "
                << interface_name;

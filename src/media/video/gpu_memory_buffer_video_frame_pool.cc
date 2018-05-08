@@ -16,6 +16,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/stack_container.h"
 #include "base/location.h"
@@ -31,6 +32,7 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gl/trace_util.h"
 
 namespace media {
@@ -80,7 +82,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   // |frames_|.
   void Shutdown();
 
-  void SetTickClockForTesting(base::TickClock* tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
  private:
   friend class base::RefCountedThreadSafe<
@@ -124,15 +126,20 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   // Struct to keep track of requested videoframe copies.
   struct VideoFrameCopyRequest {
     VideoFrameCopyRequest(scoped_refptr<VideoFrame> video_frame,
-                          FrameReadyCB frame_ready_cb)
-        : video_frame(video_frame), frame_ready_cb(std::move(frame_ready_cb)) {}
+                          FrameReadyCB frame_ready_cb,
+                          bool passthrough)
+        : video_frame(video_frame),
+          frame_ready_cb(std::move(frame_ready_cb)),
+          passthrough(passthrough) {}
     scoped_refptr<VideoFrame> video_frame;
     FrameReadyCB frame_ready_cb;
+    bool passthrough;
   };
 
   // Start the copy of a video_frame on the worker_task_runner_.
-  // It assumes there are currently no in-flight copies.
-  void StartCopy(const scoped_refptr<VideoFrame>& video_frame);
+  // It assumes there are currently no in-flight copies and works on the request
+  // in the front of |frame_copy_requests_| queue.
+  void StartCopy();
 
   // Copy |video_frame| data into |frame_resources| and calls |frame_ready_cb|
   // when done.
@@ -165,6 +172,13 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
       const gfx::Size& size,
       GpuVideoAcceleratorFactories::OutputFormat format);
 
+  // Calls the FrameReadyCB of the first entry in |frame_copy_requests_|, with
+  // the provided |video_frame|, then deletes the entry from
+  // |frame_copy_requests_| and attempts to start another copy if there are
+  // other |frame_copy_requests_| elements.
+  void CompleteCopyRequestAndMaybeStartNextCopy(
+      const scoped_refptr<VideoFrame>& video_frame);
+
   // Callback called when a VideoFrame generated with GetFrameResources is no
   // longer referenced.
   // This must be called on the thread where |media_task_runner_| is current.
@@ -191,7 +205,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   GpuVideoAcceleratorFactories::OutputFormat output_format_;
 
   // |tick_clock_| is always a DefaultTickClock outside of testing.
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Queued up video frames for copies. The front is the currently
   // in-flight copy, new copies are added at the end.
@@ -348,27 +362,29 @@ void CopyRowsToI420Buffer(int first_row,
                           uint8_t* output,
                           int dest_stride,
                           base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
   TRACE_EVENT2("media", "CopyRowsToI420Buffer", "bytes_per_row", bytes_per_row,
                "rows", rows);
-  if (output) {
-    DCHECK_NE(dest_stride, 0);
-    DCHECK_LE(bytes_per_row, std::abs(dest_stride));
-    DCHECK_LE(bytes_per_row, source_stride);
-    DCHECK_GE(bit_depth, 8u);
 
-    if (bit_depth == 8) {
-      libyuv::CopyPlane(source + source_stride * first_row, source_stride,
-                        output + dest_stride * first_row, dest_stride,
-                        bytes_per_row, rows);
-    } else {
-      const int scale = 0x10000 >> (bit_depth - 8);
-      libyuv::Convert16To8Plane(
-          reinterpret_cast<const uint16*>(source + source_stride * first_row),
-          source_stride / 2, output + dest_stride * first_row, dest_stride,
-          scale, bytes_per_row, rows);
-    }
+  if (!output)
+    return;
+
+  DCHECK_NE(dest_stride, 0);
+  DCHECK_LE(bytes_per_row, std::abs(dest_stride));
+  DCHECK_LE(bytes_per_row, source_stride);
+  DCHECK_GE(bit_depth, 8u);
+
+  if (bit_depth == 8) {
+    libyuv::CopyPlane(source + source_stride * first_row, source_stride,
+                      output + dest_stride * first_row, dest_stride,
+                      bytes_per_row, rows);
+  } else {
+    const int scale = 0x10000 >> (bit_depth - 8);
+    libyuv::Convert16To8Plane(
+        reinterpret_cast<const uint16*>(source + source_stride * first_row),
+        source_stride / 2, output + dest_stride * first_row, dest_stride, scale,
+        bytes_per_row, rows);
   }
-  std::move(done).Run();
 }
 
 void CopyRowsToNV12Buffer(int first_row,
@@ -380,30 +396,32 @@ void CopyRowsToNV12Buffer(int first_row,
                           uint8_t* dest_uv,
                           int dest_stride_uv,
                           base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
   TRACE_EVENT2("media", "CopyRowsToNV12Buffer", "bytes_per_row", bytes_per_row,
                "rows", rows);
-  if (dest_y && dest_uv) {
-    DCHECK_NE(dest_stride_y, 0);
-    DCHECK_NE(dest_stride_uv, 0);
-    DCHECK_LE(bytes_per_row, std::abs(dest_stride_y));
-    DCHECK_LE(bytes_per_row, std::abs(dest_stride_uv));
-    DCHECK_EQ(0, first_row % 2);
 
-    libyuv::I420ToNV12(
-        source_frame->visible_data(VideoFrame::kYPlane) +
-            first_row * source_frame->stride(VideoFrame::kYPlane),
-        source_frame->stride(VideoFrame::kYPlane),
-        source_frame->visible_data(VideoFrame::kUPlane) +
-            first_row / 2 * source_frame->stride(VideoFrame::kUPlane),
-        source_frame->stride(VideoFrame::kUPlane),
-        source_frame->visible_data(VideoFrame::kVPlane) +
-            first_row / 2 * source_frame->stride(VideoFrame::kVPlane),
-        source_frame->stride(VideoFrame::kVPlane),
-        dest_y + first_row * dest_stride_y, dest_stride_y,
-        dest_uv + first_row / 2 * dest_stride_uv, dest_stride_uv, bytes_per_row,
-        rows);
-  }
-  std::move(done).Run();
+  if (!dest_y || !dest_uv)
+    return;
+
+  DCHECK_NE(dest_stride_y, 0);
+  DCHECK_NE(dest_stride_uv, 0);
+  DCHECK_LE(bytes_per_row, std::abs(dest_stride_y));
+  DCHECK_LE(bytes_per_row, std::abs(dest_stride_uv));
+  DCHECK_EQ(0, first_row % 2);
+
+  libyuv::I420ToNV12(
+      source_frame->visible_data(VideoFrame::kYPlane) +
+          first_row * source_frame->stride(VideoFrame::kYPlane),
+      source_frame->stride(VideoFrame::kYPlane),
+      source_frame->visible_data(VideoFrame::kUPlane) +
+          first_row / 2 * source_frame->stride(VideoFrame::kUPlane),
+      source_frame->stride(VideoFrame::kUPlane),
+      source_frame->visible_data(VideoFrame::kVPlane) +
+          first_row / 2 * source_frame->stride(VideoFrame::kVPlane),
+      source_frame->stride(VideoFrame::kVPlane),
+      dest_y + first_row * dest_stride_y, dest_stride_y,
+      dest_uv + first_row / 2 * dest_stride_uv, dest_stride_uv, bytes_per_row,
+      rows);
 }
 
 void CopyRowsToUYVYBuffer(int first_row,
@@ -413,25 +431,27 @@ void CopyRowsToUYVYBuffer(int first_row,
                           uint8_t* output,
                           int dest_stride,
                           base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
   TRACE_EVENT2("media", "CopyRowsToUYVYBuffer", "bytes_per_row", width * 2,
                "rows", rows);
-  if (output) {
-    DCHECK_NE(dest_stride, 0);
-    DCHECK_LE(width, std::abs(dest_stride / 2));
-    DCHECK_EQ(0, first_row % 2);
-    libyuv::I420ToUYVY(
-        source_frame->visible_data(VideoFrame::kYPlane) +
-            first_row * source_frame->stride(VideoFrame::kYPlane),
-        source_frame->stride(VideoFrame::kYPlane),
-        source_frame->visible_data(VideoFrame::kUPlane) +
-            first_row / 2 * source_frame->stride(VideoFrame::kUPlane),
-        source_frame->stride(VideoFrame::kUPlane),
-        source_frame->visible_data(VideoFrame::kVPlane) +
-            first_row / 2 * source_frame->stride(VideoFrame::kVPlane),
-        source_frame->stride(VideoFrame::kVPlane),
-        output + first_row * dest_stride, dest_stride, width, rows);
-  }
-  std::move(done).Run();
+
+  if (!output)
+    return;
+
+  DCHECK_NE(dest_stride, 0);
+  DCHECK_LE(width, std::abs(dest_stride / 2));
+  DCHECK_EQ(0, first_row % 2);
+  libyuv::I420ToUYVY(
+      source_frame->visible_data(VideoFrame::kYPlane) +
+          first_row * source_frame->stride(VideoFrame::kYPlane),
+      source_frame->stride(VideoFrame::kYPlane),
+      source_frame->visible_data(VideoFrame::kUPlane) +
+          first_row / 2 * source_frame->stride(VideoFrame::kUPlane),
+      source_frame->stride(VideoFrame::kUPlane),
+      source_frame->visible_data(VideoFrame::kVPlane) +
+          first_row / 2 * source_frame->stride(VideoFrame::kVPlane),
+      source_frame->stride(VideoFrame::kVPlane),
+      output + first_row * dest_stride, dest_stride, width, rows);
 }
 
 void CopyRowsToRGB10Buffer(bool is_argb,
@@ -442,60 +462,54 @@ void CopyRowsToRGB10Buffer(bool is_argb,
                            uint8_t* output,
                            int dest_stride,
                            base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
   TRACE_EVENT2("media", "CopyRowsToXR30Buffer", "bytes_per_row", width * 2,
                "rows", rows);
-  if (output) {
-    DCHECK_NE(dest_stride, 0);
-    DCHECK_LE(width, std::abs(dest_stride / 2));
-    DCHECK_EQ(0, first_row % 2);
+  if (!output)
+    return;
 
-    int color_space = COLOR_SPACE_UNSPECIFIED;
-    if (source_frame->metadata()->GetInteger(VideoFrameMetadata::COLOR_SPACE,
-                                             &color_space)) {
-      color_space = COLOR_SPACE_UNSPECIFIED;
+  DCHECK_NE(dest_stride, 0);
+  DCHECK_LE(width, std::abs(dest_stride / 2));
+  DCHECK_EQ(0, first_row % 2);
+
+  const uint16_t* y_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kYPlane) +
+      first_row * source_frame->stride(VideoFrame::kYPlane));
+  const size_t y_plane_stride = source_frame->stride(VideoFrame::kYPlane) / 2;
+  const uint16_t* v_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kVPlane) +
+      first_row / 2 * source_frame->stride(VideoFrame::kVPlane));
+  const size_t v_plane_stride = source_frame->stride(VideoFrame::kVPlane) / 2;
+  const uint16_t* u_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kUPlane) +
+      first_row / 2 * source_frame->stride(VideoFrame::kUPlane));
+  const size_t u_plane_stride = source_frame->stride(VideoFrame::kUPlane) / 2;
+  uint8_t* dest_rgb10 = output + first_row * dest_stride;
+
+  SkYUVColorSpace skyuv = kRec709_SkYUVColorSpace;
+  source_frame->ColorSpace().ToSkYUVColorSpace(&skyuv);
+
+  if (skyuv == kRec601_SkYUVColorSpace) {
+    if (is_argb) {
+      libyuv::I010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
+    } else {
+      libyuv::I010ToAB30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
     }
-    const uint16_t* y_plane = reinterpret_cast<const uint16_t*>(
-        source_frame->visible_data(VideoFrame::kYPlane) +
-        first_row * source_frame->stride(VideoFrame::kYPlane));
-    const size_t y_plane_stride = source_frame->stride(VideoFrame::kYPlane) / 2;
-    const uint16_t* v_plane = reinterpret_cast<const uint16_t*>(
-        source_frame->visible_data(VideoFrame::kVPlane) +
-        first_row / 2 * source_frame->stride(VideoFrame::kVPlane));
-    const size_t v_plane_stride = source_frame->stride(VideoFrame::kVPlane) / 2;
-    const uint16_t* u_plane = reinterpret_cast<const uint16_t*>(
-        source_frame->visible_data(VideoFrame::kUPlane) +
-        first_row / 2 * source_frame->stride(VideoFrame::kUPlane));
-    const size_t u_plane_stride = source_frame->stride(VideoFrame::kUPlane) / 2;
-    uint8_t* dest_ar30 = output + first_row * dest_stride;
-
-    switch (color_space) {
-      case COLOR_SPACE_HD_REC709:
-        if (is_argb) {
-          libyuv::H010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
-                             v_plane, v_plane_stride, dest_ar30, dest_stride,
-                             width, rows);
-        } else {
-          libyuv::H010ToAB30(y_plane, y_plane_stride, u_plane, u_plane_stride,
-                             v_plane, v_plane_stride, dest_ar30, dest_stride,
-                             width, rows);
-        }
-        break;
-      case COLOR_SPACE_UNSPECIFIED:
-      case COLOR_SPACE_JPEG:
-      case COLOR_SPACE_SD_REC601:
-        if (is_argb) {
-          libyuv::I010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
-                             v_plane, v_plane_stride, dest_ar30, dest_stride,
-                             width, rows);
-        } else {
-          libyuv::I010ToAB30(y_plane, y_plane_stride, u_plane, u_plane_stride,
-                             v_plane, v_plane_stride, dest_ar30, dest_stride,
-                             width, rows);
-        }
-        break;
+  } else {
+    if (is_argb) {
+      libyuv::H010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
+    } else {
+      libyuv::H010ToAB30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
     }
   }
-  std::move(done).Run();
 }
 
 gfx::Size CodedSize(const scoped_refptr<VideoFrame>& video_frame,
@@ -542,10 +556,9 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
         gpu_factories_->VideoFrameOutputFormat(video_frame->BitDepth());
   }
 
-  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED) {
-    std::move(frame_ready_cb).Run(video_frame);
-    return;
-  }
+  bool passthrough = false;
+  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
+    passthrough = true;
   switch (video_frame->format()) {
     // Supported cases.
     case PIXEL_FORMAT_YV12:
@@ -576,10 +589,8 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_YUV444P12:
     case PIXEL_FORMAT_Y16:
     case PIXEL_FORMAT_UNKNOWN:
-      std::move(frame_ready_cb).Run(video_frame);
-      return;
+      passthrough = true;
   }
-
   // TODO(dcastagna): Handle odd positioned video frame input, see
   // https://crbug.com/638906.
   // TODO(emircan): Eliminate odd size video frame input cases as they are not
@@ -588,13 +599,13 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
       (video_frame->visible_rect().y() & 1) ||
       (video_frame->coded_size().width() & 1) ||
       (video_frame->coded_size().height() & 1)) {
-    std::move(frame_ready_cb).Run(video_frame);
-    return;
+    passthrough = true;
   }
 
-  frame_copy_requests_.emplace_back(video_frame, std::move(frame_ready_cb));
+  frame_copy_requests_.emplace_back(video_frame, std::move(frame_ready_cb),
+                                    passthrough);
   if (frame_copy_requests_.size() == 1u)
-    StartCopy(video_frame);
+    StartCopy();
 }
 
 bool GpuMemoryBufferVideoFramePool::PoolImpl::OnMemoryDump(
@@ -670,24 +681,30 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDone(
                      this, video_frame, frame_resources));
 }
 
-void GpuMemoryBufferVideoFramePool::PoolImpl::StartCopy(
-    const scoped_refptr<VideoFrame>& video_frame) {
+void GpuMemoryBufferVideoFramePool::PoolImpl::StartCopy() {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
   DCHECK(!frame_copy_requests_.empty());
 
-  const gfx::Size coded_size = CodedSize(video_frame, output_format_);
-  // Acquire resources. Incompatible ones will be dropped from the pool.
-  FrameResources* frame_resources =
-      GetOrCreateFrameResources(coded_size, output_format_);
-  if (!frame_resources) {
-    std::move(frame_copy_requests_.front().frame_ready_cb).Run(video_frame);
-    frame_copy_requests_.pop_front();
-    return;
-  }
+  while (!frame_copy_requests_.empty()) {
+    VideoFrameCopyRequest& request = frame_copy_requests_.front();
+    // Acquire resources. Incompatible ones will be dropped from the pool.
+    FrameResources* frame_resources =
+        request.passthrough
+            ? nullptr
+            : GetOrCreateFrameResources(
+                  CodedSize(request.video_frame, output_format_),
+                  output_format_);
+    if (!frame_resources) {
+      std::move(request.frame_ready_cb).Run(request.video_frame);
+      frame_copy_requests_.pop_front();
+      continue;
+    }
 
-  worker_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&PoolImpl::CopyVideoFrameToGpuMemoryBuffers,
-                                this, video_frame, frame_resources));
+    worker_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&PoolImpl::CopyVideoFrameToGpuMemoryBuffers,
+                                  this, request.video_frame, frame_resources));
+    break;
+  }
 }
 
 // Copies |video_frame| into |frame_resources| asynchronously, posting n tasks
@@ -811,8 +828,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   gpu::gles2::GLES2Interface* gles2 = gpu_factories_->ContextGL();
   if (!gles2) {
     frame_resources->MarkUnused(tick_clock_->NowTicks());
-    std::move(frame_copy_requests_.front().frame_ready_cb).Run(video_frame);
-    frame_copy_requests_.pop_front();
+    CompleteCopyRequestAndMaybeStartNextCopy(video_frame);
     return;
   }
 
@@ -863,8 +879,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   if (!frame) {
     frame_resources->MarkUnused(tick_clock_->NowTicks());
     MailboxHoldersReleased(frame_resources, gpu::SyncToken());
-    std::move(frame_copy_requests_.front().frame_ready_cb).Run(video_frame);
-    frame_copy_requests_.pop_front();
+    CompleteCopyRequestAndMaybeStartNextCopy(video_frame);
     return;
   }
   frame->SetReleaseMailboxCB(
@@ -888,32 +903,25 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
 #endif
       break;
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
+    case GpuVideoAcceleratorFactories::OutputFormat::XB30:
       allow_overlay = true;
+      // We've converted the YUV to RGB, fix the color space.
+      // TODO(hubbe): The libyuv YUV to RGB conversion may not have
+      // honored the color space conversion 100%. We should either fix
+      // libyuv or find a way for later passes to make up the difference.
+      frame->set_color_space(video_frame->ColorSpace().GetAsRGB());
       break;
     default:
       break;
   }
+
+  frame->metadata()->MergeMetadataFrom(video_frame->metadata());
   frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY,
                                 allow_overlay);
-
-  base::TimeTicks render_time;
-  if (video_frame->metadata()->GetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
-                                            &render_time)) {
-    frame->metadata()->SetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
-                                    render_time);
-  }
-
   frame->metadata()->SetBoolean(VideoFrameMetadata::READ_LOCK_FENCES_ENABLED,
                                 true);
 
-  DCHECK(!frame_copy_requests_.empty());
-  std::move(frame_copy_requests_.front().frame_ready_cb).Run(frame);
-  frame_copy_requests_.pop_front();
-
-  if (!frame_copy_requests_.empty()) {
-    VideoFrameCopyRequest& copy_request = frame_copy_requests_.front();
-    StartCopy(copy_request.video_frame);
-  }
+  CompleteCopyRequestAndMaybeStartNextCopy(frame);
 }
 
 // Destroy all the resources posting one task per FrameResources
@@ -942,7 +950,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::Shutdown() {
 }
 
 void GpuMemoryBufferVideoFramePool::PoolImpl::SetTickClockForTesting(
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
 }
 
@@ -1004,6 +1012,17 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResources(
                                         plane_resource.mailbox.name);
   }
   return frame_resources;
+}
+
+void GpuMemoryBufferVideoFramePool::PoolImpl::
+    CompleteCopyRequestAndMaybeStartNextCopy(
+        const scoped_refptr<VideoFrame>& video_frame) {
+  DCHECK(!frame_copy_requests_.empty());
+
+  std::move(frame_copy_requests_.front().frame_ready_cb).Run(video_frame);
+  frame_copy_requests_.pop_front();
+  if (!frame_copy_requests_.empty())
+    StartCopy();
 }
 
 // static
@@ -1096,7 +1115,7 @@ void GpuMemoryBufferVideoFramePool::Abort() {
 }
 
 void GpuMemoryBufferVideoFramePool::SetTickClockForTesting(
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   pool_impl_->SetTickClockForTesting(tick_clock);
 }
 

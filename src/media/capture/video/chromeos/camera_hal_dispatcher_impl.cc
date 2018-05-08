@@ -72,17 +72,17 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
 
 class MojoCameraClientObserver : public CameraClientObserver {
  public:
-  explicit MojoCameraClientObserver(arc::mojom::CameraHalClientPtr client)
+  explicit MojoCameraClientObserver(cros::mojom::CameraHalClientPtr client)
       : client_(std::move(client)) {}
 
-  void OnChannelCreated(arc::mojom::CameraModulePtr camera_module) override {
+  void OnChannelCreated(cros::mojom::CameraModulePtr camera_module) override {
     client_->SetUpChannel(std::move(camera_module));
   }
 
-  arc::mojom::CameraHalClientPtr& client() { return client_; }
+  cros::mojom::CameraHalClientPtr& client() { return client_; }
 
  private:
-  arc::mojom::CameraHalClientPtr client_;
+  cros::mojom::CameraHalClientPtr client_;
   DISALLOW_IMPLICIT_CONSTRUCTORS(MojoCameraClientObserver);
 };
 
@@ -125,8 +125,8 @@ bool CameraHalDispatcherImpl::Start(
                               base::WaitableEvent::InitialState::NOT_SIGNALED);
   blocking_io_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&CameraHalDispatcherImpl::CreateSocket, base::Unretained(this),
-                 base::Unretained(&started)));
+      base::BindOnce(&CameraHalDispatcherImpl::CreateSocket,
+                     base::Unretained(this), base::Unretained(&started)));
   started.Wait();
   return IsStarted();
 }
@@ -155,8 +155,8 @@ CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
   VLOG(1) << "Stopping CameraHalDispatcherImpl...";
   if (proxy_thread_.IsRunning()) {
     proxy_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&CameraHalDispatcherImpl::StopOnProxyThread,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&CameraHalDispatcherImpl::StopOnProxyThread,
+                                  base::Unretained(this)));
     proxy_thread_.Stop();
   }
   blocking_io_thread_.Stop();
@@ -164,7 +164,7 @@ CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
 }
 
 void CameraHalDispatcherImpl::RegisterServer(
-    arc::mojom::CameraHalServerPtr camera_hal_server) {
+    cros::mojom::CameraHalServerPtr camera_hal_server) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
 
   if (camera_hal_server_) {
@@ -172,8 +172,8 @@ void CameraHalDispatcherImpl::RegisterServer(
     return;
   }
   camera_hal_server.set_connection_error_handler(
-      base::Bind(&CameraHalDispatcherImpl::OnCameraHalServerConnectionError,
-                 base::Unretained(this)));
+      base::BindOnce(&CameraHalDispatcherImpl::OnCameraHalServerConnectionError,
+                     base::Unretained(this)));
   camera_hal_server_ = std::move(camera_hal_server);
   VLOG(1) << "Camera HAL server registered";
 
@@ -185,11 +185,11 @@ void CameraHalDispatcherImpl::RegisterServer(
 }
 
 void CameraHalDispatcherImpl::RegisterClient(
-    arc::mojom::CameraHalClientPtr client) {
+    cros::mojom::CameraHalClientPtr client) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
   auto client_observer =
       std::make_unique<MojoCameraClientObserver>(std::move(client));
-  client_observer->client().set_connection_error_handler(base::Bind(
+  client_observer->client().set_connection_error_handler(base::BindOnce(
       &CameraHalDispatcherImpl::OnCameraHalClientConnectionError,
       base::Unretained(this), base::Unretained(client_observer.get())));
   AddClientObserver(std::move(client_observer));
@@ -249,9 +249,10 @@ void CameraHalDispatcherImpl::CreateSocket(base::WaitableEvent* started) {
   }
 
   blocking_io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&CameraHalDispatcherImpl::StartServiceLoop,
-                            base::Unretained(this), base::Passed(&socket_fd),
-                            base::Unretained(started)));
+      FROM_HERE,
+      base::BindOnce(&CameraHalDispatcherImpl::StartServiceLoop,
+                     base::Unretained(this), base::Passed(&socket_fd),
+                     base::Unretained(started)));
 }
 
 void CameraHalDispatcherImpl::StartServiceLoop(
@@ -306,8 +307,9 @@ void CameraHalDispatcherImpl::StartServiceLoop(
         PLOG(ERROR) << "sendmsg()";
       } else {
         proxy_task_runner_->PostTask(
-            FROM_HERE, base::Bind(&CameraHalDispatcherImpl::OnPeerConnected,
-                                  base::Unretained(this), base::Passed(&pipe)));
+            FROM_HERE,
+            base::BindOnce(&CameraHalDispatcherImpl::OnPeerConnected,
+                           base::Unretained(this), base::Passed(&pipe)));
       }
     }
   }
@@ -325,8 +327,8 @@ void CameraHalDispatcherImpl::AddClientObserverOnProxyThread(
 void CameraHalDispatcherImpl::EstablishMojoChannel(
     CameraClientObserver* client_observer) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  arc::mojom::CameraModulePtr camera_module_ptr;
-  arc::mojom::CameraModuleRequest camera_module_request =
+  cros::mojom::CameraModulePtr camera_module_ptr;
+  cros::mojom::CameraModuleRequest camera_module_request =
       mojo::MakeRequest(&camera_module_ptr);
   camera_hal_server_->CreateChannel(std::move(camera_module_request));
   client_observer->OnChannelCreated(std::move(camera_module_ptr));
@@ -336,7 +338,7 @@ void CameraHalDispatcherImpl::OnPeerConnected(
     mojo::ScopedMessagePipeHandle message_pipe) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
   binding_set_.AddBinding(
-      this, arc::mojom::CameraHalDispatcherRequest(std::move(message_pipe)));
+      this, cros::mojom::CameraHalDispatcherRequest(std::move(message_pipe)));
   VLOG(1) << "New CameraHalDispatcher binding added";
 }
 

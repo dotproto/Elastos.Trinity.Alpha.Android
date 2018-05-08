@@ -15,6 +15,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.offlinepages.DeletePageResult;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -560,6 +561,26 @@ public class OfflinePageBridge {
     }
 
     /**
+     * Ask the native code to publish the internal page asychronously.
+     * @param offlineId ID of the offline page to publish.
+     * @param publishedCallback Function to call when publishing is done.  This will be called
+     *        with the new path of the file.
+     */
+    public void publishInternalPageByOfflineId(long offlineId, Callback<String> publishedCallback) {
+        nativePublishInternalPageByOfflineId(
+                mNativeOfflinePageBridge, offlineId, publishedCallback);
+    }
+
+    /**
+     * Ask the native code to publish the internal page asychronously.
+     * @param guid Client ID of the offline page to publish.
+     * @param publishedCallback Function to call when publishing is done.
+     */
+    public void publishInternalPageByGuid(String guid, Callback<String> publishedCallback) {
+        nativePublishInternalPageByGuid(mNativeOfflinePageBridge, guid, publishedCallback);
+    }
+
+    /**
      * Whether or not the underlying offline page model is loaded.
      */
     public boolean isOfflinePageModelLoaded() {
@@ -690,12 +711,33 @@ public class OfflinePageBridge {
     }
 
     /**
+     * Get the url params to open the intent carrying MHTML file or content.
+     *
+     * @param url The file:// or content:// URL.
+     * @param callback Callback to pass back the url params.
+     */
+    public void getLoadUrlParamsForOpeningMhtmlFileOrContent(
+            String url, Callback<LoadUrlParams> callback) {
+        nativeGetLoadUrlParamsForOpeningMhtmlFileOrContent(mNativeOfflinePageBridge, url, callback);
+    }
+
+    /**
      * Checks if the web contents is showing a trusted offline page.
      * @param webContents Web contents shown.
      * @return True if a trusted offline page is shown.
      */
     public boolean isShowingTrustedOfflinePage(WebContents webContents) {
         return nativeIsShowingTrustedOfflinePage(mNativeOfflinePageBridge, webContents);
+    }
+
+    /**
+     * Tries to acquire the storage access permssion if not yet.
+     *
+     * @param webContents Contents of the page to check.
+     * @param callback Callback to notify the result.
+     */
+    public void acquireFileAccessPermission(WebContents webContents, Callback<Boolean> callback) {
+        nativeAcquireFileAccessPermission(mNativeOfflinePageBridge, webContents, callback);
     }
 
     /**
@@ -773,6 +815,13 @@ public class OfflinePageBridge {
         return new DeletedPageInfo(offlineId, clientNamespace, clientId, requestOrigin);
     }
 
+    @CalledByNative
+    private static LoadUrlParams createLoadUrlParams(String url, String extraHeaders) {
+        LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+        loadUrlParams.setVerbatimHeaders(extraHeaders);
+        return loadUrlParams;
+    }
+
     private static native boolean nativeIsOfflineBookmarksEnabled();
     private static native boolean nativeIsPageSharingEnabled();
     private static native boolean nativeCanSavePage(String url);
@@ -810,7 +859,12 @@ public class OfflinePageBridge {
     @VisibleForTesting
     native void nativeDeletePagesByOfflineId(
             long nativeOfflinePageBridge, long[] offlineIds, Callback<Integer> callback);
-
+    @VisibleForTesting
+    private native void nativePublishInternalPageByOfflineId(
+            long nativeOfflinePageBridge, long offlineId, Callback<String> publishedCallback);
+    @VisibleForTesting
+    private native void nativePublishInternalPageByGuid(
+            long nativeOfflinePageBridge, String guid, Callback<String> publishedCallback);
     private native void nativeSelectPageForOnlineUrl(
             long nativeOfflinePageBridge, String onlineUrl, int tabId,
             Callback<OfflinePageItem> callback);
@@ -839,4 +893,8 @@ public class OfflinePageBridge {
             long nativeOfflinePageBridge, long offlineId, Callback<String> callback);
     private native boolean nativeIsShowingTrustedOfflinePage(
             long nativeOfflinePageBridge, WebContents webContents);
+    private native void nativeGetLoadUrlParamsForOpeningMhtmlFileOrContent(
+            long nativeOfflinePageBridge, String url, Callback<LoadUrlParams> callback);
+    private native void nativeAcquireFileAccessPermission(
+            long nativeOfflinePageBridge, WebContents webContents, Callback<Boolean> callback);
 }

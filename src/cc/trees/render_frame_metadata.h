@@ -7,8 +7,10 @@
 
 #include "base/optional.h"
 #include "cc/cc_export.h"
+#include "components/viz/common/quads/selection.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/selection_bound.h"
 
 namespace cc {
 
@@ -30,6 +32,10 @@ class CC_EXPORT RenderFrameMetadata {
   bool operator==(const RenderFrameMetadata& other);
   bool operator!=(const RenderFrameMetadata& other);
 
+  // Indicates whether the scroll offset of the root layer is at top, i.e.,
+  // whether scroll_offset.y() == 0.
+  bool is_scroll_offset_at_top = true;
+
   // The background color of a CompositorFrame. It can be used for filling the
   // content area if the primary surface is unavailable and fallback is not
   // specified.
@@ -38,6 +44,17 @@ class CC_EXPORT RenderFrameMetadata {
   // Scroll offset of the root layer. This optional parameter is only valid
   // during tests.
   base::Optional<gfx::Vector2dF> root_scroll_offset;
+
+  // Selection region relative to the current viewport. If the selection is
+  // empty or otherwise unused, the bound types will indicate such.
+  viz::Selection<gfx::SelectionBound> selection;
+
+  // Determines whether the page is mobile optimized or not, which means at
+  // least one of the following has to be true:
+  // - page has a width=device-width or narrower viewport.
+  // - page prevents zooming in or out (i.e. min and max page scale factors
+  // are the same).
+  bool is_mobile_optimized = false;
 };
 
 }  // namespace cc

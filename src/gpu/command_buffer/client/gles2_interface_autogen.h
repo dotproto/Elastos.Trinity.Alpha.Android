@@ -617,7 +617,7 @@ virtual void GenVertexArraysOES(GLsizei n, GLuint* arrays) = 0;
 virtual void DeleteVertexArraysOES(GLsizei n, const GLuint* arrays) = 0;
 virtual GLboolean IsVertexArrayOES(GLuint array) = 0;
 virtual void BindVertexArrayOES(GLuint array) = 0;
-virtual void SwapBuffers() = 0;
+virtual void SwapBuffers(GLbitfield flags = 0) = 0;
 virtual GLuint GetMaxValueInBufferCHROMIUM(GLuint buffer_id,
                                            GLsizei count,
                                            GLenum type,
@@ -684,7 +684,8 @@ virtual void GetTranslatedShaderSourceANGLE(GLuint shader,
 virtual void PostSubBufferCHROMIUM(GLint x,
                                    GLint y,
                                    GLint width,
-                                   GLint height) = 0;
+                                   GLint height,
+                                   GLbitfield flags = 0) = 0;
 virtual void CopyTextureCHROMIUM(GLuint source_id,
                                  GLint source_level,
                                  GLenum dest_target,
@@ -762,7 +763,8 @@ virtual void ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
                                           GLfloat uv_x,
                                           GLfloat uv_y,
                                           GLfloat uv_width,
-                                          GLfloat uv_height) = 0;
+                                          GLfloat uv_height,
+                                          GLboolean enable_blend) = 0;
 virtual void ScheduleCALayerSharedStateCHROMIUM(GLfloat opacity,
                                                 GLboolean is_clipped,
                                                 const GLfloat* clip_rect,
@@ -776,7 +778,7 @@ virtual void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                      GLuint filter) = 0;
 virtual void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                                const GLuint* textures) = 0;
-virtual void CommitOverlayPlanesCHROMIUM() = 0;
+virtual void CommitOverlayPlanesCHROMIUM(GLbitfield flags = 0) = 0;
 virtual void FlushDriverCachesCHROMIUM() = 0;
 virtual GLuint GetLastFlushIdCHROMIUM() = 0;
 virtual void ScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
@@ -910,7 +912,8 @@ virtual void OverlayPromotionHintCHROMIUM(GLuint texture,
                                           GLint display_width,
                                           GLint display_height) = 0;
 virtual void SwapBuffersWithBoundsCHROMIUM(GLsizei count,
-                                           const GLint* rects) = 0;
+                                           const GLint* rects,
+                                           GLbitfield flags = 0) = 0;
 virtual void SetDrawRectangleCHROMIUM(GLint x,
                                       GLint y,
                                       GLint width,
@@ -923,7 +926,6 @@ virtual void BeginRasterCHROMIUM(GLuint texture_id,
                                  GLuint sk_color,
                                  GLuint msaa_sample_count,
                                  GLboolean can_use_lcd_text,
-                                 GLboolean use_distance_field_text,
                                  GLint color_type,
                                  GLuint color_space_transfer_cache_id) = 0;
 virtual void* MapRasterCHROMIUM(GLsizeiptr size) = 0;

@@ -4,7 +4,9 @@
 
 #include "content/common/render_frame_metadata_struct_traits.h"
 
+#include "services/viz/public/cpp/compositing/selection_struct_traits.h"
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
+#include "ui/gfx/mojo/selection_bound_struct_traits.h"
 
 namespace mojo {
 
@@ -14,7 +16,10 @@ bool StructTraits<content::mojom::RenderFrameMetadataDataView,
     Read(content::mojom::RenderFrameMetadataDataView data,
          cc::RenderFrameMetadata* out) {
   out->root_background_color = data.root_background_color();
-  return data.ReadRootScrollOffset(&out->root_scroll_offset);
+  out->is_scroll_offset_at_top = data.is_scroll_offset_at_top();
+  out->is_mobile_optimized = data.is_mobile_optimized();
+  return data.ReadRootScrollOffset(&out->root_scroll_offset) &&
+         data.ReadSelection(&out->selection);
 }
 
 }  // namespace mojo

@@ -42,6 +42,7 @@ class QuicCryptoClientStreamTest : public QuicTest {
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
         crypto_config_(crypto_test_utils::ProofVerifierForTesting(),
                        TlsClientHandshaker::CreateSslCtx()) {
+    SetQuicReloadableFlag(quic_respect_ietf_header, true);
     CreateConnection();
   }
 
@@ -390,6 +391,7 @@ class QuicCryptoClientStreamStatelessTest : public QuicTest {
         server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED) {
+    SetQuicReloadableFlag(quic_respect_ietf_header, true);
     TestQuicSpdyClientSession* client_session = nullptr;
     CreateClientSessionForTest(server_id_,
                                /* supports_stateless_rejects= */ true,

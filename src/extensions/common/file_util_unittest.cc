@@ -12,7 +12,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -185,7 +184,7 @@ TEST_F(FileUtilTest, LoadExtensionWithUnderscoreAndMetadataFolder) {
 
 TEST_F(FileUtilTest, LoadExtensionWithValidLocales) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir = install_dir.AppendASCII("extension_with_locales");
 
   std::string error;
@@ -197,7 +196,7 @@ TEST_F(FileUtilTest, LoadExtensionWithValidLocales) {
 
 TEST_F(FileUtilTest, LoadExtensionWithoutLocalesFolder) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir = install_dir.AppendASCII("extension_without_locales");
 
   std::string error;
@@ -289,7 +288,7 @@ TEST_F(FileUtilTest,
 
 TEST_F(FileUtilTest, LoadExtensionGivesHelpfullErrorOnMissingManifest) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir =
       install_dir.AppendASCII("file_util").AppendASCII("missing_manifest");
 
@@ -303,7 +302,7 @@ TEST_F(FileUtilTest, LoadExtensionGivesHelpfullErrorOnMissingManifest) {
 
 TEST_F(FileUtilTest, LoadExtensionGivesHelpfullErrorOnBadManifest) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir =
       install_dir.AppendASCII("file_util").AppendASCII("bad_manifest");
 
@@ -350,7 +349,7 @@ TEST_F(FileUtilTest, BackgroundScriptsMustExist) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->SetString("name", "test");
   value->SetString("version", "1");
-  value->SetInteger("manifest_version", 1);
+  value->SetInteger("manifest_version", 2);
 
   base::ListValue* scripts =
       value->SetList("background.scripts", std::make_unique<base::ListValue>());
@@ -488,7 +487,7 @@ TEST_F(FileUtilTest, WarnOnPrivateKey) {
 // Try to install an extension with a zero-length icon file.
 TEST_F(FileUtilTest, CheckZeroLengthAndMissingIconFile) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
 
   base::FilePath ext_dir =
       install_dir.AppendASCII("file_util").AppendASCII("bad_icon");
@@ -502,7 +501,7 @@ TEST_F(FileUtilTest, CheckZeroLengthAndMissingIconFile) {
 // Try to install an unpacked extension with a zero-length icon file.
 TEST_F(FileUtilTest, CheckZeroLengthAndMissingIconFileUnpacked) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
 
   base::FilePath ext_dir =
       install_dir.AppendASCII("file_util").AppendASCII("bad_icon");

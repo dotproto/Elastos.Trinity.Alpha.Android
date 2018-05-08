@@ -6,11 +6,13 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/loader/data_pipe_to_source_stream.h"
 #include "content/browser/loader/source_stream_to_data_pipe.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
+#include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_handler.h"
 #include "content/public/common/content_features.h"
 #include "net/cert/cert_status_flags.h"
@@ -80,6 +82,7 @@ WebPackageLoader::WebPackageLoader(
     network::mojom::URLLoaderClientEndpointsPtr endpoints,
     url::Origin request_initiator,
     uint32_t url_loader_options,
+    base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     URLLoaderThrottlesGetter url_loader_throttles_getter,
     scoped_refptr<net::URLRequestContextGetter> request_context_getter)
@@ -89,6 +92,7 @@ WebPackageLoader::WebPackageLoader(
       url_loader_client_binding_(this),
       request_initiator_(request_initiator),
       url_loader_options_(url_loader_options),
+      frame_tree_node_id_getter_(std::move(frame_tree_node_id_getter)),
       url_loader_factory_(std::move(url_loader_factory)),
       url_loader_throttles_getter_(std::move(url_loader_throttles_getter)),
       request_context_getter_(std::move(request_context_getter)),
@@ -123,7 +127,6 @@ WebPackageLoader::~WebPackageLoader() = default;
 
 void WebPackageLoader::OnReceiveResponse(
     const network::ResourceResponseHead& response_head,
-    const base::Optional<net::SSLInfo>& ssl_info,
     network::mojom::DownloadedTempFilePtr downloaded_file) {
   // Must not be called because this WebPackageLoader and the client endpoints
   // were bound after OnReceiveResponse() is called.
@@ -183,7 +186,9 @@ void WebPackageLoader::OnStartLoadingResponseBody(
       content_type_, std::make_unique<DataPipeToSourceStream>(std::move(body)),
       base::BindOnce(&WebPackageLoader::OnHTTPExchangeFound,
                      weak_factory_.GetWeakPtr()),
-      std::move(cert_fetcher_factory), std::move(request_context_getter_));
+      std::move(cert_fetcher_factory), std::move(request_context_getter_),
+      std::make_unique<SignedExchangeDevToolsProxy>(
+          std::move(frame_tree_node_id_getter_)));
 }
 
 void WebPackageLoader::OnComplete(
@@ -229,8 +234,7 @@ void WebPackageLoader::OnHTTPExchangeFound(
     const GURL& request_url,
     const std::string& request_method,
     const network::ResourceResponseHead& resource_response,
-    std::unique_ptr<net::SourceStream> payload_stream,
-    base::Optional<net::SSLInfo> ssl_info) {
+    std::unique_ptr<net::SourceStream> payload_stream) {
   if (error) {
     // This will eventually delete |this|.
     forwarding_client_->OnComplete(network::URLLoaderCompletionStatus(error));
@@ -244,19 +248,24 @@ void WebPackageLoader::OnHTTPExchangeFound(
       std::move(original_response_timing_info_)->CreateRedirectResponseHead());
   forwarding_client_.reset();
 
-  if (ssl_info &&
+  const base::Optional<net::SSLInfo>& ssl_info = resource_response.ssl_info;
+  if (ssl_info.has_value() &&
       (url_loader_options_ &
        network::mojom::kURLLoadOptionSendSSLInfoForCertificateError) &&
       net::IsCertStatusError(ssl_info->cert_status) &&
       !net::IsCertStatusMinorError(ssl_info->cert_status)) {
     ssl_info_ = ssl_info;
   }
-  if (!(url_loader_options_ &
+  if (ssl_info.has_value() &&
+      !(url_loader_options_ &
         network::mojom::kURLLoadOptionSendSSLInfoWithResponse)) {
-    ssl_info = base::nullopt;
+    network::ResourceResponseHead response_info = resource_response;
+    response_info.ssl_info = base::nullopt;
+    client_->OnReceiveResponse(response_info, nullptr /* downloaded_file */);
+  } else {
+    client_->OnReceiveResponse(resource_response,
+                               nullptr /* downloaded_file */);
   }
-  client_->OnReceiveResponse(resource_response, std::move(ssl_info),
-                             nullptr /* downloaded_file */);
 
   // Currently we always assume that we have body.
   // TODO(https://crbug.com/80374): Add error handling and bail out

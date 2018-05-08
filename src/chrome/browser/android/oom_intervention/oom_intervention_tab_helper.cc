@@ -60,6 +60,7 @@ void RecordInterventionStateOnCrash(bool accepted) {
 // Field trial parameter names.
 const char kRendererPauseParamName[] = "pause_renderer";
 const char kShouldDetectInRenderer[] = "detect_in_renderer";
+const char kRendererWorkloadThreshold[] = "renderer_workload_threshold";
 
 bool RendererPauseIsEnabled() {
   static bool enabled = base::GetFieldTrialParamByFeatureAsBool(
@@ -71,6 +72,18 @@ bool ShouldDetectInRenderer() {
   static bool enabled = base::GetFieldTrialParamByFeatureAsBool(
       features::kOomIntervention, kShouldDetectInRenderer, true);
   return enabled;
+}
+
+uint64_t GetRendererMemoryWorkloadThreshold() {
+  const uint64_t kDefaultMemoryWorkloadThreshold = 80 * 1024 * 1024;
+
+  std::string threshold_str = base::GetFieldTrialParamValueByFeature(
+      features::kOomIntervention, kRendererWorkloadThreshold);
+  uint64_t threshold = 0;
+  if (!base::StringToUint64(threshold_str, &threshold)) {
+    return kDefaultMemoryWorkloadThreshold;
+  }
+  return threshold;
 }
 
 }  // namespace
@@ -86,6 +99,7 @@ OomInterventionTabHelper::OomInterventionTabHelper(
       decider_(OomInterventionDecider::GetForBrowserContext(
           web_contents->GetBrowserContext())),
       binding_(this),
+      renderer_memory_workload_threshold_(GetRendererMemoryWorkloadThreshold()),
       weak_ptr_factory_(this) {
   OutOfMemoryReporter::FromWebContents(web_contents)->AddObserver(this);
 }
@@ -108,7 +122,7 @@ void OomInterventionTabHelper::AcceptIntervention() {
 
 void OomInterventionTabHelper::DeclineIntervention() {
   RecordInterventionUserDecision(false);
-  intervention_.reset();
+  ResetInterfaces();
   intervention_state_ = InterventionState::DECLINED;
 
   if (decider_) {
@@ -125,7 +139,7 @@ void OomInterventionTabHelper::WebContentsDestroyed() {
 
 void OomInterventionTabHelper::RenderProcessGone(
     base::TerminationStatus status) {
-  intervention_.reset();
+  ResetInterfaces();
 
   // Skip background process termination.
   if (!IsLastVisibleWebContents(web_contents())) {
@@ -167,7 +181,7 @@ void OomInterventionTabHelper::DidStartNavigation(
   if (navigation_handle->IsSameDocument())
     return;
 
-  intervention_.reset();
+  ResetInterfaces();
 
   // Filter out background navigation.
   if (!IsLastVisibleWebContents(navigation_handle->GetWebContents())) {
@@ -259,7 +273,7 @@ void OomInterventionTabHelper::StartMonitoringIfNeeded() {
 
 void OomInterventionTabHelper::StopMonitoring() {
   if (ShouldDetectInRenderer()) {
-    intervention_.reset();
+    ResetInterfaces();
   } else {
     subscription_.reset();
   }
@@ -282,7 +296,9 @@ void OomInterventionTabHelper::StartDetectionInRenderer() {
   DCHECK(!binding_.is_bound());
   blink::mojom::OomInterventionHostPtr host;
   binding_.Bind(mojo::MakeRequest(&host));
-  intervention_->StartDetection(std::move(host), trigger_intervention);
+  intervention_->StartDetection(std::move(host),
+                                renderer_memory_workload_threshold_,
+                                trigger_intervention);
 }
 
 void OomInterventionTabHelper::OnNearOomDetected() {
@@ -303,7 +319,7 @@ void OomInterventionTabHelper::OnNearOomDetected() {
 void OomInterventionTabHelper::
     OnDetectionWindowElapsedWithoutHighMemoryUsage() {
   ResetInterventionState();
-  intervention_.reset();
+  ResetInterfaces();
   StartMonitoringIfNeeded();
 }
 
@@ -311,4 +327,10 @@ void OomInterventionTabHelper::ResetInterventionState() {
   near_oom_detected_time_.reset();
   intervention_state_ = InterventionState::NOT_TRIGGERED;
   renderer_detection_timer_.AbandonAndStop();
+}
+
+void OomInterventionTabHelper::ResetInterfaces() {
+  intervention_.reset();
+  if (binding_.is_bound())
+    binding_.Close();
 }

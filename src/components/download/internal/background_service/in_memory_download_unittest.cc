@@ -5,6 +5,7 @@
 #include "components/download/internal/background_service/in_memory_download.h"
 
 #include "base/guid.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
@@ -43,7 +44,7 @@ class MockDelegate : public InMemoryDownload::Delegate {
 
   // InMemoryDownload::Delegate implementation.
   MOCK_METHOD1(OnDownloadProgress, void(InMemoryDownload*));
-  void OnDownloadComplete(InMemoryDownload* download) {
+  void OnDownloadComplete(InMemoryDownload* download) override {
     if (run_loop_.running())
       run_loop_.Quit();
   }

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -16,7 +17,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_view_core.h"
@@ -45,6 +46,7 @@
 #include "ui/android/overscroll_refresh_handler.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -130,6 +132,34 @@ void AXTreeSnapshotCallback(const ScopedJavaGlobalRef<jobject>& callback,
   ScopedJavaLocalRef<jobject> j_root =
       JNI_WebContentsImpl_CreateJavaAXSnapshot(env, snapshot.get(), true);
   Java_WebContentsImpl_onAccessibilitySnapshot(env, j_root, callback);
+}
+
+std::string CompressAndSaveBitmap(const std::string& dir,
+                                  const SkBitmap& bitmap) {
+  base::AssertBlockingAllowed();
+
+  std::vector<unsigned char> data;
+  if (!gfx::JPEGCodec::Encode(bitmap, 85, &data))
+    return std::string();
+
+  base::FilePath screenshot_dir(dir);
+  if (!base::DirectoryExists(screenshot_dir)) {
+    base::CreateDirectory(screenshot_dir);
+  }
+
+  base::FilePath screenshot_path;
+  base::ScopedFILE out_file(
+      base::CreateAndOpenTemporaryFileInDir(screenshot_dir, &screenshot_path));
+  unsigned int bytes_written =
+      fwrite(reinterpret_cast<const char*>(data.data()), 1, data.size(),
+             out_file.get());
+
+  // If there were errors, don't leave a partial file around.
+  if (bytes_written != data.size()) {
+    base::DeleteFile(screenshot_path, false);
+    return std::string();
+  }
+  return screenshot_path.value();
 }
 
 }  // namespace
@@ -347,8 +377,9 @@ void WebContentsAndroid::OnShow(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 void WebContentsAndroid::SetImportance(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
-    jint importance) {
-  web_contents_->SetImportance(static_cast<ChildProcessImportance>(importance));
+    jint main_frame_importance) {
+  web_contents_->SetMainFrameImportance(
+      static_cast<ChildProcessImportance>(main_frame_importance));
 }
 
 void WebContentsAndroid::SuspendAllMediaPlayers(
@@ -590,12 +621,14 @@ void WebContentsAndroid::GetContentBitmap(
     const JavaParamRef<jobject>& obj,
     jint width,
     jint height,
+    const JavaParamRef<jstring>& jpath,
     const JavaParamRef<jobject>& jcallback) {
-  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   base::OnceCallback<void(const SkBitmap&)> result_callback = base::BindOnce(
       &WebContentsAndroid::OnFinishGetContentBitmap, weak_factory_.GetWeakPtr(),
       ScopedJavaGlobalRef<jobject>(env, obj),
-      ScopedJavaGlobalRef<jobject>(env, jcallback));
+      ScopedJavaGlobalRef<jobject>(env, jcallback),
+      ConvertJavaStringToUTF8(env, jpath));
+  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   if (!view) {
     std::move(result_callback).Run(SkBitmap());
     return;
@@ -705,13 +738,22 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetOrCreateEventForwarder(
 void WebContentsAndroid::OnFinishGetContentBitmap(
     const JavaRef<jobject>& obj,
     const JavaRef<jobject>& callback,
+    const std::string& path,
     const SkBitmap& bitmap) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> java_bitmap;
-  if (!bitmap.drawsNothing())
-    java_bitmap = gfx::ConvertToJavaBitmap(&bitmap);
-  Java_WebContentsImpl_onGetContentBitmapFinished(env, obj, callback,
-                                                  java_bitmap);
+  if (!bitmap.drawsNothing()) {
+    auto task_runner = base::CreateSequencedTaskRunnerWithTraits(
+        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+    base::PostTaskAndReplyWithResult(
+        task_runner.get(), FROM_HERE,
+        base::BindOnce(&CompressAndSaveBitmap, path, bitmap),
+        base::BindOnce(&base::android::RunStringCallbackAndroid,
+                       ScopedJavaGlobalRef<jobject>(env, callback.obj())));
+    return;
+  }
+  // If readback failed, call empty callback
+  base::android::RunStringCallbackAndroid(callback, std::string());
 }
 
 void WebContentsAndroid::OnFinishDownloadImage(
@@ -749,6 +791,16 @@ void WebContentsAndroid::SetMediaSession(
     const ScopedJavaLocalRef<jobject>& j_media_session) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_WebContentsImpl_setMediaSession(env, obj_, j_media_session);
+}
+
+int WebContentsAndroid::GetTopControlsShrinkBlinkHeightPixForTesting(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  RenderWidgetHostViewAndroid* rwhva = GetRenderWidgetHostViewAndroid();
+  float scale = web_contents_->GetNativeView()->GetDipScale();
+  return (rwhva && rwhva->DoBrowserControlsShrinkBlinkSize())
+             ? rwhva->GetTopControlsHeight() * scale
+             : 0;
 }
 
 }  // namespace content

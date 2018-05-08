@@ -42,7 +42,6 @@ class CC_EXPORT LayerTreeSettings {
   int damaged_frame_limit = 3;
   bool enable_latency_recovery = true;
   bool can_use_lcd_text = true;
-  bool use_distance_field_text = false;
   bool gpu_rasterization_forced = false;
   int gpu_rasterization_msaa_sample_count = 0;
   float gpu_rasterization_skewport_target_time_in_seconds = 0.2f;
@@ -94,7 +93,8 @@ class CC_EXPORT LayerTreeSettings {
   ManagedMemoryPolicy memory_policy;
   size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
-  viz::ResourceFormat preferred_tile_format;
+  bool use_rgba_4444 = false;
+  bool unpremultiply_and_dither_low_bit_depth_tiles = false;
 
   bool enable_mask_tiling = true;
 

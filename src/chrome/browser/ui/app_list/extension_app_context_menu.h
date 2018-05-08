@@ -32,12 +32,16 @@ class ExtensionAppContextMenu : public AppContextMenu {
 
   static void DisableInstalledExtensionCheckForTesting(bool disable);
 
-  // AppListContextMenu overrides:
-  ui::MenuModel* GetMenuModel() override;
+  // Returns the string id based on launch type.
+  int GetLaunchStringId() const;
+
+  // AppContextMenu overrides:
+  void GetMenuModel(GetMenuModelCallback callback) override;
   void BuildMenu(ui::SimpleMenuModel* menu_model) override;
 
   // ui::SimpleMenuModel::Delegate overrides:
   base::string16 GetLabelForCommandId(int command_id) const override;
+  bool GetIconForCommandId(int command_id, gfx::Image* icon) const override;
   bool IsItemForCommandIdDynamic(int command_id) const override;
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;

@@ -13,7 +13,7 @@
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_listener.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 
@@ -55,7 +55,10 @@ class InputRouter : public IPC::Listener {
   virtual void SetDeviceScaleFactor(float device_scale_factor) = 0;
 
   // Sets the frame tree node id of associated frame, used when tracing
-  // input event latencies to relate events to their target frames.
+  // input event latencies to relate events to their target frames. Since
+  // input always flows to Local Frame Roots, the |frameTreeNodeId| is
+  // relative to the Frame associated with the Local Frame Root for the
+  // widget owning this InputRouter.
   virtual void SetFrameTreeNodeId(int frameTreeNodeId) = 0;
 
   // Return the currently allowed touch-action.
@@ -72,6 +75,9 @@ class InputRouter : public IPC::Listener {
 
   // Used to stop an active fling if such exists.
   virtual void StopFling() = 0;
+
+  // Used to check if a fling cancellation is deferred due to boosting or not.
+  virtual bool FlingCancellationIsDeferred() = 0;
 };
 
 }  // namespace content

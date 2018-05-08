@@ -14,6 +14,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
@@ -30,10 +31,11 @@
 #include "components/error_page/common/error_page_params.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -123,7 +125,8 @@ base::TimeDelta GetAutoReloadTime(size_t reload_count) {
 // Returns whether |error| is a DNS-related error (and therefore whether
 // the tab helper should start a DNS probe after receiving it).
 bool IsNetDnsError(const error_page::Error& error) {
-  return error.domain() == net::kErrorDomain && net::IsDnsError(error.reason());
+  return error.domain() == error_page::Error::kNetErrorDomain &&
+         net::IsDnsError(error.reason());
 }
 
 GURL SanitizeURL(const GURL& url) {
@@ -169,7 +172,7 @@ bool ShouldUseFixUrlServiceForError(const error_page::Error& error,
     *error_param = "dnserror";
     return true;
   }
-  if (domain == net::kErrorDomain &&
+  if (domain == error_page::Error::kNetErrorDomain &&
       (error.reason() == net::ERR_CONNECTION_FAILED ||
        error.reason() == net::ERR_CONNECTION_REFUSED ||
        error.reason() == net::ERR_ADDRESS_UNREACHABLE ||
@@ -362,7 +365,7 @@ std::unique_ptr<error_page::ErrorPageParams> CreateErrorPageParams(
 }
 
 void ReportAutoReloadSuccess(const error_page::Error& error, size_t count) {
-  if (error.domain() != net::kErrorDomain)
+  if (error.domain() != error_page::Error::kNetErrorDomain)
     return;
   base::UmaHistogramSparse("Net.AutoReload.ErrorAtSuccess", -error.reason());
   UMA_HISTOGRAM_COUNTS("Net.AutoReload.CountAtSuccess",
@@ -374,7 +377,7 @@ void ReportAutoReloadSuccess(const error_page::Error& error, size_t count) {
 }
 
 void ReportAutoReloadFailure(const error_page::Error& error, size_t count) {
-  if (error.domain() != net::kErrorDomain)
+  if (error.domain() != error_page::Error::kNetErrorDomain)
     return;
   base::UmaHistogramSparse("Net.AutoReload.ErrorAtStop", -error.reason());
   UMA_HISTOGRAM_COUNTS("Net.AutoReload.CountAtStop",
@@ -475,7 +478,7 @@ NetErrorHelperCore::NavigationCorrectionParams::~NavigationCorrectionParams() {}
 bool NetErrorHelperCore::IsReloadableError(
     const NetErrorHelperCore::ErrorPageInfo& info) {
   GURL url = info.error.url();
-  return info.error.domain() == net::kErrorDomain &&
+  return info.error.domain() == error_page::Error::kNetErrorDomain &&
          info.error.reason() != net::ERR_ABORTED &&
          // For now, net::ERR_UNKNOWN_URL_SCHEME is only being displayed on
          // Chrome for Android.
@@ -501,8 +504,7 @@ bool NetErrorHelperCore::IsReloadableError(
 NetErrorHelperCore::NetErrorHelperCore(Delegate* delegate,
                                        bool auto_reload_enabled,
                                        bool auto_reload_visible_only,
-                                       bool is_visible,
-                                       bool online)
+                                       bool is_visible)
     : delegate_(delegate),
       last_probe_status_(error_page::DNS_PROBE_POSSIBLE),
       can_show_network_diagnostics_dialog_(false),
@@ -512,7 +514,8 @@ NetErrorHelperCore::NetErrorHelperCore(Delegate* delegate,
       auto_reload_paused_(false),
       auto_reload_in_flight_(false),
       uncommitted_load_started_(false),
-      online_(online),
+      // TODO(ellyjones): Make online_ accurate at object creation.
+      online_(true),
       visible_(is_visible),
       auto_reload_count_(0),
       navigation_from_button_(NO_BUTTON) {}
@@ -869,6 +872,12 @@ void NetErrorHelperCore::Reload(bool bypass_cache) {
 }
 
 bool NetErrorHelperCore::MaybeStartAutoReloadTimer() {
+  // Automation tools expect to be in control of reloads.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableAutomation)) {
+    return false;
+  }
+
   if (!committed_error_page_info_ ||
       !committed_error_page_info_->is_finished_loading ||
       pending_error_page_info_ || uncommitted_load_started_) {

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,7 +31,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_urls.h"
 #include "net/base/url_util.h"
-#include "ui/app_list/app_list_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -52,13 +52,13 @@ WebstoreResult::WebstoreResult(Profile* profile,
       extension_registry_(NULL),
       weak_factory_(this) {
   set_id(GetResultIdFromExtensionId(app_id));
-
+  set_result_type(ash::SearchResultType::kWebStoreSearch);
   SetDefaultDetails();
 
   InitAndStartObserving();
   UpdateActions();
 
-  int icon_dimension = GetPreferredIconDimension(this);
+  int icon_dimension = GetPreferredIconDimension(display_type());
   icon_ = gfx::ImageSkia(
       std::make_unique<UrlIconSource>(
           base::Bind(&WebstoreResult::OnIconLoaded, weak_factory_.GetWeakPtr()),
@@ -102,8 +102,8 @@ void WebstoreResult::InvokeAction(int action_index, int event_flags) {
   StartInstall();
 }
 
-std::unique_ptr<SearchResult> WebstoreResult::Duplicate() const {
-  std::unique_ptr<SearchResult> copy(new WebstoreResult(
+std::unique_ptr<ChromeSearchResult> WebstoreResult::Duplicate() const {
+  std::unique_ptr<ChromeSearchResult> copy(new WebstoreResult(
       profile_, app_id_, icon_url_, is_paid_, item_type_, controller_));
   copy->set_title(title());
   copy->set_title_tags(title_tags());
@@ -150,7 +150,7 @@ void WebstoreResult::SetDefaultDetails() {
   const base::string16 details =
       l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE);
   Tags details_tags;
-  details_tags.push_back(Tag(SearchResult::Tag::DIM, 0, details.length()));
+  details_tags.push_back(Tag(ash::SearchResultTag::DIM, 0, details.length()));
 
   set_details(details);
   set_details_tags(details_tags);

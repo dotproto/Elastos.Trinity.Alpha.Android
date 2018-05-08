@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Kizindua</translation>
 <translation id="1525508553941733066">ONDOA</translation>
+<translation id="1537254971476575106">Kikuzaji cha skrini nzima</translation>
 <translation id="15373452373711364">Kishale kikubwa cha kipanya</translation>
 <translation id="1550523713251050646">Bofya ili upate chaguo zaidi</translation>
 <translation id="1567387640189251553">Kibodi tofauti imeunganishwa baada ya tukio lako la hivi karibuni la kuweka nenosiri. Huenda inajaribu kuiba mibofyo yako.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Samahani, tumeshindwa kuthibitisha nenosiri lako. Kumbuka: ikiwa ulibadilisha nenosiri lako hivi karibuni, nenosiri lako jipya litaanza kutumika pindi utakapoondoka kwenye akaunti, tafadhali tumia nenosiri la awali hapa.</translation>
 <translation id="1677472565718498478">Zimesalia <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Anwani ya IPv6: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Msimamizi wa kifaa hiki anaweza kufuatilia shughuli zako.</translation>
 <translation id="1734367976349034509">Kifaa hiki kinadhibitiwa kibiashara</translation>
 <translation id="1746730358044914197">Mbinu za kuingiza data zimewekwa na msimamizi wako.</translation>
 <translation id="1747827819627189109">Kibodi ya skrini imewashwa</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Kitufe cha ziada</translation>
 <translation id="1951012854035635156">Mratibu</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Weka lugha yako</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Zima</translation>
 <translation id="2012624427112548395">Ctrl+Search+H</translation>
 <translation id="2049639323467105390">Kifaa hiki kinadhibitiwa na <ph name="DOMAIN" /> .</translation>
 <translation id="2050339315714019657">Wima</translation>
 <translation id="2067602449040652523">Ung'avu wa kibodi</translation>
+<translation id="2081529251031312395">Bado $1 anaweza kuingia katika akaunti baadaye.</translation>
 <translation id="2122028596993374965">Acha kutuma <ph name="TAB_NAME" /> kwenye <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Chaja ya nguvu ya chini</translation>
+<translation id="2135456203358955318">Kikuzaji kilichofungwa</translation>
 <translation id="2144487987174258011">Zima kisha uwashe ili usasishe Adobe Flash Player</translation>
-<translation id="2191905770366256395">Kibodi unayoweza kutenganisha inahitaji sasisho muhimu</translation>
 <translation id="2208323208084708176">Hali ya eneo-kazi iliyounganishwa</translation>
 <translation id="2220572644011485463">PIN au nenosiri</translation>
 <translation id="225680501294068881">Inatambazaa vifaa...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Kipimo cha mwonekano</translation>
 <translation id="2303600792989757991">Geuza muhtasari wa dirisha</translation>
 <translation id="2338501278241028356">Washa Bluetooth ili ugundue vifaa vilivyo karibu</translation>
+<translation id="2339073806695260576">Gusa kitufe cha stylus kwenye rafu ili uandike kidokezo, upige picha ya skrini, utumie kielekezi cha leza au lenzi.</translation>
 <translation id="2351266942280602854">Lugha na uingizaji</translation>
 <translation id="2352467521400612932">Mipangilio ya stylus</translation>
 <translation id="2354174487190027830">Inaanza kutumia <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Wasilisha</translation>
 <translation id="2675319268637823299">Msimamizi amezuia uwezo wa kuingia katika akaunti nyingi kwa wakati mmoja kwa kutumia <ph name="USER_EMAIL" />.
     Ni lazima watumiaji wote waondoke katika akaunti ili uendelee.</translation>
+<translation id="2696763960464195425">Maelezo yako yataondolewa wakati unaondoka kwenye akaunti. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Weka kibodi yako</translation>
 <translation id="2718395828230677721">Mwanga wa Usiku</translation>
 <translation id="2727977024730340865">Imechomekwa katika chaja ya kawi ya chini. Huenda kuchaji kwa betri hakutakuwa kuzuri.</translation>
 <translation id="2761704814324807722">Treya ya hali, saa <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Kuingiza data kwa mwandiko wa mkono</translation>
 <translation id="6528179044667508675">Usinisumbue</translation>
 <translation id="6537270692134705506">Piga skrini picha</translation>
-<translation id="6580955892089546165">Kipengele hiki hukuruhusu kufikia kwa haraka mtumiaji yeyote aliyeingia katika akaunti bila ya kuhitaji nenosiri.
-
-Tumia kipengele hiki kwa akaunti unazoamini pekee.</translation>
 <translation id="6585808820553845416">Kipindi kitakwisha baada ya <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Tafuta+Shift+K</translation>
 <translation id="6650933572246256093">Kifaa cha Bluetooth cha "<ph name="DEVICE_NAME" />" kinaomba idhini ya kuoanisha. Tafadhali weka nenosiri hili kwenye kifaa hicho: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Nenosiri</translation>
 <translation id="6691659475504239918">Search+Shift+H</translation>
+<translation id="6696025732084565524">Kibodi unayoweza kutenganisha inahitaji sasisho muhimu</translation>
 <translation id="6700713906295497288">Kitufe cha menyu ya IME</translation>
 <translation id="6713285437468012787">Kifaa cha Bluetooth cha "<ph name="DEVICE_NAME" />" kimeoanishwa na sasa kinapatikana kwa watumiaji wote. Unaweza kuondoa uoanishaji huu kwa kutumia Mipangilio.</translation>
 <translation id="6715542151869432661">Hakuna vifaa vya mkononi vilivyopatikana.</translation>
@@ -260,7 +265,6 @@ Tumia kipengele hiki kwa akaunti unazoamini pekee.</translation>
 <translation id="7029814467594812963">Toka kwenye kipindi</translation>
 <translation id="7034339000180558234">Inatuma <ph name="TAB_NAME" /> kwenye <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Weka Mandhari...</translation>
-<translation id="7054808953701320293">Nimeelewa, usinionyeshe tena</translation>
 <translation id="7066646422045619941">Mtandao huu umezimwa na msimamizi wako.</translation>
 <translation id="7067196344162293536">Zungusha kiotomatiki</translation>
 <translation id="7098389117866926363">Kifaa cha USB-C (mlango wa kushoto nyuma)</translation>
@@ -299,8 +303,6 @@ Tumia kipengele hiki kwa akaunti unazoamini pekee.</translation>
 <translation id="7994370417837006925">Uwezo wa kuingia katika akaunti nyingi kwa wakati mmoja</translation>
 <translation id="8000066093800657092">Hakuna mtandao</translation>
 <translation id="8054466585765276473">Inakokotoa muda wa betri.</translation>
-<translation id="8056430285089645882">Nimeelewa, usioneshe hili tena</translation>
-<translation id="8088137642766812908">Kuwa makini, kipengee hiki kinaweza kuumiza</translation>
 <translation id="8098591350844501178">Acha kutuma skrini kwenye <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Imeunganishwa kwenye <ph name="NAME" /></translation>
 <translation id="813913629614996137">Inaanzisha…</translation>
@@ -326,10 +328,8 @@ Tumia kipengele hiki kwa akaunti unazoamini pekee.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Chaja ya nguvu ya chini imeunganishwa</translation>
 <translation id="8734991477317290293">Huenda inajaribu kuiba mibofyo yako</translation>
+<translation id="8809737090443522491">Andika jina la programu au hati</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">Kuhamisha madirisha hadi eneo-kazi jingine kunaweza kusababisha tabia ambayo hakikutarajiwa.
-
-Arifa, madirisha na vidirisha vya baadaye vitagawanywa baina ya maeneo-kazi.</translation>
 <translation id="8825534185036233643">Kuakisi ukitumia zaidi ya skrini mbili hakuruhusiwi.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Kitufe cha Nyuma</translation>

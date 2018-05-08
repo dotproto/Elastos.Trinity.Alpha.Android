@@ -38,7 +38,8 @@ class TokenRevoker : public GaiaAuthConsumer {
   void Start(const std::string& token);
 
   // GaiaAuthConsumer:
-  void OnOAuth2RevokeTokenCompleted() override;
+  void OnOAuth2RevokeTokenCompleted(
+      GaiaAuthConsumer::TokenRevocationStatus status) override;
 
  private:
   GaiaAuthFetcher gaia_fetcher_;
@@ -57,7 +58,8 @@ void TokenRevoker::Start(const std::string& token) {
   gaia_fetcher_.StartRevokeOAuth2Token(token);
 }
 
-void TokenRevoker::OnOAuth2RevokeTokenCompleted() {
+void TokenRevoker::OnOAuth2RevokeTokenCompleted(
+    GaiaAuthConsumer::TokenRevocationStatus status) {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -114,6 +116,12 @@ void EnterpriseEnrollmentHelperImpl::EnrollUsingAttestation() {
   DoEnroll("");  // The token is not used in attestation mode.
 }
 
+void EnterpriseEnrollmentHelperImpl::EnrollForOfflineDemo() {
+  CHECK_EQ(enrollment_config_.mode,
+           policy::EnrollmentConfig::MODE_OFFLINE_DEMO);
+  DoEnroll("");  // The token is not used in offline demo mode.
+}
+
 void EnterpriseEnrollmentHelperImpl::ClearAuth(const base::Closure& callback) {
   if (oauth_status_ != OAUTH_NOT_STARTED) {
     // Do not revoke the additional token if enrollment has finished
@@ -161,8 +169,10 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
   }
 
   bool check_license_type = false;
-  // The license selection dialog is not used when doing Zero Touch.
-  if (!enrollment_config_.is_mode_attestation()) {
+  // The license selection dialog is not used when doing Zero Touch or setting
+  // up offline demo-mode.
+  if (!enrollment_config_.is_mode_attestation() &&
+      enrollment_config_.mode != policy::EnrollmentConfig::MODE_OFFLINE_DEMO) {
     check_license_type = !base::CommandLine::ForCurrentProcess()->HasSwitch(
         chromeos::switches::kEnterpriseDisableLicenseTypeSelection);
   }

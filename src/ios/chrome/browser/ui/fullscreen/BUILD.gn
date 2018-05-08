@@ -29,6 +29,20 @@ source_set("fullscreen") {
   ]
 }
 
+source_set("features") {
+  sources = [
+    "fullscreen_features.h",
+    "fullscreen_features.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    "//base",
+    "//components/flags_ui",
+  ]
+}
+
 source_set("coordinators") {
   sources = [
     "chrome_coordinator+fullscreen_disabling.h",
@@ -70,6 +84,7 @@ source_set("internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
+    ":features",
     ":ui",
     "//base",
     "//components/keyed_service/ios",
@@ -121,6 +136,8 @@ source_set("unit_tests") {
     ":fullscreen",
     ":internal",
     ":ui",
+    "//base/test:test_support",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/broadcaster",
     "//ios/chrome/browser/ui/fullscreen/test",

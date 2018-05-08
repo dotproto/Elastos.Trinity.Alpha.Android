@@ -8,18 +8,14 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/strings/string_piece_forward.h"
+#include "content/browser/web_package/signed_exchange_certificate_chain.h"
 #include "content/common/content_export.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "url/origin.h"
-
-namespace net {
-class X509Certificate;
-}  // namespace net
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -31,6 +27,7 @@ class SimpleWatcher;
 
 namespace content {
 
+class SignedExchangeDevToolsProxy;
 class ThrottlingURLLoader;
 class URLLoaderThrottle;
 
@@ -38,7 +35,7 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
     : public network::mojom::URLLoaderClient {
  public:
   using CertificateCallback =
-      base::OnceCallback<void(scoped_refptr<net::X509Certificate>)>;
+      base::OnceCallback<void(std::unique_ptr<SignedExchangeCertificateChain>)>;
 
   // Starts fetching the certificate using a ThrottlingURLLoader created with
   // the |shared_url_loader_factory| and the |throttles|. The |callback| will
@@ -54,12 +51,8 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
       const GURL& cert_url,
       url::Origin request_initiator,
       bool force_fetch,
-      CertificateCallback callback);
-
-  // Parses a TLS 1.3 Certificate message containing X.509v3 certificates and
-  // returns a vector of cert_data. Returns nullopt when failed to parse.
-  static base::Optional<std::vector<base::StringPiece>> GetCertChainFromMessage(
-      base::StringPiece message);
+      CertificateCallback callback,
+      SignedExchangeDevToolsProxy* devtools_proxy);
 
   ~SignedExchangeCertFetcher() override;
 
@@ -79,7 +72,8 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
       const GURL& cert_url,
       url::Origin request_initiator,
       bool force_fetch,
-      CertificateCallback callback);
+      CertificateCallback callback,
+      SignedExchangeDevToolsProxy* devtools_proxy);
   void Start();
   void Abort();
   void OnHandleReady(MojoResult result);
@@ -88,7 +82,6 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
   // network::mojom::URLLoaderClient
   void OnReceiveResponse(
       const network::ResourceResponseHead& head,
-      const base::Optional<net::SSLInfo>& ssl_info,
       network::mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const network::ResourceResponseHead& head) override;
@@ -111,6 +104,9 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
   mojo::ScopedDataPipeConsumerHandle body_;
   std::unique_ptr<mojo::SimpleWatcher> handle_watcher_;
   std::string body_string_;
+
+  // This is owned by SignedExchangeHandler which is the owner of |this|.
+  SignedExchangeDevToolsProxy* devtools_proxy_;
 
   DISALLOW_COPY_AND_ASSIGN(SignedExchangeCertFetcher);
 };

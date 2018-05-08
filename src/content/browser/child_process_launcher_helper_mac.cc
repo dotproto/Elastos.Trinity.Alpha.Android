@@ -4,7 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
 #include "content/browser/child_process_launcher.h"
@@ -32,6 +31,7 @@
 #include "services/service_manager/sandbox/mac/utility.sb.h"
 #include "services/service_manager/sandbox/sandbox.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
+#include "services/service_manager/sandbox/switches.h"
 
 namespace content {
 namespace internal {
@@ -67,8 +67,9 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
   auto sandbox_type =
       service_manager::SandboxTypeFromCommandLine(*command_line_);
 
-  bool no_sandbox = command_line_->HasSwitch(switches::kNoSandbox) ||
-                    service_manager::IsUnsandboxedSandboxType(sandbox_type);
+  bool no_sandbox =
+      command_line_->HasSwitch(service_manager::switches::kNoSandbox) ||
+      service_manager::IsUnsandboxedSandboxType(sandbox_type);
 
   // TODO(kerrnel): Delete this switch once the V2 sandbox is always enabled.
   bool v2_process = false;
@@ -162,7 +163,8 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     }
 
     base::FilePath helper_executable;
-    CHECK(PathService::Get(content::CHILD_PROCESS_EXE, &helper_executable));
+    CHECK(
+        base::PathService::Get(content::CHILD_PROCESS_EXE, &helper_executable));
 
     options->fds_to_remap.push_back(std::make_pair(pipe, pipe));
 
@@ -222,13 +224,15 @@ void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
   broker->GetLock().Release();
 }
 
-base::TerminationStatus ChildProcessLauncherHelper::GetTerminationStatus(
+ChildProcessTerminationInfo ChildProcessLauncherHelper::GetTerminationInfo(
     const ChildProcessLauncherHelper::Process& process,
-    bool known_dead,
-    int* exit_code) {
-  return known_dead
-      ? base::GetKnownDeadTerminationStatus(process.process.Handle(), exit_code)
-      : base::GetTerminationStatus(process.process.Handle(), exit_code);
+    bool known_dead) {
+  ChildProcessTerminationInfo info;
+  info.status = known_dead ? base::GetKnownDeadTerminationStatus(
+                                 process.process.Handle(), &info.exit_code)
+                           : base::GetTerminationStatus(
+                                 process.process.Handle(), &info.exit_code);
+  return info;
 }
 
 // static

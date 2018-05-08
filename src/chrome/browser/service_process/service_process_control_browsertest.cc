@@ -35,8 +35,7 @@ class ServiceProcessControlBrowserTest
  public:
   ServiceProcessControlBrowserTest() {
   }
-  virtual ~ServiceProcessControlBrowserTest() {
-  }
+  ~ServiceProcessControlBrowserTest() override {}
 
   void HistogramsCallback() {
     MockHistogramsCallback();
@@ -194,7 +193,7 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, LaunchAndReconnect) {
   ServiceProcessControl::GetInstance()->remote_interfaces().GetInterface(
       &cloud_print_proxy);
   cloud_print_proxy->EnableCloudPrintProxyWithRobot(
-      "", "", "", std::make_unique<base::DictionaryValue>());
+      "", "", "", base::Value(base::Value::Type::DICTIONARY));
 
   ServiceProcessControl::GetInstance()->remote_interfaces().GetInterface(
       &cloud_print_proxy);

@@ -25,8 +25,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
-#include "crypto/ec_private_key.h"
-#include "crypto/ec_signature_creator.h"
 #include "net/base/url_util.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
@@ -34,6 +32,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_util.h"
+#include "net/http/http_vary_data.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
@@ -50,14 +49,14 @@
 #include "net/spdy/chromium/spdy_log_util.h"
 #include "net/spdy/chromium/spdy_session_pool.h"
 #include "net/spdy/chromium/spdy_stream.h"
-#include "net/spdy/core/spdy_frame_builder.h"
-#include "net/spdy/core/spdy_protocol.h"
-#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
-#include "net/spdy/platform/api/spdy_string.h"
-#include "net/spdy/platform/api/spdy_string_utils.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "net/third_party/spdy/core/spdy_frame_builder.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/platform/api/spdy_estimate_memory_usage.h"
+#include "net/third_party/spdy/platform/api/spdy_string.h"
+#include "net/third_party/spdy/platform/api/spdy_string_utils.h"
 #include "url/url_constants.h"
 
 namespace net {
@@ -1192,9 +1191,7 @@ bool SpdySession::GetSSLInfo(SSLInfo* ssl_info) const {
 Error SpdySession::GetTokenBindingSignature(crypto::ECPrivateKey* key,
                                             TokenBindingType tb_type,
                                             std::vector<uint8_t>* out) {
-  SSLClientSocket* ssl_socket =
-      static_cast<SSLClientSocket*>(connection_->socket());
-  return ssl_socket->GetTokenBindingSignature(key, tb_type, out);
+  return connection_->socket()->GetTokenBindingSignature(key, tb_type, out);
 }
 
 bool SpdySession::WasAlpnNegotiated() const {
@@ -1422,7 +1419,64 @@ bool SpdySession::ValidatePushedStream(SpdyStreamId stream_id,
     return false;
   }
 
-  return true;
+  if (stream_it->second->IsReservedRemote()) {
+    // Pushed response headers have not arrived yet, match stream to request.
+    // TODO(https://crbug.com/554220): This is incorrect.  Validate pushed
+    // response headers after they arrive.
+    // TODO(https://crbug.com/831536): Add histogram.
+    return true;
+  }
+
+  HttpRequestInfo pushed_request_info;
+  ConvertHeaderBlockToHttpRequestHeaders(stream_it->second->request_headers(),
+                                         &pushed_request_info.extra_headers);
+
+  HttpResponseInfo pushed_response_info;
+  if (!SpdyHeadersToHttpResponse(stream_it->second->response_headers(),
+                                 &pushed_response_info)) {
+    return false;
+  }
+
+  SpdyHeaderBlock::const_iterator status_it =
+      stream_it->second->response_headers().find(kHttp2StatusHeader);
+  // Had there not been a status header, SpdyHeadersToHttpResponse() would have
+  // returned true just above.
+  DCHECK(status_it != stream_it->second->response_headers().end());
+  // 206 Partial Content and 416 Requested Range Not Satisfiable are range
+  // responses.
+  if (status_it->second == "206" || status_it->second == "416") {
+    SpdyHeaderBlock::const_iterator client_request_range_it =
+        stream_it->second->request_headers().find("range");
+    if (client_request_range_it == stream_it->second->request_headers().end()) {
+      // Client initiated request is not a range request.
+      // TODO(https://crbug.com/831536): Add histogram.
+      return false;
+    }
+    std::string pushed_request_range;
+    if (!request_info.extra_headers.GetHeader(HttpRequestHeaders::kRange,
+                                              &pushed_request_range)) {
+      // Pushed request is not a range request.
+      // TODO(https://crbug.com/831536): Add histogram.
+      return false;
+    }
+    if (client_request_range_it->second != pushed_request_range) {
+      // Client and pushed request ranges do not match.
+      // TODO(https://crbug.com/831536): Add histogram.
+      return false;
+    }
+  }
+
+  HttpVaryData vary_data;
+  if (!vary_data.Init(pushed_request_info,
+                      *pushed_response_info.headers.get())) {
+    // Pushed response did not contain non-empty Vary header.
+    // TODO(https://crbug.com/831536): Add histogram.
+    return true;
+  }
+
+  // TODO(https://crbug.com/831536): Add histogram.
+  return vary_data.MatchesRequest(request_info,
+                                  *pushed_response_info.headers.get());
 }
 
 base::WeakPtr<SpdySession> SpdySession::GetWeakPtrToSession() {
@@ -3028,6 +3082,7 @@ void SpdySession::OnHeaders(SpdyStreamId stream_id,
     DCHECK_EQ(SPDY_PUSH_STREAM, stream->type());
     if (max_concurrent_pushed_streams_ &&
         num_active_pushed_streams_ >= max_concurrent_pushed_streams_) {
+      // TODO(https://crbug.com/831536): Add histogram.
       ResetStream(stream_id, ERROR_CODE_REFUSED_STREAM,
                   "Stream concurrency limit reached.");
       return;

@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -16,6 +17,7 @@
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/service/gpu_channel.h"
@@ -26,7 +28,10 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/viz/privileged/interfaces/gl/gpu_host.mojom.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/native_widget_types.h"
+
+class GrContext;
 
 #if defined(OS_CHROMEOS)
 namespace arc {
@@ -57,7 +62,10 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
                  std::unique_ptr<gpu::GpuWatchdogThread> watchdog,
                  scoped_refptr<base::SingleThreadTaskRunner> io_runner,
                  const gpu::GpuFeatureInfo& gpu_feature_info,
-                 const gpu::GpuPreferences& gpu_preferences);
+                 const gpu::GpuPreferences& gpu_preferences,
+                 const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+                 const base::Optional<gpu::GpuFeatureInfo>&
+                     gpu_feature_info_for_hardware_gpu);
 
   ~GpuServiceImpl() override;
 
@@ -68,6 +76,8 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
                           gpu::SyncPointManager* sync_point_manager = nullptr,
                           base::WaitableEvent* shutdown_event = nullptr);
   void Bind(mojom::GpuServiceRequest request);
+
+  bool CreateGrContextIfNecessary(gl::GLSurface* surface);
 
   bool is_initialized() const { return !!gpu_host_; }
 
@@ -93,6 +103,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   }
 
   gpu::SyncPointManager* sync_point_manager() { return sync_point_manager_; }
+  gpu::Scheduler* scheduler() { return scheduler_.get(); }
 
   gpu::GpuWatchdogThread* watchdog_thread() { return watchdog_thread_.get(); }
 
@@ -108,6 +119,12 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   const gpu::GpuPreferences& gpu_preferences() const {
     return gpu_preferences_;
   }
+
+  gpu::SequenceId skia_output_surface_sequence_id() const {
+    return skia_output_surface_sequence_id_;
+  }
+  gl::GLContext* context_for_skia() { return context_for_skia_.get(); }
+  GrContext* gr_context() { return gr_context_.get(); }
 
  private:
   void RecordLogMessage(int severity,
@@ -140,12 +157,16 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
                            bool is_gpu_host,
                            EstablishGpuChannelCallback callback) override;
   void CloseChannel(int32_t client_id) override;
+#if defined(OS_CHROMEOS)
   void CreateArcVideoDecodeAccelerator(
       arc::mojom::VideoDecodeAcceleratorRequest vda_request) override;
   void CreateArcVideoEncodeAccelerator(
       arc::mojom::VideoEncodeAcceleratorRequest vea_request) override;
+  void CreateArcVideoProtectedBufferAllocator(
+      arc::mojom::VideoProtectedBufferAllocatorRequest pba_request) override;
   void CreateArcProtectedBufferManager(
       arc::mojom::ProtectedBufferManagerRequest pbm_request) override;
+#endif  // defined(OS_CHROMEOS)
   void CreateJpegDecodeAccelerator(
       media::mojom::JpegDecodeAcceleratorRequest jda_request) override;
   void CreateJpegEncodeAccelerator(
@@ -166,6 +187,8 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   void GetVideoMemoryUsageStats(
       GetVideoMemoryUsageStatsCallback callback) override;
   void RequestCompleteGpuInfo(RequestCompleteGpuInfoCallback callback) override;
+  void GetGpuSupportedRuntimeVersion(
+      GetGpuSupportedRuntimeVersionCallback callback) override;
   void RequestHDRStatus(RequestHDRStatusCallback callback) override;
   void LoadedShader(const std::string& key, const std::string& data) override;
   void DestroyingVideoSurface(int32_t surface_id,
@@ -173,6 +196,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   void WakeUpGpu() override;
   void GpuSwitched() override;
   void DestroyAllChannels() override;
+  void OnBackgrounded() override;
   void Crash() override;
   void Hang() override;
   void ThrowJavaException() override;
@@ -183,6 +207,8 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
       arc::mojom::VideoDecodeAcceleratorRequest vda_request);
   void CreateArcVideoEncodeAcceleratorOnMainThread(
       arc::mojom::VideoEncodeAcceleratorRequest vea_request);
+  void CreateArcVideoProtectedBufferAllocatorOnMainThread(
+      arc::mojom::VideoProtectedBufferAllocatorRequest pba_request);
   void CreateArcProtectedBufferManagerOnMainThread(
       arc::mojom::ProtectedBufferManagerRequest pbm_request);
 #endif  // defined(OS_CHROMEOS)
@@ -204,6 +230,11 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   // Information about general chrome feature support for the GPU.
   gpu::GpuFeatureInfo gpu_feature_info_;
 
+  // What we would have gotten if we haven't fallen back to SwiftShader or
+  // pure software (in the viz case).
+  base::Optional<gpu::GPUInfo> gpu_info_for_hardware_gpu_;
+  base::Optional<gpu::GpuFeatureInfo> gpu_feature_info_for_hardware_gpu_;
+
   scoped_refptr<mojom::ThreadSafeGpuHostPtr> gpu_host_;
   std::unique_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
   std::unique_ptr<media::MediaGpuChannelManager> media_gpu_channel_manager_;
@@ -214,6 +245,15 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   gpu::SyncPointManager* sync_point_manager_ = nullptr;
 
   std::unique_ptr<gpu::Scheduler> scheduler_;
+
+  // sequence id for running tasks from SkiaOutputSurface;
+  gpu::SequenceId skia_output_surface_sequence_id_;
+
+  // A GLContext for |gr_context_|. It can only be accessed by Skia.
+  scoped_refptr<gl::GLContext> context_for_skia_;
+
+  // A GrContext for SkiaOutputSurface (maybe raster as well).
+  sk_sp<GrContext> gr_context_;
 
   // An event that will be signalled when we shutdown. On some platforms it
   // comes from external sources.
@@ -227,7 +267,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   std::unique_ptr<mojo::BindingSet<mojom::GpuService>> bindings_;
 
 #if defined(OS_CHROMEOS)
-  std::unique_ptr<arc::ProtectedBufferManager> protected_buffer_manager_;
+  scoped_refptr<arc::ProtectedBufferManager> protected_buffer_manager_;
 #endif  // defined(OS_CHROMEOS)
 
   base::WeakPtr<GpuServiceImpl> weak_ptr_;

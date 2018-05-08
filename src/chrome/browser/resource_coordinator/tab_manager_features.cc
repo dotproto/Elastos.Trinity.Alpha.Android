@@ -5,6 +5,7 @@
 #include "chrome/browser/resource_coordinator/tab_manager_features.h"
 
 #include "base/metrics/field_trial_params.h"
+#include "base/numerics/ranges.h"
 #include "chrome/common/chrome_features.h"
 
 namespace {
@@ -42,6 +43,30 @@ const base::Feature kStaggeredBackgroundTabOpeningExperiment{
 
 namespace resource_coordinator {
 
+namespace {
+
+// Determines the moderate threshold for tab discarding based on system memory,
+// and enforces the constraint that it must be in the interval
+// [low_loaded_tab_count, high_loaded_tab_count].
+int GetModerateThresholdTabCountBasedOnSystemMemory(
+    ProactiveTabDiscardParams* params,
+    int memory_in_gb) {
+  int moderate_loaded_tab_count_per_gb = base::GetFieldTrialParamByFeatureAsInt(
+      features::kProactiveTabDiscarding,
+      kProactiveTabDiscard_ModerateLoadedTabsPerGbRamParam,
+      kProactiveTabDiscard_ModerateLoadedTabsPerGbRamDefault);
+
+  int moderate_level = moderate_loaded_tab_count_per_gb * memory_in_gb;
+
+  moderate_level =
+      base::ClampToRange(moderate_level, params->low_loaded_tab_count,
+                         params->high_loaded_tab_count);
+
+  return moderate_level;
+}
+
+}  // namespace
+
 // Field-trial parameter names for proactive tab discarding.
 const char kProactiveTabDiscard_LowLoadedTabCountParam[] = "LowLoadedTabCount";
 const char kProactiveTabDiscard_ModerateLoadedTabsPerGbRamParam[] =
@@ -54,6 +79,14 @@ const char kProactiveTabDiscard_ModerateOccludedTimeoutParam[] =
     "ModerateOccludedTimeoutSeconds";
 const char kProactiveTabDiscard_HighOccludedTimeoutParam[] =
     "HighOccludedTimeoutSeconds";
+const char kProactiveTabDiscard_FaviconUpdateObservationWindow[] =
+    "FaviconUpdateObservationWindow";
+const char kProactiveTabDiscard_TitleUpdateObservationWindow[] =
+    "TitleUpdateObservationWindow";
+const char kProactiveTabDiscard_AudioUsageObservationWindow[] =
+    "AudioUsageObservationWindow";
+const char kProactiveTabDiscard_NotificationsUsageObservationWindow[] =
+    "NotificationsUsageObservationWindow";
 
 // Default values for ProactiveTabDiscardParams.
 //
@@ -79,41 +112,94 @@ const base::TimeDelta kProactiveTabDiscard_ModerateOccludedTimeoutDefault =
     base::TimeDelta::FromHours(1);
 const base::TimeDelta kProactiveTabDiscard_HighOccludedTimeoutDefault =
     base::TimeDelta::FromMinutes(10);
+// Observations windows have a default value of 2 hours, 95% of backgrounded
+// tabs don't use any of these features in this time window.
+const base::TimeDelta
+    kProactiveTabDiscard_FaviconUpdateObservationWindow_Default =
+        base::TimeDelta::FromHours(2);
+const base::TimeDelta
+    kProactiveTabDiscard_TitleUpdateObservationWindow_Default =
+        base::TimeDelta::FromHours(2);
+const base::TimeDelta kProactiveTabDiscard_AudioUsageObservationWindow_Default =
+    base::TimeDelta::FromHours(2);
+const base::TimeDelta
+    kProactiveTabDiscard_NotificationsUsageObservationWindow_Default =
+        base::TimeDelta::FromHours(2);
 
-void GetProactiveTabDiscardParams(ProactiveTabDiscardParams* params) {
-  params->low_loaded_tab_count = base::GetFieldTrialParamByFeatureAsInt(
+ProactiveTabDiscardParams::ProactiveTabDiscardParams() = default;
+ProactiveTabDiscardParams::ProactiveTabDiscardParams(
+    const ProactiveTabDiscardParams& rhs) = default;
+
+ProactiveTabDiscardParams GetProactiveTabDiscardParams(int memory_in_gb) {
+  ProactiveTabDiscardParams params = {};
+  params.low_loaded_tab_count = base::GetFieldTrialParamByFeatureAsInt(
       features::kProactiveTabDiscarding,
       kProactiveTabDiscard_LowLoadedTabCountParam,
       kProactiveTabDiscard_LowLoadedTabCountDefault);
 
-  params->moderate_loaded_tab_count_per_gb =
-      base::GetFieldTrialParamByFeatureAsInt(
-          features::kProactiveTabDiscarding,
-          kProactiveTabDiscard_ModerateLoadedTabsPerGbRamParam,
-          kProactiveTabDiscard_ModerateLoadedTabsPerGbRamDefault);
-
-  params->high_loaded_tab_count = base::GetFieldTrialParamByFeatureAsInt(
+  params.high_loaded_tab_count = base::GetFieldTrialParamByFeatureAsInt(
       features::kProactiveTabDiscarding,
       kProactiveTabDiscard_HighLoadedTabCountParam,
       kProactiveTabDiscard_HighLoadedTabCountDefault);
 
-  params->low_occluded_timeout =
+  // |moderate_loaded_tab_count| determined after |high_loaded_tab_count| so it
+  // can be enforced that it is lower than |high_loaded_tab_count|.
+  params.moderate_loaded_tab_count =
+      GetModerateThresholdTabCountBasedOnSystemMemory(&params, memory_in_gb);
+
+  params.low_occluded_timeout =
       base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
           features::kProactiveTabDiscarding,
           kProactiveTabDiscard_LowOccludedTimeoutParam,
           kProactiveTabDiscard_LowOccludedTimeoutDefault.InSeconds()));
 
-  params->moderate_occluded_timeout =
+  params.moderate_occluded_timeout =
       base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
           features::kProactiveTabDiscarding,
           kProactiveTabDiscard_ModerateOccludedTimeoutParam,
           kProactiveTabDiscard_ModerateOccludedTimeoutDefault.InSeconds()));
 
-  params->high_occluded_timeout =
+  params.high_occluded_timeout =
       base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
           features::kProactiveTabDiscarding,
           kProactiveTabDiscard_HighOccludedTimeoutParam,
           kProactiveTabDiscard_HighOccludedTimeoutDefault.InSeconds()));
+
+  params.favicon_update_observation_window =
+      base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kProactiveTabDiscarding,
+          kProactiveTabDiscard_FaviconUpdateObservationWindow,
+          kProactiveTabDiscard_FaviconUpdateObservationWindow_Default
+              .InSeconds()));
+
+  params.title_update_observation_window =
+      base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kProactiveTabDiscarding,
+          kProactiveTabDiscard_TitleUpdateObservationWindow,
+          kProactiveTabDiscard_TitleUpdateObservationWindow_Default
+              .InSeconds()));
+
+  params.audio_usage_observation_window =
+      base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kProactiveTabDiscarding,
+          kProactiveTabDiscard_AudioUsageObservationWindow,
+          kProactiveTabDiscard_AudioUsageObservationWindow_Default
+              .InSeconds()));
+
+  params.notifications_usage_observation_window =
+      base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kProactiveTabDiscarding,
+          kProactiveTabDiscard_NotificationsUsageObservationWindow,
+          kProactiveTabDiscard_NotificationsUsageObservationWindow_Default
+              .InSeconds()));
+
+  return params;
+}
+
+const ProactiveTabDiscardParams& GetStaticProactiveTabDiscardParams() {
+  static base::NoDestructor<ProactiveTabDiscardParams> params(
+      GetProactiveTabDiscardParams());
+  return *params;
 }
 
 base::TimeDelta GetTabLoadTimeout(const base::TimeDelta& default_timeout) {

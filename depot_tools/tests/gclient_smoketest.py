@@ -155,23 +155,6 @@ class GClientSmoke(GClientSmokeBase):
   def git_base(self):
     return 'git://random.server/git/'
 
-  def testHelp(self):
-    """testHelp: make sure no new command was added."""
-    result = self.gclient(['help'])
-    # Roughly, not too short, not too long.
-    self.assertTrue(1000 < len(result[0]) and len(result[0]) < 2300,
-                    'Too much written to stdout: %d bytes' % len(result[0]))
-    self.assertEquals(0, len(result[1]))
-    self.assertEquals(0, result[2])
-
-  def testUnknown(self):
-    result = self.gclient(['foo'])
-    # Roughly, not too short, not too long.
-    self.assertTrue(1000 < len(result[0]) and len(result[0]) < 2300,
-                    'Too much written to stdout: %d bytes' % len(result[0]))
-    self.assertEquals(0, len(result[1]))
-    self.assertEquals(0, result[2])
-
   def testNotConfigured(self):
     res = ('', 'Error: client not configured; see \'gclient config\'\n', 1)
     self.check(res, self.gclient(['diff']))
@@ -378,6 +361,35 @@ class GClientSmokeGIT(GClientSmokeBase):
         'cond_var = false',
     ])
     self.assertTree(tree)
+
+  def testSyncJsonOutput(self):
+    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    output_json = os.path.join(self.root_dir, 'output.json')
+    self.gclient(['sync', '--deps', 'mac', '--output-json', output_json])
+    with open(output_json) as f:
+      output_json = json.load(f)
+
+    out = {
+        'solutions': {
+            'src/': {
+                'scm': 'git',
+                'url': self.git_base + 'repo_1',
+                'revision': self.githash('repo_1', 2),
+            },
+            'src/repo2/': {
+                'scm': 'git',
+                'url':
+                    self.git_base + 'repo_2@' + self.githash('repo_2', 1)[:7],
+                'revision': self.githash('repo_2', 1),
+            },
+            'src/repo2/repo_renamed/': {
+                'scm': 'git',
+                'url': '/repo_3',
+                'revision': self.githash('repo_3', 2),
+            },
+        },
+    }
+    self.assertEqual(out, output_json)
 
   def testSyncIgnoredSolutionName(self):
     """TODO(maruel): This will become an error soon."""
@@ -803,10 +815,9 @@ class GClientSmokeGIT(GClientSmokeBase):
         'name': 'src',
         'deps_file': 'DEPS',
         'custom_deps': {
-            'foo/bar': None,
             'src/repo2': '%srepo_2@%s' % (
                 self.git_base, self.githash('repo_2', 1)),
-            u'src/repo2/repo_renamed': '%srepo_3@%s' % (
+            'src/repo2/repo_renamed': '%srepo_3@%s' % (
                 self.git_base, self.githash('repo_3', 2)),
         },
     }]
@@ -856,7 +867,7 @@ class GClientSmokeGIT(GClientSmokeBase):
         '  # src -> src/repo2 -> foo/bar',
         '  "foo/bar": {',
         '    "url": "/repo_3",',
-        '    "condition": \'true_str_var\',',
+        '    "condition": \'(repo2_false_var) and (true_str_var)\',',
         '  },',
         '',
         '  # src',
@@ -985,6 +996,9 @@ class GClientSmokeGIT(GClientSmokeBase):
         '  # src',
         '  "hook1_contents": \'git_hooked1\',',
         '',
+        '  # src -> src/repo2',
+        '  "repo2_false_var": \'False\',',
+        '',
         '  # src',
         '  "repo5_var": \'/repo_5\',',
         '',
@@ -1032,7 +1046,7 @@ class GClientSmokeGIT(GClientSmokeBase):
         '  # src -> src/repo2 -> foo/bar',
         '  "foo/bar": {',
         '    "url": "/repo_3@%s",' % (self.githash('repo_3', 2)),
-        '    "condition": \'true_str_var\',',
+        '    "condition": \'(repo2_false_var) and (true_str_var)\',',
         '  },',
         '',
         '  # src',
@@ -1161,6 +1175,9 @@ class GClientSmokeGIT(GClientSmokeBase):
         '',
         '  # src',
         '  "hook1_contents": \'git_hooked1\',',
+        '',
+        '  # src -> src/repo2',
+        '  "repo2_false_var": \'False\',',
         '',
         '  # src',
         '  "repo5_var": \'/repo_5\',',

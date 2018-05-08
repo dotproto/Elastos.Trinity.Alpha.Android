@@ -66,7 +66,7 @@ bool HasSomethingAtIndex(const base::ListValue* list, int index) {
 
 SyncInternalsMessageHandler::SyncInternalsMessageHandler()
     : SyncInternalsMessageHandler(base::BindRepeating(
-          &syncer::sync_ui_util::ConstructAboutInformation_DEPRECATED)) {}
+          &syncer::sync_ui_util::ConstructAboutInformation)) {}
 
 SyncInternalsMessageHandler::SyncInternalsMessageHandler(
     AboutSyncDataDelegate about_sync_data_delegate)
@@ -91,44 +91,48 @@ void SyncInternalsMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForEvents,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForEvents,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleRegisterForEvents,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForPerTypeCounters,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestUpdatedAboutInfo,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestListOfTypes,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestListOfTypes,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestListOfTypes,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestUserEventsVisibility,
-      base::Bind(
+      base::BindRepeating(
           &SyncInternalsMessageHandler::HandleRequestUserEventsVisibility,
           base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kSetIncludeSpecifics,
-      base::Bind(&SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kWriteUserEvent,
-      base::Bind(&SyncInternalsMessageHandler::HandleWriteUserEvent,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleWriteUserEvent,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kGetAllNodes,
-      base::Bind(&SyncInternalsMessageHandler::HandleGetAllNodes,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleGetAllNodes,
+                          base::Unretained(this)));
 }
 
 void SyncInternalsMessageHandler::HandleRegisterForEvents(

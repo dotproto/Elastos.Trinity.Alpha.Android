@@ -24,17 +24,23 @@
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/crash/content/browser/crash_dump_observer_android.h"
+#include "components/heap_profiling/supervisor.h"
+#include "components/services/heap_profiling/public/cpp/settings.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -67,7 +73,7 @@ int AwBrowserMainParts::PreEarlyInitialization() {
   // Android specific MessageLoop. Also see MainMessageLoopRun.
   DCHECK(!main_message_loop_.get());
   main_message_loop_.reset(new base::MessageLoopForUI);
-  base::MessageLoopForUI::current()->Start();
+  base::MessageLoopCurrentForUI::Get()->Start();
   return content::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -89,7 +95,7 @@ int AwBrowserMainParts::PreCreateThreads() {
   pak_file_path = pak_file_path.AppendASCII("resources.pak");
   ui::LoadMainAndroidPackFile("assets/resources.pak", pak_file_path);
 
-  base::android::MemoryPressureListenerAndroid::RegisterSystemCallback(
+  base::android::MemoryPressureListenerAndroid::Initialize(
       base::android::AttachCurrentThread());
   breakpad::CrashDumpObserver::Create();
 
@@ -138,6 +144,15 @@ bool AwBrowserMainParts::MainMessageLoopRun(int* result_code) {
   // Android WebView does not use default MessageLoop. It has its own
   // Android specific MessageLoop.
   return true;
+}
+
+void AwBrowserMainParts::ServiceManagerConnectionStarted(
+    content::ServiceManagerConnection* connection) {
+  heap_profiling::Mode mode = heap_profiling::GetModeForStartup();
+  if (mode != heap_profiling::Mode::kNone) {
+    heap_profiling::Supervisor::GetInstance()->Start(connection,
+                                                     base::OnceClosure());
+  }
 }
 
 }  // namespace android_webview

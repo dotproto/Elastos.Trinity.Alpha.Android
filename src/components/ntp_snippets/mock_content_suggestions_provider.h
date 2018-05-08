@@ -25,7 +25,7 @@ class MockContentSuggestionsProvider : public ContentSuggestionsProvider {
   MockContentSuggestionsProvider(
       Observer* observer,
       const std::vector<Category>& provided_categories);
-  ~MockContentSuggestionsProvider();
+  ~MockContentSuggestionsProvider() override;
 
   void SetProvidedCategories(const std::vector<Category>& provided_categories);
 
@@ -81,8 +81,7 @@ class MockContentSuggestionsProvider : public ContentSuggestionsProvider {
   MOCK_METHOD2(FetchSuggestionImageMock,
                void(const ContentSuggestion::ID&, const ImageFetchedCallback&));
   MOCK_METHOD2(FetchSuggestionImageDataMock,
-               void(const ContentSuggestion::ID&,
-                    const ImageDataFetchedCallback&));
+               void(const ContentSuggestion::ID&, ImageDataFetchedCallback*));
 
  private:
   std::vector<Category> provided_categories_;

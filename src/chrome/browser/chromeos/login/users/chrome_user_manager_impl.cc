@@ -10,7 +10,6 @@
 #include <set>
 #include <utility>
 
-#include "ash/multi_profile_uma.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/session_controller.mojom.h"
@@ -63,8 +62,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/supervised_user/chromeos/manager_password_service_factory.h"
-#include "chrome/browser/supervised_user/chromeos/supervised_user_password_service_factory.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/chrome_constants.h"
@@ -151,8 +148,10 @@ bool GetUserLockAttributes(const user_manager::User* user,
   if (!profile)
     return false;
   PrefService* const prefs = profile->GetPrefs();
-  if (can_lock)
-    *can_lock = user->can_lock() && prefs->GetBoolean(prefs::kAllowScreenLock);
+  if (can_lock) {
+    *can_lock =
+        user->can_lock() && prefs->GetBoolean(ash::prefs::kAllowScreenLock);
+  }
   if (multi_profile_behavior) {
     *multi_profile_behavior =
         prefs->GetString(prefs::kMultiProfileUserBehavior);
@@ -514,11 +513,6 @@ void ChromeUserManagerImpl::Observe(
       Profile* profile = content::Details<Profile>(details).ptr();
       if (IsUserLoggedIn() && !IsLoggedInAsGuest() && !IsLoggedInAsKioskApp() &&
           !IsLoggedInAsArcKioskApp()) {
-        if (IsLoggedInAsSupervisedUser())
-          SupervisedUserPasswordServiceFactory::GetForProfile(profile);
-        if (IsLoggedInAsUserWithGaiaAccount())
-          ManagerPasswordServiceFactory::GetForProfile(profile);
-
         if (!profile->IsOffTheRecord()) {
           if (AuthSyncObserver::ShouldObserve(profile)) {
             AuthSyncObserver* sync_observer =
@@ -1280,8 +1274,10 @@ void ChromeUserManagerImpl::UpdateNumberOfUsers() {
   size_t users = GetLoggedInUsers().size();
   if (users) {
     // Write the user number as UMA stat when a multi user session is possible.
-    if ((users + GetUsersAllowedForMultiProfile().size()) > 1)
-      ash::MultiProfileUMA::RecordUserCount(users);
+    if ((users + GetUsersAllowedForMultiProfile().size()) > 1) {
+      UMA_HISTOGRAM_COUNTS_100("MultiProfile.UsersPerSessionIncremental",
+                               users);
+    }
   }
 
   static crash_reporter::CrashKeyString<64> crash_key("num-users");
@@ -1314,10 +1310,8 @@ void ChromeUserManagerImpl::UpdateUserTimeZoneRefresher(Profile* profile) {
 }
 
 void ChromeUserManagerImpl::SetUserAffiliation(
-    const std::string& user_email,
+    const AccountId& account_id,
     const AffiliationIDSet& user_affiliation_ids) {
-  const AccountId& account_id = user_manager::known_user::GetAccountId(
-      user_email, std::string() /* id */, AccountType::UNKNOWN);
   user_manager::User* user = FindUserAndModify(account_id);
 
   if (user) {

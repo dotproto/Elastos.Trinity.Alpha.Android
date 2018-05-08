@@ -4,7 +4,7 @@
 
 // This file provides methods used to fill forms in JavaScript.
 
-goog.module('__crWeb.fill');
+goog.provide('__crWeb.fill');
 
 /**
  * @typedef {{
@@ -191,8 +191,8 @@ function setInputElementAngularValue_(value, input) {
 }
 
 /**
- * Sets the value of an input and dispatches a change event if
- * |shouldSendChangeEvent|.
+ * Sets the value of an input, dispatches the events on the changed element and
+ * call |callback| if it is defined.
  *
  * It is based on the logic in
  *
@@ -207,43 +207,119 @@ function setInputElementAngularValue_(value, input) {
  *
  * @param {string} value The value the input element will be set.
  * @param {Element} input The input element of which the value is set.
- * @param {function(boolean)=} callback Callback function with a boolean
+ * @param {function()=} callback Callback function with a boolean
  *     argument that indicates if the input element's value was changed.
  */
 __gCrWeb.fill.setInputElementValue = function(
     value, input, callback = undefined) {
-  if (!input) {
+  if (!input)
     return;
+
+  var activeElement = document.activeElement;
+  if (input != activeElement) {
+    __gCrWeb.fill.createAndDispatchHTMLEvent(
+        activeElement, value, 'blur', true, false);
+    __gCrWeb.fill.createAndDispatchHTMLEvent(
+        input, value, 'focus', true, false);
   }
-  var changed = false;
-  if (input.type === 'checkbox' || input.type === 'radio') {
-    changed = input.checked !== value;
-    input.checked = value;
-  } else if (input.type === 'select-one') {
-    changed = input.value !== value;
-    input.value = value;
-  } else {
+
+  setInputElementValue_(value, input);
+  if (callback)
+    callback();
+
+  if (input != activeElement) {
+    __gCrWeb.fill.createAndDispatchHTMLEvent(input, value, 'blur', true, false);
+    __gCrWeb.fill.createAndDispatchHTMLEvent(
+        activeElement, value, 'focus', true, false);
+  }
+};
+
+/**
+ * Internal function to set the element value.
+ *
+ * @param {string} value The value the input element will be set.
+ * @param {Element} input The input element of which the value is set.
+ */
+function setInputElementValue_(value, input) {
+  var propertyName = (input.type === 'checkbox' || input.type === 'radio') ?
+      'checked' :
+      'value';
+  if (input.type !== 'select-one' && input.type !== 'checkbox' &&
+      input.type !== 'radio') {
     // In HTMLInputElement.cpp there is a check on canSetValue(value), which
     // returns false only for file input. As file input is not relevant for
     // autofill and this method is only used for autofill for now, there is no
     // such check in this implementation.
-    var sanitizedValue =
-        __gCrWeb.fill.sanitizeValueForInputElement(value, input);
-    changed = sanitizedValue !== input.value;
-    input.value = sanitizedValue;
+    value = __gCrWeb.fill.sanitizeValueForInputElement(value, input);
   }
+
+  // Return early if the value hasn't changed.
+  if (input[propertyName] == value)
+    return;
+
+  // When the user inputs a value in an HTMLInput field, the property setter is
+  // not called. The different frameworks often call it explicitly when
+  // receiving the input event.
+  // This is probably due to the sync between the HTML object and the DOM
+  // object.
+  // The sequence of event is: User input -> input event -> setter.
+  // When the property is set programmatically (input.value = 'foo'), the setter
+  // is called immediately (then probably called again on the input event)
+  // JS input -> setter.
+  // The only way to emulate the user behavior is to override the property
+  // The getter will return the new value to emulate the fact the the HTML
+  // value was updated without calling the setter.
+  // The setter simply forwards the set to the older property descriptor.
+  // Once the setter has been called, just forward get and set calls.
+
+  var oldPropertyDescriptor = /** @type {!Object} */ (
+      Object.getOwnPropertyDescriptor(input, propertyName));
+  var overrideProperty =
+      oldPropertyDescriptor && oldPropertyDescriptor.configurable;
+  var setterCalled = false;
+
+  if (overrideProperty) {
+    var newProperty = {
+      get: function() {
+        if (setterCalled && oldPropertyDescriptor.get) {
+          return oldPropertyDescriptor.get.call(input);
+        }
+        // Simulate the fact that the HTML value has been set but not yet the
+        // property.
+        return value + '';
+      },
+      configurable: true
+    };
+    if (oldPropertyDescriptor.set) {
+      newProperty.set = function(e) {
+        setterCalled = true;
+        oldPropertyDescriptor.set.call(input, value);
+      }
+    }
+    Object.defineProperty(input, propertyName, newProperty);
+  } else {
+    setterCalled = true;
+    input[propertyName] = value;
+  }
+
   if (window['angular']) {
     // The page uses the AngularJS framework. Update the angular value before
     // sending events.
     setInputElementAngularValue_(value, input);
   }
-  if (changed) {
-    __gCrWeb.fill.notifyElementValueChanged(input);
+  __gCrWeb.fill.notifyElementValueChanged(input, value);
+
+  if (overrideProperty) {
+    Object.defineProperty(input, propertyName, oldPropertyDescriptor);
+    if (!setterCalled && input[propertyName] != value) {
+      // The setter was never called. This may be intentional (the framework
+      // ignored the input event) or not (the event did not conform to what
+      // framework expected). The whole function will likely fail, but try to
+      // set the value directly as a last try.
+      input[propertyName] = value;
+    }
   }
-  if (callback) {
-    callback(changed);
-  }
-};
+}
 
 /**
  * Returns a sanitized value of proposedValue for a given input element type.
@@ -384,15 +460,23 @@ __gCrWeb.fill.sanitizeValueForNumberInputType = function(proposedValue) {
 /**
  * Creates and sends notification that element has changed.
  *
- * Most handlers react to 'change' or 'input' event, so sent both.
+ * Send events that 'mimic' the user typing in a field.
+ * 'input' event is often use in case of a text field, and 'change'event is
+ * more often used in case of selects.
  *
  * @param {Element} element The element that changed.
  */
-__gCrWeb.fill.notifyElementValueChanged = function(element) {
-  __gCrWeb.fill.createAndDispatchHTMLEvent(element, 'keydown', true, false);
-  __gCrWeb.fill.createAndDispatchHTMLEvent(element, 'change', true, false);
-  __gCrWeb.fill.createAndDispatchHTMLEvent(element, 'input', true, false);
-  __gCrWeb.fill.createAndDispatchHTMLEvent(element, 'keyup', true, false);
+__gCrWeb.fill.notifyElementValueChanged = function(element, value) {
+  __gCrWeb.fill.createAndDispatchHTMLEvent(
+      element, value, 'keydown', true, false);
+  __gCrWeb.fill.createAndDispatchHTMLEvent(
+      element, value, 'keypress', true, false);
+  __gCrWeb.fill.createAndDispatchHTMLEvent(
+      element, value, 'input', true, false);
+  __gCrWeb.fill.createAndDispatchHTMLEvent(
+      element, value, 'keyup', true, false);
+  __gCrWeb.fill.createAndDispatchHTMLEvent(
+      element, value, 'change', true, false);
 };
 
 /**
@@ -406,18 +490,26 @@ __gCrWeb.fill.notifyElementValueChanged = function(element) {
  *     canceled.
  */
 __gCrWeb.fill.createAndDispatchHTMLEvent = function(
-    element, type, bubbles, cancelable) {
-  var changeEvent =
-      /** @type {!Event} */ (element.ownerDocument.createEvent('HTMLEvents'));
-  changeEvent.initEvent(type, bubbles, cancelable);
-  // Some frameworks will use the data field to update their cache value.
-  changeEvent.data = element.value;
+    element, value, type, bubbles, cancelable) {
+  var event =
+      new Event(type, {bubbles: bubbles, cancelable: cancelable, data: value});
+  if (type == 'input') {
+    event.inputType = 'insertText';
+  }
+  element.dispatchEvent(event);
+};
 
-  // Adding a |simulated| flag on the event will force the React framework to
-  // update the backend store.
-  changeEvent.simulated = true;
-
-  element.dispatchEvent(changeEvent);
+/**
+ * Returns a canonical action for |formElement|. It works the same as upstream
+ * function GetCanonicalActionForForm.
+ * @param {HTMLFormElement} formElement
+ * @return {string} Canonical action.
+ */
+__gCrWeb.fill.getCanonicalActionForForm = function(formElement) {
+  var rawAction = formElement.getAttribute('action') || '';
+  var absoluteUrl =
+      __gCrWeb.common.absoluteURL(formElement.ownerDocument, rawAction);
+  return __gCrWeb.common.removeQueryAndReferenceFromURL(absoluteUrl);
 };
 
 /**
@@ -605,7 +697,7 @@ function matchLabelsAndFields_(
  *     will be processed.
  * @param {number} extractMask Mask controls what data is extracted from
  *     formElement.
- * @param {AutofillFormData} form Form to fill in the AutofillFormData
+ * @param {Object} form Form to fill in the AutofillFormData
  *     information of formElement.
  * @param {?AutofillFormFieldData} field Field to fill in the form field
  *     information of formControlElement.
@@ -677,15 +769,15 @@ __gCrWeb.fill.formOrFieldsetsToFormData = function(
   // Protect against custom implementation of Array.toJSON in host pages.
   form['fields'].toJSON = null;
   return true;
-}
+};
 
 /**
- * Fills |form| with the form data object corresponding to the |formElement|.
- * If |field| is non-NULL, also fills |field| with the FormField object
- * corresponding to the |formControlElement|.
+ * Fills |form| with the form data object corresponding to the
+ * |formElement|. If |field| is non-NULL, also fills |field| with the
+ * FormField object corresponding to the |formControlElement|.
  * |extract_mask| controls what data is extracted.
- * Returns true if |form| is filled out. Returns false if there are no fields or
- * too many fields in the |form|.
+ * Returns true if |form| is filled out. Returns false if there are no
+ * fields or too many fields in the |form|.
  *
  * It is based on the logic in
  *     bool WebFormElementToFormData(
@@ -694,7 +786,8 @@ __gCrWeb.fill.formOrFieldsetsToFormData = function(
  *         ExtractMask extract_mask,
  *         FormData* form,
  *         FormFieldData* field)
- * in chromium/src/components/autofill/content/renderer/form_autofill_util.cc
+ * in
+ * chromium/src/components/autofill/content/renderer/form_autofill_util.cc
  *
  * @param {HTMLFrameElement|Window} frame The window or frame where the
  *     formElement is in.
@@ -703,7 +796,7 @@ __gCrWeb.fill.formOrFieldsetsToFormData = function(
  *     formElment, the FormField of which will be returned in field.
  * @param {number} extractMask Mask controls what data is extracted from
  *     formElement.
- * @param {AutofillFormData} form Form to fill in the AutofillFormData
+ * @param {Object} form Form to fill in the AutofillFormData
  *     information of formElement.
  * @param {?AutofillFormFieldData} field Field to fill in the form field
  *     information of formControlElement.
@@ -719,8 +812,7 @@ __gCrWeb.fill.webFormElementToFormData = function(
   form['name'] = __gCrWeb.form.getFormIdentifier(formElement);
   form['origin'] =
       __gCrWeb.common.removeQueryAndReferenceFromURL(frame.location.href);
-  form['action'] = __gCrWeb.common.absoluteURL(
-      frame.document, formElement.getAttribute('action'));
+  form['action'] = __gCrWeb.fill.getCanonicalActionForForm(formElement);
 
   // Note different from form_autofill_util.cc version of this method, which
   // computes |form.action| using document.completeURL(form_element.action())
@@ -888,19 +980,19 @@ __gCrWeb.fill.findChildTextInner = function(node, depth, divsToSkip) {
 
   // Recursively compute the children's text.
   // Preserve inter-element whitespace separation.
-  var childText = __gCrWeb.fill.findChildTextInner(
-      node.firstChild, depth - 1, divsToSkip);
+  var childText =
+      __gCrWeb.fill.findChildTextInner(node.firstChild, depth - 1, divsToSkip);
   var addSpace = node.nodeType === Node.TEXT_NODE && !nodeText;
   // Emulate apparently incorrect Chromium behavior tracked in
   // https://crbug.com/239819.
   addSpace = false;
-  nodeText = __gCrWeb.fill.combineAndCollapseWhitespace(
-      nodeText, childText, addSpace);
+  nodeText =
+      __gCrWeb.fill.combineAndCollapseWhitespace(nodeText, childText, addSpace);
 
   // Recursively compute the siblings' text.
   // Again, preserve inter-element whitespace separation.
-  var siblingText = __gCrWeb.fill.findChildTextInner(
-      node.nextSibling, depth - 1, divsToSkip);
+  var siblingText =
+      __gCrWeb.fill.findChildTextInner(node.nextSibling, depth - 1, divsToSkip);
   addSpace = node.nodeType === Node.TEXT_NODE && !nodeText;
   // Emulate apparently incorrect Chromium behavior tracked in
   // https://crbug.com/239819.
@@ -925,13 +1017,12 @@ __gCrWeb.fill.findChildTextInner = function(node, depth, divsToSkip) {
  * @return {string} The child text.
  */
 __gCrWeb.fill.findChildTextWithIgnoreList = function(node, divsToSkip) {
-  if (node.nodeType === Node.TEXT_NODE)
-    return __gCrWeb.fill.nodeValue(node);
+  if (node.nodeType === Node.TEXT_NODE) return __gCrWeb.fill.nodeValue(node);
 
   var child = node.firstChild;
   var kChildSearchDepth = 10;
-  var nodeText = __gCrWeb.fill.findChildTextInner(
-      child, kChildSearchDepth, divsToSkip);
+  var nodeText =
+      __gCrWeb.fill.findChildTextInner(child, kChildSearchDepth, divsToSkip);
   nodeText = nodeText.trim();
   return nodeText;
 };
@@ -999,8 +1090,7 @@ __gCrWeb.fill.inferLabelFromSibling = function(element, forward) {
     // Coalesce any text contained in multiple consecutive
     //  (a) plain text nodes or
     //  (b) inline HTML elements that are essentially equivalent to text nodes.
-    if (nodeType === Node.TEXT_NODE ||
-        __gCrWeb.fill.hasTagName(sibling, 'b') ||
+    if (nodeType === Node.TEXT_NODE || __gCrWeb.fill.hasTagName(sibling, 'b') ||
         __gCrWeb.fill.hasTagName(sibling, 'strong') ||
         __gCrWeb.fill.hasTagName(sibling, 'span') ||
         __gCrWeb.fill.hasTagName(sibling, 'font')) {
@@ -1455,14 +1545,12 @@ __gCrWeb.fill.inferLabelFromDivTable = function(element) {
       }
 
       lookingForParent = false;
-    } else if (
-        !lookingForParent && __gCrWeb.fill.hasTagName(node, 'label')) {
+    } else if (!lookingForParent && __gCrWeb.fill.hasTagName(node, 'label')) {
       if (!node.control) {
         inferredLabel = __gCrWeb.fill.findChildText(node);
       }
     } else if (
-        lookingForParent &&
-        __gCrWeb.fill.isTraversableContainerElement(node)) {
+        lookingForParent && __gCrWeb.fill.isTraversableContainerElement(node)) {
       // If the element is in a non-div container, its label most likely is too.
       break;
     }
@@ -1808,15 +1896,15 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   // The label is not officially part of a form control element; however, the
   // labels for all form control elements are scraped from the DOM and set in
   // form data.
-  field['name'] = __gCrWeb.form.getFieldIdentifier(element);
+  field['identifier'] = __gCrWeb.form.getFieldIdentifier(element);
+  field['name'] = __gCrWeb.form.getFieldName(element);
   field['form_control_type'] = element.type;
   var autocomplete_attribute = element.getAttribute('autocomplete');
   if (autocomplete_attribute) {
     field['autocomplete_attribute'] = autocomplete_attribute;
   }
   if (field['autocomplete_attribute'] != null &&
-      field['autocomplete_attribute'].length >
-          __gCrWeb.fill.MAX_DATA_LENGTH) {
+      field['autocomplete_attribute'].length > __gCrWeb.fill.MAX_DATA_LENGTH) {
     // Discard overly long attribute values to avoid DOS-ing the browser
     // process. However, send over a default string to indicate that the
     // attribute was present.
@@ -1835,7 +1923,7 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   if (__gCrWeb.fill.isAutofillableInputElement(element) ||
       __gCrWeb.fill.isTextAreaElement(element) ||
       __gCrWeb.fill.isSelectElement(element)) {
-    field['is_autofilled'] = element["isAutofilled"];
+    field['is_autofilled'] = element['isAutofilled'];
     field['should_autocomplete'] = __gCrWeb.fill.autoComplete(element);
     field['is_focusable'] = !element.disabled && !element.readOnly &&
         element.tabIndex >= 0 && isVisibleNode_(element);
@@ -1886,6 +1974,5 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   }
   field['value'] = value;
 };
-
 
 }());  // End of anonymous object

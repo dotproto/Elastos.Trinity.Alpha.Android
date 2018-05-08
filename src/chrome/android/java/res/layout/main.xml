@@ -27,16 +27,13 @@
             android:layout_height="wrap_content"
             android:layout_gravity="start|bottom">
 
-            <HorizontalScrollView
-                android:id="@+id/keyboard_accessory"
+            <ViewStub
+                android:id="@+id/keyboard_accessory_stub"
+                android:inflatedId="@+id/keyboard_accessory"
+                android:layout="@layout/keyboard_accessory"
                 android:layout_height="@dimen/keyboard_accessory_height"
                 android:layout_width="match_parent"
-                android:layout_gravity="start|bottom"
-                android:background="@drawable/keyboard_accessory_background"
-                android:contentDescription="@string/autofill_keyboard_accessory_content_description"
-                android:fillViewport="true"
-                android:scrollbars="none"
-                android:visibility="gone" />
+                android:layout_gravity="start|bottom"/>
 
         </org.chromium.chrome.browser.snackbar.BottomContainer>
 
@@ -86,15 +83,17 @@
             android:visibility="gone" />
 
         <ViewStub
+            android:id="@+id/bottom_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|bottom"
+            android:inflatedId="@+id/bottom_toolbar"
+            android:layout="@layout/bottom_toolbar" />
+
+        <ViewStub
             android:id="@+id/control_container_stub"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
-
-        <FrameLayout
-            android:id="@+id/bottom_sheet_snackbar_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="start|bottom" />
 
         <ViewStub
             android:id="@+id/empty_container_stub"

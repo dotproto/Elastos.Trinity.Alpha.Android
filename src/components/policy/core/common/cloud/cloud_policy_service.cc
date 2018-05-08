@@ -43,17 +43,6 @@ CloudPolicyService::~CloudPolicyService() {
   store_->RemoveObserver(this);
 }
 
-std::string CloudPolicyService::ManagedBy() const {
-  const em::PolicyData* policy = store_->policy();
-  if (policy) {
-    std::string username = policy->username();
-    std::size_t pos = username.find('@');
-    if (pos != std::string::npos)
-      return username.substr(pos + 1);
-  }
-  return std::string();
-}
-
 void CloudPolicyService::RefreshPolicy(const RefreshPolicyCallback& callback) {
   // If the client is not registered or is unregistering, bail out.
   if (!client_->is_registered() || unregister_state_ != UNREGISTER_NONE) {
@@ -129,6 +118,11 @@ void CloudPolicyService::OnStoreLoaded(CloudPolicyStore* store) {
     } else if (policy_type_ == dm_protocol::kChromeDevicePolicyType) {
       UMA_HISTOGRAM_CUSTOM_COUNTS("Enterprise.PolicyUpdatePeriod.Device",
                                   age.InDays(), 1, 1000, 100);
+    } else if (policy_type_ ==
+               dm_protocol::kChromeMachineLevelUserCloudPolicyType) {
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Enterprise.PolicyUpdatePeriod.MachineLevelUser", age.InDays(), 1,
+          1000, 100);
     }
   }
   client_->set_last_policy_timestamp(policy_timestamp);

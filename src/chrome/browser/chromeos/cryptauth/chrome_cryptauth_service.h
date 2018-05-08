@@ -48,18 +48,14 @@ class ChromeCryptAuthService
   std::unique_ptr<cryptauth::CryptAuthClientFactory>
   CreateCryptAuthClientFactory() override;
 
-  // cryptauth::SecureMessageDelegate::Factory:
-  std::unique_ptr<cryptauth::SecureMessageDelegate>
-  CreateSecureMessageDelegate() override;
-
   // cryptauth::CryptAuthEnrollmentManager::Observer:
-  void OnEnrollmentStarted() override;
   void OnEnrollmentFinished(bool success) override;
 
  protected:
   // Note: ChromeCryptAuthServiceFactory DependsOn(OAuth2TokenServiceFactory),
   // so |token_service| is guaranteed to outlast this service.
   ChromeCryptAuthService(
+      std::unique_ptr<cryptauth::CryptAuthClientFactory> client_factory,
       std::unique_ptr<cryptauth::CryptAuthGCMManager> gcm_manager,
       std::unique_ptr<cryptauth::CryptAuthDeviceManager> device_manager,
       std::unique_ptr<cryptauth::CryptAuthEnrollmentManager> enrollment_manager,
@@ -79,6 +75,7 @@ class ChromeCryptAuthService
   bool IsEnrollmentAllowedByPolicy();
   void OnPrefsChanged();
 
+  std::unique_ptr<cryptauth::CryptAuthClientFactory> client_factory_;
   std::unique_ptr<cryptauth::CryptAuthGCMManager> gcm_manager_;
   std::unique_ptr<cryptauth::CryptAuthEnrollmentManager> enrollment_manager_;
   std::unique_ptr<cryptauth::CryptAuthDeviceManager> device_manager_;

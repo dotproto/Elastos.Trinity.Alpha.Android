@@ -7,15 +7,16 @@
 
 namespace gl {
 
-const char kGLImplementationDesktopName[]     = "desktop";
-const char kGLImplementationOSMesaName[]      = "osmesa";
-const char kGLImplementationAppleName[]       = "apple";
-const char kGLImplementationEGLName[]         = "egl";
-const char kGLImplementationANGLEName[]       = "angle";
+const char kGLImplementationDesktopName[] = "desktop";
+const char kGLImplementationOSMesaName[] = "osmesa";
+const char kGLImplementationAppleName[] = "apple";
+const char kGLImplementationEGLName[] = "egl";
+const char kGLImplementationANGLEName[] = "angle";
 const char kGLImplementationSwiftShaderName[] = "swiftshader";
 const char kGLImplementationSwiftShaderForWebGLName[] = "swiftshader-webgl";
-const char kGLImplementationMockName[]        = "mock";
+const char kGLImplementationMockName[] = "mock";
 const char kGLImplementationStubName[] = "stub";
+const char kGLImplementationDisabledName[] = "disabled";
 
 const char kANGLEImplementationDefaultName[]  = "default";
 const char kANGLEImplementationD3D9Name[]     = "d3d9";
@@ -164,5 +165,9 @@ const base::Feature kDirectCompositionComplexOverlays{
 // Allow using overlays for non-root render passes.
 const base::Feature kDirectCompositionNonrootOverlays{
     "DirectCompositionNonrootOverlays", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Default to using ANGLE's OpenGL backend
+const base::Feature kDefaultANGLEOpenGL{"DefaultANGLEOpenGL",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

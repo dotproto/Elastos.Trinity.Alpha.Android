@@ -10,12 +10,10 @@
 
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -36,7 +34,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
 
@@ -59,8 +57,6 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       child_identity_(mojom::kRendererServiceName,
                       BrowserContext::GetServiceUserIdFor(browser_context),
                       base::StringPrintf("%d", id_)),
-      shared_bitmap_allocation_notifier_impl_(
-          viz::ServerSharedBitmapManager::current()),
       weak_ptr_factory_(this) {
   // Child process security operations can't be unit tested unless we add
   // ourselves as an existing child process.
@@ -90,13 +86,13 @@ void MockRenderProcessHost::SimulateRenderProcessExit(
     base::TerminationStatus status,
     int exit_code) {
   has_connection_ = false;
-  RenderProcessHost::RendererClosedDetails details(status, exit_code);
+  ChildProcessTerminationInfo termination_info{status, exit_code};
   NotificationService::current()->Notify(
       NOTIFICATION_RENDERER_PROCESS_CLOSED, Source<RenderProcessHost>(this),
-      Details<RenderProcessHost::RendererClosedDetails>(&details));
+      Details<ChildProcessTerminationInfo>(&termination_info));
 
   for (auto& observer : observers_)
-    observer.RenderProcessExited(this, details.status, details.exit_code);
+    observer.RenderProcessExited(this, termination_info);
 
   // Send every routing ID a FrameHostMsg_RenderProcessGone message. To ensure a
   // predictable order for unittests which may assert against the order, we sort
@@ -113,7 +109,8 @@ void MockRenderProcessHost::SimulateRenderProcessExit(
 
   for (auto& entry_pair : sorted_listeners_) {
     entry_pair.second->OnMessageReceived(FrameHostMsg_RenderProcessGone(
-        entry_pair.first, static_cast<int>(details.status), details.exit_code));
+        entry_pair.first, static_cast<int>(termination_info.status),
+        termination_info.exit_code));
   }
 }
 
@@ -153,14 +150,22 @@ void MockRenderProcessHost::ShutdownForBadMessage(
   ++bad_msg_count_;
 }
 
-void MockRenderProcessHost::WidgetRestored() {
+void MockRenderProcessHost::UpdateClientPriority(PriorityClient* client) {}
+
+int MockRenderProcessHost::VisibleClientCount() const {
+  int count = 0;
+  for (auto* client : priority_clients_) {
+    const Priority priority = client->GetPriority();
+    if (!priority.is_hidden) {
+      count++;
+    }
+  }
+  return count;
 }
 
-void MockRenderProcessHost::WidgetHidden() {
-}
-
-int MockRenderProcessHost::VisibleWidgetCount() const {
-  return 1;
+unsigned int MockRenderProcessHost::GetFrameDepth() const {
+  NOTIMPLEMENTED();
+  return 0u;
 }
 
 bool MockRenderProcessHost::IsForGuestsOnly() const {
@@ -201,12 +206,14 @@ bool MockRenderProcessHost::FastShutdownStarted() const {
   return fast_shutdown_started_;
 }
 
-base::ProcessHandle MockRenderProcessHost::GetHandle() const {
+const base::Process& MockRenderProcessHost::GetProcess() const {
   // Return the current-process handle for the IPC::GetPlatformFileForTransit
   // function.
-  if (process_handle)
-    return *process_handle;
-  return base::GetCurrentProcessHandle();
+  if (process.IsValid())
+    return process;
+
+  static const base::Process current_process(base::Process::Current());
+  return current_process;
 }
 
 bool MockRenderProcessHost::IsReady() const {
@@ -260,17 +267,15 @@ void MockRenderProcessHost::RemovePendingView() {
 }
 
 void MockRenderProcessHost::AddWidget(RenderWidgetHost* widget) {
+  priority_clients_.insert(static_cast<RenderWidgetHostImpl*>(widget));
 }
 
 void MockRenderProcessHost::RemoveWidget(RenderWidgetHost* widget) {
+  priority_clients_.erase(static_cast<RenderWidgetHostImpl*>(widget));
 }
 
 #if defined(OS_ANDROID)
-void MockRenderProcessHost::UpdateWidgetImportance(
-    ChildProcessImportance old_value,
-    ChildProcessImportance new_value) {}
-
-ChildProcessImportance MockRenderProcessHost::ComputeEffectiveImportance() {
+ChildProcessImportance MockRenderProcessHost::GetEffectiveImportance() {
   NOTIMPLEMENTED();
   return ChildProcessImportance::NORMAL;
 }
@@ -335,16 +340,28 @@ size_t MockRenderProcessHost::GetKeepAliveRefCount() const {
   return keep_alive_ref_count_;
 }
 
-void MockRenderProcessHost::IncrementKeepAliveRefCount() {
+void MockRenderProcessHost::IncrementKeepAliveRefCount(
+    KeepAliveClientType client) {
   ++keep_alive_ref_count_;
 }
 
-void MockRenderProcessHost::DecrementKeepAliveRefCount() {
+void MockRenderProcessHost::DecrementKeepAliveRefCount(
+    KeepAliveClientType client) {
   --keep_alive_ref_count_;
 }
 
 void MockRenderProcessHost::DisableKeepAliveRefCount() {
   keep_alive_ref_count_ = 0;
+
+  // RenderProcessHost::DisableKeepAliveRefCount() virtual method gets called as
+  // part of BrowserContext::NotifyWillBeDestroyed(...).  Normally
+  // MockRenderProcessHost::DisableKeepAliveRefCount doesn't call Cleanup,
+  // because the MockRenderProcessHost might be owned by a test.  However, when
+  // the MockRenderProcessHost is the spare RenderProcessHost, we know that it
+  // is owned by the SpareRenderProcessHostManager and we need to delete the
+  // spare to avoid reports/DCHECKs about memory leaks.
+  if (this == RenderProcessHostImpl::GetSpareRenderProcessHostForTesting())
+    Cleanup();
 }
 
 bool MockRenderProcessHost::IsKeepAliveRefCountDisabled() {
@@ -422,9 +439,6 @@ void MockRenderProcessHost::SetWebRtcEventLogOutput(int lid, bool enabled) {}
 
 #endif
 
-void MockRenderProcessHost::ResumeDeferredNavigation(
-    const GlobalRequestID& request_id) {}
-
 bool MockRenderProcessHost::OnMessageReceived(const IPC::Message& msg) {
   IPC::Listener* listener = listeners_.Lookup(msg.routing_id());
   if (listener)
@@ -472,28 +486,6 @@ void MockRenderProcessHostFactory::Remove(MockRenderProcessHost* host) const {
       break;
     }
   }
-}
-
-viz::SharedBitmapAllocationNotifierImpl*
-MockRenderProcessHost::GetSharedBitmapAllocationNotifier() {
-  return &shared_bitmap_allocation_notifier_impl_;
-}
-
-std::string GetInputMessageTypes(MockRenderProcessHost* process) {
-  std::vector<std::string> result;
-  for (size_t i = 0; i < process->sink().message_count(); ++i) {
-    const IPC::Message* message = process->sink().GetMessageAt(i);
-    InputMsg_HandleInputEvent::Param params;
-    if (message->type() != InputMsg_HandleInputEvent::ID ||
-        !InputMsg_HandleInputEvent::Read(message, &params)) {
-      result.push_back("*");
-      break;
-    }
-    const blink::WebInputEvent* event = std::get<0>(params);
-    result.push_back(blink::WebInputEvent::GetName(event->GetType()));
-  }
-  process->sink().ClearMessages();
-  return base::JoinString(result, " ");
 }
 
 }  // namespace content

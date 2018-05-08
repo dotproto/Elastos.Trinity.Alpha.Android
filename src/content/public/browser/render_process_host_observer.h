@@ -12,6 +12,7 @@
 namespace content {
 
 class RenderProcessHost;
+struct ChildProcessTerminationInfo;
 
 // An observer API implemented by classes which are interested
 // in RenderProcessHost lifecycle events.
@@ -19,7 +20,7 @@ class CONTENT_EXPORT RenderProcessHostObserver {
  public:
   // This method is invoked when the process was launched and the channel was
   // connected. This is the earliest time it is safe to call Shutdown on the
-  // RenderProcessHost and get RenderProcessExited notifications.
+  // RenderProcessHost.
   virtual void RenderProcessReady(RenderProcessHost* host) {}
 
   // This method is invoked when the process when the process could shut down
@@ -46,13 +47,8 @@ class CONTENT_EXPORT RenderProcessHostObserver {
   // active renderer process for the top-level frame; for code that needs to be
   // a WebContentsObserver anyway, consider whether that API might be a better
   // choice.
-  //
-  // If |status| is TERMINATION_STATUS_LAUNCH_FAILED then |exit_code| will
-  // contain a platform specific launch failure error code. Otherwise, it will
-  // contain the exit code for the process.
   virtual void RenderProcessExited(RenderProcessHost* host,
-                                   base::TerminationStatus status,
-                                   int exit_code) {}
+                                   const ChildProcessTerminationInfo& info) {}
 
   // This method is invoked when the observed RenderProcessHost itself is
   // destroyed. This is guaranteed to be the last call made to the observer, so

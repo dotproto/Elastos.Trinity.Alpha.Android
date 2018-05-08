@@ -45,10 +45,6 @@
 #include "ui/gfx/image/image.h"
 #include "url/url_util.h"
 
-#if defined(OS_WIN)
-#include "ui/base/win/osk_display_manager.h"
-#endif
-
 using bookmarks::BookmarkModel;
 using metrics::OmniboxEventProto;
 
@@ -644,8 +640,9 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
       input_.type(),
       popup_open,
       dropdown_ignored ? 0 : index,
+      disposition,
       !pasted_text.empty(),
-      -1,  // don't yet know tab ID; set later if appropriate
+      SessionID::InvalidValue(), // don't know tab ID; set later if appropriate
       ClassifyPage(),
       elapsed_time_since_user_first_modified_omnibox,
       match.allowed_to_be_default_match ? match.inline_autocompletion.length() :
@@ -664,7 +661,7 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
     // If we know the destination is being opened in the current tab,
     // we can easily get the tab ID.  (If it's being opened in a new
     // tab, we don't know the tab ID yet.)
-    log.tab_id = client_->GetSessionID().id();
+    log.tab_id = client_->GetSessionID();
   }
   autocomplete_controller()->AddProvidersInfo(&log.providers_info);
   client_->OnURLOpenedFromOmnibox(&log);
@@ -782,7 +779,7 @@ bool OmniboxEditModel::AcceptKeyword(
   // with a temporary one.  This is important because rerunning autocomplete
   // after the user pressed space, which will have happened just before reaching
   // here, may have generated a new match, which the user won't actually see and
-  // which we don't want to switch back to when existing keyword mode; see
+  // which we don't want to switch back to when exiting keyword mode; see
   // comments in ClearKeyword().
   if (entry_method == KeywordModeEntryMethod::TAB) {
     // Ensure the current selection is saved before showing keyword mode
@@ -962,20 +959,8 @@ void OmniboxEditModel::OnKillFocus() {
   paste_state_ = NONE;
   control_key_state_ = UP;
 #if defined(OS_WIN)
-  ui::OnScreenKeyboardDisplayManager::GetInstance()->DismissVirtualKeyboard();
+  view_->HideImeIfNeeded();
 #endif
-
-  // TODO(tommycli): This seems redundant with the RevertAll call in the Views
-  // code. Find a way to consolidate these calls.
-  if (!user_input_in_progress_ &&
-      base::FeatureList::IsEnabled(
-          omnibox::kUIExperimentHideSteadyStateUrlSchemeAndSubdomains)) {
-    // Revert all the user has made a partial selection.
-    size_t start = 0, end = 0;
-    view_->GetSelectionBounds(&start, &end);
-    if (view_->IsSelectAll() || start == end)
-      view_->RevertAll();
-  }
 }
 
 bool OmniboxEditModel::WillHandleEscapeKey() const {
@@ -1357,8 +1342,9 @@ void OmniboxEditModel::GetInfoForCurrentText(AutocompleteMatch* match,
       *alternate_nav_url = result().alternate_nav_url();
   } else {
     client_->GetAutocompleteClassifier()->Classify(
-        MaybePrependKeyword(view_->GetText()), is_keyword_selected(), true,
-        ClassifyPage(), match, alternate_nav_url);
+        MaybePrependKeyword(user_input_in_progress_ ? view_->GetText()
+                                                    : url_for_editing_),
+        is_keyword_selected(), true, ClassifyPage(), match, alternate_nav_url);
   }
 }
 
@@ -1426,6 +1412,8 @@ bool OmniboxEditModel::IsSpaceCharForAcceptingKeyword(wchar_t c) {
 OmniboxEventProto::PageClassification OmniboxEditModel::ClassifyPage() const {
   if (!client_->CurrentPageExists())
     return OmniboxEventProto::OTHER;
+  if (focus_source_ == SEARCH_BUTTON)
+    return OmniboxEventProto::SEARCH_BUTTON_AS_STARTING_FOCUS;
   if (client_->IsInstantNTP()) {
     // Note that we treat OMNIBOX as the source if focus_source_ is INVALID,
     // i.e., if input isn't actually in progress.

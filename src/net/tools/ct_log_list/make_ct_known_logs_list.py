@@ -15,31 +15,6 @@ def _write_cpp_header(f):
     f.write("// This file is auto-generated, DO NOT EDIT.\n\n")
 
 
-def _write_log_info_struct_definition(f):
-    f.write(
-        "struct CTLogInfo {\n"
-        "  // The DER-encoded SubjectPublicKeyInfo for the log.\n"
-        "  const char* log_key;\n"
-        "  // The length, in bytes, of |log_key|.\n"
-        "  size_t log_key_length;\n"
-        "  // The user-friendly log name.\n"
-        "  // Note: This will not be translated.\n"
-        "  const char* log_name;\n"
-        "  // The HTTPS API endpoint for the log.\n"
-        "  // Note: Trailing slashes should be included.\n"
-        "  const char* log_url;\n"
-        "  // The DNS API endpoint for the log.\n"
-        "  // This is used as the parent domain for all queries about the "
-        "log.\n  // If empty, CT DNS queries are not supported for the log. "
-        "This will prevent\n  // retrieval of inclusion proofs over DNS for "
-        "SCTs from the log.\n"
-        "  // https://github.com/google/certificate-transparency-rfcs/blob/"
-        "master/dns/draft-ct-over-dns.md.\n"
-        "  const char* log_dns_domain;\n"
-        "};\n\n"
-        )
-
-
 def _write_disqualified_log_info_struct_definition(f):
     f.write(
         "// Information related to previously-qualified, but now disqualified,"
@@ -132,7 +107,6 @@ def _to_loginfo_struct(log):
     s += "\n     ".join(split_hex_key)
     s += ',\n     %d' % (len(log_key))
     s += ',\n     "%s"' % (_escape_c_string(log["description"]))
-    s += ',\n     "https://%s"' % (log["url"])
     s += ',\n     "%s"' % (log["dns_api_endpoint"])
     s += '}'
     return s
@@ -191,7 +165,6 @@ def generate_cpp_file(input_file, f):
 
     # Write the list of currently-qualifying logs.
     qualifying_logs = [log for log in logs if not _is_log_disqualified(log)]
-    _write_log_info_struct_definition(f)
     _write_qualifying_logs_loginfo(f, qualifying_logs)
 
     # Write the IDs of all CT Logs operated by Google

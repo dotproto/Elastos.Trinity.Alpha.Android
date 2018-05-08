@@ -11,7 +11,6 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -22,7 +21,6 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/service_manager/child_connection.h"
-#include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_switches.h"
@@ -35,6 +33,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
+#include "services/service_manager/sandbox/switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_switches.h"
 
@@ -190,10 +189,6 @@ void UtilityProcessHost::SetServiceIdentity(
   service_identity_ = identity;
 }
 
-void UtilityProcessHost::AddFilter(BrowserMessageFilter* filter) {
-  process_->AddFilter(filter);
-}
-
 void UtilityProcessHost::SetLaunchCallback(
     base::OnceCallback<void(base::ProcessId)> callback) {
   DCHECK(!launched_);
@@ -255,6 +250,7 @@ bool UtilityProcessHost::StartProcess() {
     cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kUtilityProcess);
     BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line.get());
+    BrowserChildProcessHostImpl::CopyTraceStartupFlags(cmd_line.get());
     std::string locale = GetContentClient()->browser()->GetApplicationLocale();
     cmd_line->AppendSwitchASCII(switches::kLang, locale);
 
@@ -267,17 +263,19 @@ bool UtilityProcessHost::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
+      network::switches::kForceEffectiveConnectionType,
       network::switches::kHostResolverRules,
       network::switches::kIgnoreCertificateErrorsSPKIList,
       network::switches::kLogNetLog,
       network::switches::kNoReferrers,
-      switches::kIgnoreCertificateErrors,
-      switches::kNoSandbox,
-      switches::kOverrideUseSoftwareGLForTests,
-      switches::kProxyServer,
+      service_manager::switches::kNoSandbox,
 #if defined(OS_MACOSX)
-      switches::kEnableSandboxLogging,
+      service_manager::switches::kEnableSandboxLogging,
 #endif
+      switches::kIgnoreCertificateErrors,
+      switches::kOverrideUseSoftwareGLForTests,
+      switches::kOverrideEnabledCdmInterfaceVersion,
+      switches::kProxyServer,
       switches::kUseFakeDeviceForMediaStream,
       switches::kUseFileForFakeVideoCapture,
       switches::kUseMockCertVerifierForTesting,

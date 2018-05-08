@@ -6,6 +6,7 @@
 #define CONTENT_SHELL_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/command_line.h"
@@ -14,10 +15,10 @@
 #include "content/public/common/content_switches.h"
 #include "content/shell/test_runner/test_runner_export.h"
 #include "content/shell/test_runner/web_frame_test_client.h"
-#include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_effective_connection_type.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_frame_client.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace test_runner {
 
@@ -83,9 +84,10 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     return mime_type.Utf8().find(suffix) != std::string::npos;
   }
 
-  void DownloadURL(const blink::WebURLRequest& request) override {
-    test_client()->DownloadURL(request);
-    Base::DownloadURL(request);
+  void DownloadURL(const blink::WebURLRequest& request,
+                   mojo::ScopedMessagePipeHandle blob_url_token) override {
+    test_client()->DownloadURL(request, mojo::ScopedMessagePipeHandle());
+    Base::DownloadURL(request, std::move(blob_url_token));
   }
 
 
@@ -251,10 +253,9 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
 
   void CheckIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
-      const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override {
-    test_client()->CheckIfAudioSinkExistsAndIsAuthorized(
-        sink_id, security_origin, web_callbacks);
+    test_client()->CheckIfAudioSinkExistsAndIsAuthorized(sink_id,
+                                                         web_callbacks);
   }
 
   blink::WebSpeechRecognizer* SpeechRecognizer() override {

@@ -87,7 +87,7 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
   void AttachToCompositor(WindowAndroidCompositor* compositor);
   void DetachFromCompositor();
 
-  void WasResized();
+  void SynchronizeVisualProperties();
 
   // Returns the ID for the current Surface. Returns an invalid ID if no
   // surface exists (!HasDelegatedContent()).
@@ -95,6 +95,8 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
 
   // Returns the local surface ID for this delegated content.
   const viz::LocalSurfaceId& GetLocalSurfaceId() const;
+
+  void TakeFallbackContentFrom(DelegatedFrameHostAndroid* other);
 
  private:
   // viz::mojom::CompositorFrameSinkClient implementation.
@@ -140,7 +142,6 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
 
   const bool enable_surface_synchronization_;
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
-  viz::LocalSurfaceId local_surface_id_;
 
   // A lock that is held from the point at which we attach to the compositor to
   // the point at which we submit our first frame to the compositor. This

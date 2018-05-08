@@ -98,16 +98,6 @@ std::unique_ptr<NotificationPlatformBridge> CreateMessageCenterBridge(
 #endif
 }
 
-std::string GetProfileId(Profile* profile) {
-#if defined(OS_WIN)
-  return base::WideToUTF8(profile->GetPath().BaseName().value());
-#elif defined(OS_POSIX)
-  return profile->GetPath().BaseName().value();
-#else
-#error "Not implemented for !OS_WIN && !OS_POSIX."
-#endif
-}
-
 void OperationCompleted() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
@@ -221,15 +211,16 @@ void NotificationDisplayServiceImpl::Display(
     return;
   }
 
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   NotificationPlatformBridge* bridge =
       NotificationPlatformBridge::CanHandleType(notification_type)
           ? bridge_
           : message_center_bridge_.get();
   DCHECK(bridge);
 
-  bridge->Display(notification_type, GetProfileId(profile_),
-                  profile_->IsOffTheRecord(), notification,
+  bridge->Display(notification_type, profile_, notification,
                   std::move(metadata));
+#endif
 
   NotificationHandler* handler = GetNotificationHandler(notification_type);
   if (handler)
@@ -246,13 +237,15 @@ void NotificationDisplayServiceImpl::Close(
     return;
   }
 
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   NotificationPlatformBridge* bridge =
       NotificationPlatformBridge::CanHandleType(notification_type)
           ? bridge_
           : message_center_bridge_.get();
   DCHECK(bridge);
 
-  bridge->Close(GetProfileId(profile_), notification_id);
+  bridge->Close(profile_, notification_id);
+#endif
 }
 
 void NotificationDisplayServiceImpl::GetDisplayed(
@@ -263,8 +256,7 @@ void NotificationDisplayServiceImpl::GetDisplayed(
     return;
   }
 
-  bridge_->GetDisplayed(GetProfileId(profile_), profile_->IsOffTheRecord(),
-                        std::move(callback));
+  bridge_->GetDisplayed(profile_, std::move(callback));
 }
 
 // Callback to run once the profile has been loaded in order to perform a
@@ -295,10 +287,12 @@ void NotificationDisplayServiceImpl::ProfileLoadedCallback(
 void NotificationDisplayServiceImpl::OnNotificationPlatformBridgeReady(
     bool success) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   if (base::FeatureList::IsEnabled(features::kNativeNotifications)) {
     UMA_HISTOGRAM_BOOLEAN("Notifications.UsingNativeNotificationCenter",
                           success);
   }
+#endif
 
   if (!success) {
     // Fall back to the message center if initialization failed. Initialization

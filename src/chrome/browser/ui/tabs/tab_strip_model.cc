@@ -150,7 +150,11 @@ void TabStripModel::WebContentsData::WebContentsDestroyed() {
   // already been closed. We just want to undo our bookkeeping.
   int index = tab_strip_model_->GetIndexOfWebContents(web_contents());
   DCHECK_NE(TabStripModel::kNoTab, index);
-  tab_strip_model_->DetachWebContentsAt(index);
+
+  // TODO(erikchen): Clean up the internal ownership of TabStripModel once we
+  // move to a world where there's always explicit ownership of WebContents.
+  // https://crbug.com/832879.
+  tab_strip_model_->DetachWebContentsAt(index).release();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -179,15 +183,16 @@ bool TabStripModel::ContainsIndex(int index) const {
   return index >= 0 && index < count();
 }
 
-void TabStripModel::AppendWebContents(WebContents* contents, bool foreground) {
-  InsertWebContentsAt(count(), contents,
+void TabStripModel::AppendWebContents(std::unique_ptr<WebContents> contents,
+                                      bool foreground) {
+  InsertWebContentsAt(count(), std::move(contents),
                       foreground ? (ADD_INHERIT_GROUP | ADD_ACTIVE) : ADD_NONE);
 }
 
 void TabStripModel::InsertWebContentsAt(int index,
-                                        WebContents* contents,
+                                        std::unique_ptr<WebContents> contents,
                                         int add_types) {
-  delegate()->WillAddWebContents(contents);
+  delegate()->WillAddWebContents(contents.get());
 
   bool active = (add_types & ADD_ACTIVE) != 0;
   bool pin = (add_types & ADD_PINNED) != 0;
@@ -204,7 +209,7 @@ void TabStripModel::InsertWebContentsAt(int index,
   // since the old contents and the new contents will be the same...
   WebContents* active_contents = GetActiveWebContents();
   std::unique_ptr<WebContentsData> data =
-      std::make_unique<WebContentsData>(this, contents);
+      std::make_unique<WebContentsData>(this, contents.get());
   data->set_pinned(pin);
   if ((add_types & ADD_INHERIT_GROUP) && active_contents) {
     if (active) {
@@ -228,7 +233,7 @@ void TabStripModel::InsertWebContentsAt(int index,
   // be blocked, or just let the modal dialog manager make the blocking call
   // directly and not use this at all.
   const web_modal::WebContentsModalDialogManager* manager =
-      web_modal::WebContentsModalDialogManager::FromWebContents(contents);
+      web_modal::WebContentsModalDialogManager::FromWebContents(contents.get());
   if (manager)
     data->set_blocked(manager->IsDialogActive());
 
@@ -237,42 +242,55 @@ void TabStripModel::InsertWebContentsAt(int index,
   selection_model_.IncrementFrom(index);
 
   for (auto& observer : observers_)
-    observer.TabInsertedAt(this, contents, index, active);
+    observer.TabInsertedAt(this, contents.get(), index, active);
 
   if (active) {
     ui::ListSelectionModel new_model = selection_model_;
     new_model.SetSelectedIndex(index);
     SetSelection(std::move(new_model), Notify::kDefault);
   }
+
+  // TODO(erikchen): Clean up the internal ownership of TabStripModel once we
+  // move to a world where there's always explicit ownership of WebContents.
+  // https://crbug.com/832879.
+  contents.release();
 }
 
-WebContents* TabStripModel::ReplaceWebContentsAt(int index,
-                                                 WebContents* new_contents) {
-  delegate()->WillAddWebContents(new_contents);
+std::unique_ptr<content::WebContents> TabStripModel::ReplaceWebContentsAt(
+    int index,
+    std::unique_ptr<WebContents> new_contents) {
+  delegate()->WillAddWebContents(new_contents.get());
 
   DCHECK(ContainsIndex(index));
   WebContents* old_contents = GetWebContentsAtImpl(index);
 
   FixOpenersAndGroupsReferencing(index);
 
-  contents_data_[index]->SetWebContents(new_contents);
+  contents_data_[index]->SetWebContents(new_contents.get());
 
   for (auto& observer : observers_)
-    observer.TabReplacedAt(this, old_contents, new_contents, index);
+    observer.TabReplacedAt(this, old_contents, new_contents.get(), index);
 
   // When the active WebContents is replaced send out a selection notification
   // too. We do this as nearly all observers need to treat a replacement of the
   // selected contents as the selection changing.
   if (active_index() == index) {
     for (auto& observer : observers_) {
-      observer.ActiveTabChanged(old_contents, new_contents, active_index(),
+      observer.ActiveTabChanged(old_contents, new_contents.get(),
+                                active_index(),
                                 TabStripModelObserver::CHANGE_REASON_REPLACED);
     }
   }
-  return old_contents;
+
+  // TODO(erikchen): Clean up the internal ownership of TabStripModel once we
+  // move to a world where there's always explicit ownership of WebContents.
+  // https://crbug.com/832879.
+  new_contents.release();
+  return base::WrapUnique(old_contents);
 }
 
-WebContents* TabStripModel::DetachWebContentsAt(int index) {
+std::unique_ptr<content::WebContents> TabStripModel::DetachWebContentsAt(
+    int index) {
   CHECK(!in_notify_);
   if (contents_data_.empty())
     return nullptr;
@@ -323,7 +341,7 @@ WebContents* TabStripModel::DetachWebContentsAt(int index) {
         observer.TabSelectionChanged(this, old_model);
     }
   }
-  return removed_contents;
+  return base::WrapUnique(removed_contents);
 }
 
 void TabStripModel::ActivateTabAt(int index, bool user_gesture) {
@@ -611,7 +629,7 @@ const ui::ListSelectionModel& TabStripModel::selection_model() const {
   return selection_model_;
 }
 
-void TabStripModel::AddWebContents(WebContents* contents,
+void TabStripModel::AddWebContents(std::unique_ptr<WebContents> contents,
                                    int index,
                                    ui::PageTransition transition,
                                    int add_types) {
@@ -649,10 +667,11 @@ void TabStripModel::AddWebContents(WebContents* contents,
     // is re-selected, not the next-adjacent.
     inherit_group = true;
   }
-  InsertWebContentsAt(index, contents,
+  WebContents* raw_contents = contents.get();
+  InsertWebContentsAt(index, std::move(contents),
                       add_types | (inherit_group ? ADD_INHERIT_GROUP : 0));
   // Reset the index, just in case insert ended up moving it on us.
-  index = GetIndexOfWebContents(contents);
+  index = GetIndexOfWebContents(raw_contents);
 
   if (inherit_group && ui::PageTransitionTypeIncludingQualifiersIs(
                            transition, ui::PAGE_TRANSITION_TYPED))
@@ -670,7 +689,7 @@ void TabStripModel::AddWebContents(WebContents* contents,
   // new background tab.
   if (WebContents* old_contents = GetActiveWebContents()) {
     if ((add_types & ADD_ACTIVE) == 0) {
-      ResizeWebContents(contents,
+      ResizeWebContents(raw_contents,
                         gfx::Rect(old_contents->GetContainerBounds().size()));
     }
   }

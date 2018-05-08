@@ -5,8 +5,10 @@
 #include "components/printing/browser/print_manager_utils.h"
 
 #include "base/command_line.h"
+#include "components/printing/browser/features.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/common/print_messages.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "printing/print_settings.h"
@@ -32,15 +34,9 @@ void CreateCompositeClientIfNeeded(content::WebContents* web_contents) {
   // where OOPIF is used such as isolate-extensions, but should be good for
   // feature testing purpose. Eventually, we will remove this check and use pdf
   // compositor service by default for printing.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess) ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kIsolateOrigins) ||
-      ((base::FeatureList::IsEnabled(features::kSitePerProcess) ||
-        base::FeatureList::IsEnabled(features::kIsolateOrigins)) &&
-       !base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kDisableSiteIsolationTrials)) ||
-      base::FeatureList::IsEnabled(features::kTopDocumentIsolation)) {
+  if (content::SiteIsolationPolicy::ShouldPdfCompositorBeEnabledForOopifs() ||
+      base::FeatureList::IsEnabled(
+          printing::features::kUsePdfCompositorServiceForPrint)) {
     PrintCompositeClient::CreateForWebContents(web_contents);
     SetOopifEnabled();
   }
@@ -72,6 +68,7 @@ void RenderParamsFromPrintSettings(const PrintSettings& settings,
   params->url = settings.url();
   params->printed_doc_type =
       IsOopifEnabled() ? SkiaDocumentType::MSKP : SkiaDocumentType::PDF;
+  params->num_pages_per_sheet = settings.num_pages_per_sheet();
 }
 
 }  // namespace printing

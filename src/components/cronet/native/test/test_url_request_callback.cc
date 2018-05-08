@@ -63,19 +63,21 @@ TestUrlRequestCallback::TestUrlRequestCallback()
       step_block_(base::WaitableEvent::ResetPolicy::MANUAL,
                   base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
-TestUrlRequestCallback::~TestUrlRequestCallback() = default;
+TestUrlRequestCallback::~TestUrlRequestCallback() {
+  ShutdownExecutor();
+}
 
-Cronet_ExecutorPtr TestUrlRequestCallback::CreateExecutor(bool direct) {
+Cronet_ExecutorPtr TestUrlRequestCallback::GetExecutor(bool direct) {
+  CHECK(!executor_);
   allow_direct_executor_ = direct;
   if (direct)
     return Cronet_Executor_CreateWith(TestUrlRequestCallback::ExecuteDirect);
   executor_thread_ =
       std::make_unique<base::Thread>("TestUrlRequestCallback executor");
   executor_thread_->Start();
-  Cronet_ExecutorPtr executor =
-      Cronet_Executor_CreateWith(TestUrlRequestCallback::Execute);
-  Cronet_Executor_SetClientContext(executor, this);
-  return executor;
+  executor_ = Cronet_Executor_CreateWith(TestUrlRequestCallback::Execute);
+  Cronet_Executor_SetClientContext(executor_, this);
+  return executor_;
 }
 
 Cronet_UrlRequestCallbackPtr
@@ -144,6 +146,7 @@ void TestUrlRequestCallback::OnReadCompleted(Cronet_UrlRequestPtr request,
   }
 
   if (MaybeCancelOrPause(request)) {
+    Cronet_Buffer_Destroy(buffer);
     return;
   }
   StartNextRead(request, buffer);
@@ -197,13 +200,26 @@ void TestUrlRequestCallback::OnCanceled(Cronet_UrlRequestPtr request,
   CHECK(!last_error_);
 
   response_step_ = ON_CANCELED;
-  response_info_ = std::make_unique<UrlResponseInfo>(info);
   on_canceled_called_ = true;
   SignalDone();
   MaybeCancelOrPause(request);
 }
 
+void TestUrlRequestCallback::ShutdownExecutor() {
+  base::AutoLock lock(executor_lock_);
+  if (executor_ == nullptr)
+    return;
+  Cronet_Executor_Destroy(executor_);
+  executor_ = nullptr;
+  // Stop executor thread outside of lock to allow runnables to complete.
+  auto executor_thread(std::move(executor_thread_));
+  executor_lock_.Release();
+  executor_thread.reset();
+  executor_lock_.Acquire();
+}
+
 void TestUrlRequestCallback::CheckExecutorThread() {
+  base::AutoLock lock(executor_lock_);
   if (executor_thread_ && !allow_direct_executor_)
     CHECK(executor_thread_->task_runner()->BelongsToCurrentThread());
 }
@@ -223,6 +239,7 @@ bool TestUrlRequestCallback::MaybeCancelOrPause(Cronet_UrlRequestPtr request) {
   }
   if (failure_type_ == CANCEL_ASYNC ||
       failure_type_ == CANCEL_ASYNC_WITHOUT_PAUSE) {
+    base::AutoLock lock(executor_lock_);
     CHECK(executor_thread_);
     executor_thread_->task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&Cronet_UrlRequest_Cancel, request));
@@ -292,6 +309,7 @@ void TestUrlRequestCallback::Execute(Cronet_ExecutorPtr self,
   auto* callback = static_cast<TestUrlRequestCallback*>(
       Cronet_Executor_GetClientContext(self));
   CHECK(callback);
+  base::AutoLock lock(callback->executor_lock_);
   CHECK(callback->executor_thread_);
   // Post |runnable| onto executor thread.
   callback->executor_thread_->task_runner()->PostTask(

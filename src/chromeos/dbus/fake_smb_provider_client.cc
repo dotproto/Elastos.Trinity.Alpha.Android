@@ -19,9 +19,19 @@ FakeSmbProviderClient::~FakeSmbProviderClient() {}
 void FakeSmbProviderClient::Init(dbus::Bus* bus) {}
 
 void FakeSmbProviderClient::Mount(const base::FilePath& share_path,
+                                  const std::string& workgroup,
+                                  const std::string& username,
+                                  base::ScopedFD password_fd,
                                   MountCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), smbprovider::ERROR_OK, 1));
+}
+
+void FakeSmbProviderClient::Remount(const base::FilePath& share_path,
+                                    int32_t mount_id,
+                                    StatusCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), smbprovider::ERROR_OK));
 }
 
 void FakeSmbProviderClient::Unmount(int32_t mount_id, StatusCallback callback) {
@@ -139,4 +149,13 @@ void FakeSmbProviderClient::GetDeleteList(int32_t mount_id,
       FROM_HERE,
       base::BindOnce(std::move(callback), smbprovider::ERROR_OK, delete_list));
 }
+
+void FakeSmbProviderClient::GetShares(const base::FilePath& server_url,
+                                      ReadDirectoryCallback callback) {
+  smbprovider::DirectoryEntryListProto entry_list;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), smbprovider::ERROR_OK, entry_list));
+}
+
 }  // namespace chromeos

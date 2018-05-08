@@ -30,19 +30,18 @@ DirectLayerTreeFrameSink::DirectLayerTreeFrameSink(
     scoped_refptr<RasterContextProvider> worker_context_provider,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    SharedBitmapManager* shared_bitmap_manager,
     bool use_viz_hit_test)
     : LayerTreeFrameSink(std::move(context_provider),
                          std::move(worker_context_provider),
                          std::move(compositor_task_runner),
-                         gpu_memory_buffer_manager,
-                         shared_bitmap_manager),
+                         gpu_memory_buffer_manager),
       frame_sink_id_(frame_sink_id),
       support_manager_(support_manager),
       frame_sink_manager_(frame_sink_manager),
       display_(display),
       display_client_(display_client),
-      use_viz_hit_test_(use_viz_hit_test) {
+      use_viz_hit_test_(use_viz_hit_test),
+      weak_factory_(this) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   capabilities_.must_always_swap = true;
   // Display and DirectLayerTreeFrameSink share a GL context, so sync
@@ -94,18 +93,20 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   DCHECK_LE(BeginFrameArgs::kStartingFrameNumber,
             frame.metadata.begin_frame_ack.sequence_number);
 
-  if (!local_surface_id_.is_valid() ||
-      frame.size_in_pixels() != last_swap_frame_size_ ||
+  if (frame.size_in_pixels() != last_swap_frame_size_ ||
       frame.device_scale_factor() != device_scale_factor_) {
-    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
+    parent_local_surface_id_allocator_.GenerateId();
     last_swap_frame_size_ = frame.size_in_pixels();
     device_scale_factor_ = frame.device_scale_factor();
-    display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor_);
+    display_->SetLocalSurfaceId(
+        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
+        device_scale_factor_);
   }
 
   auto hit_test_region_list = CreateHitTestData(frame);
-  support_->SubmitCompositorFrame(local_surface_id_, std::move(frame),
-                                  std::move(hit_test_region_list));
+  support_->SubmitCompositorFrame(
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
+      std::move(frame), std::move(hit_test_region_list));
 }
 
 void DirectLayerTreeFrameSink::DidNotProduceFrame(const BeginFrameAck& ack) {
@@ -152,7 +153,24 @@ void DirectLayerTreeFrameSink::DisplayDidReceiveCALayerParams(
     display_client_->OnDisplayReceivedCALayerParams(ca_layer_params);
 }
 
+void DirectLayerTreeFrameSink::DidSwapAfterSnapshotRequestReceived(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  // TODO(samans): Implement this method once the plumbing for latency info also
+  // works for non-OOP-D.
+}
+
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAck(
+    const std::vector<ReturnedResource>& resources) {
+  // Submitting a CompositorFrame can synchronously draw and dispatch a frame
+  // ack. PostTask to ensure the client is notified on a new stack frame.
+  compositor_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal,
+          weak_factory_.GetWeakPtr(), resources));
+}
+
+void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal(
     const std::vector<ReturnedResource>& resources) {
   client_->ReclaimResources(resources);
   client_->DidReceiveCompositorFrameAck();

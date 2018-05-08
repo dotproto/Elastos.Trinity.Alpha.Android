@@ -20,15 +20,15 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSelectElement.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_select_element.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using blink::WebConsoleMessage;
@@ -418,13 +418,13 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
           0, std::min(field_data.label.length(), kMaxLabelSize));
 
       // A rough estimate of the maximum title size is:
-      //    7 field titles at <17 chars each
-      //    + 6 values at <40 chars each
+      //    8 field titles at <17 chars each
+      //    + 7 values at <40 chars each
       //    + 1 truncated label at <kMaxLabelSize;
-      //    = 459 chars, rounded up to the next multiple of 64 = 512
+      //    = 516 chars, rounded up to the next multiple of 64 = 576
       // A particularly large parseable name could blow through this and cause
       // another allocation, but that's OK.
-      constexpr size_t kMaxTitleSize = 512;
+      constexpr size_t kMaxTitleSize = 576;
       std::string title;
       title.reserve(kMaxTitleSize);
       title += "overall type: ";
@@ -437,6 +437,8 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
       title += base::UTF16ToUTF8(truncated_label);
       title += "\nparseable name: ";
       title += field.parseable_name;
+      title += "\nsection: ";
+      title += field.section;
       title += "\nfield signature: ";
       title += field.signature;
       title += "\nform signature: ";

@@ -94,6 +94,7 @@
 <translation id="5034860022980953847">folyamatjelző</translation>
 <translation id="5117590920725113268">A következő hónap megjelenítése</translation>
 <translation id="512758898067543763">sorfejléc</translation>
+<translation id="5153163864850940242">A videó lejátszása kép a képben módban történik</translation>
 <translation id="5164977714490026579">Az érték legyen nagyobb vagy egyenlő, mint <ph name="MINIMUM" />.</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Kérjük, adja meg a „<ph name="ATSIGN" />” előtti részt is. A „<ph name="INVALIDADDRESS" />” cím nem teljes.</translation>
@@ -124,7 +125,6 @@
 <translation id="6404546809543547843">hang idővonalának vezérlője</translation>
 <translation id="648732519525291180">időválasztó</translation>
 <translation id="6550675742724504774">Beállítások</translation>
-<translation id="6564313821541007458">Most kép a képben módban van</translation>
 <translation id="658823671542763450">teljes képernyős nézet</translation>
 <translation id="663493177488814956">hírcsatorna</translation>
 <translation id="6637586476836377253">napló</translation>

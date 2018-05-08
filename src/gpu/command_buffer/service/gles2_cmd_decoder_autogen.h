@@ -2663,6 +2663,7 @@ error::Error GLES2DecoderImpl::HandleStencilFunc(
     state_.stencil_back_func = func;
     state_.stencil_back_ref = ref;
     state_.stencil_back_mask = mask;
+    state_.stencil_state_changed_since_validation = true;
     api()->glStencilFuncFn(func, ref, mask);
   }
   return error::kNoError;
@@ -2707,6 +2708,7 @@ error::Error GLES2DecoderImpl::HandleStencilFuncSeparate(
       state_.stencil_back_ref = ref;
       state_.stencil_back_mask = mask;
     }
+    state_.stencil_state_changed_since_validation = true;
     api()->glStencilFuncSeparateFn(face, func, ref, mask);
   }
   return error::kNoError;
@@ -2723,6 +2725,7 @@ error::Error GLES2DecoderImpl::HandleStencilMask(
     state_.stencil_front_writemask = mask;
     state_.stencil_back_writemask = mask;
     framebuffer_state_.clear_state_dirty = true;
+    state_.stencil_state_changed_since_validation = true;
   }
   return error::kNoError;
 }
@@ -2753,6 +2756,7 @@ error::Error GLES2DecoderImpl::HandleStencilMaskSeparate(
       state_.stencil_back_writemask = mask;
     }
     framebuffer_state_.clear_state_dirty = true;
+    state_.stencil_state_changed_since_validation = true;
   }
   return error::kNoError;
 }
@@ -4490,7 +4494,15 @@ error::Error GLES2DecoderImpl::HandleBindVertexArrayOES(
 error::Error GLES2DecoderImpl::HandleSwapBuffers(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  DoSwapBuffers();
+  const volatile gles2::cmds::SwapBuffers& c =
+      *static_cast<const volatile gles2::cmds::SwapBuffers*>(cmd_data);
+  GLbitfield flags = static_cast<GLbitfield>(c.flags);
+  if (!validators_->swap_buffers_flags.IsValid(flags)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSwapBuffers",
+                       "flags GL_INVALID_VALUE");
+    return error::kNoError;
+  }
+  DoSwapBuffers(flags);
   return error::kNoError;
 }
 
@@ -4903,7 +4915,16 @@ error::Error GLES2DecoderImpl::HandleScheduleCALayerInUseQueryCHROMIUMImmediate(
 error::Error GLES2DecoderImpl::HandleCommitOverlayPlanesCHROMIUM(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  DoCommitOverlayPlanes();
+  const volatile gles2::cmds::CommitOverlayPlanesCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::CommitOverlayPlanesCHROMIUM*>(
+          cmd_data);
+  GLbitfield flags = static_cast<GLbitfield>(c.flags);
+  if (!validators_->swap_buffers_flags.IsValid(flags)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCommitOverlayPlanesCHROMIUM",
+                       "flags GL_INVALID_VALUE");
+    return error::kNoError;
+  }
+  DoCommitOverlayPlanes(flags);
   return error::kNoError;
 }
 
@@ -5119,6 +5140,7 @@ error::Error GLES2DecoderImpl::HandleSwapBuffersWithBoundsCHROMIUMImmediate(
   }
   volatile const GLint* rects = GetImmediateDataAs<volatile const GLint*>(
       c, data_size, immediate_data_size);
+  GLbitfield flags = static_cast<GLbitfield>(c.flags);
   if (count < 0) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSwapBuffersWithBoundsCHROMIUM",
                        "count < 0");
@@ -5127,7 +5149,12 @@ error::Error GLES2DecoderImpl::HandleSwapBuffersWithBoundsCHROMIUMImmediate(
   if (rects == NULL) {
     return error::kOutOfBounds;
   }
-  DoSwapBuffersWithBoundsCHROMIUM(count, rects);
+  if (!validators_->swap_buffers_flags.IsValid(flags)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSwapBuffersWithBoundsCHROMIUM",
+                       "flags GL_INVALID_VALUE");
+    return error::kNoError;
+  }
+  DoSwapBuffersWithBoundsCHROMIUM(count, rects, flags);
   return error::kNoError;
 }
 
@@ -5169,13 +5196,11 @@ error::Error GLES2DecoderImpl::HandleBeginRasterCHROMIUM(
   GLuint sk_color = static_cast<GLuint>(c.sk_color);
   GLuint msaa_sample_count = static_cast<GLuint>(c.msaa_sample_count);
   GLboolean can_use_lcd_text = static_cast<GLboolean>(c.can_use_lcd_text);
-  GLboolean use_distance_field_text =
-      static_cast<GLboolean>(c.use_distance_field_text);
   GLint color_type = static_cast<GLint>(c.color_type);
   GLuint color_space_transfer_cache_id =
       static_cast<GLuint>(c.color_space_transfer_cache_id);
   DoBeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
-                        can_use_lcd_text, use_distance_field_text, color_type,
+                        can_use_lcd_text, color_type,
                         color_space_transfer_cache_id);
   return error::kNoError;
 }
@@ -5412,6 +5437,7 @@ bool GLES2DecoderImpl::SetCapabilityState(GLenum cap, bool enabled) {
       state_.enable_flags.stencil_test = enabled;
       if (state_.enable_flags.cached_stencil_test != enabled ||
           state_.ignore_cached_state) {
+        state_.stencil_state_changed_since_validation = true;
         framebuffer_state_.clear_state_dirty = true;
       }
       return false;

@@ -19,7 +19,7 @@ class MockBrowserUiInterface : public BrowserUiInterface {
   MockBrowserUiInterface();
   ~MockBrowserUiInterface() override;
 
-  MOCK_METHOD2(SetWebVrMode, void(bool enabled, bool show_toast));
+  MOCK_METHOD1(SetWebVrMode, void(bool enabled));
   MOCK_METHOD1(SetFullscreen, void(bool enabled));
   MOCK_METHOD1(SetToolbarState, void(const ToolbarState& state));
   MOCK_METHOD1(SetIncognito, void(bool enabled));
@@ -28,20 +28,20 @@ class MockBrowserUiInterface : public BrowserUiInterface {
   MOCK_METHOD0(SetIsExiting, void());
   MOCK_METHOD2(SetHistoryButtonsEnabled,
                void(bool can_go_back, bool can_go_forward));
-  MOCK_METHOD1(SetVideoCaptureEnabled, void(bool enabled));
-  MOCK_METHOD1(SetScreenCaptureEnabled, void(bool enabled));
-  MOCK_METHOD1(SetAudioCaptureEnabled, void(bool enabled));
-  MOCK_METHOD1(SetBluetoothConnected, void(bool enabled));
-  MOCK_METHOD1(SetLocationAccessEnabled, void(bool enabled));
+  MOCK_METHOD1(SetCapturingState, void(const CapturingStateModel& state));
   MOCK_METHOD1(ShowExitVrPrompt, void(UiUnsupportedMode reason));
   MOCK_METHOD1(SetSpeechRecognitionEnabled, void(bool enabled));
   MOCK_METHOD1(SetRecognitionResult, void(const base::string16& result));
   MOCK_METHOD1(OnSpeechRecognitionStateChanged, void(int new_state));
-  void SetOmniboxSuggestions(std::unique_ptr<OmniboxSuggestions> suggestions) {}
+  void SetOmniboxSuggestions(
+      std::unique_ptr<OmniboxSuggestions> suggestions) override {}
   void OnAssetsLoaded(AssetsLoadStatus status,
                       std::unique_ptr<Assets> assets,
-                      const base::Version& component_version) {}
+                      const base::Version& component_version) override {}
   MOCK_METHOD0(OnAssetsUnavailable, void());
+  MOCK_METHOD1(SetRegularTabsOpen, void(bool));
+  MOCK_METHOD1(SetIncognitoTabsOpen, void(bool));
+  MOCK_METHOD1(SetOverlayTextureEmpty, void(bool));
 
   MOCK_METHOD1(ShowSoftInput, void(bool));
   MOCK_METHOD4(UpdateWebInputIndices, void(int, int, int, int));

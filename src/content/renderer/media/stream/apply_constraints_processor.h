@@ -9,11 +9,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/stream/media_stream_constraints_util.h"
 #include "media/capture/video_capture_types.h"
-#include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
-#include "third_party/WebKit/public/web/WebApplyConstraintsRequest.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/web/web_apply_constraints_request.h"
 
 namespace blink {
 class WebString;
@@ -34,7 +35,8 @@ class CONTENT_EXPORT ApplyConstraintsProcessor {
   using MediaDevicesDispatcherCallback = base::RepeatingCallback<
       const blink::mojom::MediaDevicesDispatcherHostPtr&()>;
   ApplyConstraintsProcessor(
-      MediaDevicesDispatcherCallback media_devices_dispatcher_cb);
+      MediaDevicesDispatcherCallback media_devices_dispatcher_cb,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~ApplyConstraintsProcessor();
 
   // Starts processing of |request|. When processing of |request| is complete,
@@ -83,6 +85,8 @@ class CONTENT_EXPORT ApplyConstraintsProcessor {
 
   MediaDevicesDispatcherCallback media_devices_dispatcher_cb_;
   SEQUENCE_CHECKER(sequence_checker_);
+
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   base::WeakPtrFactory<ApplyConstraintsProcessor> weak_factory_;
 

@@ -7,12 +7,12 @@
 #include <sys/socket.h>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -43,10 +43,9 @@
 #include "gpu/ipc/host/gpu_switches.h"
 #include "gpu/ipc/service/switches.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
@@ -76,10 +75,12 @@ void DeriveCommandLine(const GURL& start_url,
   DCHECK_NE(&base_command_line, command_line);
 
   static const char* const kForwardSwitches[] = {
+    service_manager::switches::kDisableGpuSandbox,
     service_manager::switches::kDisableSeccompFilterSandbox,
     service_manager::switches::kDisableSetuidSandbox,
     service_manager::switches::kGpuSandboxAllowSysVShm,
     service_manager::switches::kGpuSandboxFailuresFatal,
+    service_manager::switches::kNoSandbox,
     ::switches::kBlinkSettings,
     ::switches::kDisable2dCanvasImageChromium,
     ::switches::kDisableAccelerated2dCanvas,
@@ -89,7 +90,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableAcceleratedVideoEncode,
     ::switches::kDisableBlinkFeatures,
     ::switches::kDisableCastStreamingHWEncoding,
-    ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
@@ -106,8 +106,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableZeroCopy,
     ::switches::kEnableBlinkFeatures,
-    ::switches::kDisableGpuSandbox,
-    ::switches::kEnableDistanceFieldText,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
@@ -127,7 +125,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableUseZoomForDSF,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
-    ::switches::kEnableDrmAtomic,
     ::switches::kEnableHardwareOverlays,
     ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
@@ -139,7 +136,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kGpuRasterizationMSAASampleCount,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
-    ::switches::kNoSandbox,
     ::switches::kNumRasterThreads,
     ::switches::kPpapiFlashArgs,
     ::switches::kPpapiFlashPath,
@@ -170,6 +166,7 @@ void DeriveCommandLine(const GURL& start_url,
 #endif
     ::switches::kOzonePlatform,
     ash::switches::kAshEnableTabletMode,
+    ash::switches::kAshEnableWaylandServer,
     ash::switches::kAshForceEnableStylusTools,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
@@ -178,6 +175,7 @@ void DeriveCommandLine(const GURL& start_url,
     ash::switches::kShowTaps,
     ash::switches::kShowViewsLogin,
     ash::switches::kShowWebUiLock,
+    ash::switches::kShowWebUiLogin,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,

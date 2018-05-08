@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/timer/timer.h"
@@ -41,17 +42,17 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebScopedVirtualTimePauser.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebHistoryItem.h"
-#include "third_party/WebKit/public/web/WebNavigationType.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebViewClient.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_scoped_virtual_time_pauser.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/web/web_ax_object.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_view_client.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -91,7 +92,7 @@ class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
 struct FileChooserParams;
-struct ResizeParams;
+struct VisualProperties;
 
 namespace mojom {
 class CreateViewParams;
@@ -262,7 +263,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& positionInViewport,
                      const blink::WebFloatSize& velocityInViewport,
-                     const blink::WebOverscrollBehavior& behavior) override;
+                     const cc::OverscrollBehavior& behavior) override;
   void HasTouchEventHandlers(bool has_handlers) override;
   blink::WebScreenInfo GetScreenInfo() override;
   void SetToolTipText(const blink::WebString&,
@@ -353,7 +354,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
 #endif
   void ConvertViewportToWindowViaWidget(blink::WebRect* rect) override;
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
-  bool HasAddedInputHandler() const override;
 
   bool uses_temporary_zoom_level() const { return uses_temporary_zoom_level_; }
 
@@ -378,7 +378,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   blink::WebWidget* GetWebWidget() const override;
   void CloseForFrame() override;
   void Close() override;
-  void OnResize(const ResizeParams& params) override;
+  void OnSynchronizeVisualProperties(const VisualProperties& params) override;
   void OnSetFocus(bool enable) override;
   GURL GetURLForGraphicsContext3D() override;
   void DidCommitCompositorFrame() override;
@@ -507,15 +507,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void OnDisableScrollbarsForSmallWindows(
       const gfx::Size& disable_scrollbars_size_limit);
   void OnEnablePreferredSizeChangedMode();
-  void OnEnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
-  void OnDisableAutoResize(const gfx::Size& new_size);
-  void OnSetLocalSurfaceIdForAutoResize(
-      uint64_t sequence_number,
-      const gfx::Size& min_size,
-      const gfx::Size& max_size,
-      const content::ScreenInfo& screen_info,
-      uint32_t content_source_id,
-      const viz::LocalSurfaceId& local_surface_id);
   void OnEnumerateDirectoryResponse(int id,
                                     const std::vector<base::FilePath>& paths);
   void OnMediaPlayerActionAt(const gfx::Point& location,
@@ -523,8 +514,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void OnPluginActionAt(const gfx::Point& location,
                         const blink::WebPluginAction& action);
   void OnMoveOrResizeStarted();
-  void OnResolveTapDisambiguation(double timestamp_seconds,
-                                  gfx::Point tap_viewport_offset,
+  void OnResolveTapDisambiguation(base::TimeTicks timestamp,
+                                  const gfx::Point& tap_viewport_offset,
                                   bool is_long_press);
   void OnSetActive(bool active);
   void OnSetBackgroundOpaque(bool opaque);
@@ -540,6 +531,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void OnForceRedraw(const ui::LatencyInfo& latency_info);
   void OnSelectWordAroundCaret();
   void OnAudioStateChanged(bool is_audio_playing);
+  void OnPausePageScheduledTasks(bool paused);
 
   // Page message handlers -----------------------------------------------------
   void OnUpdateWindowScreenRect(gfx::Rect window_screen_rect);
@@ -597,13 +589,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
 #else
   void UpdateThemePrefs() {}
 #endif
-
-  // Send the appropriate ack to be able discard this input event message.
-  void OnDiscardInputEvent(
-      const blink::WebInputEvent* input_event,
-      const std::vector<const blink::WebInputEvent*>& coalesced_events,
-      const ui::LatencyInfo& latency_info,
-      InputEventDispatchType dispatch_type);
 
   // ---------------------------------------------------------------------------
   // ADDING NEW FUNCTIONS? Please keep private functions alphabetized and put

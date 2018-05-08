@@ -10,7 +10,6 @@
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker_tester.h"
@@ -195,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestBasic) {
 IN_PROC_BROWSER_TEST_F(ScreenLockerTest, LockScreenWhileAddingUser) {
   UserAddingScreen::Get()->Start();
   content::RunAllPendingInMessageLoop();
-  ScreenLocker::HandleLockScreenRequest();
+  ScreenLocker::HandleShowLockScreenRequest();
 }
 
 // Test how locking the screen affects an active fullscreen window.

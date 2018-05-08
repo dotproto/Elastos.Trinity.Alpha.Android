@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
@@ -122,8 +124,7 @@ void RunMessageLoop() {
 }
 
 void RunThisRunLoop(base::RunLoop* run_loop) {
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
   run_loop->Run();
 }
 
@@ -162,14 +163,14 @@ void RunAllTasksUntilIdle() {
     // current loop iteration and loop in case the MessageLoop posts tasks to
     // the Task Scheduler after the initial flush.
     TaskObserver task_observer;
-    base::MessageLoop::current()->AddTaskObserver(&task_observer);
+    base::MessageLoopCurrent::Get()->AddTaskObserver(&task_observer);
 
     base::RunLoop run_loop;
     base::TaskScheduler::GetInstance()->FlushAsyncForTesting(
         run_loop.QuitWhenIdleClosure());
     run_loop.Run();
 
-    base::MessageLoop::current()->RemoveTaskObserver(&task_observer);
+    base::MessageLoopCurrent::Get()->RemoveTaskObserver(&task_observer);
 
     if (!task_observer.processed())
       break;
@@ -194,8 +195,7 @@ std::unique_ptr<base::Value> ExecuteScriptAndGetValue(
 }
 
 bool AreAllSitesIsolatedForTesting() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kSitePerProcess);
+  return SiteIsolationPolicy::UseDedicatedProcessesForAllSites();
 }
 
 void IsolateAllSitesForTesting(base::CommandLine* command_line) {
@@ -268,7 +268,10 @@ WebContents* CreateAndAttachInnerContents(RenderFrameHost* rfh) {
 
   WebContents::CreateParams inner_params(outer_contents->GetBrowserContext());
   inner_params.guest_delegate = guest_delegate.get();
-  WebContents* inner_contents = WebContents::Create(inner_params);
+
+  // TODO(erikchen): Fix ownership semantics for guest views.
+  // https://crbug.com/832879.
+  WebContents* inner_contents = WebContents::Create(inner_params).release();
 
   // Attach. |inner_contents| becomes owned by |outer_contents|.
   inner_contents->AttachToOuterWebContentsFrame(outer_contents, rfh);
@@ -393,8 +396,8 @@ InProcessUtilityThreadHelper::InProcessUtilityThreadHelper()
 
 InProcessUtilityThreadHelper::~InProcessUtilityThreadHelper() {
   if (child_thread_count_) {
-    DCHECK(BrowserThread::IsMessageLoopValid(BrowserThread::UI));
-    DCHECK(BrowserThread::IsMessageLoopValid(BrowserThread::IO));
+    DCHECK(BrowserThread::IsThreadInitialized(BrowserThread::UI));
+    DCHECK(BrowserThread::IsThreadInitialized(BrowserThread::IO));
     run_loop_.reset(new base::RunLoop);
     run_loop_->Run();
   }

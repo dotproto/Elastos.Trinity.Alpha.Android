@@ -24,6 +24,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/persistent_histogram_storage.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -53,7 +54,6 @@
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/installer_state.h"
-#include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_install_details.h"
 #include "chrome/installer/setup/setup_singleton.h"
@@ -1290,8 +1290,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   if (!installer::IsProcessorSupported())
     return installer::CPU_NOT_SUPPORTED;
 
-  // Persist histograms so they can be uploaded later.
-  installer::PersistentHistogramStorage persistent_histogram_storage;
+  // Persist histograms so they can be uploaded later. The storage directory is
+  // created during installation when the main WorkItemList is evaluated so
+  // disable storage directory creation in PersistentHistogramStorage.
+  base::PersistentHistogramStorage persistent_histogram_storage(
+      installer::kSetupHistogramAllocatorName,
+      base::PersistentHistogramStorage::StorageDirManagement::kUseExisting);
 
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
@@ -1302,6 +1306,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
           switches::kProcessType);
 
   if (process_type == crash_reporter::switches::kCrashpadHandler) {
+    // Histogram storage is enabled at the very top of this wWinMain. Disable it
+    // when this process is decicated to crashpad as there is no directory in
+    // which to write them nor a browser to subsequently upload them.
+    persistent_histogram_storage.Disable();
     return crash_reporter::RunAsCrashpadHandler(
         *base::CommandLine::ForCurrentProcess(), base::FilePath(),
         switches::kProcessType, switches::kUserDataDir);
@@ -1331,9 +1339,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   VLOG(1) << "is_migrating_to_single is "
           << installer_state.is_migrating_to_single();
 
-  persistent_histogram_storage.set_storage_dir(
-      installer::PersistentHistogramStorage::GetReportedStorageDir(
-          installer_state.target_path()));
+  persistent_histogram_storage.set_storage_base_dir(
+      installer_state.target_path());
 
   installer::ConfigureCrashReporting(installer_state);
   installer::SetInitialCrashKeys(installer_state);
@@ -1346,6 +1353,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   base::win::SetupCRT(cmd_line);
 
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
+
+  // Histogram storage is enabled at the very top of this wWinMain. Disable it
+  // during uninstall since there's neither a directory in which to write them
+  // nor a browser to subsequently upload them.
+  if (is_uninstall)
+    persistent_histogram_storage.Disable();
 
   // Check to make sure current system is Win7 or later. If not, log
   // error message and get out.
@@ -1400,7 +1413,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   // extension), in which case CommandLineToArgv will not yield an argv with the
   // true path to the program at position 0.
   base::FilePath setup_exe;
-  PathService::Get(base::FILE_EXE, &setup_exe);
+  base::PathService::Get(base::FILE_EXE, &setup_exe);
 
   int exit_code = 0;
   if (HandleNonInstallCmdLineOptions(setup_exe, cmd_line, &original_state,

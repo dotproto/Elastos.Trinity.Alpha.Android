@@ -34,9 +34,10 @@ namespace syncer {
 class DeviceInfoSyncBridge : public ModelTypeSyncBridge,
                              public DeviceInfoTracker {
  public:
-  DeviceInfoSyncBridge(LocalDeviceInfoProvider* local_device_info_provider,
-                       OnceModelTypeStoreFactory store_factory,
-                       const ChangeProcessorFactory& change_processor_factory);
+  DeviceInfoSyncBridge(
+      LocalDeviceInfoProvider* local_device_info_provider,
+      OnceModelTypeStoreFactory store_factory,
+      std::unique_ptr<ModelTypeChangeProcessor> change_processor);
   ~DeviceInfoSyncBridge() override;
 
   // ModelTypeSyncBridge implementation.
@@ -51,7 +52,7 @@ class DeviceInfoSyncBridge : public ModelTypeSyncBridge,
   void GetAllData(DataCallback callback) override;
   std::string GetClientTag(const EntityData& entity_data) override;
   std::string GetStorageKey(const EntityData& entity_data) override;
-  void ApplyDisableSyncChanges(
+  DisableSyncResponse ApplyDisableSyncChanges(
       std::unique_ptr<MetadataChangeList> delete_metadata_change_list) override;
 
   // DeviceInfoTracker implementation.

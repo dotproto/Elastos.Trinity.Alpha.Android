@@ -23,10 +23,11 @@
 #include "extensions/renderer/renderer_messaging_service.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 
@@ -316,6 +317,19 @@ void ExtensionFrameHelper::ScheduleAtDocumentIdle(
 
 void ExtensionFrameHelper::DidStartProvisionalLoad(
     blink::WebDocumentLoader* document_loader) {
+  // New window created by chrome.app.window.create() must not start parsing the
+  // document immediately. The chrome.app.window.create() callback (if any)
+  // needs to be called prior to the new window's 'load' event. The parser will
+  // be resumed when it happens. It doesn't apply to sandboxed pages.
+  if (view_type_ == VIEW_TYPE_APP_WINDOW && render_frame()->IsMainFrame() &&
+      !has_started_first_navigation_ &&
+      GURL(document_loader->GetRequest().Url()).SchemeIs(kExtensionScheme) &&
+      !ScriptContext::IsSandboxedPage(document_loader->GetRequest().Url())) {
+    document_loader->BlockParser();
+  }
+
+  has_started_first_navigation_ = true;
+
   if (!delayed_main_world_script_initialization_)
     return;
 

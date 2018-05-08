@@ -15,7 +15,6 @@
 #include "base/ios/block_types.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -45,6 +44,7 @@
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/download/download_manager_tab_helper.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/find_in_page/find_in_page_controller.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -60,7 +60,6 @@
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_dialog_delegate.h"
-#import "ios/chrome/browser/tabs/tab_headers_delegate.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
@@ -165,7 +164,6 @@ NSString* const kTabUrlKey = @"url";
 @synthesize overscrollActionsControllerDelegate =
     overscrollActionsControllerDelegate_;
 @synthesize dialogDelegate = dialogDelegate_;
-@synthesize tabHeadersDelegate = tabHeadersDelegate_;
 
 #pragma mark - Initializers
 
@@ -205,9 +203,18 @@ NSString* const kTabUrlKey = @"url";
 #pragma mark - Properties
 
 - (NSString*)title {
-  base::string16 title = self.webState->GetTitle();
-  if (title.empty())
-    title = l10n_util::GetStringUTF16(IDS_DEFAULT_TAB_TITLE);
+  base::string16 title;
+
+  web::WebState* webState = self.webState;
+  if (!webState->GetNavigationManager()->GetVisibleItem() &&
+      DownloadManagerTabHelper::FromWebState(webState)->has_download_task()) {
+    title = l10n_util::GetStringUTF16(IDS_DOWNLOAD_TAB_TITLE);
+  } else {
+    title = webState->GetTitle();
+    if (title.empty())
+      title = l10n_util::GetStringUTF16(IDS_DEFAULT_TAB_TITLE);
+  }
+
   return base::SysUTF16ToNSString(title);
 }
 
@@ -523,10 +530,6 @@ NSString* const kTabUrlKey = @"url";
 - (BOOL)webController:(CRWWebController*)webController
     shouldOpenExternalURL:(const GURL&)URL {
   return YES;
-}
-
-- (CGFloat)headerHeightForWebController:(CRWWebController*)webController {
-  return [self.tabHeadersDelegate tabHeaderHeightForTab:self];
 }
 
 #pragma mark - Private methods

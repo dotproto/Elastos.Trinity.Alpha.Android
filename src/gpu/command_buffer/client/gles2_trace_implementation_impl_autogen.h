@@ -1763,9 +1763,9 @@ void GLES2TraceImplementation::BindVertexArrayOES(GLuint array) {
   gl_->BindVertexArrayOES(array);
 }
 
-void GLES2TraceImplementation::SwapBuffers() {
+void GLES2TraceImplementation::SwapBuffers(GLbitfield flags) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::SwapBuffers");
-  gl_->SwapBuffers();
+  gl_->SwapBuffers(flags);
 }
 
 GLuint GLES2TraceImplementation::GetMaxValueInBufferCHROMIUM(GLuint buffer_id,
@@ -1932,9 +1932,10 @@ void GLES2TraceImplementation::GetTranslatedShaderSourceANGLE(GLuint shader,
 void GLES2TraceImplementation::PostSubBufferCHROMIUM(GLint x,
                                                      GLint y,
                                                      GLint width,
-                                                     GLint height) {
+                                                     GLint height,
+                                                     GLbitfield flags) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::PostSubBufferCHROMIUM");
-  gl_->PostSubBufferCHROMIUM(x, y, width, height);
+  gl_->PostSubBufferCHROMIUM(x, y, width, height, flags);
 }
 
 void GLES2TraceImplementation::CopyTextureCHROMIUM(
@@ -2140,12 +2141,14 @@ void GLES2TraceImplementation::ScheduleOverlayPlaneCHROMIUM(
     GLfloat uv_x,
     GLfloat uv_y,
     GLfloat uv_width,
-    GLfloat uv_height) {
+    GLfloat uv_height,
+    GLboolean enable_blend) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
                                 "GLES2Trace::ScheduleOverlayPlaneCHROMIUM");
-  gl_->ScheduleOverlayPlaneCHROMIUM(
-      plane_z_order, plane_transform, overlay_texture_id, bounds_x, bounds_y,
-      bounds_width, bounds_height, uv_x, uv_y, uv_width, uv_height);
+  gl_->ScheduleOverlayPlaneCHROMIUM(plane_z_order, plane_transform,
+                                    overlay_texture_id, bounds_x, bounds_y,
+                                    bounds_width, bounds_height, uv_x, uv_y,
+                                    uv_width, uv_height, enable_blend);
 }
 
 void GLES2TraceImplementation::ScheduleCALayerSharedStateCHROMIUM(
@@ -2181,10 +2184,10 @@ void GLES2TraceImplementation::ScheduleCALayerInUseQueryCHROMIUM(
   gl_->ScheduleCALayerInUseQueryCHROMIUM(count, textures);
 }
 
-void GLES2TraceImplementation::CommitOverlayPlanesCHROMIUM() {
+void GLES2TraceImplementation::CommitOverlayPlanesCHROMIUM(GLbitfield flags) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
                                 "GLES2Trace::CommitOverlayPlanesCHROMIUM");
-  gl_->CommitOverlayPlanesCHROMIUM();
+  gl_->CommitOverlayPlanesCHROMIUM(flags);
 }
 
 void GLES2TraceImplementation::FlushDriverCachesCHROMIUM() {
@@ -2521,12 +2524,12 @@ void GLES2TraceImplementation::OverlayPromotionHintCHROMIUM(
                                     display_y, display_width, display_height);
 }
 
-void GLES2TraceImplementation::SwapBuffersWithBoundsCHROMIUM(
-    GLsizei count,
-    const GLint* rects) {
+void GLES2TraceImplementation::SwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                                             const GLint* rects,
+                                                             GLbitfield flags) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
                                 "GLES2Trace::SwapBuffersWithBoundsCHROMIUM");
-  gl_->SwapBuffersWithBoundsCHROMIUM(count, rects);
+  gl_->SwapBuffersWithBoundsCHROMIUM(count, rects, flags);
 }
 
 void GLES2TraceImplementation::SetDrawRectangleCHROMIUM(GLint x,
@@ -2568,13 +2571,12 @@ void GLES2TraceImplementation::BeginRasterCHROMIUM(
     GLuint sk_color,
     GLuint msaa_sample_count,
     GLboolean can_use_lcd_text,
-    GLboolean use_distance_field_text,
     GLint color_type,
     GLuint color_space_transfer_cache_id) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::BeginRasterCHROMIUM");
   gl_->BeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
-                           can_use_lcd_text, use_distance_field_text,
-                           color_type, color_space_transfer_cache_id);
+                           can_use_lcd_text, color_type,
+                           color_space_transfer_cache_id);
 }
 
 void* GLES2TraceImplementation::MapRasterCHROMIUM(GLsizeiptr size) {

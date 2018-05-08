@@ -16,15 +16,15 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/network_change_notifier.h"
 #include "services/network/public/cpp/network_param_ipc_traits.h"
-#include "third_party/WebKit/public/platform/WebHistoryScrollRestorationType.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
-#include "third_party/WebKit/public/platform/WebSecurityStyle.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
-#include "third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h"
-#include "third_party/WebKit/public/web/window_features.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/platform/web_history_scroll_restoration_type.h"
+#include "third_party/blink/public/platform/web_point.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_referrer_policy.h"
+#include "third_party/blink/public/platform/web_security_style.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_frame_serializer_cache_control_policy.h"
+#include "third_party/blink/public/web/window_features.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/accessibility/ax_tree_update.h"
@@ -181,6 +181,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(viewport_meta_enabled)
   IPC_STRUCT_TRAITS_MEMBER(shrinks_viewport_contents_to_fit)
   IPC_STRUCT_TRAITS_MEMBER(viewport_style)
+  IPC_STRUCT_TRAITS_MEMBER(smooth_scroll_for_find_enabled)
   IPC_STRUCT_TRAITS_MEMBER(main_frame_resizes_are_orientation_changes)
   IPC_STRUCT_TRAITS_MEMBER(initialize_at_minimum_page_scale)
   IPC_STRUCT_TRAITS_MEMBER(smart_insert_delete_enabled)
@@ -214,7 +215,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(clobber_user_agent_initial_scale_quirk)
   IPC_STRUCT_TRAITS_MEMBER(ignore_main_frame_overflow_hidden_quirk)
   IPC_STRUCT_TRAITS_MEMBER(report_screen_size_in_physical_pixels_quirk)
-  IPC_STRUCT_TRAITS_MEMBER(resue_global_for_unowned_main_frame)
+  IPC_STRUCT_TRAITS_MEMBER(reuse_global_for_unowned_main_frame)
   IPC_STRUCT_TRAITS_MEMBER(spellcheck_enabled_by_default)
   IPC_STRUCT_TRAITS_MEMBER(video_fullscreen_orientation_lock_enabled)
   IPC_STRUCT_TRAITS_MEMBER(video_rotate_to_fullscreen_enabled)
@@ -252,23 +253,23 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::WindowFeatures)
   IPC_STRUCT_TRAITS_MEMBER(scrollbars_visible)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Event, ax::mojom::Event::kLast)
-IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Role, ax::mojom::Role::kLast)
+IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Event, ax::mojom::Event::kMaxValue)
+IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Role, ax::mojom::Role::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::BoolAttribute,
-                          ax::mojom::BoolAttribute::kLast)
+                          ax::mojom::BoolAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::FloatAttribute,
-                          ax::mojom::FloatAttribute::kLast)
+                          ax::mojom::FloatAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::IntAttribute,
-                          ax::mojom::IntAttribute::kLast)
+                          ax::mojom::IntAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::IntListAttribute,
-                          ax::mojom::IntListAttribute::kLast)
+                          ax::mojom::IntListAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::StringListAttribute,
-                          ax::mojom::StringListAttribute::kLast)
+                          ax::mojom::StringListAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::StringAttribute,
-                          ax::mojom::StringAttribute::kLast)
+                          ax::mojom::StringAttribute::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::TextAffinity,
-                          ax::mojom::TextAffinity::kLast)
-IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::EventFrom, ax::mojom::EventFrom::kLast)
+                          ax::mojom::TextAffinity::kMaxValue)
+IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::EventFrom, ax::mojom::EventFrom::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::AXRelativeBounds)
   IPC_STRUCT_TRAITS_MEMBER(offset_container_id)

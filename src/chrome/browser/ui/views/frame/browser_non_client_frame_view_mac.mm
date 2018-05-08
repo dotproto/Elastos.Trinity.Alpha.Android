@@ -16,10 +16,7 @@
 
 namespace {
 
-// How far to inset the tabstrip from the sides of the window.
-const int kTabstripTopInset = 8;
-const int kTabstripLeftInset = 70;  // Make room for window control buttons.
-constexpr int kTabstripRightInset = 4;  // Margin for profile switcher.
+constexpr int kTabstripTopInset = 8;
 
 }  // namespace
 
@@ -37,6 +34,10 @@ BrowserNonClientFrameViewMac::~BrowserNonClientFrameViewMac() {
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMac, BrowserNonClientFrameView implementation:
 
+bool BrowserNonClientFrameViewMac::CaptionButtonsOnLeadingEdge() const {
+  return true;
+}
+
 gfx::Rect BrowserNonClientFrameViewMac::GetBoundsForTabStrip(
     views::View* tabstrip) const {
   DCHECK(tabstrip);
@@ -51,8 +52,9 @@ int BrowserNonClientFrameViewMac::GetTopInset(bool restored) const {
 }
 
 int BrowserNonClientFrameViewMac::GetTabStripRightInset() const {
+  constexpr int kTabstripRightInset = 4;  // Margin for profile switcher.
   int inset = kTabstripRightInset;
-  views::View* profile_switcher_view = GetProfileSwitcherView();
+  views::View* profile_switcher_view = GetProfileSwitcherButton();
   if (profile_switcher_view) {
     inset += profile_switcher_view->GetPreferredSize().width();
   } else if (profile_indicator_icon()) {
@@ -70,6 +72,7 @@ void BrowserNonClientFrameViewMac::UpdateThrobber(bool running) {
 }
 
 int BrowserNonClientFrameViewMac::GetTabStripLeftInset() const {
+  constexpr int kTabstripLeftInset = 70;  // Make room for caption buttons.
   return kTabstripLeftInset;
 }
 
@@ -86,7 +89,7 @@ gfx::Rect BrowserNonClientFrameViewMac::GetWindowBoundsForClientBounds(
 }
 
 int BrowserNonClientFrameViewMac::NonClientHitTest(const gfx::Point& point) {
-  views::View* profile_switcher_view = GetProfileSwitcherView();
+  views::View* profile_switcher_view = GetProfileSwitcherButton();
   if (profile_switcher_view) {
     gfx::Point point_in_switcher(point);
     views::View::ConvertPointToTarget(this, profile_switcher_view,
@@ -126,7 +129,13 @@ void BrowserNonClientFrameViewMac::SizeConstraintsChanged() {
 // BrowserNonClientFrameViewMac, views::View implementation:
 
 gfx::Size BrowserNonClientFrameViewMac::GetMinimumSize() const {
-  return browser_view()->GetMinimumSize();
+  gfx::Size size = browser_view()->GetMinimumSize();
+  constexpr gfx::Size kMinTabbedWindowSize(400, 272);
+  constexpr gfx::Size kMinPopupWindowSize(100, 122);
+  size.SetToMax(browser_view()->browser()->is_type_tabbed()
+                    ? kMinTabbedWindowSize
+                    : kMinPopupWindowSize);
+  return size;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -136,7 +145,7 @@ gfx::Size BrowserNonClientFrameViewMac::GetMinimumSize() const {
 
 void BrowserNonClientFrameViewMac::Layout() {
   DCHECK(browser_view());
-  views::View* profile_switcher_view = GetProfileSwitcherView();
+  views::View* profile_switcher_view = GetProfileSwitcherButton();
   if (profile_indicator_icon() && browser_view()->IsTabStripVisible()) {
     LayoutIncognitoButton();
     // Mac lays out the incognito icon on the right, as the stoplight
@@ -149,7 +158,7 @@ void BrowserNonClientFrameViewMac::Layout() {
     TabStrip* tabstrip = browser_view()->tabstrip();
     if (tabstrip && browser_view()->IsTabStripVisible()) {
       int new_tab_button_bottom =
-          tabstrip->bounds().y() + tabstrip->GetNewTabButtonBounds().height();
+          tabstrip->bounds().y() + tabstrip->new_tab_button_bounds().height();
       // Align the switcher's bottom to bottom of the new tab button;
       button_y = new_tab_button_bottom - button_size.height();
     }
@@ -184,5 +193,5 @@ void BrowserNonClientFrameViewMac::PaintThemedFrame(gfx::Canvas* canvas) {
   gfx::ImageSkia image = GetFrameImage();
   canvas->TileImageInt(image, 0, 0, width(), image.height());
   gfx::ImageSkia overlay = GetFrameOverlayImage();
-  canvas->TileImageInt(overlay, 0, 0, width(), overlay.height());
+  canvas->DrawImageInt(overlay, 0, 0);
 }

@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">Адрес 1</translation>
 <translation id="1545749641540134597">Сканирайте код за бърза реакция</translation>
 <translation id="1580783302095112590">Пощата е изпратена.</translation>
+<translation id="1582732959743469162">Текущото изтегляне ще бъде прекратено.</translation>
 <translation id="1612730193129642006">Показване на мрежа с раздели</translation>
 <translation id="1644574205037202324">История</translation>
 <translation id="1646446875146297738">Активирането на „Do Not Track“ означава, че с трафика ви на сърфиране ще се включва заявка. Ефектите зависят от това, дали уебсайтът ще отговори на нея и как ще я изтълкува.
@@ -136,6 +137,7 @@
 <translation id="3393920035788932672">Изск. прозорци са разр.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> мин</translation>
 <translation id="3448016392200048164">Разделен изглед</translation>
+<translation id="3469166899695866866">Искате ли да спрете изтеглянето?</translation>
 <translation id="3474624961160222204">Продължаване като <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Формулярите са попълнени.</translation>
 <translation id="3478058380795961209">Месец на валидност</translation>
@@ -149,6 +151,7 @@
 <translation id="3588820906588687999">Отваряне на изображението в нов раздел</translation>
 <translation id="3603009562372709545">Копиране на URL адреса на връзката</translation>
 <translation id="3607167657931203000">Автоматично попълване на данни</translation>
+<translation id="3609785682760573515">Синхронизира се...</translation>
 <translation id="3628119975092896051">Списъкът ви за четене е налице офлайн. За да добавите страница към него, докоснете „<ph name="SHARE_OPENING_ICON" />“.</translation>
 <translation id="3638472932233958418">Предв. зареждане на уеб стр.</translation>
 <translation id="3691593122358196899">Отметката бе запазена в/ъв „<ph name="FOLDER_TITLE" />“</translation>
@@ -158,6 +161,7 @@
 <translation id="3789841737615482174">Инсталиране</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3897092660631435901">Меню</translation>
+<translation id="3915450441834151894">Информация за сайта</translation>
 <translation id="3928666092801078803">Комбиниране на данните ми</translation>
 <translation id="3950820424414687140">Вход</translation>
 <translation id="3963231839620026525">Нов раздел „инкогнито“</translation>
@@ -166,6 +170,7 @@
 <translation id="4002066346123236978">Заглавие</translation>
 <translation id="4038354071007134711">Няма приложение, което може да отвори файла.</translation>
 <translation id="4049507953662678203">Уверете се, че сте свързани с мрежа, и опитайте отново.</translation>
+<translation id="4084682180776658562">Отметка</translation>
 <translation id="411254640334432676">Изтеглянето не бе успешно.</translation>
 <translation id="4121993058175073134">За изпращане на експ. данни от мрежата конфиг. имейла си в Настройки.</translation>
 <translation id="4124987746317609294">Период от време</translation>
@@ -221,6 +226,7 @@
 <translation id="5197255632782567636">Интернет</translation>
 <translation id="5228579091201413441">Активиране на синхронизирането</translation>
 <translation id="5244474230056479698">Синхронизира се със: <ph name="EMAIL" /></translation>
+<translation id="527973086555161537">Отворете раздел, за да сърфирате частно в мрежата.</translation>
 <translation id="5300589172476337783">Показване</translation>
 <translation id="5317780077021120954">Запазване</translation>
 <translation id="5327248766486351172">Име</translation>
@@ -284,6 +290,7 @@
 <translation id="633809752005859102">Нещо сериозно се обърка. Ще работим по него.</translation>
 <translation id="6342069812937806050">Току-що</translation>
 <translation id="6344783595350022745">Изчистване на текста</translation>
+<translation id="6346549652287021269">Да се стартира ли ново изтегляне?</translation>
 <translation id="6362362396625799311">Няма раздели в режим „инкогнито“</translation>
 <translation id="6374469231428023295">Нов опит</translation>
 <translation id="6380866119319257197">Ако забравите пропуска си или искате да промените тази настройка, <ph name="BEGIN_LINK" />нулирайте синхронизирането<ph name="END_LINK" /></translation>
@@ -325,12 +332,14 @@
 <translation id="7031882061095297553">Синхронизиране със</translation>
 <translation id="7053983685419859001">Блокиране</translation>
 <translation id="7062545763355031412">Приемане и превключване на профилите</translation>
+<translation id="7102005569666697658">Изтегля се… <ph name="FILE_SIZE" /></translation>
 <translation id="7108338896283013870">Скриване</translation>
 <translation id="7133798577887235672">Име и фамилия</translation>
 <translation id="7136892417564438900">Няма достъп до камерата</translation>
 <translation id="7159472599653637159">Мобилен сайт</translation>
 <translation id="7167621057293532233">Типове данни</translation>
 <translation id="7175593937868963913">Ново съобщение</translation>
+<translation id="7180611975245234373">Опресняване</translation>
 <translation id="7189598951263744875">Споделяне...</translation>
 <translation id="7203585745079012652">Изговаряне на отговорите</translation>
 <translation id="722055596168483966">Персонализиране на услугите на Google</translation>
@@ -349,6 +358,7 @@
 <translation id="750493650310597496">Избрахте 0</translation>
 <translation id="7514365320538308">Изтегляне</translation>
 <translation id="7537586195939242955">Понастоящем пропускът не може да се инсталира в Passbook.</translation>
+<translation id="7554791636758816595">Нов раздел</translation>
 <translation id="7561196759112975576">Винаги</translation>
 <translation id="7603852183842204213">Блок. изск. прозорци (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Синхронизирането не работи</translation>
@@ -360,6 +370,7 @@
 <translation id="7769602470925380267">Приемане и излизане от профила</translation>
 <translation id="7772032839648071052">Потвърдете пропуска</translation>
 <translation id="780301667611848630">Не, благодаря</translation>
+<translation id="7856733331829174190">Неуспешно изтегляне</translation>
 <translation id="7859704718976024901">История на сърфирането</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Експортиране на паролите...</translation>
@@ -372,8 +383,10 @@
 <translation id="8023878949384262191">Разгъва секцията.</translation>
 <translation id="8059533439631660104">Свива секцията.</translation>
 <translation id="806745655614357130">Оставяне на данните отделно</translation>
+<translation id="8073670137947914548">Изтеглянето завърши</translation>
 <translation id="8076014560081431679">Запазените настройки за сайтове няма да бъдат изтрити и може да отразяват навиците ви при сърфиране. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Затваряне на разделите</translation>
+<translation id="8114753159095730575">Наличен е файл за изтегляне. Съответните опции са достъпни в долната част на екрана.</translation>
 <translation id="8205564605687841303">Отказ</translation>
 <translation id="8225985093977202398">Кеширани изображения и файлове</translation>
 <translation id="8261506727792406068">Изтриване</translation>

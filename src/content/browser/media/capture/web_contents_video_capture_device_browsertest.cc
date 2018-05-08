@@ -96,11 +96,9 @@ class FakeVideoCaptureStack {
    private:
     using Buffer = media::VideoCaptureDevice::Client::Buffer;
 
-    void OnNewBufferHandle(
-        int buffer_id,
-        std::unique_ptr<Buffer::HandleProvider> handle_provider) final {
-      buffers_[buffer_id] =
-          handle_provider->GetHandleForInterProcessTransit(true);
+    void OnNewBuffer(int buffer_id,
+                     media::mojom::VideoBufferHandlePtr buffer_handle) final {
+      buffers_[buffer_id] = std::move(buffer_handle);
     }
 
     void OnFrameReadyInBuffer(
@@ -110,12 +108,13 @@ class FakeVideoCaptureStack {
         media::mojom::VideoFrameInfoPtr frame_info) final {
       const auto it = buffers_.find(buffer_id);
       CHECK(it != buffers_.end());
-      mojo::ScopedSharedBufferHandle& buffer = it->second;
+      CHECK(it->second->is_shared_buffer_handle());
+      mojo::ScopedSharedBufferHandle& buffer =
+          it->second->get_shared_buffer_handle();
 
       const size_t mapped_size =
           media::VideoCaptureFormat(frame_info->coded_size, 0.0f,
-                                    frame_info->pixel_format,
-                                    frame_info->storage_type)
+                                    frame_info->pixel_format)
               .ImageAllocationSize();
       mojo::ScopedSharedBufferMapping mapping = buffer->Map(mapped_size);
       CHECK(mapping.get());
@@ -126,9 +125,7 @@ class FakeVideoCaptureStack {
           reinterpret_cast<uint8_t*>(mapping.get()), mapped_size,
           frame_info->timestamp);
       CHECK(frame);
-      if (frame_info->metadata) {
-        frame->metadata()->MergeInternalValuesFrom(*frame_info->metadata);
-      }
+      frame->metadata()->MergeInternalValuesFrom(frame_info->metadata);
       // This destruction observer will unmap the shared memory when the
       // VideoFrame goes out-of-scope.
       frame->AddDestructionObserver(base::BindOnce(
@@ -159,7 +156,7 @@ class FakeVideoCaptureStack {
     void OnStartedUsingGpuDecode() final { NOTREACHED(); }
 
     FakeVideoCaptureStack* const capture_stack_;
-    base::flat_map<int, mojo::ScopedSharedBufferHandle> buffers_;
+    base::flat_map<int, media::mojom::VideoBufferHandlePtr> buffers_;
   };
 
   FrameCallback frame_callback_;
@@ -223,8 +220,7 @@ class WebContentsVideoCaptureDeviceBrowserTest : public ContentBrowserTest {
 
     media::VideoCaptureParams params;
     params.requested_format = media::VideoCaptureFormat(
-        capture_size, kMaxFramesPerSecond, media::PIXEL_FORMAT_I420,
-        media::VideoPixelStorage::CPU);
+        capture_size, kMaxFramesPerSecond, media::PIXEL_FORMAT_I420);
     params.resolution_change_policy =
         use_fixed_aspect_ratio()
             ? media::ResolutionChangePolicy::FIXED_ASPECT_RATIO

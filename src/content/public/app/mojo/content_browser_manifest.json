@@ -34,16 +34,16 @@
           "blink::mojom::BlobRegistry",
           "blink::mojom::BroadcastChannelProvider",
           "blink::mojom::ClipboardHost",
+          "blink::mojom::EmbeddedFrameSinkProvider",
+          "blink::mojom::FileUtilitiesHost",
           "blink::mojom::LockManager",
           "blink::mojom::Hyphenation",
           "blink::mojom::MimeRegistry",
-          "blink::mojom::OffscreenCanvasProvider",
           "blink::mojom::ReportingServiceProxy",
           "blink::mojom::WebDatabaseHost",
           "content::mojom::AppCacheBackend",
           "content::mojom::ClipboardHost",
           "content::mojom::FieldTrialRecorder",
-          "content::mojom::FileUtilitiesHost",
           "content::mojom::FrameSinkProvider",
           "content::mojom::MediaStreamTrackMetricsHost",
           "content::mojom::MemoryCoordinatorHandle",
@@ -66,7 +66,6 @@
           "network::mojom::URLLoaderFactory",
           "resource_coordinator::mojom::ProcessCoordinationUnit",
           "ui::mojom::Gpu",
-          "viz::mojom::SharedBitmapAllocationNotifier",
           "viz::mojom::CompositingModeReporter"
         ],
         "service_manager:service_factory": [
@@ -88,6 +87,7 @@
           "device:geolocation",
           "device:hid",
           "device:input_service",
+          "device:mtp",
           "device:nfc",
           "device:serial",
           "device:vibration",
@@ -137,6 +137,7 @@
           "autofill::mojom::PasswordManagerDriver",
           "blink::mojom::BackgroundFetchService",
           "blink::mojom::BudgetService",
+          "blink::mojom::CacheStorage",
           "blink::mojom::ColorChooserFactory",
           "blink::mojom::DedicatedWorkerFactory",
           "blink::mojom::LockManager",
@@ -153,7 +154,6 @@
           "blink::mojom::TextSuggestionHost",
           "blink::mojom::UnhandledTapNotifier",
           "blink::mojom::WebBluetoothService",
-          "blink::mojom::WebSocket",
 
           // TODO(beng): figure out how to overlay test interfaces like this.
           "content::mojom::BrowserTarget",
@@ -165,6 +165,7 @@
           "content::mojom::RendererAudioInputStreamFactory",
           "content::mojom::RendererAudioOutputStreamFactory",
           "content::mojom::SharedWorkerConnector",
+          "content::mojom::SpeechRecognizer",
           "device::mojom::Geolocation",
           "device::mojom::NFC",
           "device::mojom::SensorProvider",
@@ -182,6 +183,7 @@
           "media::mojom::RemoterFactory",
           "media::mojom::Renderer",
           "network::mojom::RestrictedCookieManager",
+          "network::mojom::WebSocket",
           "password_manager::mojom::CredentialManager",
           "payments::mojom::PaymentManager",
           "payments::mojom::PaymentRequest",
@@ -190,7 +192,8 @@
           "shape_detection::mojom::FaceDetectionProvider",
           "shape_detection::mojom::TextDetection",
           "ui::mojom::Gpu",
-          "webauth::mojom::Authenticator"
+          "webauth::mojom::Authenticator",
+          "webauth::test::mojom::VirtualAuthenticatorManager"
         ]
       },
       "requires": {
@@ -201,10 +204,12 @@
       "provides": {
         "renderer": [
           "blink::mojom::BudgetService",
+          "blink::mojom::CacheStorage",
           "blink::mojom::LockManager",
           "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::QuotaDispatcherHost",
+          "network::mojom::WebSocket",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
           "shape_detection::mojom::FaceDetectionProvider",
@@ -217,12 +222,13 @@
         "renderer": [
           "blink::mojom::BackgroundFetchService",
           "blink::mojom::BudgetService",
+          "blink::mojom::CacheStorage",
           "blink::mojom::LockManager",
           "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::QuotaDispatcherHost",
-          "blink::mojom::WebSocket",
           "network::mojom::RestrictedCookieManager",
+          "network::mojom::WebSocket",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
           "shape_detection::mojom::FaceDetectionProvider",
@@ -234,11 +240,12 @@
       "provides": {
         "renderer": [
           "blink::mojom::BudgetService",
+          "blink::mojom::CacheStorage",
           "blink::mojom::LockManager",
           "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::QuotaDispatcherHost",
-          "blink::mojom::WebSocket",
+          "network::mojom::WebSocket",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
           "shape_detection::mojom::FaceDetectionProvider",

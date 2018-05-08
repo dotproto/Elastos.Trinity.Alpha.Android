@@ -214,7 +214,8 @@ class MojomProcessor(object):
             support_lazy_serialization=args.support_lazy_serialization,
             disallow_native_types=args.disallow_native_types,
             disallow_interfaces=args.disallow_interfaces,
-            generate_message_ids=args.generate_message_ids)
+            generate_message_ids=args.generate_message_ids,
+            generate_fuzzing=args.generate_fuzzing)
         filtered_args = []
         if hasattr(generator_module, 'GENERATOR_PREFIX'):
           prefix = '--' + generator_module.GENERATOR_PREFIX + '_'
@@ -243,6 +244,11 @@ def _Generate(args, remaining_args):
 
   processor = MojomProcessor(lambda filename: filename in args.filename)
   processor.LoadTypemaps(set(args.typemaps))
+
+  if args.filelist:
+    with open(args.filelist) as f:
+      args.filename.extend(f.read().split())
+
   for filename in args.filename:
     processor._GenerateModule(args, remaining_args, generator_modules,
                               RelativePath(filename, args.depth), [])
@@ -293,6 +299,11 @@ def _ParseFile(args, rel_filename):
 
 def _Parse(args, _):
   fileutil.EnsureDirectoryExists(args.output_dir)
+
+  if args.filelist:
+    with open(args.filelist) as f:
+      args.filename.extend(f.read().split())
+
   for filename in args.filename:
     _ParseFile(args, RelativePath(filename, args.depth))
   return 0
@@ -306,6 +317,10 @@ def _Precompile(args, _):
 
 def _VerifyImportDeps(args, __):
   fileutil.EnsureDirectoryExists(args.gen_dir)
+
+  if args.filelist:
+    with open(args.filelist) as f:
+      args.filename.extend(f.read().split())
 
   for filename in args.filename:
     rel_path = RelativePath(filename, args.depth)
@@ -352,7 +367,8 @@ def main():
   parse_parser = subparsers.add_parser(
       "parse", description="Parse mojom to AST and remove disabled definitions."
                            " Pickle pruned AST into output_dir.")
-  parse_parser.add_argument("filename", nargs="+", help="mojom input file")
+  parse_parser.add_argument("filename", nargs="*", help="mojom input file")
+  parse_parser.add_argument("--filelist", help="mojom input file list")
   parse_parser.add_argument(
       "-o",
       "--output_dir",
@@ -373,8 +389,9 @@ def main():
 
   generate_parser = subparsers.add_parser(
       "generate", description="Generate bindings from mojom files.")
-  generate_parser.add_argument("filename", nargs="+",
+  generate_parser.add_argument("filename", nargs="*",
                                help="mojom input file")
+  generate_parser.add_argument("--filelist", help="mojom input file list")
   generate_parser.add_argument("-d", "--depth", dest="depth", default=".",
                                help="depth from source root")
   generate_parser.add_argument("-o", "--output_dir", dest="output_dir",
@@ -450,6 +467,10 @@ def main():
       help="Generates only the message IDs header for C++ bindings. Note that "
       "this flag only matters if --generate_non_variant_code is also "
       "specified.", action="store_true")
+  generate_parser.add_argument(
+      "--generate_fuzzing",
+      action="store_true",
+      help="Generates additional bindings for fuzzing in JS.")
   generate_parser.set_defaults(func=_Generate)
 
   precompile_parser = subparsers.add_parser("precompile",
@@ -461,8 +482,9 @@ def main():
 
   verify_parser = subparsers.add_parser("verify", description="Checks "
       "the set of imports against the set of dependencies.")
-  verify_parser.add_argument("filename", nargs="+",
+  verify_parser.add_argument("filename", nargs="*",
       help="mojom input file")
+  verify_parser.add_argument("--filelist", help="mojom input file list")
   verify_parser.add_argument("-f", "--file", dest="deps_file",
       help="file containing paths to the sources files for "
       "dependencies")

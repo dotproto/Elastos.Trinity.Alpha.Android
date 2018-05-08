@@ -12,7 +12,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
-#include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -28,9 +27,13 @@
 #include "content/public/test/url_loader_interceptor.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_request_headers.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/network_switches.h"
+#include "third_party/blink/public/common/client_hints/client_hints.h"
 
 namespace {
 
@@ -57,14 +60,11 @@ class ThirdPartyURLLoaderInterceptor {
       return false;
 
     request_count_seen_++;
-    if (params->url_request.headers.HasHeader("dpr")) {
-      client_hints_count_seen_++;
-    }
-    if (params->url_request.headers.HasHeader("device-memory")) {
-      client_hints_count_seen_++;
-    }
-    if (params->url_request.headers.HasHeader("viewport-width")) {
-      client_hints_count_seen_++;
+    for (size_t i = 0; i < blink::kClientHintsHeaderMappingCount; ++i) {
+      if (params->url_request.headers.HasHeader(
+              blink::kClientHintsHeaderMapping[i])) {
+        client_hints_count_seen_++;
+      }
     }
     return false;
   }
@@ -148,9 +148,6 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
 
     request_interceptor_ = std::make_unique<ThirdPartyURLLoaderInterceptor>(
         GURL("https://foo.com/non-existing-image.jpg"));
@@ -161,6 +158,8 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
+    cmd->AppendSwitchASCII(network::switches::kForceEffectiveConnectionType,
+                           net::kEffectiveConnectionType2G);
   }
 
   void SetClientHintExpectationsOnMainFrame(bool expect_client_hints) {
@@ -256,22 +255,19 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
         request.GetURL().spec().find(".html") != std::string::npos;
 
     if (is_main_frame_navigation) {
-      // device-memory header is attached to the main frame request.
-      EXPECT_EQ(expect_client_hints_on_main_frame_,
-                base::ContainsKey(request.headers, "device-memory"));
-      EXPECT_EQ(expect_client_hints_on_main_frame_,
-                base::ContainsKey(request.headers, "dpr"));
-      EXPECT_EQ(expect_client_hints_on_main_frame_,
-                base::ContainsKey(request.headers, "viewport-width"));
+      VerifyClientHintsReceived(expect_client_hints_on_main_frame_, request);
       if (expect_client_hints_on_main_frame_) {
         double value = 0.0;
         EXPECT_TRUE(base::StringToDouble(
             request.headers.find("device-memory")->second, &value));
         EXPECT_LT(0.0, value);
+        main_frame_device_memory_observed_ = value;
 
         EXPECT_TRUE(
             base::StringToDouble(request.headers.find("dpr")->second, &value));
         EXPECT_LT(0.0, value);
+        main_frame_dpr_observed_ = value;
+
         EXPECT_TRUE(base::StringToDouble(
             request.headers.find("viewport-width")->second, &value));
 #if !defined(OS_ANDROID)
@@ -279,26 +275,29 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
 #else
         EXPECT_EQ(980, value);
 #endif
+        main_frame_viewport_width_observed_ = value;
+        VerifyNetworkQualityClientHints(request);
       }
     }
 
     if (!is_main_frame_navigation) {
-      EXPECT_EQ(expect_client_hints_on_subresources_,
-                base::ContainsKey(request.headers, "device-memory"));
-      EXPECT_EQ(expect_client_hints_on_subresources_,
-                base::ContainsKey(request.headers, "dpr"));
-      EXPECT_EQ(expect_client_hints_on_subresources_,
-                base::ContainsKey(request.headers, "viewport-width"));
+      VerifyClientHintsReceived(expect_client_hints_on_subresources_, request);
 
       if (expect_client_hints_on_subresources_) {
         double value = 0.0;
         EXPECT_TRUE(base::StringToDouble(
             request.headers.find("device-memory")->second, &value));
         EXPECT_LT(0.0, value);
+        if (main_frame_device_memory_observed_ > 0) {
+          EXPECT_EQ(main_frame_device_memory_observed_, value);
+        }
 
         EXPECT_TRUE(
             base::StringToDouble(request.headers.find("dpr")->second, &value));
         EXPECT_LT(0.0, value);
+        if (main_frame_dpr_observed_ > 0) {
+          EXPECT_EQ(main_frame_dpr_observed_, value);
+        }
 
         EXPECT_TRUE(base::StringToDouble(
             request.headers.find("viewport-width")->second, &value));
@@ -307,17 +306,78 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
 #else
         EXPECT_EQ(980, value);
 #endif
+#if defined(OS_ANDROID)
+        // TODO(tbansal): https://crbug.com/825892: Viewport width on main
+        // frame requests may be incorrect when the Chrome window is not
+        // maximized.
+        if (main_frame_viewport_width_observed_ > 0) {
+          EXPECT_EQ(main_frame_viewport_width_observed_, value);
+        }
+#endif
+        VerifyNetworkQualityClientHints(request);
       }
     }
 
-    if (base::ContainsKey(request.headers, "dpr"))
-      count_client_hints_headers_seen_++;
+    for (size_t i = 0; i < blink::kClientHintsHeaderMappingCount; ++i) {
+      if (base::ContainsKey(request.headers,
+                            blink::kClientHintsHeaderMapping[i])) {
+        count_client_hints_headers_seen_++;
+      }
+    }
+  }
 
-    if (base::ContainsKey(request.headers, "device-memory"))
-      count_client_hints_headers_seen_++;
+  void VerifyClientHintsReceived(bool expect_client_hints,
+                                 const net::test_server::HttpRequest& request) {
+    for (size_t i = 0; i < blink::kClientHintsHeaderMappingCount; ++i) {
+      // Resource width client hint is only attached on image subresources.
+      if (std::string(blink::kClientHintsHeaderMapping[i]) == "width") {
+        continue;
+      }
+      EXPECT_EQ(expect_client_hints,
+                base::ContainsKey(request.headers,
+                                  blink::kClientHintsHeaderMapping[i]));
+    }
+  }
 
-    if (base::ContainsKey(request.headers, "viewport-width"))
-      count_client_hints_headers_seen_++;
+  void VerifyNetworkQualityClientHints(
+      const net::test_server::HttpRequest& request) const {
+    // Effective connection type is forced to 2G using command line in these
+    // tests.
+    int rtt_value = 0.0;
+    EXPECT_TRUE(
+        base::StringToInt(request.headers.find("rtt")->second, &rtt_value));
+    EXPECT_LE(0, rtt_value);
+    // Verify that RTT value is a multiple of 50 milliseconds.
+    EXPECT_EQ(0, rtt_value % 50);
+    EXPECT_GE(3000, rtt_value);
+
+    double mbps_value = 0.0;
+    EXPECT_TRUE(base::StringToDouble(request.headers.find("downlink")->second,
+                                     &mbps_value));
+    EXPECT_LE(0, mbps_value);
+    // Verify that the mbps value is a multiple of 0.050 mbps.
+    // Allow for small amount of noise due to double to integer conversions.
+    EXPECT_NEAR(0, (static_cast<int>(mbps_value * 1000)) % 50, 1);
+    EXPECT_GE(10.0, mbps_value);
+
+    EXPECT_FALSE(request.headers.find("ect")->second.empty());
+
+    // TODO(tbansal): https://crbug.com/819244: When network servicification is
+    // enabled, the UI thread NQE observers do not receive notifications on
+    // change in the network quality.
+    if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      // Effective connection type is forced to 2G using command line in these
+      // tests. RTT is expected to be 1800 msec but leave some gap to account
+      // for added noise and randomization.
+      EXPECT_NEAR(1800, rtt_value, 360);
+
+      // Effective connection type is forced to 2G using command line in these
+      // tests. downlink is expected to be 0.075 Mbps but leave some gap to
+      // account for added noise and randomization.
+      EXPECT_NEAR(0.075, mbps_value, 0.05);
+
+      EXPECT_EQ("2g", request.headers.find("ect")->second);
+    }
   }
 
   net::EmbeddedTestServer http_server_;
@@ -331,6 +391,10 @@ class ClientHintsBrowserTest : public InProcessBrowserTest {
   GURL without_accept_ch_without_lifetime_img_foo_com_;
   GURL without_accept_ch_without_lifetime_img_localhost_;
   GURL accept_ch_without_lifetime_img_localhost_;
+
+  double main_frame_dpr_observed_ = -1;
+  double main_frame_viewport_width_observed_ = -1;
+  double main_frame_device_memory_observed_ = -1;
 
   // Expect client hints on all the main frame request.
   bool expect_client_hints_on_main_frame_;
@@ -356,8 +420,8 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest, ClientHintsHttps) {
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // client_hints_url() sets three client hints.
-  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+  // client_hints_url() sets six client hints.
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
   // accept_ch_with_lifetime_url() sets client hints persist duration to 3600
   // seconds.
   histogram_tester.ExpectUniqueSample("ClientHints.PersistDuration",
@@ -388,7 +452,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
       GURL("https://foo.com/"), GURL(), CONTENT_SETTINGS_TYPE_CLIENT_HINTS,
       std::string(),
       std::make_unique<base::Value>(
-          client_hints_settings.at(0).setting_value->Clone()));
+          client_hints_settings.at(0).setting_value.Clone()));
 
   // Verify that client hints for the two hosts has been saved.
   host_content_settings_map =
@@ -409,9 +473,9 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // Three client hints are attached to the image request, and three to the main
+  // Six client hints are attached to the image request, and six to the main
   // frame request.
-  EXPECT_EQ(6u, count_client_hints_headers_seen());
+  EXPECT_EQ(12u, count_client_hints_headers_seen());
 
   // Navigating to without_accept_ch_without_lifetime_img_foo_com() should not
   // attach client hints to the image subresouce contained in that page since
@@ -426,7 +490,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
 #if defined(OS_ANDROID)
   EXPECT_EQ(6u, count_client_hints_headers_seen());
 #else
-  EXPECT_EQ(9u, count_client_hints_headers_seen());
+  EXPECT_EQ(18u, count_client_hints_headers_seen());
 #endif
   // Requests to third party servers should not have client hints attached.
   EXPECT_EQ(1u, third_party_request_count_seen());
@@ -484,8 +548,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // client_hints_url() sets three client hints.
-  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
   // accept_ch_with_lifetime_http_local_url() sets client hints persist duration
   // to 3600 seconds.
   histogram_tester.ExpectUniqueSample("ClientHints.PersistDuration",
@@ -504,9 +567,9 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   ui_test_utils::NavigateToURL(browser(),
                                without_accept_ch_without_lifetime_local_url());
 
-  // Three client hints are attached to the image request, and three to the main
+  // Six client hints are attached to the image request, and six to the main
   // frame request.
-  EXPECT_EQ(6u, count_client_hints_headers_seen());
+  EXPECT_EQ(12u, count_client_hints_headers_seen());
 }
 
 // Loads a webpage that does not request persisting of client hints.
@@ -544,8 +607,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // client_hints_url() sets three client hints.
-  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
   // accept_ch_with_lifetime_url() sets client hints persist duration to 3600
   // seconds.
   histogram_tester.ExpectUniqueSample("ClientHints.PersistDuration",
@@ -563,9 +625,9 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   ui_test_utils::NavigateToURL(browser(),
                                without_accept_ch_without_lifetime_url());
 
-  // Three client hints are attached to the image request, and three to the main
+  // Six client hints are attached to the image request, and six to the main
   // frame request.
-  EXPECT_EQ(6u, count_client_hints_headers_seen());
+  EXPECT_EQ(12u, count_client_hints_headers_seen());
 }
 
 // Ensure that when cookies are blocked, client hint preferences are not
@@ -623,8 +685,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // client_hints_url() sets three client hints.
-  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
   // accept_ch_with_lifetime_url() tries to set client hints persist duration to
   // 3600 seconds.
   histogram_tester.ExpectUniqueSample("ClientHints.PersistDuration",
@@ -659,9 +720,9 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   ui_test_utils::NavigateToURL(browser(),
                                without_accept_ch_without_lifetime_url());
 
-  // Three client hints are attached to the image request, and three to the main
+  // Six client hints are attached to the image request, and six to the main
   // frame request.
-  EXPECT_EQ(6u, count_client_hints_headers_seen());
+  EXPECT_EQ(12u, count_client_hints_headers_seen());
 
   // Clear settings.
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
@@ -726,8 +787,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   content::FetchHistogramsFromChildProcesses();
   SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-  // client_hints_url() sets three client hints.
-  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
   // accept_ch_with_lifetime_url() tries to set client hints persist duration to
   // 3600 seconds.
   histogram_tester.ExpectUniqueSample("ClientHints.PersistDuration",
@@ -761,9 +821,9 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   ui_test_utils::NavigateToURL(browser(),
                                without_accept_ch_without_lifetime_url());
 
-  // Three client hints are attached to the image request, and three to the main
+  // Six client hints are attached to the image request, and six to the main
   // frame request.
-  EXPECT_EQ(6u, count_client_hints_headers_seen());
+  EXPECT_EQ(12u, count_client_hints_headers_seen());
 
   // Clear settings.
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
@@ -806,8 +866,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   ui_test_utils::NavigateToURL(browser(),
                                accept_ch_without_lifetime_img_localhost());
 
-  // Client hints are attached to only the first party image subresource.
-  EXPECT_EQ(3u, count_client_hints_headers_seen());
+  EXPECT_EQ(6u, count_client_hints_headers_seen());
   EXPECT_EQ(2u, third_party_request_count_seen());
   EXPECT_EQ(0u, third_party_client_hints_count_seen());
   VerifyContentSettingsNotNotified();
@@ -825,7 +884,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
           CONTENT_SETTING_BLOCK);
   ui_test_utils::NavigateToURL(browser(),
                                accept_ch_without_lifetime_img_localhost());
-  EXPECT_EQ(3u, count_client_hints_headers_seen());
+  EXPECT_EQ(6u, count_client_hints_headers_seen());
   EXPECT_EQ(3u, third_party_request_count_seen());
   EXPECT_EQ(0u, third_party_client_hints_count_seen());
 
@@ -871,8 +930,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
   SetClientHintExpectationsOnSubresources(true);
   ui_test_utils::NavigateToURL(browser(),
                                accept_ch_without_lifetime_img_localhost());
-  // Client hints are attached to only the first party image subresource.
-  EXPECT_EQ(3u, count_client_hints_headers_seen());
+  EXPECT_EQ(6u, count_client_hints_headers_seen());
   EXPECT_EQ(2u, third_party_request_count_seen());
   EXPECT_EQ(0u, third_party_client_hints_count_seen());
 
@@ -886,7 +944,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest,
 
   ui_test_utils::NavigateToURL(browser(),
                                accept_ch_without_lifetime_img_localhost());
-  EXPECT_EQ(3u, count_client_hints_headers_seen());
+  EXPECT_EQ(6u, count_client_hints_headers_seen());
   EXPECT_EQ(3u, third_party_request_count_seen());
   EXPECT_EQ(0u, third_party_client_hints_count_seen());
 
@@ -910,8 +968,8 @@ IN_PROC_BROWSER_TEST_F(ClientHintsBrowserTest, ClientHintsHttpsIncognito) {
     content::FetchHistogramsFromChildProcesses();
     SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
 
-    // accept_ch_with_lifetime_url() sets three client hints.
-    histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 3, 1);
+    // accept_ch_with_lifetime_url() sets six client hints.
+    histogram_tester.ExpectUniqueSample("ClientHints.UpdateSize", 6, 1);
 
     // At least one renderer must have been created. All the renderers created
     // must have read 0 client hints.

@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
@@ -29,6 +30,7 @@
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/drag_controller.h"
 
@@ -40,6 +42,8 @@ class IntentPickerView;
 class KeywordHintView;
 class LocationIconView;
 class ManagePasswordsIconViews;
+enum class OmniboxPart;
+class OmniboxPopupView;
 enum class OmniboxTint;
 class Profile;
 class SelectedKeywordView;
@@ -92,14 +96,6 @@ class LocationBarView : public LocationBar,
     virtual ~Delegate() {}
   };
 
-  enum ColorKind {
-    BACKGROUND = 0,
-    TEXT,
-    SELECTED_TEXT,
-    DEEMPHASIZED_TEXT,
-    SECURITY_CHIP_TEXT,
-  };
-
   // The location bar view's class name.
   static const char kViewClassName[];
 
@@ -111,6 +107,15 @@ class LocationBarView : public LocationBar,
 
   ~LocationBarView() override;
 
+  // Returns the location bar border thickness in DIPs.
+  static int GetBorderThicknessDip();
+
+  // Whether the location bar is a pill shape.
+  static bool IsRounded();
+
+  // Returns the location bar border radius in DIPs.
+  float GetBorderRadius();
+
   // Initializes the LocationBarView.
   void Init();
 
@@ -118,9 +123,8 @@ class LocationBarView : public LocationBar,
   // be called when the receiving instance is attached to a view container.
   bool IsInitialized() const;
 
-  // Returns the appropriate color for the desired kind, based on the user's
-  // system theme.
-  SkColor GetColor(ColorKind kind) const;
+  // Helper to get the color for |part| using the current tint().
+  SkColor GetColor(OmniboxPart part) const;
 
   // Returns the location bar border color blended with the toolbar color.
   // It's guaranteed to be opaque.
@@ -173,10 +177,6 @@ class LocationBarView : public LocationBar,
   // not where the icons are shown).
   gfx::Point GetOmniboxViewOrigin() const;
 
-  // Returns the inset from the edge of the location bar where text begins when
-  // only a location icon is showing (no security chip or keyword bubble).
-  int GetTextInsetForNormalInputStart() const;
-
   // Shows |text| as an inline autocompletion.  This is useful for IMEs, where
   // we can't show the autocompletion inside the actual OmniboxView.  See
   // comments on |ime_inline_autocomplete_view_|.
@@ -197,13 +197,13 @@ class LocationBarView : public LocationBar,
     return selected_keyword_view_;
   }
 
-  // Where InfoBar arrows should point. The point will be returned in the
-  // coordinates of the LocationBarView.
-  gfx::Point GetInfoBarAnchorPoint() const;
-
   // The anchor view for security-related bubbles. That is, those anchored to
   // the leading edge of the Omnibox, under the padlock.
   views::View* GetSecurityBubbleAnchorView();
+
+  // Show a page info dialog for |web_contents|.
+  // Returns true if a dialog was shown, false otherwise.
+  bool ShowPageInfoDialog(content::WebContents* web_contents);
 
   OmniboxViewViews* omnibox_view() { return omnibox_view_; }
   const OmniboxViewViews* omnibox_view() const { return omnibox_view_; }
@@ -252,10 +252,23 @@ class LocationBarView : public LocationBar,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  static bool IsVirtualKeyboardVisible();
+  static bool IsVirtualKeyboardVisible(views::Widget* widget);
+
+  // Returns the height available for user-entered text in the location bar.
+  static int GetAvailableTextHeight();
+
+  // Returns the height available for text within location bar decorations.
+  static int GetAvailableDecorationTextHeight();
+
+  void OnOmniboxFocused();
+  void OnOmniboxBlurred();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SecurityIndicatorTest, CheckIndicatorText);
+  FRIEND_TEST_ALL_PREFIXES(TouchLocationBarViewBrowserTest,
+                           OmniboxViewViewsSize);
+  FRIEND_TEST_ALL_PREFIXES(TouchLocationBarViewBrowserTest,
+                           IMEInlineAutocompletePosition);
   using ContentSettingViews = std::vector<ContentSettingImageView*>;
 
   // Helper for GetMinimumWidth().  Calculates the incremental minimum width
@@ -265,15 +278,22 @@ class LocationBarView : public LocationBar,
   // The border color, drawn on top of the toolbar.
   SkColor GetBorderColor() const;
 
+  // The LocationBarView bounds, without the ends which have a border radius.
+  // E.g., if the LocationBarView was 50dip long, and the border radius was 2,
+  // this method would return a gfx::Rect with 46dip width.
+  gfx::Rect GetLocalBoundsWithoutEndcaps() const;
+
   // Returns the thickness of any visible edge, in pixels.
   int GetHorizontalEdgeThickness() const;
 
-  // Returns the total amount of space reserved above or below the content,
-  // which is the vertical edge thickness plus the padding next to it.
-  int GetTotalVerticalPadding() const;
+  // Updates the background on a theme change, or dropdown state change.
+  void RefreshBackground();
 
   // Updates |location_icon_view_| based on the current state and theme.
   void RefreshLocationIcon();
+
+  // Handles the arrival of an asynchronously fetched location bar icon.
+  void OnLocationIconFetched(const gfx::Image& image);
 
   // Updates the visibility state of the Content Blocked icons to reflect what
   // is actually blocked on the current page. Returns true if the visibility
@@ -312,6 +332,9 @@ class LocationBarView : public LocationBar,
 
   // Returns true if the location icon text should be animated.
   bool ShouldAnimateLocationIconTextVisibilityChange() const;
+
+  // Gets the OmniboxPopupView associated with the model in |omnibox_view_|.
+  OmniboxPopupView* GetOmniboxPopupView();
 
   // LocationBar:
   GURL GetDestinationURL() const override;
@@ -357,10 +380,15 @@ class LocationBarView : public LocationBar,
 
   // ChromeOmniboxEditController:
   void OnChanged() override;
+  void OnPopupVisibilityChanged() override;
   const ToolbarModel* GetToolbarModel() const override;
 
   // DropdownBarHostDelegate:
   void SetFocusAndSelection(bool select_all) override;
+
+  // Returns the total amount of space reserved above or below the content,
+  // which is the vertical edge thickness plus the padding next to it.
+  static int GetTotalVerticalPadding();
 
   // The Browser this LocationBarView is in.  Note that at least
   // chromeos::SimpleWebViewDialog uses a LocationBarView outside any browser
@@ -439,6 +467,9 @@ class LocationBarView : public LocationBar,
   // focused. Used when the toolbar is in full keyboard accessibility mode.
   bool show_focus_rect_ = false;
 
+  // The focus ring view.
+  views::View* focus_ring_ = nullptr;
+
   // Tracks this preference to determine whether bookmark editing is allowed.
   BooleanPrefMember edit_bookmarks_enabled_;
 
@@ -449,6 +480,12 @@ class LocationBarView : public LocationBar,
   // whether to animate security level transitions.
   security_state::SecurityLevel last_update_security_level_ =
       security_state::NONE;
+
+  // Used to scope the lifetime of asynchronous icon fetch callbacks to the
+  // lifetime of the object. Weak pointers issued by this factory are
+  // invalidated whenever we start a new icon fetch, so don't use this weak
+  // factory for any other purposes.
+  base::WeakPtrFactory<LocationBarView> icon_fetch_weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarView);
 };

@@ -251,7 +251,7 @@ TEST_F(RasterFormatTest, BeginRasterCHROMIUM) {
   void* next_cmd =
       cmd.Set(&cmd, static_cast<GLuint>(11), static_cast<GLuint>(12),
               static_cast<GLuint>(13), static_cast<GLboolean>(14),
-              static_cast<GLboolean>(15), static_cast<GLint>(16));
+              static_cast<GLint>(15), static_cast<GLuint>(16));
   EXPECT_EQ(static_cast<uint32_t>(cmds::BeginRasterCHROMIUM::kCmdId),
             cmd.header.command);
   EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
@@ -259,8 +259,8 @@ TEST_F(RasterFormatTest, BeginRasterCHROMIUM) {
   EXPECT_EQ(static_cast<GLuint>(12), cmd.sk_color);
   EXPECT_EQ(static_cast<GLuint>(13), cmd.msaa_sample_count);
   EXPECT_EQ(static_cast<GLboolean>(14), cmd.can_use_lcd_text);
-  EXPECT_EQ(static_cast<GLboolean>(15), cmd.use_distance_field_text);
-  EXPECT_EQ(static_cast<GLint>(16), cmd.color_type);
+  EXPECT_EQ(static_cast<GLint>(15), cmd.color_type);
+  EXPECT_EQ(static_cast<GLuint>(16), cmd.color_space_transfer_cache_id);
   CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
 }
 
@@ -397,6 +397,46 @@ TEST_F(RasterFormatTest, ProduceTextureDirectImmediate) {
   EXPECT_EQ(sizeof(cmd) + RoundSizeToMultipleOfEntries(sizeof(data)),
             cmd.header.size * 4u);
   EXPECT_EQ(static_cast<GLuint>(11), cmd.texture);
+  CheckBytesWrittenMatchesExpectedSize(
+      next_cmd, sizeof(cmd) + RoundSizeToMultipleOfEntries(sizeof(data)));
+}
+
+TEST_F(RasterFormatTest, CreateAndConsumeTextureINTERNALImmediate) {
+  const int kSomeBaseValueToTestWith = 51;
+  static GLbyte data[] = {
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 0),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 1),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 2),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 3),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 4),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 5),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 6),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 7),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 8),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 9),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 10),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 11),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 12),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 13),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 14),
+      static_cast<GLbyte>(kSomeBaseValueToTestWith + 15),
+  };
+  cmds::CreateAndConsumeTextureINTERNALImmediate& cmd =
+      *GetBufferAs<cmds::CreateAndConsumeTextureINTERNALImmediate>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLuint>(11), static_cast<bool>(12),
+                           static_cast<gfx::BufferUsage>(13),
+                           static_cast<viz::ResourceFormat>(14), data);
+  EXPECT_EQ(static_cast<uint32_t>(
+                cmds::CreateAndConsumeTextureINTERNALImmediate::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd) + RoundSizeToMultipleOfEntries(sizeof(data)),
+            cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLuint>(11), cmd.texture_id);
+  EXPECT_EQ(static_cast<bool>(12), static_cast<bool>(cmd.use_buffer));
+  EXPECT_EQ(static_cast<gfx::BufferUsage>(13),
+            static_cast<gfx::BufferUsage>(cmd.buffer_usage));
+  EXPECT_EQ(static_cast<viz::ResourceFormat>(14),
+            static_cast<viz::ResourceFormat>(cmd.format));
   CheckBytesWrittenMatchesExpectedSize(
       next_cmd, sizeof(cmd) + RoundSizeToMultipleOfEntries(sizeof(data)));
 }

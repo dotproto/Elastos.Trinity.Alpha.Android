@@ -13,6 +13,7 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -20,7 +21,6 @@
 #include "components/drive/drive_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
@@ -37,6 +37,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/ash_pref_names.h"  // nogncheck
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -73,7 +74,7 @@ bool IsSettingReadOnly(const std::string& pref_name) {
   if (pref_name == chromeos::kSystemTimezone)
     return chromeos::system::PerUserTimezoneEnabled();
   // enable_screen_lock must be changed through the quickUnlockPrivate API.
-  if (pref_name == ::prefs::kEnableAutoScreenLock)
+  if (pref_name == ash::prefs::kEnableAutoScreenLock)
     return true;
 #endif
   return false;
@@ -259,7 +260,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[chromeos::kAccountsPrefUsers] =
       settings_api::PrefType::PREF_TYPE_LIST;
   // kEnableAutoScreenLock is read-only.
-  (*s_whitelist)[::prefs::kEnableAutoScreenLock] =
+  (*s_whitelist)[ash::prefs::kEnableAutoScreenLock] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kEnableQuickUnlockFingerprint] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -302,6 +303,20 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[ash::prefs::kAccessibilityVirtualKeyboardEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kAccessibilityMonoAudioEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Text to Speech.
+  (*s_whitelist)[::prefs::kTextToSpeechLangToVoiceName] =
+      settings_api::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)[::prefs::kTextToSpeechRate] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kTextToSpeechPitch] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kTextToSpeechVolume] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+
+  // Crostini
+  (*s_whitelist)[crostini::prefs::kCrostiniEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Android Apps.
@@ -422,6 +437,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
 
   // Multidevice settings.
   (*s_whitelist)[arc::prefs::kSmsConnectEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Native Printing settings.
+  (*s_whitelist)[::prefs::kUserNativePrintersAllowed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
 #else

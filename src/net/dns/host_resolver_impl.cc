@@ -30,7 +30,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
-#include "base/containers/circular_deque.h"
+#include "base/containers/linked_list.h"
 #include "base/debug/debugger.h"
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
@@ -562,9 +562,6 @@ void MakeNotStale(HostCache::EntryStaleness* stale_info) {
   stale_info->stale_hits = 0;
 }
 
-// Persist data every five minutes (potentially, cache and learned RTT).
-const int64_t kPersistDelaySec = 300;
-
 }  // namespace
 
 //-----------------------------------------------------------------------------
@@ -588,10 +585,19 @@ bool ResolveLocalHostname(base::StringPiece host,
 
 const unsigned HostResolverImpl::kMaximumDnsFailures = 16;
 
-// Holds the data for a request that could not be completed synchronously.
-// It is owned by a Job. Canceled Requests are only marked as canceled rather
-// than removed from the Job's |requests_| list.
-class HostResolverImpl::RequestImpl : public HostResolver::Request {
+// Holds the callback and request parameters for an outstanding request.
+//
+// The RequestImpl is owned by the end user of host resolution. Deletion prior
+// to the request having completed means the request was cancelled by the
+// caller.
+//
+// Both the RequestImpl and its associated Job hold non-owning pointers to each
+// other. Care must be taken to clear the corresponding pointer when
+// cancellation is initiated by the Job (OnJobCancelled) vs by the end user
+// (~RequestImpl).
+class HostResolverImpl::RequestImpl
+    : public HostResolver::Request,
+      public base::LinkNode<HostResolverImpl::RequestImpl> {
  public:
   RequestImpl(const NetLogWithSource& source_net_log,
               const RequestInfo& info,
@@ -669,6 +675,9 @@ class HostResolverImpl::RequestImpl : public HostResolver::Request {
 //------------------------------------------------------------------------------
 
 // Calls HostResolverProc in TaskScheduler. Performs retries if necessary.
+//
+// In non-test code, the HostResolverProc is always SystemHostResolverProc,
+// which calls a platform API that implements host resolution.
 //
 // Whenever we try to resolve the host, we post a delayed task to check if host
 // resolution (OnLookupComplete) is completed or not. If the original attempt
@@ -966,7 +975,11 @@ class HostResolverImpl::ProcTask
 
 //-----------------------------------------------------------------------------
 
-// Resolves the hostname using DnsTransaction.
+// Resolves the hostname using DnsTransaction, which is a full implementation of
+// a DNS stub resolver. One DnsTransaction is created for each resolution
+// needed, which for AF_UNSPEC resolutions includes both A and AAAA. The
+// transactions are scheduled separately and started separately.
+//
 // TODO(szym): This could be moved to separate source file as well.
 class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
  public:
@@ -1250,14 +1263,13 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_JOB);
     }
     // else CompleteRequests logged EndEvent.
-    if (!requests_.empty()) {
+    while (!requests_.empty()) {
       // Log any remaining Requests as cancelled.
-      for (RequestImpl* req : requests_) {
-        DCHECK_EQ(this, req->job());
-        LogCancelRequest(req->source_net_log(), req->info());
-        req->OnJobCancelled(this);
-      }
-      requests_.clear();
+      RequestImpl* req = requests_.head()->value();
+      req->RemoveFromList();
+      DCHECK_EQ(this, req->job());
+      LogCancelRequest(req->source_net_log(), req->info());
+      req->OnJobCancelled(this);
     }
   }
 
@@ -1297,7 +1309,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     if (!request->info().is_speculative())
       had_non_speculative_request_ = true;
 
-    requests_.push_back(request);
+    requests_.Append(request);
 
     UpdatePriority();
   }
@@ -1327,19 +1339,13 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
 
     if (num_active_requests() > 0) {
       UpdatePriority();
-      RemoveRequest(request);
+      request->RemoveFromList();
     } else {
       // If we were called from a Request's callback within CompleteRequests,
       // that Request could not have been cancelled, so num_active_requests()
       // could not be 0. Therefore, we are not in CompleteRequests().
       CompleteRequestsWithError(OK /* cancelled */);
     }
-  }
-
-  void RemoveRequest(RequestImpl* request) {
-    auto it = std::find(requests_.begin(), requests_.end(), request);
-    DCHECK(it != requests_.end());
-    requests_.erase(it);
   }
 
   // Called from AbortAllInProgressJobs. Completes all requests and destroys
@@ -1377,8 +1383,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
   bool ServeFromHosts() {
     DCHECK_GT(num_active_requests(), 0u);
     AddressList addr_list;
-    if (resolver_->ServeFromHosts(key(),
-                                  requests_.front()->info(),
+    if (resolver_->ServeFromHosts(key(), requests_.head()->value()->info(),
                                   &addr_list)) {
       // This will destroy the Job.
       CompleteRequests(
@@ -1448,7 +1453,8 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
   AddressList MakeAddressListForRequest(const AddressList& list) const {
     if (requests_.empty())
       return list;
-    return AddressList::CopyWithPort(list, requests_.front()->info().port());
+    return AddressList::CopyWithPort(list,
+                                     requests_.head()->value()->info().port());
   }
 
   void UpdatePriority() {
@@ -1769,8 +1775,6 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     net_log_.EndEventWithNetErrorCode(NetLogEventType::HOST_RESOLVER_IMPL_JOB,
                                       entry.error());
 
-    resolver_->SchedulePersist();
-
     DCHECK(!requests_.empty());
 
     if (entry.error() == OK || entry.error() == ERR_ICANN_NAME_COLLISION) {
@@ -1790,8 +1794,8 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     // Complete all of the requests that were attached to the job and
     // detach them.
     while (!requests_.empty()) {
-      RequestImpl* req = requests_.front();
-      requests_.pop_front();
+      RequestImpl* req = requests_.head()->value();
+      req->RemoveFromList();
       DCHECK_EQ(this, req->job());
       // Update the net log and notify registered observers.
       LogFinishRequest(req->source_net_log(), req->info(), entry.error());
@@ -1863,7 +1867,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
   std::unique_ptr<DnsTask> dns_task_;
 
   // All Requests waiting for the result of this Job. Some can be canceled.
-  base::circular_deque<RequestImpl*> requests_;
+  base::LinkedList<RequestImpl> requests_;
 
   // A handle used in |HostResolverImpl::dispatcher_|.
   PrioritizedDispatcher::Handle handle_;
@@ -1977,7 +1981,6 @@ HostResolverImpl::HostResolverImpl(const Options& options, NetLog* net_log)
       last_ipv6_probe_result_(true),
       additional_resolver_flags_(0),
       fallback_to_proctask_(true),
-      persist_initialized_(false),
       weak_ptr_factory_(this),
       probe_weak_ptr_factory_(this) {
   if (options.enable_caching)
@@ -2643,36 +2646,6 @@ void HostResolverImpl::SetDnsClient(std::unique_ptr<DnsClient> dns_client) {
   }
 
   AbortDnsTasks();
-}
-
-void HostResolverImpl::InitializePersistence(
-    const PersistCallback& persist_callback,
-    std::unique_ptr<const base::Value> old_data) {
-  DCHECK(!persist_initialized_);
-  persist_callback_ = persist_callback;
-  persist_initialized_ = true;
-  if (old_data)
-    ApplyPersistentData(std::move(old_data));
-}
-
-void HostResolverImpl::ApplyPersistentData(
-    std::unique_ptr<const base::Value> data) {}
-
-std::unique_ptr<const base::Value> HostResolverImpl::GetPersistentData() {
-  return std::unique_ptr<const base::Value>();
-}
-
-void HostResolverImpl::SchedulePersist() {
-  if (!persist_initialized_ || persist_timer_.IsRunning())
-    return;
-  persist_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(kPersistDelaySec),
-      base::Bind(&HostResolverImpl::DoPersist, weak_ptr_factory_.GetWeakPtr()));
-}
-
-void HostResolverImpl::DoPersist() {
-  DCHECK(persist_initialized_);
-  persist_callback_.Run(GetPersistentData());
 }
 
 HostResolverImpl::RequestImpl::~RequestImpl() {

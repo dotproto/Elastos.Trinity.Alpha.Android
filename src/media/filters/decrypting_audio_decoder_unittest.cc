@@ -44,11 +44,11 @@ const int kDecodingDelay = 3;
 static scoped_refptr<DecoderBuffer> CreateFakeEncryptedBuffer() {
   const int buffer_size = 16;  // Need a non-empty buffer;
   scoped_refptr<DecoderBuffer> buffer(new DecoderBuffer(buffer_size));
-  buffer->set_decrypt_config(std::unique_ptr<DecryptConfig>(new DecryptConfig(
+  buffer->set_decrypt_config(DecryptConfig::CreateCencConfig(
       std::string(reinterpret_cast<const char*>(kFakeKeyId),
                   arraysize(kFakeKeyId)),
       std::string(reinterpret_cast<const char*>(kFakeIv), arraysize(kFakeIv)),
-      std::vector<SubsampleEntry>())));
+      std::vector<SubsampleEntry>()));
   return buffer;
 }
 
@@ -65,9 +65,7 @@ class DecryptingAudioDecoderTest : public testing::Test {
         decoded_frame_(NULL),
         decoded_frame_list_() {}
 
-  virtual ~DecryptingAudioDecoderTest() {
-    Destroy();
-  }
+  ~DecryptingAudioDecoderTest() override { Destroy(); }
 
   void InitializeAndExpectResult(const AudioDecoderConfig& config,
                                  bool success) {
@@ -132,7 +130,7 @@ class DecryptingAudioDecoderTest : public testing::Test {
   }
 
   // Decode |buffer| and expect DecodeDone to get called with |status|.
-  void DecodeAndExpect(const scoped_refptr<DecoderBuffer>& buffer,
+  void DecodeAndExpect(scoped_refptr<DecoderBuffer> buffer,
                        DecodeStatus status) {
     EXPECT_CALL(*this, DecodeDone(status));
     decoder_->Decode(buffer,
@@ -143,7 +141,7 @@ class DecryptingAudioDecoderTest : public testing::Test {
 
   // Helper function to simulate the decrypting and decoding process in the
   // |decryptor_| with a decoding delay of kDecodingDelay buffers.
-  void DecryptAndDecodeAudio(const scoped_refptr<DecoderBuffer>& encrypted,
+  void DecryptAndDecodeAudio(scoped_refptr<DecoderBuffer> encrypted,
                              const Decryptor::AudioDecodeCB& audio_decode_cb) {
     num_decrypt_and_decode_calls_++;
     if (!encrypted->end_of_stream())

@@ -51,7 +51,9 @@ class FakeFullscreenDelegate : public WebContentsDelegate {
   FakeFullscreenDelegate() = default;
   ~FakeFullscreenDelegate() override = default;
 
-  void EnterFullscreenModeForTab(WebContents*, const GURL&) override {
+  void EnterFullscreenModeForTab(WebContents*,
+                                 const GURL&,
+                                 const blink::WebFullscreenOptions&) override {
     is_fullscreen_ = true;
   }
 
@@ -106,7 +108,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest,
   EXPECT_EQ(1, CountLinks(manager->GetRoot()));
 }
 
-IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest, InsideIFrame) {
+// Fails flakily on all platforms: crbug.com/825735
+IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest,
+                       DISABLED_InsideIFrame) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   FakeFullscreenDelegate delegate;

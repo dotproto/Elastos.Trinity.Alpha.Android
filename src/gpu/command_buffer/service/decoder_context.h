@@ -26,14 +26,17 @@ class GLSurface;
 }  // namespace gl
 
 namespace gpu {
-class TextureBase;
 class QueryManager;
+class ServiceTransferCache;
+class TextureBase;
 struct ContextCreationAttribs;
 
 namespace gles2 {
 class ContextGroup;
 class ErrorState;
+class FeatureInfo;
 class GpuFenceManager;
+class Texture;
 struct ContextState;
 struct DisallowedFeatures;
 }  // namespace gles2
@@ -72,6 +75,8 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   virtual void Destroy(bool have_context) = 0;
 
   virtual Capabilities GetCapabilities() = 0;
+
+  virtual const gles2::FeatureInfo* GetFeatureInfo() const = 0;
 
   // Gets the associated GLContext.
   virtual gl::GLContext* GetGLContext() = 0;
@@ -130,6 +135,9 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   virtual void RestoreState(const gles2::ContextState* prev_state) = 0;
 
   // Restore States.
+  virtual void RestoreGlobalState() const = 0;
+  virtual void ClearAllAttributes() const = 0;
+  virtual void RestoreAllAttributes() const = 0;
   virtual void RestoreActiveTexture() const = 0;
   virtual void RestoreAllTextureUnitAndSamplerBindings(
       const gles2::ContextState* prev_state) const = 0;
@@ -170,6 +178,50 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   //
   virtual gles2::ContextGroup* GetContextGroup() = 0;
   virtual gles2::ErrorState* GetErrorState() = 0;
+
+  //
+  // Methods required by Texture.
+  //
+  // Indicates whether a given internal format is one for a compressed
+  // texture.
+  virtual bool IsCompressedTextureFormat(unsigned format) = 0;
+  // Clears a level sub area of a 2D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearLevel(gles2::Texture* texture,
+                          unsigned target,
+                          int level,
+                          unsigned format,
+                          unsigned type,
+                          int xoffset,
+                          int yoffset,
+                          int width,
+                          int height) = 0;
+  // Clears a level sub area of a compressed 2D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearCompressedTextureLevel(gles2::Texture* texture,
+                                           unsigned target,
+                                           int level,
+                                           unsigned format,
+                                           int width,
+                                           int height) = 0;
+  // Clears a level of a 3D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearLevel3D(gles2::Texture* texture,
+                            unsigned target,
+                            int level,
+                            unsigned format,
+                            unsigned type,
+                            int width,
+                            int height,
+                            int depth) = 0;
+  //
+  // Methods required by InProcessCommandBuffer
+  //
+  // Gets the ServiceTransferCache for this context.
+  virtual ServiceTransferCache* GetTransferCacheForTest() = 0;
+
+  // Set to true to LOG every command.
+  virtual void SetLogCommands(bool log_commands) = 0;
 };
 
 }  // namespace gpu

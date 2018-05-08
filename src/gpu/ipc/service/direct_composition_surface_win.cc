@@ -9,9 +9,7 @@
 #include <dxgi1_6.h>
 
 #include "base/containers/circular_deque.h"
-#include "base/debug/alias.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
@@ -225,6 +223,12 @@ class DCLayerTree {
   bool UpdateVisualClip(VisualInfo* visual_info,
                         const ui::DCRendererLayerParams& params);
 
+  void CalculateVideoSwapChainParameters(
+      const ui::DCRendererLayerParams& params,
+      gfx::Rect* video_visual_bounds_rect,
+      gfx::Size* video_input_size,
+      gfx::Size* video_swap_chain_size) const;
+
   DirectCompositionSurfaceWin* surface_;
   std::vector<std::unique_ptr<ui::DCRendererLayerParams>> pending_overlays_;
 
@@ -255,10 +259,10 @@ class DCLayerTree::SwapChainPresenter {
 
   ~SwapChainPresenter();
 
-  void PresentToSwapChain(const ui::DCRendererLayerParams& overlay);
+  void PresentToSwapChain(const ui::DCRendererLayerParams& overlay,
+                          const gfx::Size& video_input_size,
+                          const gfx::Size& swap_chain_size);
 
-  float swap_chain_scale_x() const { return swap_chain_scale_x_; }
-  float swap_chain_scale_y() const { return swap_chain_scale_y_; }
   const Microsoft::WRL::ComPtr<IDXGISwapChain1>& swap_chain() const {
     return swap_chain_;
   }
@@ -282,11 +286,6 @@ class DCLayerTree::SwapChainPresenter {
   gfx::Size processor_input_size_;
   gfx::Size processor_output_size_;
   bool is_yuy2_swapchain_ = false;
-
-  // This is the scale from the swapchain size to the size of the contents
-  // onscreen.
-  float swap_chain_scale_x_ = 0.0f;
-  float swap_chain_scale_y_ = 0.0f;
 
   PresentationHistory presentation_history_;
   bool failed_to_create_yuy2_swapchain_ = false;
@@ -487,7 +486,9 @@ bool DCLayerTree::SwapChainPresenter::UploadVideoImages(
 }
 
 void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
-    const ui::DCRendererLayerParams& params) {
+    const ui::DCRendererLayerParams& params,
+    const gfx::Size& video_input_size,
+    const gfx::Size& swap_chain_size) {
   gl::GLImageDXGIBase* image_dxgi =
       gl::GLImageDXGIBase::FromGLImage(params.image[0].get());
   gl::GLImageMemory* y_image_memory = nullptr;
@@ -503,53 +504,7 @@ void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
     return;
   }
 
-  // Swap chain size is the minimum of the on-screen size and the source
-  // size so the video processor can do the minimal amount of work and
-  // the overlay has to read the minimal amount of data.
-  // DWM is also less likely to promote a surface to an overlay if it's
-  // much larger than its area on-screen.
-  gfx::Rect bounds_rect = params.rect;
-  gfx::Size ceiled_input_size = gfx::ToCeiledSize(params.contents_rect.size());
-  gfx::Size swap_chain_size = bounds_rect.size();
-
-  if (g_supports_scaled_overlays)
-    swap_chain_size.SetToMin(ceiled_input_size);
-
-  // YUY2 surfaces must have an even width.
-  if (swap_chain_size.width() % 2 == 1)
-    swap_chain_size.set_width(swap_chain_size.width() + 1);
-
-  InitializeVideoProcessor(ceiled_input_size, swap_chain_size);
-
-  if (surface_->workarounds().disable_larger_than_screen_overlays) {
-    // Because of the rounding when converting between pixels and DIPs, a
-    // fullscreen video can become slightly larger than the monitor - e.g. on
-    // a 3000x2000 monitor with a scale factor of 1.75 a 1920x1079 video can
-    // become 3002x1689.
-    // On older Intel drivers, swapchains that are bigger than the monitor
-    // won't be put into overlays, which will hurt power usage a lot. On those
-    // systems, the scaling can be adjusted very slightly so that it's less
-    // than the monitor size. This should be close to imperceptible.
-    // TODO(jbauman): Remove when http://crbug.com/668278 is fixed.
-    const int kOversizeMargin = 3;
-
-    if ((bounds_rect.x() >= 0) &&
-        (bounds_rect.width() > g_overlay_monitor_size.width()) &&
-        (bounds_rect.width() <=
-         g_overlay_monitor_size.width() + kOversizeMargin)) {
-      bounds_rect.set_width(g_overlay_monitor_size.width());
-    }
-
-    if ((bounds_rect.y() >= 0) &&
-        (bounds_rect.height() > g_overlay_monitor_size.height()) &&
-        (bounds_rect.height() <=
-         g_overlay_monitor_size.height() + kOversizeMargin)) {
-      bounds_rect.set_height(g_overlay_monitor_size.height());
-    }
-  }
-
-  swap_chain_scale_x_ = bounds_rect.width() * 1.0f / swap_chain_size.width();
-  swap_chain_scale_y_ = bounds_rect.height() * 1.0f / swap_chain_size.height();
+  InitializeVideoProcessor(video_input_size, swap_chain_size);
 
   bool yuy2_swapchain = ShouldBeYUY2();
   bool first_present = false;
@@ -711,7 +666,7 @@ void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
                                                       TRUE, &dest_rect);
     video_context_->VideoProcessorSetStreamDestRect(video_processor_.Get(), 0,
                                                     TRUE, &dest_rect);
-    RECT source_rect = gfx::Rect(ceiled_input_size).ToRECT();
+    RECT source_rect = gfx::Rect(video_input_size).ToRECT();
     video_context_->VideoProcessorSetStreamSourceRect(video_processor_.Get(), 0,
                                                       TRUE, &source_rect);
 
@@ -805,6 +760,7 @@ void DCLayerTree::SwapChainPresenter::ReallocateSwapChain(bool yuy2) {
   Microsoft::WRL::ComPtr<IDXGIFactoryMedia> media_factory;
   dxgi_factory.CopyTo(media_factory.GetAddressOf());
   DXGI_SWAP_CHAIN_DESC1 desc = {};
+  DCHECK(!swap_chain_size_.IsEmpty());
   desc.Width = swap_chain_size_.width();
   desc.Height = swap_chain_size_.height();
   desc.Format = DXGI_FORMAT_YUY2;
@@ -821,9 +777,6 @@ void DCLayerTree::SwapChainPresenter::ReallocateSwapChain(bool yuy2) {
   HANDLE handle;
   HRESULT hr = create_surface_handle_function_(COMPOSITIONOBJECT_ALL_ACCESS,
                                                nullptr, &handle);
-  // TODO(crbug/792806): Remove Alias and CHECK after issue is fixed.
-  base::debug::Alias(&hr);
-  CHECK(SUCCEEDED(hr));
   swap_chain_handle_.Set(handle);
 
   if (is_yuy2_swapchain_ != yuy2) {
@@ -881,17 +834,44 @@ bool DCLayerTree::InitVisual(size_t i) {
 bool DCLayerTree::UpdateVisualForVideo(
     VisualInfo* visual_info,
     const ui::DCRendererLayerParams& params) {
+  bool changed = false;
+  // This visual's content was a DC surface, but now it'll be a swap chain.
+  if (visual_info->surface) {
+    changed = true;
+    visual_info->surface.Reset();
+  }
+
+  gfx::Rect bounds_rect;
+  gfx::Size video_input_size;
+  gfx::Size swap_chain_size;
+
+  CalculateVideoSwapChainParameters(params, &bounds_rect, &video_input_size,
+                                    &swap_chain_size);
+
   Microsoft::WRL::ComPtr<IDCompositionVisual2> dc_visual =
       visual_info->content_visual;
 
-  bool changed = false;
-  gfx::Rect bounds_rect = params.rect;
-  visual_info->surface.Reset();
+  // Do not create a SwapChainPresenter if swap chain size will be empty.
+  if (swap_chain_size.IsEmpty()) {
+    // This visual's content was a swap chain, but now it'll be empty.
+    if (visual_info->swap_chain) {
+      changed = true;
+      visual_info->swap_chain.Reset();
+      visual_info->swap_chain_presenter.reset();
+      dc_visual->SetContent(nullptr);
+    }
+    return changed;
+  }
+
   if (!visual_info->swap_chain_presenter) {
     visual_info->swap_chain_presenter =
         std::make_unique<SwapChainPresenter>(this, d3d11_device_);
   }
-  visual_info->swap_chain_presenter->PresentToSwapChain(params);
+
+  visual_info->swap_chain_presenter->PresentToSwapChain(
+      params, video_input_size, swap_chain_size);
+
+  // This visual's content was a different swap chain.
   if (visual_info->swap_chain !=
       visual_info->swap_chain_presenter->swap_chain()) {
     visual_info->swap_chain = visual_info->swap_chain_presenter->swap_chain();
@@ -899,24 +879,26 @@ bool DCLayerTree::UpdateVisualForVideo(
     changed = true;
   }
 
-  if (visual_info->swap_chain_presenter->swap_chain_scale_x() !=
-          visual_info->swap_chain_scale_x ||
-      visual_info->swap_chain_presenter->swap_chain_scale_y() !=
-          visual_info->swap_chain_scale_y ||
+  // This is the scale from the swapchain size to the size of the contents
+  // onscreen.
+  float swap_chain_scale_x =
+      bounds_rect.width() * 1.0f / swap_chain_size.width();
+  float swap_chain_scale_y =
+      bounds_rect.height() * 1.0f / swap_chain_size.height();
+
+  // This visual's transform changed.
+  if (swap_chain_scale_x != visual_info->swap_chain_scale_x ||
+      swap_chain_scale_y != visual_info->swap_chain_scale_y ||
       params.transform != visual_info->transform ||
-      visual_info->bounds != bounds_rect) {
-    visual_info->swap_chain_scale_x =
-        visual_info->swap_chain_presenter->swap_chain_scale_x();
-    visual_info->swap_chain_scale_y =
-        visual_info->swap_chain_presenter->swap_chain_scale_y();
+      bounds_rect != visual_info->bounds) {
+    visual_info->swap_chain_scale_x = swap_chain_scale_x;
+    visual_info->swap_chain_scale_y = swap_chain_scale_y;
     visual_info->transform = params.transform;
     visual_info->bounds = bounds_rect;
 
     gfx::Transform final_transform = params.transform;
     gfx::Transform scale_transform;
-    scale_transform.Scale(
-        visual_info->swap_chain_presenter->swap_chain_scale_x(),
-        visual_info->swap_chain_presenter->swap_chain_scale_y());
+    scale_transform.Scale(swap_chain_scale_x, swap_chain_scale_y);
     final_transform.PreconcatTransform(scale_transform);
     final_transform.Transpose();
 
@@ -935,6 +917,60 @@ bool DCLayerTree::UpdateVisualForVideo(
     changed = true;
   }
   return changed;
+}
+
+void DCLayerTree::CalculateVideoSwapChainParameters(
+    const ui::DCRendererLayerParams& params,
+    gfx::Rect* video_visual_bounds_rect,
+    gfx::Size* video_input_size,
+    gfx::Size* video_swap_chain_size) const {
+  // Swap chain size is the minimum of the on-screen size and the source
+  // size so the video processor can do the minimal amount of work and
+  // the overlay has to read the minimal amount of data.
+  // DWM is also less likely to promote a surface to an overlay if it's
+  // much larger than its area on-screen.
+  gfx::Rect bounds_rect = params.rect;
+
+  if (workarounds().disable_larger_than_screen_overlays) {
+    // Because of the rounding when converting between pixels and DIPs, a
+    // fullscreen video can become slightly larger than the monitor - e.g. on
+    // a 3000x2000 monitor with a scale factor of 1.75 a 1920x1079 video can
+    // become 3002x1689.
+    // On older Intel drivers, swapchains that are bigger than the monitor
+    // won't be put into overlays, which will hurt power usage a lot. On those
+    // systems, the scaling can be adjusted very slightly so that it's less
+    // than the monitor size. This should be close to imperceptible.
+    // TODO(jbauman): Remove when http://crbug.com/668278 is fixed.
+    const int kOversizeMargin = 3;
+
+    if ((bounds_rect.x() >= 0) &&
+        (bounds_rect.width() > g_overlay_monitor_size.width()) &&
+        (bounds_rect.width() <=
+         g_overlay_monitor_size.width() + kOversizeMargin)) {
+      bounds_rect.set_width(g_overlay_monitor_size.width());
+    }
+
+    if ((bounds_rect.y() >= 0) &&
+        (bounds_rect.height() > g_overlay_monitor_size.height()) &&
+        (bounds_rect.height() <=
+         g_overlay_monitor_size.height() + kOversizeMargin)) {
+      bounds_rect.set_height(g_overlay_monitor_size.height());
+    }
+  }
+
+  gfx::Size ceiled_input_size = gfx::ToCeiledSize(params.contents_rect.size());
+  gfx::Size swap_chain_size = bounds_rect.size();
+
+  if (g_supports_scaled_overlays)
+    swap_chain_size.SetToMin(ceiled_input_size);
+
+  // YUY2 surfaces must have an even width.
+  if (swap_chain_size.width() % 2 == 1)
+    swap_chain_size.set_width(swap_chain_size.width() + 1);
+
+  *video_visual_bounds_rect = bounds_rect;
+  *video_input_size = ceiled_input_size;
+  *video_swap_chain_size = swap_chain_size;
 }
 
 bool DCLayerTree::UpdateVisualForBackbuffer(
@@ -1097,6 +1133,10 @@ bool DirectCompositionSurfaceWin::AreOverlaysSupported() {
   UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.OverlaysSupported",
                         overlays_supported);
   return overlays_supported;
+}
+
+void DirectCompositionSurfaceWin::EnableScaledOverlaysForTesting() {
+  g_supports_scaled_overlays = true;
 }
 
 // static
@@ -1300,6 +1340,10 @@ bool DirectCompositionSurfaceWin::SetEnableDCLayers(bool enable) {
 }
 
 bool DirectCompositionSurfaceWin::FlipsVertically() const {
+  return true;
+}
+
+bool DirectCompositionSurfaceWin::SupportsPresentationCallback() {
   return true;
 }
 

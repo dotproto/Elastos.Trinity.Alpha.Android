@@ -210,6 +210,9 @@ class CC_PAINT_EXPORT PaintOp {
   // and display lists.  This doesn't count other objects like paths or blobs.
   size_t AdditionalBytesUsed() const { return 0; }
 
+  // Returns the number of ops in referenced sub records and display lists.
+  size_t AdditionalOpCount() const { return 0; }
+
   // Run the destructor for the derived op type.  Ops are usually contained in
   // memory buffers and so don't have their destructors run automatically.
   void DestroyThis();
@@ -601,6 +604,7 @@ class CC_PAINT_EXPORT DrawRecordOp final : public PaintOp {
   bool IsValid() const { return true; }
   static bool AreEqual(const PaintOp* left, const PaintOp* right);
   size_t AdditionalBytesUsed() const;
+  size_t AdditionalOpCount() const;
   bool HasDiscardableImages() const;
   int CountSlowPaths() const;
   bool HasNonAAPaint() const;
@@ -863,6 +867,9 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   size_t bytes_used() const {
     return sizeof(*this) + reserved_ + subrecord_bytes_used_;
   }
+  // Returns the total number of ops including sub-records.
+  size_t total_op_count() const { return op_count_ + subrecord_op_count_; }
+
   size_t next_op_offset() const { return used_; }
   int numSlowPaths() const { return num_slow_paths_; }
   bool HasNonAAPaint() const { return has_non_aa_paint_; }
@@ -896,14 +903,21 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
 
   void UpdateSaveLayerBounds(size_t offset, const SkRect& bounds) {
     CHECK_LT(offset, used_);
-    CHECK_LE(offset + sizeof(SaveLayerOp), used_);
+    CHECK_LE(offset + sizeof(PaintOp), used_);
 
-    auto* op = reinterpret_cast<SaveLayerOp*>(data_.get() + offset);
-    CHECK_EQ(op->type, static_cast<uint32_t>(SaveLayerOp::kType));
-    size_t skip = op->skip;
-    DCHECK_EQ(skip, ComputeOpSkip(sizeof(SaveLayerOp)));
-
-    op->bounds = bounds;
+    auto* op = reinterpret_cast<PaintOp*>(data_.get() + offset);
+    switch (op->GetType()) {
+      case SaveLayerOp::kType:
+        CHECK_LE(offset + sizeof(SaveLayerOp), used_);
+        static_cast<SaveLayerOp*>(op)->bounds = bounds;
+        break;
+      case SaveLayerAlphaOp::kType:
+        CHECK_LE(offset + sizeof(SaveLayerAlphaOp), used_);
+        static_cast<SaveLayerAlphaOp*>(op)->bounds = bounds;
+        break;
+      default:
+        NOTREACHED();
+    }
   }
 
   template <typename T>
@@ -920,6 +934,7 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     has_discardable_images_ |= op->HasDiscardableImagesFromFlags();
 
     subrecord_bytes_used_ += op->AdditionalBytesUsed();
+    subrecord_op_count_ += op->AdditionalOpCount();
   }
 
   template <typename T>
@@ -1133,6 +1148,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   int num_slow_paths_ = 0;
   // Record additional bytes used by referenced sub-records and display lists.
   size_t subrecord_bytes_used_ = 0;
+  // Record total op count of referenced sub-record and display lists.
+  size_t subrecord_op_count_ = 0;
 
   bool has_non_aa_paint_ : 1;
   bool has_discardable_images_ : 1;

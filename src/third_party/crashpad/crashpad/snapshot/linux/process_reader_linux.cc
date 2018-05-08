@@ -182,7 +182,6 @@ ProcessReaderLinux::ProcessReaderLinux()
       threads_(),
       modules_(),
       elf_readers_(),
-      process_memory_(),
       is_64_bit_(false),
       initialized_threads_(false),
       initialized_modules_(false),
@@ -199,12 +198,7 @@ bool ProcessReaderLinux::Initialize(PtraceConnection* connection) {
     return false;
   }
 
-  pid_t pid = connection->GetProcessID();
-  if (!memory_map_.Initialize(pid)) {
-    return false;
-  }
-
-  if (!process_memory_.Initialize(pid)) {
+  if (!memory_map_.Initialize(connection_)) {
     return false;
   }
 
@@ -332,7 +326,7 @@ void ProcessReaderLinux::InitializeModules() {
   INITIALIZATION_STATE_DCHECK_VALID(initialized_);
 
   AuxiliaryVector aux;
-  if (!aux.Initialize(ProcessID(), is_64_bit_)) {
+  if (!aux.Initialize(connection_)) {
     return;
   }
 

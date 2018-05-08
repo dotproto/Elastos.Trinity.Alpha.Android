@@ -24,6 +24,24 @@ using base::trace_event::MemoryDumpLevelOfDetail;
 namespace cc {
 namespace {
 
+bool UseCacheForDrawImage(const DrawImage& draw_image) {
+  // Lazy generated images are have their decode cached.
+  sk_sp<SkImage> sk_image = draw_image.paint_image().GetSkImage();
+  if (sk_image->isLazyGenerated())
+    return true;
+
+  // Cache images that need to be converted to a non-sRGB color space.
+  // TODO(ccameron): Consider caching when any color conversion is required.
+  // https://crbug.com/791828
+  const gfx::ColorSpace& dst_color_space = draw_image.target_color_space();
+  if (dst_color_space.IsValid() &&
+      dst_color_space != gfx::ColorSpace::CreateSRGB()) {
+    return true;
+  }
+
+  return false;
+}
+
 // The number of entries to keep around in the cache. This limit can be breached
 // if more items are locked. That is, locked items ignore this limit.
 // Depending on the memory state of the system, we limit the amount of items
@@ -206,10 +224,7 @@ SoftwareImageDecodeCache::GetTaskForImageAndRefInternal(
   if (key.target_size().IsEmpty())
     return TaskResult(false);
 
-  // For non-lazy images a decode isn't necessary.
-  // TODO(khushalsagar): If these images require color conversion, we should
-  // still cache that result.
-  if (!image.paint_image().IsLazyGenerated())
+  if (!UseCacheForDrawImage(image))
     return TaskResult(false);
 
   base::AutoLock lock(lock_);
@@ -475,8 +490,8 @@ void SoftwareImageDecodeCache::DecodeImageIfNecessary(
 
 DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDraw(
     const DrawImage& draw_image) {
-  // Non-lazy generated images can be used for raster directly.
-  if (!draw_image.paint_image().GetSkImage()->isLazyGenerated()) {
+  // Non-cached images are be used for raster directly.
+  if (!UseCacheForDrawImage(draw_image)) {
     return DecodedDrawImage(draw_image.paint_image().GetSkImage(),
                             SkSize::Make(0, 0), SkSize::Make(1.f, 1.f),
                             draw_image.filter_quality(),
@@ -509,8 +524,12 @@ DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDrawInternal(
   cache_entry->mark_used();
 
   DecodeImageIfNecessary(key, paint_image, cache_entry);
+  auto decoded_image = cache_entry->image();
+  if (!decoded_image)
+    return DecodedDrawImage();
+
   auto decoded_draw_image =
-      DecodedDrawImage(cache_entry->image(), cache_entry->src_rect_offset(),
+      DecodedDrawImage(std::move(decoded_image), cache_entry->src_rect_offset(),
                        GetScaleAdjustment(key), GetDecodedFilterQuality(key),
                        cache_entry->is_budgeted);
   return decoded_draw_image;
@@ -519,8 +538,7 @@ DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDrawInternal(
 void SoftwareImageDecodeCache::DrawWithImageFinished(
     const DrawImage& image,
     const DecodedDrawImage& decoded_image) {
-  // We don't cache any data for non-lazy images.
-  if (!image.paint_image().IsLazyGenerated())
+  if (!UseCacheForDrawImage(image))
     return;
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
@@ -566,31 +584,6 @@ void SoftwareImageDecodeCache::ClearCache() {
 
 size_t SoftwareImageDecodeCache::GetMaximumMemoryLimitBytes() const {
   return locked_images_budget_.total_limit_bytes();
-}
-
-void SoftwareImageDecodeCache::NotifyImageUnused(
-    const PaintImage::FrameKey& frame_key) {
-  base::AutoLock lock(lock_);
-
-  auto it = frame_key_to_image_keys_.find(frame_key);
-  if (it == frame_key_to_image_keys_.end())
-    return;
-
-  for (auto key_it = it->second.begin(); key_it != it->second.end();) {
-    // This iterates over the CacheKey vector for the given skimage_id,
-    // and deletes all entries from decoded_images_ corresponding to the
-    // skimage_id.
-    auto image_it = decoded_images_.Peek(*key_it);
-    // TODO(sohanjg): Find an optimized way to cleanup locked images.
-    if (image_it != decoded_images_.end() && image_it->second->ref_count == 0) {
-      decoded_images_.Erase(image_it);
-      key_it = it->second.erase(key_it);
-    } else {
-      ++key_it;
-    }
-  }
-  if (it->second.empty())
-    frame_key_to_image_keys_.erase(it);
 }
 
 void SoftwareImageDecodeCache::OnImageDecodeTaskCompleted(

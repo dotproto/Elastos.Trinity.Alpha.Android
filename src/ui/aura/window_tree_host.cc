@@ -37,8 +37,45 @@
 
 namespace aura {
 
+namespace {
+
 const char kWindowTreeHostForAcceleratedWidget[] =
     "__AURA_WINDOW_TREE_HOST_ACCELERATED_WIDGET__";
+
+bool ShouldAllocateLocalSurfaceId() {
+  // When running with the window service (either in 'mus' or 'mash' mode), the
+  // LocalSurfaceId allocation for the WindowTreeHost is managed by the
+  // WindowTreeClient and WindowTreeHostMus.
+  return Env::GetInstance()->mode() == Env::Mode::LOCAL;
+}
+
+#if DCHECK_IS_ON()
+class ScopedLocalSurfaceIdValidator {
+ public:
+  explicit ScopedLocalSurfaceIdValidator(Window* window)
+      : window_(window),
+        local_surface_id_(window ? window->GetLocalSurfaceId()
+                                 : viz::LocalSurfaceId()) {}
+  ~ScopedLocalSurfaceIdValidator() {
+    if (ShouldAllocateLocalSurfaceId() && window_) {
+      DCHECK_EQ(local_surface_id_, window_->GetLocalSurfaceId());
+    }
+  }
+
+ private:
+  Window* const window_;
+  const viz::LocalSurfaceId local_surface_id_;
+  DISALLOW_COPY_AND_ASSIGN(ScopedLocalSurfaceIdValidator);
+};
+#else
+class ScopedLocalSurfaceIdValidator {
+ public:
+  explicit ScopedLocalSurfaceIdValidator(Window* window) {}
+  ~ScopedLocalSurfaceIdValidator() {}
+};
+#endif
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeHost, public:
@@ -65,8 +102,8 @@ void WindowTreeHost::InitHost() {
       display::Screen::GetScreen()->GetDisplayNearestWindow(window());
   device_scale_factor_ = display.device_scale_factor();
 
+  UpdateRootWindowSizeInPixels();
   InitCompositor();
-  UpdateRootWindowSizeInPixels(GetBoundsInPixels().size());
   Env::GetInstance()->NotifyHostInitialized(this);
 }
 
@@ -91,7 +128,7 @@ gfx::Transform WindowTreeHost::GetRootTransform() const {
 
 void WindowTreeHost::SetRootTransform(const gfx::Transform& transform) {
   window()->SetTransform(transform);
-  UpdateRootWindowSizeInPixels(GetBoundsInPixels().size());
+  UpdateRootWindowSizeInPixels();
 }
 
 gfx::Transform WindowTreeHost::GetInverseRootTransform() const {
@@ -116,14 +153,14 @@ gfx::Transform WindowTreeHost::GetInverseRootTransformForLocalEventCoordinates()
   return invert;
 }
 
-void WindowTreeHost::UpdateRootWindowSizeInPixels(
-    const gfx::Size& host_size_in_pixels) {
-  gfx::Rect bounds(host_size_in_pixels.width(), host_size_in_pixels.height());
-  gfx::RectF new_bounds =
-      gfx::ScaleRect(gfx::RectF(bounds), 1.0f / device_scale_factor_);
-  window()->layer()->transform().TransformRect(&new_bounds);
-  window()->SetBounds(gfx::ToEnclosingRect(new_bounds));
-  window()->SetDeviceScaleFactor(device_scale_factor_);
+void WindowTreeHost::UpdateRootWindowSizeInPixels() {
+  // Validate that the LocalSurfaceId does not change.
+  bool compositor_inited = !!compositor()->root_layer();
+  ScopedLocalSurfaceIdValidator lsi_validator(compositor_inited ? window()
+                                                                : nullptr);
+  gfx::Rect transformed_bounds_in_pixels =
+      GetTransformedRootWindowBoundsInPixels(GetBoundsInPixels().size());
+  window()->SetBounds(transformed_bounds_in_pixels);
 }
 
 void WindowTreeHost::ConvertDIPToScreenInPixels(gfx::Point* point) const {
@@ -336,20 +373,22 @@ void WindowTreeHost::OnHostMovedInPixels(
 }
 
 void WindowTreeHost::OnHostResizedInPixels(
-    const gfx::Size& new_size_in_pixels) {
+    const gfx::Size& new_size_in_pixels,
+    const viz::LocalSurfaceId& new_local_surface_id) {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(window());
   device_scale_factor_ = display.device_scale_factor();
+  UpdateRootWindowSizeInPixels();
 
-  gfx::Size layer_size = GetBoundsInPixels().size();
-  // The layer, and the observers should be notified of the
-  // transformed size of the root window.
-  UpdateRootWindowSizeInPixels(layer_size);
-
-  // The compositor should have the same size as the native root window host.
-  // Get the latest scale from display because it might have been changed.
+  // Allocate a new LocalSurfaceId for the new state.
+  auto local_surface_id = new_local_surface_id;
+  if (ShouldAllocateLocalSurfaceId() && !new_local_surface_id.is_valid()) {
+    window_->AllocateLocalSurfaceId();
+    local_surface_id = window_->GetLocalSurfaceId();
+  }
+  ScopedLocalSurfaceIdValidator lsi_validator(window());
   compositor_->SetScaleAndSize(device_scale_factor_, new_size_in_pixels,
-                               window()->GetLocalSurfaceId());
+                               local_surface_id);
 
   for (WindowTreeHostObserver& observer : observers_)
     observer.OnHostResized(this);
@@ -406,6 +445,15 @@ void WindowTreeHost::OnDisplayMetricsChanged(const display::Display& display,
       compositor_->SetDisplayColorSpace(display.color_space());
     }
   }
+}
+
+gfx::Rect WindowTreeHost::GetTransformedRootWindowBoundsInPixels(
+    const gfx::Size& size_in_pixels) const {
+  gfx::Rect bounds(size_in_pixels);
+  gfx::RectF new_bounds =
+      gfx::ScaleRect(gfx::RectF(bounds), 1.0f / device_scale_factor_);
+  window()->layer()->transform().TransformRect(&new_bounds);
+  return gfx::ToEnclosingRect(new_bounds);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

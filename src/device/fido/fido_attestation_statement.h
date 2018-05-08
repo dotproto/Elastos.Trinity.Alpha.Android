@@ -32,7 +32,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAttestationStatement
 
   // Produces a map in the following format:
   // { "x5c": [ x509_certs bytes ], "sig": signature bytes ] }
-  cbor::CBORValue::MapValue GetAsCBORMap() override;
+  cbor::CBORValue::MapValue GetAsCBORMap() const override;
+
+  bool IsAttestationCertificateInappropriatelyIdentifying() override;
 
  private:
   const std::vector<uint8_t> signature_;

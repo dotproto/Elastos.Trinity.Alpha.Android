@@ -5,12 +5,14 @@
 #include "content/browser/web_package/signed_exchange_handler.h"
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
+#include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "net/base/io_buffer.h"
@@ -31,7 +33,7 @@ const int kOutputBufferSize = 4096;
 
 std::string GetTestFileContents(base::StringPiece name) {
   base::FilePath path;
-  PathService::Get(content::DIR_TEST_DATA, &path);
+  base::PathService::Get(content::DIR_TEST_DATA, &path);
   path = path.AppendASCII("htxg").AppendASCII(name);
 
   std::string contents;
@@ -58,21 +60,15 @@ class MockSignedExchangeCertFetcherFactory
   std::unique_ptr<SignedExchangeCertFetcher> CreateFetcherAndStart(
       const GURL& cert_url,
       bool force_fetch,
-      SignedExchangeCertFetcher::CertificateCallback callback) override {
+      SignedExchangeCertFetcher::CertificateCallback callback,
+      SignedExchangeDevToolsProxy* devtools_proxy) override {
     EXPECT_EQ(cert_url, expected_cert_url_);
 
-    scoped_refptr<net::X509Certificate> cert;
-
-    base::Optional<std::vector<base::StringPiece>> der_certs =
-        SignedExchangeCertFetcher::GetCertChainFromMessage(cert_str_);
-    EXPECT_TRUE(der_certs);
-    if (der_certs) {
-      cert = net::X509Certificate::CreateFromDERCertChain(*der_certs);
-      EXPECT_TRUE(cert);
-    }
+    auto cert_chain = SignedExchangeCertificateChain::Parse(cert_str_);
+    EXPECT_TRUE(cert_chain);
 
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), cert));
+        FROM_HERE, base::BindOnce(std::move(callback), std::move(cert_chain)));
     return nullptr;
   }
 
@@ -110,7 +106,8 @@ class SignedExchangeHandlerTest
         "application/signed-exchange;v=b0", std::move(source),
         base::BindOnce(&SignedExchangeHandlerTest::OnHeaderFound,
                        base::Unretained(this)),
-        std::move(cert_fetcher_factory), request_context_getter_);
+        std::move(cert_fetcher_factory), request_context_getter_,
+        nullptr /* devtools_proxy */);
   }
 
   void TearDown() override {
@@ -177,8 +174,7 @@ class SignedExchangeHandlerTest
                      const GURL&,
                      const std::string&,
                      const network::ResourceResponseHead& resource_response,
-                     std::unique_ptr<net::SourceStream> payload_stream,
-                     base::Optional<net::SSLInfo>) {
+                     std::unique_ptr<net::SourceStream> payload_stream) {
     read_header_ = true;
     error_ = error;
     resource_response_ = resource_response;

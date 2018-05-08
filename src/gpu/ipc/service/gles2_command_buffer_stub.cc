@@ -4,6 +4,7 @@
 
 #include "gpu/ipc/service/gles2_command_buffer_stub.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -12,7 +13,6 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -22,6 +22,7 @@
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/swap_buffers_flags.h"
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/gl_state_restorer_impl.h"
 #include "gpu/command_buffer/service/image_manager.h"
@@ -46,6 +47,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_switches_util.h"
 #include "ui/gl/gl_workarounds.h"
 #include "ui/gl/init/gl_factory.h"
 
@@ -335,7 +337,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   }
 
   if (manager->gpu_preferences().enable_gpu_service_logging) {
-    gles2_decoder_->set_log_commands(true);
+    gles2_decoder_->SetLogCommands(true);
   }
 
   const size_t kSharedStateSize = sizeof(CommandBufferSharedState);
@@ -401,6 +403,7 @@ void GLES2CommandBufferStub::SetSnapshotRequestedCallback(
 
 void GLES2CommandBufferStub::UpdateVSyncParameters(base::TimeTicks timebase,
                                                    base::TimeDelta interval) {
+  DCHECK(!gl::IsPresentationCallbackEnabled());
   Send(new GpuCommandBufferMsg_UpdateVSyncParameters(route_id_, timebase,
                                                      interval));
 }
@@ -408,7 +411,13 @@ void GLES2CommandBufferStub::UpdateVSyncParameters(base::TimeTicks timebase,
 void GLES2CommandBufferStub::BufferPresented(
     uint64_t swap_id,
     const gfx::PresentationFeedback& feedback) {
-  Send(new GpuCommandBufferMsg_BufferPresented(route_id_, swap_id, feedback));
+  DCHECK(gl::IsPresentationCallbackEnabled());
+  if (pending_swaps_.front() & gpu::SwapBuffersFlags::kPresentationFeedback ||
+      (pending_swaps_.front() & gpu::SwapBuffersFlags::kVSyncParams &&
+       feedback.flags & gfx::PresentationFeedback::kVSync)) {
+    Send(new GpuCommandBufferMsg_BufferPresented(route_id_, swap_id, feedback));
+  }
+  pending_swaps_.pop_front();
 }
 
 void GLES2CommandBufferStub::AddFilter(IPC::MessageFilter* message_filter) {
@@ -432,6 +441,11 @@ void GLES2CommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
 void GLES2CommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
                                                  bool is_lost) {
   gles2_decoder_->ReturnFrontBuffer(mailbox, is_lost);
+}
+
+void GLES2CommandBufferStub::OnSwapBuffers(uint32_t flags) {
+  if (gl::IsPresentationCallbackEnabled())
+    pending_swaps_.push_back(flags);
 }
 
 }  // namespace gpu

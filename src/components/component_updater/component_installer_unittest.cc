@@ -58,7 +58,7 @@ constexpr base::FilePath::CharType relative_install_dir[] =
 
 base::FilePath test_file(const char* file) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   return path.AppendASCII("components")
       .AppendASCII("test")
       .AppendASCII("data")
@@ -72,7 +72,7 @@ class MockUpdateClient : public UpdateClient {
 
   void Install(const std::string& id,
                CrxDataCallback crx_data_callback,
-               Callback callback) {
+               Callback callback) override {
     DoInstall(id, std::move(crx_data_callback));
     std::move(callback).Run(update_client::Error::NONE);
   }
@@ -80,7 +80,7 @@ class MockUpdateClient : public UpdateClient {
   void Update(const std::vector<std::string>& ids,
               CrxDataCallback crx_data_callback,
               bool is_foreground,
-              Callback callback) {
+              Callback callback) override {
     DoUpdate(ids, std::move(crx_data_callback));
     std::move(callback).Run(update_client::Error::NONE);
   }
@@ -88,7 +88,7 @@ class MockUpdateClient : public UpdateClient {
   void SendUninstallPing(const std::string& id,
                          const base::Version& version,
                          int reason,
-                         Callback callback) {
+                         Callback callback) override {
     DoSendUninstallPing(id, version, reason);
     std::move(callback).Run(update_client::Error::NONE);
   }
@@ -311,7 +311,7 @@ TEST_F(ComponentInstallerTest, UnpackPathInstallSuccess) {
 
   base::ScopedPathOverride scoped_path_override(DIR_COMPONENT_USER);
   base::FilePath base_dir;
-  EXPECT_TRUE(PathService::Get(DIR_COMPONENT_USER, &base_dir));
+  EXPECT_TRUE(base::PathService::Get(DIR_COMPONENT_USER, &base_dir));
   base_dir = base_dir.Append(relative_install_dir);
   EXPECT_TRUE(base::CreateDirectory(base_dir));
   installer->Install(

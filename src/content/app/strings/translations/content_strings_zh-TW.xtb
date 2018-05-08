@@ -94,6 +94,7 @@
 <translation id="5034860022980953847">進度指標</translation>
 <translation id="5117590920725113268">顯示下一個月</translation>
 <translation id="512758898067543763">列標題</translation>
+<translation id="5153163864850940242">目前在子母畫面模式中播放這部影片</translation>
 <translation id="5164977714490026579">值必須大於或等於 <ph name="MINIMUM" />。</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">請輸入「<ph name="ATSIGN" />」後面的部分。「<ph name="INVALIDADDRESS" />」不是完整值。</translation>
@@ -124,10 +125,9 @@
 <translation id="6404546809543547843">音訊時間點拖曳工具</translation>
 <translation id="648732519525291180">時間選擇器</translation>
 <translation id="6550675742724504774">選項</translation>
-<translation id="6564313821541007458">目前在子母畫面模式中</translation>
 <translation id="658823671542763450">進入全螢幕</translation>
 <translation id="663493177488814956">資訊提供</translation>
-<translation id="6637586476836377253">紀錄</translation>
+<translation id="6637586476836377253">記錄</translation>
 <translation id="6643016212128521049">清除</translation>
 <translation id="668171684555832681">其他...</translation>
 <translation id="6692633176391053278">步進器</translation>

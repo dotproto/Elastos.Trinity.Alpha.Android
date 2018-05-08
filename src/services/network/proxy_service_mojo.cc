@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/proxy_resolution/network_delegate_error_observer.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
@@ -17,7 +16,8 @@
 
 namespace network {
 
-std::unique_ptr<net::ProxyResolutionService> CreateProxyServiceUsingMojoFactory(
+std::unique_ptr<net::ProxyResolutionService>
+CreateProxyResolutionServiceUsingMojoFactory(
     proxy_resolver::mojom::ProxyResolverFactoryPtr mojo_proxy_factory,
     std::unique_ptr<net::ProxyConfigService> proxy_config_service,
     std::unique_ptr<net::PacFileFetcher> pac_file_fetcher,

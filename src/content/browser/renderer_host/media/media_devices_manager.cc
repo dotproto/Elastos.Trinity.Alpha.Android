@@ -95,6 +95,21 @@ std::string VideoLabelWithoutModelID(const std::string& label) {
   return label.substr(0, idx - 1);
 }
 
+bool LabelHasUSBModel(const std::string& label) {
+  return label.size() >= 11 && label[label.size() - 11] == '(' &&
+         label[label.size() - 6] == ':' && label[label.size() - 1] == ')';
+}
+
+std::string GetUSBModelFromLabel(const std::string& label) {
+  DCHECK(LabelHasUSBModel(label));
+  return label.substr(label.size() - 10, 9);
+}
+
+bool IsRealAudioDeviceID(const std::string& device_id) {
+  return !media::AudioDeviceDescription::IsDefaultDevice(device_id) &&
+         !media::AudioDeviceDescription::IsCommunicationsDevice(device_id);
+}
+
 }  // namespace
 
 std::string GuessVideoGroupID(const MediaDeviceInfoArray& audio_infos,
@@ -106,25 +121,55 @@ std::string GuessVideoGroupID(const MediaDeviceInfoArray& audio_infos,
   if (video_label.size() <= 3)
     return video_info.device_id;
 
-  auto equals_lambda = [&video_label](const MediaDeviceInfo& info) {
-    return info.label.find(video_label) != std::string::npos;
-  };
+  std::function<bool(const MediaDeviceInfo&)>
+      video_label_is_included_in_audio_label =
+          [&video_label](const MediaDeviceInfo& audio_info) {
+            return audio_info.label.find(video_label) != std::string::npos;
+          };
 
-  auto it_first =
-      std::find_if(audio_infos.begin(), audio_infos.end(), equals_lambda);
-  if (it_first == audio_infos.end())
-    return video_info.device_id;
+  bool video_has_usb_model = LabelHasUSBModel(video_info.label);
+  std::string video_usb_model = video_has_usb_model
+                                    ? GetUSBModelFromLabel(video_info.label)
+                                    : std::string();
+  std::function<bool(const MediaDeviceInfo&)> usb_model_matches =
+      [video_has_usb_model,
+       &video_usb_model](const MediaDeviceInfo& audio_info) {
+        return video_has_usb_model && LabelHasUSBModel(audio_info.label)
+                   ? video_usb_model == GetUSBModelFromLabel(audio_info.label)
+                   : false;
+      };
 
-  auto it = it_first;
-  while ((it = std::find_if(it + 1, audio_infos.end(), equals_lambda)) !=
-         audio_infos.end()) {
-    // If the label appears with more than one group ID, it is impossible to
-    // know which group ID is the correct one.
-    if (it->group_id != it_first->group_id)
-      return video_info.device_id;
+  for (auto* lambda :
+       {&video_label_is_included_in_audio_label, &usb_model_matches}) {
+    // The label for the default and communication audio devices may contain the
+    // same label as the real devices, so they should be ignored when trying to
+    // find unique matches.
+    auto real_device_matches = [lambda](const MediaDeviceInfo& audio_info) {
+      return IsRealAudioDeviceID(audio_info.device_id) && (*lambda)(audio_info);
+    };
+    auto it_first = std::find_if(audio_infos.begin(), audio_infos.end(),
+                                 real_device_matches);
+    if (it_first == audio_infos.end())
+      continue;
+
+    auto it = it_first;
+    bool duplicate_found = false;
+    while ((it = std::find_if(it + 1, audio_infos.end(),
+                              real_device_matches)) != audio_infos.end()) {
+      // If there is more than one match, it is impossible to know which group
+      // ID is the correct one. This may occur if multiple devices of the same
+      // model are installed.
+      if (it->group_id != it_first->group_id) {
+        duplicate_found = true;
+        break;
+      }
+    }
+
+    if (!duplicate_found)
+      return it_first->group_id;
   }
 
-  return it_first->group_id;
+  return video_info.device_id;
 }
 
 struct MediaDevicesManager::EnumerationRequest {
@@ -556,16 +601,6 @@ MediaDevicesManager::ComputeVideoInputCapabilities(
     capabilities->formats = GetVideoInputFormats(device_info.device_id,
                                                  false /* try_in_use_first */);
     capabilities->facing_mode = device_info.video_facing;
-#if defined(OS_ANDROID)
-    // On Android, the facing mode is not available in the |facing| field,
-    // but is available as part of the label.
-    // TODO(guidou): Remove this code once the |facing| field is supported
-    // on Android. See http://crbug.com/672856.
-    if (device_info.label.find("front") != std::string::npos)
-      capabilities->facing_mode = media::MEDIA_VIDEO_FACING_USER;
-    else if (device_info.label.find("back") != std::string::npos)
-      capabilities->facing_mode = media::MEDIA_VIDEO_FACING_ENVIRONMENT;
-#endif
     video_input_capabilities.push_back(std::move(capabilities));
   }
   return video_input_capabilities;
@@ -766,34 +801,39 @@ void MediaDevicesManager::NotifyDeviceChangeSubscribers(
   DCHECK(IsValidMediaDeviceType(type));
 
   for (auto& subscription : subscriptions_) {
-    SubscriptionRequest* request = &subscription.second;
-    if (request->subscribe_types[type]) {
+    const SubscriptionRequest& request = subscription.second;
+    if (request.subscribe_types[type]) {
       base::PostTaskAndReplyWithResult(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI).get(),
           FROM_HERE,
-          base::BindOnce(salt_and_origin_callback_, request->render_process_id,
-                         request->render_frame_id),
+          base::BindOnce(salt_and_origin_callback_, request.render_process_id,
+                         request.render_frame_id),
           base::BindOnce(&MediaDevicesManager::CheckPermissionForDeviceChange,
-                         weak_factory_.GetWeakPtr(), request, type, snapshot));
+                         weak_factory_.GetWeakPtr(), subscription.first,
+                         request.render_process_id, request.render_frame_id,
+                         type, snapshot));
     }
   }
 }
 
 void MediaDevicesManager::CheckPermissionForDeviceChange(
-    SubscriptionRequest* request,
+    uint32_t subscription_id,
+    int render_process_id,
+    int render_frame_id,
     MediaDeviceType type,
     const MediaDeviceInfoArray& device_infos,
     const std::pair<std::string, url::Origin>& salt_and_origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   permission_checker_->CheckPermission(
-      type, request->render_process_id, request->render_frame_id,
+      type, render_process_id, render_frame_id,
       base::BindOnce(&MediaDevicesManager::NotifyDeviceChange,
-                     weak_factory_.GetWeakPtr(), request, type, device_infos,
-                     salt_and_origin.first, salt_and_origin.second));
+                     weak_factory_.GetWeakPtr(), subscription_id, type,
+                     device_infos, salt_and_origin.first,
+                     salt_and_origin.second));
 }
 
 void MediaDevicesManager::NotifyDeviceChange(
-    SubscriptionRequest* request,
+    uint32_t subscription_id,
     MediaDeviceType type,
     const MediaDeviceInfoArray& device_infos,
     std::string device_id_salt,
@@ -801,8 +841,13 @@ void MediaDevicesManager::NotifyDeviceChange(
     bool has_permission) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(IsValidMediaDeviceType(type));
-  std::string group_id_salt = request->group_id_salt_base + device_id_salt;
-  request->listener->OnDevicesChanged(
+  auto it = subscriptions_.find(subscription_id);
+  if (it == subscriptions_.end())
+    return;
+
+  const SubscriptionRequest& request = it->second;
+  std::string group_id_salt = request.group_id_salt_base + device_id_salt;
+  request.listener->OnDevicesChanged(
       type, TranslateMediaDeviceInfoArray(has_permission, device_id_salt,
                                           group_id_salt, security_origin,
                                           device_infos));

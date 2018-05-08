@@ -5,19 +5,14 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 
 #include "base/mac/foundation_util.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-namespace {
-// The inner insets of the View content.
-const CGFloat kMargin = 16;
-
-// The vertical spacing between text labels.
-const CGFloat kVerticalSpacing = 2.0;
-}
 
 @implementation TableViewTextHeaderFooterItem
 @synthesize subtitleText = _subtitleText;
@@ -27,6 +22,8 @@ const CGFloat kVerticalSpacing = 2.0;
   self = [super initWithType:type];
   if (self) {
     self.cellClass = [TableViewTextHeaderFooterView class];
+    self.accessibilityTraits |=
+        UIAccessibilityTraitButton | UIAccessibilityTraitHeader;
   }
   return self;
 }
@@ -42,13 +39,20 @@ const CGFloat kVerticalSpacing = 2.0;
       base::mac::ObjCCastStrict<TableViewTextHeaderFooterView>(headerFooter);
   header.textLabel.text = self.text;
   header.subtitleLabel.text = self.subtitleText;
+  header.accessibilityLabel = self.text;
 }
 
 @end
 
 #pragma mark - TableViewTextHeaderFooter
 
+@interface TableViewTextHeaderFooterView ()
+// Animator that handles all cell animations.
+@property(strong, nonatomic) UIViewPropertyAnimator* cellAnimator;
+@end
+
 @implementation TableViewTextHeaderFooterView
+@synthesize cellAnimator = _cellAnimator;
 @synthesize subtitleLabel = _subtitleLabel;
 @synthesize textLabel = _textLabel;
 
@@ -67,7 +71,6 @@ const CGFloat kVerticalSpacing = 2.0;
     UIStackView* verticalStack = [[UIStackView alloc]
         initWithArrangedSubviews:@[ _textLabel, _subtitleLabel ]];
     verticalStack.axis = UILayoutConstraintAxisVertical;
-    verticalStack.spacing = kVerticalSpacing;
     verticalStack.translatesAutoresizingMaskIntoConstraints = NO;
 
     // Container View.
@@ -83,16 +86,16 @@ const CGFloat kVerticalSpacing = 2.0;
       // Container Constraints.
       [containerView.leadingAnchor
           constraintEqualToAnchor:self.contentView.leadingAnchor
-                         constant:kMargin],
+                         constant:kTableViewHorizontalSpacing],
       [containerView.trailingAnchor
           constraintEqualToAnchor:self.contentView.trailingAnchor
-                         constant:-kMargin],
+                         constant:-kTableViewHorizontalSpacing],
       [containerView.topAnchor
           constraintGreaterThanOrEqualToAnchor:self.contentView.topAnchor
-                                      constant:kMargin],
+                                      constant:kTableViewVerticalSpacing],
       [containerView.bottomAnchor
           constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor
-                                   constant:-kMargin],
+                                   constant:-kTableViewVerticalSpacing],
       [containerView.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
       // Vertical StackView Constraints.
@@ -106,6 +109,29 @@ const CGFloat kVerticalSpacing = 2.0;
     ]];
   }
   return self;
+}
+
+- (void)animateHighlight {
+  UIColor* originalBackgroundColor = self.contentView.backgroundColor;
+  self.cellAnimator = [[UIViewPropertyAnimator alloc]
+      initWithDuration:kTableViewCellSelectionAnimationDuration
+                 curve:UIViewAnimationCurveLinear
+            animations:^{
+              self.contentView.backgroundColor =
+                  UIColorFromRGB(kTableViewHighlightedCellColor,
+                                 kTableViewHighlightedCellColorAlpha);
+            }];
+  __weak TableViewTextHeaderFooterView* weakSelf = self;
+  [self.cellAnimator addCompletion:^(UIViewAnimatingPosition finalPosition) {
+    weakSelf.contentView.backgroundColor = originalBackgroundColor;
+  }];
+  [self.cellAnimator startAnimation];
+}
+
+- (void)prepareForReuse {
+  [super prepareForReuse];
+  if (self.cellAnimator.isRunning)
+    [self.cellAnimator stopAnimation:YES];
 }
 
 @end

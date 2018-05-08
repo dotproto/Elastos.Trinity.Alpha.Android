@@ -17,7 +17,6 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/log/net_log_with_source.h"
-#include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -28,7 +27,6 @@ class CertVerifyResult;
 class DrainableIOBuffer;
 class SourceStream;
 class URLRequestContextGetter;
-class X509Certificate;
 }  // namespace net
 
 namespace network {
@@ -39,6 +37,8 @@ namespace content {
 
 class SignedExchangeCertFetcher;
 class SignedExchangeCertFetcherFactory;
+class SignedExchangeCertificateChain;
+class SignedExchangeDevToolsProxy;
 
 // IMPORTANT: Currenly SignedExchangeHandler partially implements the verifying
 // logic.
@@ -46,13 +46,12 @@ class SignedExchangeCertFetcherFactory;
 class CONTENT_EXPORT SignedExchangeHandler {
  public:
   // TODO(https://crbug.com/803774): Add verification status here.
-  using ExchangeHeadersCallback =
-      base::OnceCallback<void(net::Error error,
-                              const GURL& request_url,
-                              const std::string& request_method,
-                              const network::ResourceResponseHead&,
-                              std::unique_ptr<net::SourceStream> payload_stream,
-                              base::Optional<net::SSLInfo>)>;
+  using ExchangeHeadersCallback = base::OnceCallback<void(
+      net::Error error,
+      const GURL& request_url,
+      const std::string& request_method,
+      const network::ResourceResponseHead&,
+      std::unique_ptr<net::SourceStream> payload_stream)>;
 
   // TODO(https://crbug.com/817187): Find a more sophisticated way to use a
   // MockCertVerifier in browser tests instead of using the static method.
@@ -70,7 +69,8 @@ class CONTENT_EXPORT SignedExchangeHandler {
       std::unique_ptr<net::SourceStream> body,
       ExchangeHeadersCallback headers_callback,
       std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory,
-      scoped_refptr<net::URLRequestContextGetter> request_context_getter);
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy);
   ~SignedExchangeHandler();
 
  protected:
@@ -92,7 +92,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
   void RunErrorCallback(net::Error);
 
   void OnCertReceived(
-      scoped_refptr<net::X509Certificate> cert);
+      std::unique_ptr<SignedExchangeCertificateChain> cert_chain);
   void OnCertVerifyComplete(int result);
 
   ExchangeHeadersCallback headers_callback_;
@@ -112,7 +112,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
 
-  scoped_refptr<net::X509Certificate> unverified_cert_;
+  std::unique_ptr<SignedExchangeCertificateChain> unverified_cert_chain_;
 
   // CertVerifyResult must be freed after the Request has been destructed.
   // So |cert_verify_result_| must be written before |cert_verifier_request_|.
@@ -122,6 +122,8 @@ class CONTENT_EXPORT SignedExchangeHandler {
   // TODO(https://crbug.com/767450): figure out what we should do for NetLog
   // with Network Service.
   net::NetLogWithSource net_log_;
+
+  std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy_;
 
   base::WeakPtrFactory<SignedExchangeHandler> weak_factory_;
 

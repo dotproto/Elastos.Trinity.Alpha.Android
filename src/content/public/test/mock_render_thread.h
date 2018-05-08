@@ -13,12 +13,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "components/viz/test/test_shared_bitmap_manager.h"
 #include "content/public/renderer/render_thread.h"
 #include "ipc/ipc_test_sink.h"
 #include "ipc/message_filter.h"
 #include "services/service_manager/public/mojom/connector.mojom.h"
-#include "third_party/WebKit/public/web/WebPopupType.h"
+#include "third_party/blink/public/web/web_popup_type.h"
 
 #if defined(OS_MACOSX)
 #include "mojo/public/cpp/system/buffer.h"
@@ -75,7 +74,6 @@ class MockRenderThread : public RenderThread {
   void RecordComputedAction(const std::string& action) override;
   std::unique_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
       size_t buffer_size) override;
-  viz::SharedBitmapManager* GetSharedBitmapManager() override;
   void RegisterExtension(v8::Extension* extension) override;
   void ScheduleIdleHandler(int64_t initial_delay_ms) override;
   void IdleHandler() override;
@@ -94,7 +92,6 @@ class MockRenderThread : public RenderThread {
 #elif defined(OS_MACOSX)
   bool LoadFont(const base::string16& font_name,
                 float font_point_size,
-                uint32_t* out_buffer_size,
                 mojo::ScopedSharedBufferHandle* out_font_data,
                 uint32_t* out_font_id) override;
 #endif
@@ -171,7 +168,6 @@ class MockRenderThread : public RenderThread {
   // Observers to notify.
   base::ObserverList<RenderThreadObserver> observers_;
 
-  viz::TestSharedBitmapManager shared_bitmap_manager_;
   std::unique_ptr<service_manager::Connector> connector_;
   service_manager::mojom::ConnectorRequest pending_connector_request_;
 

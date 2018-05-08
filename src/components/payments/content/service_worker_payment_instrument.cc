@@ -109,6 +109,13 @@ void ServiceWorkerPaymentInstrument::ValidateCanMakePayment(
     return;
   }
 
+  // Do not send CanMakePayment event to payment apps that have not been
+  // explicitly verified.
+  if (!stored_payment_app_info_->has_explicitly_verified_methods) {
+    OnCanMakePayment(std::move(callback), true);
+    return;
+  }
+
   mojom::CanMakePaymentEventDataPtr event_data =
       CreateCanMakePaymentEventData();
   if (event_data.is_null()) {
@@ -202,8 +209,7 @@ void ServiceWorkerPaymentInstrument::InvokePaymentApp(Delegate* delegate) {
             : *(installable_web_app_info_->icon),
         installable_web_app_info_->sw_js_url,
         installable_web_app_info_->sw_scope,
-        installable_web_app_info_->sw_use_cache,
-        std::vector<std::string>(1, installable_enabled_method_),
+        installable_web_app_info_->sw_use_cache, installable_enabled_method_,
         base::BindOnce(&ServiceWorkerPaymentInstrument::OnPaymentAppInvoked,
                        weak_ptr_factory_.GetWeakPtr()));
   } else {

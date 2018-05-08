@@ -84,9 +84,9 @@ QuicEndpoint::QuicEndpoint(Simulator* simulator,
   connection_.SetSelfAddress(GetAddressFromName(name));
   connection_.set_visitor(this);
   connection_.SetEncrypter(ENCRYPTION_FORWARD_SECURE,
-                           new NullEncrypter(perspective));
+                           QuicMakeUnique<NullEncrypter>(perspective));
   connection_.SetDecrypter(ENCRYPTION_FORWARD_SECURE,
-                           new NullDecrypter(perspective));
+                           QuicMakeUnique<NullDecrypter>(perspective));
   connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
   connection_.SetDataProducer(&producer_);
   connection_.SetSessionNotifier(this);
@@ -102,6 +102,8 @@ QuicEndpoint::QuicEndpoint(Simulator* simulator,
   CryptoHandshakeMessage peer_hello;
   peer_hello.SetValue(kICSL,
                       static_cast<uint32_t>(kMaximumIdleTimeoutSecs - 1));
+  peer_hello.SetValue(kMIDS,
+                      static_cast<uint32_t>(kDefaultMaxStreamsPerConnection));
   QuicConfig config;
   QuicErrorCode error_code = config.ProcessPeerHello(
       peer_hello, perspective == Perspective::IS_CLIENT ? SERVER : CLIENT,

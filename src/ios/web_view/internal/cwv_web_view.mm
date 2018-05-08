@@ -7,6 +7,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/json/json_writer.h"
+#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
@@ -26,9 +28,11 @@
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
+#include "ios/web_view/cwv_web_view_features.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_controller_internal.h"
 #import "ios/web_view/internal/cwv_html_element_internal.h"
 #import "ios/web_view/internal/cwv_navigation_action_internal.h"
+#import "ios/web_view/internal/cwv_script_command_internal.h"
 #import "ios/web_view/internal/cwv_scroll_view_internal.h"
 #import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
 #import "ios/web_view/internal/translate/cwv_translation_controller_internal.h"
@@ -52,7 +56,25 @@
 namespace {
 // A key used in NSCoder to store the session storage object.
 NSString* const kSessionStorageKey = @"sessionStorage";
+
+// Converts base::DictionaryValue to NSDictionary.
+NSDictionary* NSDictionaryFromDictionaryValue(
+    const base::DictionaryValue& value) {
+  std::string json;
+  if (!base::JSONWriter::Write(value, &json)) {
+    NOTREACHED() << "Failed to convert base::DictionaryValue to JSON";
+    return nil;
+  }
+
+  NSData* json_data = [NSData dataWithBytes:json.c_str() length:json.length()];
+  NSDictionary* ns_dictionary =
+      [NSJSONSerialization JSONObjectWithData:json_data
+                                      options:kNilOptions
+                                        error:nil];
+  DCHECK(ns_dictionary) << "Failed to convert JSON to NSDictionary";
+  return ns_dictionary;
 }
+}  // namespace
 
 @interface CWVWebView ()<CRWWebStateDelegate, CRWWebStateObserver> {
   CWVWebViewConfiguration* _configuration;
@@ -76,6 +98,9 @@ NSString* const kSessionStorageKey = @"sessionStorage";
 @property(nonatomic, readwrite) BOOL loading;
 @property(nonatomic, readwrite, copy) NSString* title;
 @property(nonatomic, readwrite) NSURL* visibleURL;
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
+@property(nonatomic, readonly) CWVAutofillController* autofillController;
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
 // Updates the availability of the back/forward navigation properties exposed
 // through |canGoBack| and |canGoForward|.
@@ -84,10 +109,14 @@ NSString* const kSessionStorageKey = @"sessionStorage";
 - (void)updateCurrentURLs;
 // Updates |title| property.
 - (void)updateTitle;
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 // Returns a new CWVAutofillController created from |_webState|.
 - (CWVAutofillController*)newAutofillController;
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 // Returns a new CWVTranslationController created from |_webState|.
 - (CWVTranslationController*)newTranslationController;
+// Updates |_webState| visiblity.
+- (void)updateWebStateVisibility;
 
 @end
 
@@ -95,7 +124,9 @@ static NSString* gUserAgentProduct = nil;
 
 @implementation CWVWebView
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 @synthesize autofillController = _autofillController;
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 @synthesize canGoBack = _canGoBack;
 @synthesize canGoForward = _canGoForward;
 @synthesize configuration = _configuration;
@@ -206,14 +237,10 @@ static NSString* gUserAgentProduct = nil;
 
 #pragma mark - UIView
 
-- (void)willMoveToSuperview:(UIView*)newSuperview {
-  [super willMoveToSuperview:newSuperview];
+- (void)didMoveToSuperview {
+  [super didMoveToSuperview];
 
-  if (newSuperview) {
-    _webState->WasShown();
-  } else {
-    _webState->WasHidden();
-  }
+  [self updateWebStateVisibility];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -388,6 +415,29 @@ static NSString* gUserAgentProduct = nil;
   }
 }
 
+- (void)addScriptCommandHandler:(id<CWVScriptCommandHandler>)handler
+                  commandPrefix:(NSString*)commandPrefix {
+  CWVWebView* __weak weakSelf = self;
+  const web::WebState::ScriptCommandCallback callback = base::BindBlockArc(
+      ^bool(const base::DictionaryValue& content, const GURL& mainDocumentURL,
+            bool userInteracting) {
+        NSDictionary* nsContent = NSDictionaryFromDictionaryValue(content);
+        CWVScriptCommand* command = [[CWVScriptCommand alloc]
+            initWithContent:nsContent
+            mainDocumentURL:net::NSURLWithGURL(mainDocumentURL)
+            userInteracting:userInteracting];
+        return [handler webView:weakSelf handleScriptCommand:command];
+      });
+
+  _webState->AddScriptCommandCallback(callback,
+                                      base::SysNSStringToUTF8(commandPrefix));
+}
+
+- (void)removeScriptCommandHandlerForCommandPrefix:(NSString*)commandPrefix {
+  _webState->RemoveScriptCommandCallback(
+      base::SysNSStringToUTF8(commandPrefix));
+}
+
 #pragma mark - Translation
 
 - (CWVTranslationController*)translationController {
@@ -405,6 +455,7 @@ static NSString* gUserAgentProduct = nil;
       initWithTranslateClient:translateClient];
 }
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 #pragma mark - Autofill
 
 - (CWVAutofillController*)autofillController {
@@ -431,6 +482,7 @@ static NSString* gUserAgentProduct = nil;
                                        JSAutofillManager:JSAutofillManager
                                      JSSuggestionManager:JSSuggestionManager];
 }
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
 #pragma mark - Preserving and Restoring State
 
@@ -448,6 +500,14 @@ static NSString* gUserAgentProduct = nil;
 }
 
 #pragma mark - Private methods
+
+- (void)updateWebStateVisibility {
+  if (self.superview) {
+    _webState->WasShown();
+  } else {
+    _webState->WasHidden();
+  }
+}
 
 // Creates a WebState instance and assigns it to |_webState|.
 // It replaces the old |_webState| if any.
@@ -478,6 +538,8 @@ static NSString* gUserAgentProduct = nil;
   }
   _webState->AddObserver(_webStateObserver.get());
 
+  [self updateWebStateVisibility];
+
   _webStateDelegate = std::make_unique<web::WebStateDelegateBridge>(self);
   _webState->SetDelegate(_webStateDelegate.get());
 
@@ -498,12 +560,14 @@ static NSString* gUserAgentProduct = nil;
     _translationController.delegate = delegate;
   }
 
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
   // Recreate and restore the delegate only if previously lazily loaded.
   if (_autofillController) {
     id<CWVAutofillControllerDelegate> delegate = _autofillController.delegate;
     _autofillController = [self newAutofillController];
     _autofillController.delegate = delegate;
   }
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
   [self addInternalWebViewAsSubview];
 

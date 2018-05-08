@@ -31,9 +31,10 @@
 #include "content/renderer/render_process_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_main_platform_delegate.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "services/service_manager/sandbox/switches.h"
+#include "third_party/blink/public/platform/scheduler/web_main_thread_scheduler.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -56,7 +57,7 @@
 
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/message_loop/message_pump_mac.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_view.h"
 #endif  // OS_MACOSX
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -185,7 +186,8 @@ int RendererMain(const MainFunctionParams& parameters) {
 
   base::PlatformThread::SetName("CrRendererMain");
 
-  bool no_sandbox = command_line.HasSwitch(switches::kNoSandbox);
+  bool no_sandbox =
+      command_line.HasSwitch(service_manager::switches::kNoSandbox);
 
 #if defined(OS_ANDROID)
   // If we have any pending LibraryLoader histograms, record them.
@@ -201,8 +203,9 @@ int RendererMain(const MainFunctionParams& parameters) {
       initial_virtual_time = base::Time::FromDoubleT(initial_time);
     }
   }
-  std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler(
-      blink::scheduler::RendererScheduler::Create(initial_virtual_time));
+  std::unique_ptr<blink::scheduler::WebMainThreadScheduler>
+      main_thread_scheduler(blink::scheduler::WebMainThreadScheduler::Create(
+          initial_virtual_time));
 
   // PlatformInitialize uses FieldTrials, so this must happen later.
   platform.PlatformInitialize();
@@ -225,7 +228,7 @@ int RendererMain(const MainFunctionParams& parameters) {
     // instruction down.
     auto render_process = RenderProcessImpl::Create();
     RenderThreadImpl::Create(std::move(main_message_loop),
-                             std::move(renderer_scheduler));
+                             std::move(main_thread_scheduler));
 #endif
     bool run_loop = true;
     if (!no_sandbox)
@@ -233,7 +236,7 @@ int RendererMain(const MainFunctionParams& parameters) {
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
     auto render_process = RenderProcessImpl::Create();
     RenderThreadImpl::Create(std::move(main_message_loop),
-                             std::move(renderer_scheduler));
+                             std::move(main_thread_scheduler));
 #endif
 
     base::HighResolutionTimerManager hi_res_timer_manager;

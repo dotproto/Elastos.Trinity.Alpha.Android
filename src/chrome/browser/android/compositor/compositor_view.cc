@@ -249,9 +249,10 @@ void CompositorView::SetNeedsComposite(JNIEnv* env,
   compositor_->SetNeedsComposite();
 }
 
-void CompositorView::BrowserChildProcessHostDisconnected(
-    const content::ChildProcessData& data) {
-  LOG(WARNING) << "Child process disconnected (type=" << data.process_type
+void CompositorView::BrowserChildProcessKilled(
+    const content::ChildProcessData& data,
+    const content::ChildProcessTerminationInfo& info) {
+  LOG(WARNING) << "Child process died (type=" << data.process_type
                << ") pid=" << data.handle << ")";
   if (base::android::BuildInfo::GetInstance()->sdk_int() <=
           base::android::SDK_VERSION_JELLY_BEAN_MR2 &&
@@ -261,13 +262,6 @@ void CompositorView::BrowserChildProcessHostDisconnected(
     Java_CompositorView_onJellyBeanSurfaceDisconnectWorkaround(
         env, obj_, overlay_video_mode_);
   }
-}
-
-void CompositorView::BrowserChildProcessCrashed(
-    const content::ChildProcessData& data,
-    int exit_code) {
-  // The Android TERMINATION_STATUS_OOM_PROTECTED hack causes us to never go
-  // through here but through BrowserChildProcessHostDisconnected() instead.
 }
 
 void CompositorView::SetCompositorWindow(

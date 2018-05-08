@@ -84,6 +84,25 @@ mojo::ScopedSharedBufferHandle DuplicateAndCloseMappedBitmap(
     CollectMemoryUsageAndDie(size, format, memory->requested_size());
   }
 
+  memory->Close();
+
+  return mojo::WrapSharedMemoryHandle(
+      dupe_handle, memory->mapped_size(),
+      mojo::UnwrappedSharedMemoryHandleProtection::kReadWrite);
+}
+
+mojo::ScopedSharedBufferHandle DuplicateWithoutClosingMappedBitmap(
+    const base::SharedMemory* memory,
+    const gfx::Size& size,
+    ResourceFormat format) {
+  DCHECK(IsBitmapFormatSupported(format));
+  base::SharedMemoryHandle dupe_handle =
+      base::SharedMemory::DuplicateHandle(memory->handle());
+  if (!base::SharedMemory::IsHandleValid(dupe_handle)) {
+    DLOG(ERROR) << "Failed to duplicate shared memory handle for bitmap.";
+    CollectMemoryUsageAndDie(size, format, memory->requested_size());
+  }
+
   return mojo::WrapSharedMemoryHandle(
       dupe_handle, memory->mapped_size(),
       mojo::UnwrappedSharedMemoryHandleProtection::kReadWrite);

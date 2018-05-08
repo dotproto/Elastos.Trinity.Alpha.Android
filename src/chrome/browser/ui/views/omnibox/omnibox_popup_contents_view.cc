@@ -15,7 +15,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
+#include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.h"
@@ -32,6 +34,7 @@
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/path.h"
@@ -52,12 +55,8 @@ base::LazyInstance<gfx::ImageSkia>::DestructorAtExit g_bottom_shadow =
 
 constexpr int kPopupVerticalPadding = 4;
 
-bool IsRounded() {
-  return ui::MaterialDesignController::IsTouchOptimizedUiEnabled();
-}
-
 bool IsNarrow() {
-  return IsRounded() ||
+  return LocationBarView::IsRounded() ||
          base::FeatureList::IsEnabled(omnibox::kUIExperimentNarrowDropdown);
 }
 
@@ -95,9 +94,15 @@ class WidgetShrinkAnimation : public gfx::AnimationDelegate {
   WidgetShrinkAnimation(views::Widget* widget, const gfx::Rect& initial_bounds)
       : widget_(widget),
         size_animation_(this),
+        start_height_(0),
         target_bounds_(initial_bounds) {}
 
   void SetTargetBounds(const gfx::Rect& bounds) {
+    // Animate based on the last height set on the Widget. Don't query the
+    // Widget itself since it may be rounded to pixel coordinates on some scale
+    // factors.
+    start_height_ = GetHeightFromAnimation();
+
     // If we're animating and our target height changes, reset the animation.
     // NOTE: If we just reset blindly on _every_ update, then when the user
     // types rapidly we could get "stuck" trying repeatedly to animate shrinking
@@ -106,36 +111,41 @@ class WidgetShrinkAnimation : public gfx::AnimationDelegate {
       size_animation_.Reset();
     target_bounds_ = bounds;
 
-    // Animate the popup shrinking, but don't animate growing larger since
-    // that would make the popup feel less responsive.
-    start_bounds_ = widget_->GetWindowBoundsInScreen();
-    if (target_bounds_.height() < start_bounds_.height())
+    // Animate the popup shrinking, but don't animate growing larger since that
+    // would make the popup feel less responsive.
+    if (target_bounds_.height() < start_height_) {
       size_animation_.Show();
-    else
-      start_bounds_ = target_bounds_;
-
-    widget_->SetBounds(start_bounds_);
+      AnimationProgressed(&size_animation_);
+    } else {
+      widget_->SetBounds(target_bounds_);
+    }
   }
 
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override {
-    gfx::Rect current_frame_bounds = start_bounds_;
-    int total_height_delta = target_bounds_.height() - start_bounds_.height();
-    // Round |current_height_delta| away from zero instead of truncating so we
-    // won't leave single white pixels at the bottom of the popup when animating
-    // very small height differences. Note the delta is negative.
-    int current_height_delta = static_cast<int>(
-        size_animation_.GetCurrentValue() * total_height_delta - 0.5);
-    current_frame_bounds.set_height(current_frame_bounds.height() +
-                                    current_height_delta);
+    gfx::Rect current_frame_bounds = target_bounds_;
+    current_frame_bounds.set_height(GetHeightFromAnimation());
     widget_->SetBounds(current_frame_bounds);
   }
 
  private:
+  int GetHeightFromAnimation() const {
+    if (!size_animation_.is_animating())
+      return target_bounds_.height();
+
+    // Round |current_height_delta| away from zero instead of truncating so we
+    // won't leave single white pixels at the bottom of the popup when animating
+    // very small height differences. Note the delta is negative.
+    int total_height_delta = target_bounds_.height() - start_height_;
+    return start_height_ +
+           static_cast<int>(
+               size_animation_.GetCurrentValue() * total_height_delta - 0.5);
+  }
+
   views::Widget* widget_;  // Weak. Owns |this|.
 
   gfx::SlideAnimation size_animation_;
-  gfx::Rect start_bounds_;
+  int start_height_;
   gfx::Rect target_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(WidgetShrinkAnimation);
@@ -166,7 +176,7 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
     params.bounds = bounds;
     params.context = parent_widget->GetNativeWindow();
 
-    if (IsRounded())
+    if (LocationBarView::IsRounded())
       RoundedOmniboxResultsFrame::OnBeforeWidgetInit(&params);
     else
       animator_ = std::make_unique<WidgetShrinkAnimation>(this, bounds);
@@ -175,9 +185,9 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
   }
 
   void SetPopupContentsView(OmniboxPopupContentsView* contents) {
-    if (IsRounded()) {
+    if (LocationBarView::IsRounded()) {
       SetContentsView(new RoundedOmniboxResultsFrame(
-          contents, contents->location_bar_view_));
+          contents, contents->location_bar_view_->tint()));
     } else {
       SetContentsView(contents);
     }
@@ -237,10 +247,32 @@ void OmniboxPopupContentsView::OpenMatch(size_t index,
                            GURL(), base::string16(), index);
 }
 
+void OmniboxPopupContentsView::OpenMatch(WindowOpenDisposition disposition) {
+  size_t index = model_->selected_line();
+  omnibox_view_->OpenMatch(model_->result().match_at(index), disposition,
+                           GURL(), base::string16(), index);
+}
+
 gfx::Image OmniboxPopupContentsView::GetMatchIcon(
     const AutocompleteMatch& match,
     SkColor vector_icon_color) const {
-  return model_->GetMatchIcon(match, vector_icon_color);
+  gfx::Image icon = model_->GetMatchIcon(match, vector_icon_color);
+  if (icon.IsEmpty())
+    return icon;
+
+  const int icon_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
+  // In touch mode, icons are 20x20. FaviconCache and ExtensionIconManager both
+  // guarantee favicons and extension icons will be 16x16, so add extra padding
+  // around them to align them vertically with the other vector icons.
+  DCHECK_GE(icon_size, icon.Height());
+  DCHECK_GE(icon_size, icon.Width());
+  gfx::Insets padding_border((icon_size - icon.Height()) / 2,
+                             (icon_size - icon.Width()) / 2);
+  if (!padding_border.IsEmpty()) {
+    return gfx::Image(gfx::CanvasImageSource::CreatePadded(*icon.ToImageSkia(),
+                                                           padding_border));
+  }
+  return icon;
 }
 
 OmniboxTint OmniboxPopupContentsView::GetTint() const {
@@ -256,6 +288,14 @@ void OmniboxPopupContentsView::SetSelectedLine(size_t index) {
 
 bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
   return index == model_->selected_line();
+}
+
+bool OmniboxPopupContentsView::IsButtonSelected() const {
+  return model_->selected_line_state() == OmniboxPopupModel::TAB_SWITCH;
+}
+
+void OmniboxPopupContentsView::UnselectButton() {
+  model_->SetSelectedLineState(OmniboxPopupModel::NORMAL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -307,9 +347,9 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     const AutocompleteMatch& match = GetMatchAtIndex(i);
     view->SetMatch(match);
     view->SetVisible(true);
-    if (match.answer && !model_->answer_bitmap().isNull()) {
-      view->SetAnswerImage(
-          gfx::ImageSkia::CreateFrom1xBitmap(model_->answer_bitmap()));
+    const SkBitmap* bitmap = model_->RichSuggestionBitmapAt(i);
+    if (bitmap != nullptr) {
+      view->SetRichSuggestionImage(gfx::ImageSkia::CreateFrom1xBitmap(*bitmap));
     }
   }
 
@@ -317,7 +357,7 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     child_at(i)->SetVisible(false);
 
   gfx::Rect new_target_bounds = UpdateMarginsAndGetTargetBounds();
-  if (IsNarrow() && !IsRounded()) {
+  if (IsNarrow() && !LocationBarView::IsRounded()) {
     SkColor background_color =
         GetOmniboxColor(OmniboxPart::RESULTS_BACKGROUND, GetTint());
     auto border = std::make_unique<views::BubbleBorder>(
@@ -441,11 +481,12 @@ void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
 // OmniboxPopupContentsView, private:
 
 gfx::Rect OmniboxPopupContentsView::UpdateMarginsAndGetTargetBounds() {
-  if (IsRounded()) {
+  if (LocationBarView::IsRounded()) {
     // The rounded popup is always offset the same amount from the omnibox.
     gfx::Rect content_rect = location_bar_view_->GetBoundsInScreen();
-    content_rect.Inset(
-        -RoundedOmniboxResultsFrame::GetAlignmentInsets(location_bar_view_));
+    gfx::Insets popup_insets =
+        -RoundedOmniboxResultsFrame::kLocationBarAlignmentInsets;
+    content_rect.Inset(popup_insets);
     content_rect.set_height(CalculatePopupHeight());
     return content_rect;
   }
@@ -492,9 +533,8 @@ int OmniboxPopupContentsView::CalculatePopupHeight() {
   // amount of space between the text and the popup border as there is in the
   // interior between each row of text.
   int height = popup_height;
-  if (IsRounded()) {
-    height += RoundedOmniboxResultsFrame::GetAlignmentInsets(location_bar_view_)
-                  .height();
+  if (LocationBarView::IsRounded()) {
+    height += RoundedOmniboxResultsFrame::GetNonResultSectionHeight();
   } else {
     height += kPopupVerticalPadding * 2 + g_top_shadow.Get().height() +
               g_bottom_shadow.Get().height();
@@ -504,7 +544,7 @@ int OmniboxPopupContentsView::CalculatePopupHeight() {
 
 void OmniboxPopupContentsView::LayoutChildren() {
   gfx::Rect contents_rect = GetContentsBounds();
-  if (!IsRounded()) {
+  if (!LocationBarView::IsRounded()) {
     contents_rect.Inset(gfx::Insets(kPopupVerticalPadding, 0));
     contents_rect.Inset(start_margin_, g_top_shadow.Get().height(), end_margin_,
                         0);

@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/public/c/system/buffer.h"
 #include "mojo/public/c/system/data_pipe.h"
@@ -14,10 +13,16 @@
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/c/system/platform_handle.h"
 
-using mojo::edk::internal::g_core;
+namespace {
 
-// Definitions of the system functions.
+mojo::edk::Core* g_core;
+
 extern "C" {
+
+MojoResult MojoInitializeImpl(const struct MojoInitializeOptions* options) {
+  NOTREACHED() << "Do not call MojoInitialize() as an EDK embedder!";
+  return MOJO_RESULT_OK;
+}
 
 MojoTimeTicks MojoGetTimeTicksNowImpl() {
   return g_core->GetTimeTicksNow();
@@ -193,7 +198,7 @@ MojoResult MojoEndReadDataImpl(MojoHandle data_pipe_consumer_handle,
 }
 
 MojoResult MojoCreateSharedBufferImpl(
-    const struct MojoCreateSharedBufferOptions* options,
+    const MojoCreateSharedBufferOptions* options,
     uint64_t num_bytes,
     MojoHandle* shared_buffer_handle) {
   return g_core->CreateSharedBuffer(options, num_bytes, shared_buffer_handle);
@@ -201,7 +206,7 @@ MojoResult MojoCreateSharedBufferImpl(
 
 MojoResult MojoDuplicateBufferHandleImpl(
     MojoHandle buffer_handle,
-    const struct MojoDuplicateBufferHandleOptions* options,
+    const MojoDuplicateBufferHandleOptions* options,
     MojoHandle* new_buffer_handle) {
   return g_core->DuplicateBufferHandle(buffer_handle, options,
                                        new_buffer_handle);
@@ -217,6 +222,12 @@ MojoResult MojoMapBufferImpl(MojoHandle buffer_handle,
 
 MojoResult MojoUnmapBufferImpl(void* buffer) {
   return g_core->UnmapBuffer(buffer);
+}
+
+MojoResult MojoGetBufferInfoImpl(MojoHandle buffer_handle,
+                                 const MojoSharedBufferOptions* options,
+                                 MojoSharedBufferInfo* info) {
+  return g_core->GetBufferInfo(buffer_handle, options, info);
 }
 
 MojoResult MojoWrapPlatformHandleImpl(const MojoPlatformHandle* platform_handle,
@@ -255,53 +266,62 @@ MojoResult MojoNotifyBadMessageImpl(MojoMessageHandle message,
   return g_core->NotifyBadMessage(message, error, error_num_bytes);
 }
 
-MojoResult MojoGetPropertyImpl(MojoPropertyType type, void* value) {
-  return g_core->GetProperty(type, value);
-}
-
 }  // extern "C"
+
+MojoSystemThunks g_thunks = {sizeof(MojoSystemThunks),
+                             MojoInitializeImpl,
+                             MojoGetTimeTicksNowImpl,
+                             MojoCloseImpl,
+                             MojoQueryHandleSignalsStateImpl,
+                             MojoCreateMessagePipeImpl,
+                             MojoWriteMessageImpl,
+                             MojoReadMessageImpl,
+                             MojoCreateDataPipeImpl,
+                             MojoWriteDataImpl,
+                             MojoBeginWriteDataImpl,
+                             MojoEndWriteDataImpl,
+                             MojoReadDataImpl,
+                             MojoBeginReadDataImpl,
+                             MojoEndReadDataImpl,
+                             MojoCreateSharedBufferImpl,
+                             MojoDuplicateBufferHandleImpl,
+                             MojoMapBufferImpl,
+                             MojoUnmapBufferImpl,
+                             MojoGetBufferInfoImpl,
+                             MojoCreateTrapImpl,
+                             MojoAddTriggerImpl,
+                             MojoRemoveTriggerImpl,
+                             MojoArmTrapImpl,
+                             MojoFuseMessagePipesImpl,
+                             MojoCreateMessageImpl,
+                             MojoDestroyMessageImpl,
+                             MojoSerializeMessageImpl,
+                             MojoAppendMessageDataImpl,
+                             MojoGetMessageDataImpl,
+                             MojoSetMessageContextImpl,
+                             MojoGetMessageContextImpl,
+                             MojoWrapPlatformHandleImpl,
+                             MojoUnwrapPlatformHandleImpl,
+                             MojoWrapPlatformSharedBufferHandleImpl,
+                             MojoUnwrapPlatformSharedBufferHandleImpl,
+                             MojoNotifyBadMessageImpl};
+
+}  // namespace
 
 namespace mojo {
 namespace edk {
 
-MojoSystemThunks MakeSystemThunks() {
-  MojoSystemThunks system_thunks = {sizeof(MojoSystemThunks),
-                                    MojoGetTimeTicksNowImpl,
-                                    MojoCloseImpl,
-                                    MojoQueryHandleSignalsStateImpl,
-                                    MojoCreateMessagePipeImpl,
-                                    MojoWriteMessageImpl,
-                                    MojoReadMessageImpl,
-                                    MojoCreateDataPipeImpl,
-                                    MojoWriteDataImpl,
-                                    MojoBeginWriteDataImpl,
-                                    MojoEndWriteDataImpl,
-                                    MojoReadDataImpl,
-                                    MojoBeginReadDataImpl,
-                                    MojoEndReadDataImpl,
-                                    MojoCreateSharedBufferImpl,
-                                    MojoDuplicateBufferHandleImpl,
-                                    MojoMapBufferImpl,
-                                    MojoUnmapBufferImpl,
-                                    MojoCreateTrapImpl,
-                                    MojoAddTriggerImpl,
-                                    MojoRemoveTriggerImpl,
-                                    MojoArmTrapImpl,
-                                    MojoFuseMessagePipesImpl,
-                                    MojoCreateMessageImpl,
-                                    MojoDestroyMessageImpl,
-                                    MojoSerializeMessageImpl,
-                                    MojoAppendMessageDataImpl,
-                                    MojoGetMessageDataImpl,
-                                    MojoSetMessageContextImpl,
-                                    MojoGetMessageContextImpl,
-                                    MojoWrapPlatformHandleImpl,
-                                    MojoUnwrapPlatformHandleImpl,
-                                    MojoWrapPlatformSharedBufferHandleImpl,
-                                    MojoUnwrapPlatformSharedBufferHandleImpl,
-                                    MojoNotifyBadMessageImpl,
-                                    MojoGetPropertyImpl};
-  return system_thunks;
+// static
+Core* Core::Get() {
+  return g_core;
+}
+
+void InitializeCore() {
+  g_core = new Core;
+}
+
+const MojoSystemThunks& GetSystemThunks() {
+  return g_thunks;
 }
 
 }  // namespace edk

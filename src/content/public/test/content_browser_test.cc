@@ -30,17 +30,21 @@
 #include "ui/base/ime/input_method_initializer.h"
 #endif
 
+#if defined(USE_AURA) && defined(TOOLKIT_VIEWS)
+#include "ui/views/test/widget_test_api.h"  // nogncheck
+#endif
+
 namespace content {
 
 ContentBrowserTest::ContentBrowserTest() {
 #if defined(OS_MACOSX)
   // See comment in InProcessBrowserTest::InProcessBrowserTest().
   base::FilePath content_shell_path;
-  CHECK(PathService::Get(base::FILE_EXE, &content_shell_path));
+  CHECK(base::PathService::Get(base::FILE_EXE, &content_shell_path));
   content_shell_path = content_shell_path.DirName();
   content_shell_path = content_shell_path.Append(
       FILE_PATH_LITERAL("Content Shell.app/Contents/MacOS/Content Shell"));
-  CHECK(PathService::Override(base::FILE_EXE, content_shell_path));
+  CHECK(base::PathService::Override(base::FILE_EXE, content_shell_path));
 #endif
   base::FilePath content_test_data(FILE_PATH_LITERAL("content/test/data"));
   CreateTestServer(content_test_data);
@@ -72,13 +76,20 @@ void ContentBrowserTest::SetUp() {
 #elif defined(OS_MACOSX)
   // See InProcessBrowserTest::PrepareTestCommandLine().
   base::FilePath subprocess_path;
-  PathService::Get(base::FILE_EXE, &subprocess_path);
+  base::PathService::Get(base::FILE_EXE, &subprocess_path);
   subprocess_path = subprocess_path.DirName().DirName();
   DCHECK_EQ(subprocess_path.BaseName().value(), "Contents");
   subprocess_path = subprocess_path.Append(
       "Frameworks/Content Shell Helper.app/Contents/MacOS/Content Shell Helper");
   command_line->AppendSwitchPath(switches::kBrowserSubprocessPath,
                                  subprocess_path);
+#endif
+
+#if defined(USE_AURA) && defined(TOOLKIT_VIEWS)
+  // https://crbug.com/695054: Ignore window activation/deactivation to make
+  // the Chrome-internal focus unaffected by OS events caused by running tests
+  // in parallel.
+  views::DisableActivationChangeHandlingForTests();
 #endif
 
   // LinuxInputMethodContextFactory has to be initialized.

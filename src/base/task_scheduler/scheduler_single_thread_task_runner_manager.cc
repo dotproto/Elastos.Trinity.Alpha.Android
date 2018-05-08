@@ -171,8 +171,9 @@ class SchedulerWorkerDelegate : public SchedulerWorker::Delegate {
 class SchedulerWorkerCOMDelegate : public SchedulerWorkerDelegate {
  public:
   SchedulerWorkerCOMDelegate(const std::string& thread_name,
-                             TaskTracker* task_tracker)
-      : SchedulerWorkerDelegate(thread_name), task_tracker_(task_tracker) {}
+                             TrackedRef<TaskTracker> task_tracker)
+      : SchedulerWorkerDelegate(thread_name),
+        task_tracker_(std::move(task_tracker)) {}
 
   ~SchedulerWorkerCOMDelegate() override { DCHECK(!scoped_com_initializer_); }
 
@@ -254,7 +255,7 @@ class SchedulerWorkerCOMDelegate : public SchedulerWorkerDelegate {
 
   bool get_work_first_ = true;
   const scoped_refptr<Sequence> message_pump_sequence_ = new Sequence;
-  TaskTracker* const task_tracker_;
+  const TrackedRef<TaskTracker> task_tracker_;
   std::unique_ptr<win::ScopedCOMInitializer> scoped_com_initializer_;
 
   DISALLOW_COPY_AND_ASSIGN(SchedulerWorkerCOMDelegate);
@@ -376,14 +377,19 @@ class SchedulerSingleThreadTaskRunnerManager::SchedulerSingleThreadTaskRunner
 };
 
 SchedulerSingleThreadTaskRunnerManager::SchedulerSingleThreadTaskRunnerManager(
-    TaskTracker* task_tracker,
+    TrackedRef<TaskTracker> task_tracker,
     DelayedTaskManager* delayed_task_manager)
-    : task_tracker_(task_tracker), delayed_task_manager_(delayed_task_manager) {
+    : task_tracker_(std::move(task_tracker)),
+      delayed_task_manager_(delayed_task_manager) {
   DCHECK(task_tracker_);
   DCHECK(delayed_task_manager_);
 #if defined(OS_WIN)
   static_assert(arraysize(shared_com_scheduler_workers_) ==
                     arraysize(shared_scheduler_workers_),
+                "The size of |shared_com_scheduler_workers_| must match "
+                "|shared_scheduler_workers_|");
+  static_assert(arraysize(shared_com_scheduler_workers_[0]) ==
+                    arraysize(shared_scheduler_workers_[0]),
                 "The size of |shared_com_scheduler_workers_| must match "
                 "|shared_scheduler_workers_|");
 #endif  // defined(OS_WIN)
@@ -430,6 +436,15 @@ SchedulerSingleThreadTaskRunnerManager::CreateCOMSTATaskRunnerWithTraits(
       traits, thread_mode);
 }
 #endif  // defined(OS_WIN)
+
+// static
+SchedulerSingleThreadTaskRunnerManager::ContinueOnShutdown
+SchedulerSingleThreadTaskRunnerManager::TraitsToContinueOnShutdown(
+    const TaskTraits& traits) {
+  if (traits.shutdown_behavior() == TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+    return IS_CONTINUE_ON_SHUTDOWN;
+  return IS_NOT_CONTINUE_ON_SHUTDOWN;
+}
 
 template <typename DelegateType>
 scoped_refptr<
@@ -541,7 +556,8 @@ template <>
 SchedulerWorker*&
 SchedulerSingleThreadTaskRunnerManager::GetSharedSchedulerWorkerForTraits<
     SchedulerWorkerDelegate>(const TaskTraits& traits) {
-  return shared_scheduler_workers_[GetEnvironmentIndexForTraits(traits)];
+  return shared_scheduler_workers_[GetEnvironmentIndexForTraits(traits)]
+                                  [TraitsToContinueOnShutdown(traits)];
 }
 
 #if defined(OS_WIN)
@@ -549,7 +565,8 @@ template <>
 SchedulerWorker*&
 SchedulerSingleThreadTaskRunnerManager::GetSharedSchedulerWorkerForTraits<
     SchedulerWorkerCOMDelegate>(const TaskTraits& traits) {
-  return shared_com_scheduler_workers_[GetEnvironmentIndexForTraits(traits)];
+  return shared_com_scheduler_workers_[GetEnvironmentIndexForTraits(traits)]
+                                      [TraitsToContinueOnShutdown(traits)];
 }
 #endif  // defined(OS_WIN)
 
@@ -585,22 +602,27 @@ void SchedulerSingleThreadTaskRunnerManager::ReleaseSharedSchedulerWorkers() {
   {
     AutoSchedulerLock auto_lock(lock_);
     for (size_t i = 0; i < arraysize(shared_scheduler_workers_); ++i) {
-      local_shared_scheduler_workers[i] = shared_scheduler_workers_[i];
-      shared_scheduler_workers_[i] = nullptr;
+      for (size_t j = 0; j < arraysize(shared_scheduler_workers_[i]); ++j) {
+        local_shared_scheduler_workers[i][j] = shared_scheduler_workers_[i][j];
+        shared_scheduler_workers_[i][j] = nullptr;
 #if defined(OS_WIN)
-      local_shared_com_scheduler_workers[i] = shared_com_scheduler_workers_[i];
-      shared_com_scheduler_workers_[i] = nullptr;
+        local_shared_com_scheduler_workers[i][j] =
+            shared_com_scheduler_workers_[i][j];
+        shared_com_scheduler_workers_[i][j] = nullptr;
 #endif
+    }
     }
   }
 
   for (size_t i = 0; i < arraysize(local_shared_scheduler_workers); ++i) {
-    if (local_shared_scheduler_workers[i])
-      UnregisterSchedulerWorker(local_shared_scheduler_workers[i]);
+    for (size_t j = 0; j < arraysize(local_shared_scheduler_workers[i]); ++j) {
+      if (local_shared_scheduler_workers[i][j])
+        UnregisterSchedulerWorker(local_shared_scheduler_workers[i][j]);
 #if defined(OS_WIN)
-    if (local_shared_com_scheduler_workers[i])
-      UnregisterSchedulerWorker(local_shared_com_scheduler_workers[i]);
+      if (local_shared_com_scheduler_workers[i][j])
+        UnregisterSchedulerWorker(local_shared_com_scheduler_workers[i][j]);
 #endif
+  }
   }
 }
 

@@ -49,17 +49,21 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/elapsed_timer.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_monster_change_dispatcher.h"
@@ -71,6 +75,7 @@
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
+using TimeRange = net::CookieDeletionInfo::TimeRange;
 
 // In steady state, most cookie requests can be satisfied by the in memory
 // cookie monster store. If the cookie request cannot be satisfied by the in
@@ -120,6 +125,22 @@ void MaybeRunCookieCallback(base::OnceCallback<void(T)> callback,
                             const T& result) {
   if (callback)
     std::move(callback).Run(result);
+}
+
+// Wraps a OnceClosure -- specifically one used by
+// |GetCookieListWithOptionsAsync()| -- with additional bound state to track the
+// duration between when its creation and destruction time.
+// See https://crbug.com/824024 for context.
+base::OnceClosure InstrumentGetCookieListClosure(base::OnceClosure closure) {
+  return base::BindOnce(
+      [](std::unique_ptr<base::ElapsedTimer> timer, base::OnceClosure closure) {
+        UMA_HISTOGRAM_CUSTOM_TIMES("Cookie.GetCookieListCompletionTime",
+                                   timer->Elapsed(),
+                                   base::TimeDelta::FromMilliseconds(10),
+                                   base::TimeDelta::FromSeconds(60), 50);
+        std::move(closure).Run();
+      },
+      std::make_unique<base::ElapsedTimer>(), std::move(closure));
 }
 
 }  // namespace
@@ -446,12 +467,12 @@ void CookieMonster::GetCookieListWithOptionsAsync(
     const CookieOptions& options,
     GetCookieListCallback callback) {
   DoCookieCallbackForURL(
-      base::BindOnce(
+      InstrumentGetCookieListClosure(base::BindOnce(
           // base::Unretained is safe as DoCookieCallbackForURL stores
           // the callback on |*this|, so the callback will not outlive
           // the object.
           &CookieMonster::GetCookieListWithOptions, base::Unretained(this), url,
-          options, std::move(callback)),
+          options, std::move(callback))),
       url);
 }
 
@@ -487,34 +508,25 @@ void CookieMonster::DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
       std::move(callback)));
 }
 
-void CookieMonster::DeleteAllCreatedBetweenAsync(const Time& delete_begin,
-                                                 const Time& delete_end,
-                                                 DeleteCallback callback) {
+void CookieMonster::DeleteAllCreatedInTimeRangeAsync(
+    const TimeRange& creation_range,
+    DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
       // base::Unretained is safe as DoCookieCallbackForURL stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
-      &CookieMonster::DeleteAllCreatedBetween, base::Unretained(this),
-      delete_begin, delete_end, std::move(callback)));
+      &CookieMonster::DeleteAllCreatedInTimeRange, base::Unretained(this),
+      creation_range, std::move(callback)));
 }
 
-void CookieMonster::DeleteAllCreatedBetweenWithPredicateAsync(
-    const Time& delete_begin,
-    const Time& delete_end,
-    const base::Callback<bool(const CanonicalCookie&)>& predicate,
-    DeleteCallback callback) {
-  if (predicate.is_null()) {
-    MaybeRunCookieCallback(std::move(callback), 0u);
-    return;
-  }
-
+void CookieMonster::DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
+                                               DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
       // base::Unretained is safe as DoCookieCallbackForURL stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
-      &CookieMonster::DeleteAllCreatedBetweenWithPredicate,
-      base::Unretained(this), delete_begin, delete_end, predicate,
-      std::move(callback)));
+      &CookieMonster::DeleteAllMatchingInfo, base::Unretained(this),
+      std::move(delete_info), std::move(callback)));
 }
 
 void CookieMonster::DeleteSessionCookiesAsync(
@@ -563,6 +575,32 @@ CookieChangeDispatcher& CookieMonster::GetChangeDispatcher() {
 
 bool CookieMonster::IsEphemeral() {
   return store_.get() == nullptr;
+}
+
+void CookieMonster::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_absolute_name) const {
+  const char kRelPath[] = "/cookie_monster";
+
+  pmd->CreateAllocatorDump(parent_absolute_name + kRelPath + "/cookies")
+      ->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  cookies_.size());
+
+  pmd->CreateAllocatorDump(parent_absolute_name + kRelPath +
+                           "/tasks_pending_global")
+      ->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  tasks_pending_.size());
+
+  size_t total_pending_for_key = 0;
+  for (const auto& kv : tasks_pending_for_key_)
+    total_pending_for_key += kv.second.size();
+  pmd->CreateAllocatorDump(parent_absolute_name + kRelPath +
+                           "/tasks_pending_for_key")
+      ->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  total_pending_for_key);
 }
 
 CookieMonster::~CookieMonster() {
@@ -632,9 +670,8 @@ void CookieMonster::GetCookieListWithOptions(const GURL& url,
   MaybeRunCookieCallback(std::move(callback), cookies);
 }
 
-void CookieMonster::DeleteAllCreatedBetween(const Time& delete_begin,
-                                            const Time& delete_end,
-                                            DeleteCallback callback) {
+void CookieMonster::DeleteAllCreatedInTimeRange(const TimeRange& creation_range,
+                                                DeleteCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   uint32_t num_deleted = 0;
@@ -643,8 +680,7 @@ void CookieMonster::DeleteAllCreatedBetween(const Time& delete_begin,
     CanonicalCookie* cc = curit->second.get();
     ++it;
 
-    if (cc->CreationDate() >= delete_begin &&
-        (delete_end.is_null() || cc->CreationDate() < delete_end)) {
+    if (creation_range.Contains(cc->CreationDate())) {
       InternalDeleteCookie(curit, true, /*sync_to_store*/
                            DELETE_COOKIE_EXPLICIT);
       ++num_deleted;
@@ -657,22 +693,15 @@ void CookieMonster::DeleteAllCreatedBetween(const Time& delete_begin,
                               : base::OnceClosure()));
 }
 
-void CookieMonster::DeleteAllCreatedBetweenWithPredicate(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
-    const base::Callback<bool(const CanonicalCookie&)>& predicate,
-    DeleteCallback callback) {
+void CookieMonster::DeleteAllMatchingInfo(CookieDeletionInfo delete_info,
+                                          DeleteCallback callback) {
   uint32_t num_deleted = 0;
   for (CookieMap::iterator it = cookies_.begin(); it != cookies_.end();) {
     CookieMap::iterator curit = it;
     CanonicalCookie* cc = curit->second.get();
     ++it;
 
-    if (cc->CreationDate() >= delete_begin &&
-        // The assumption that null |delete_end| is equivalent to
-        // Time::Max() is confusing.
-        (delete_end.is_null() || cc->CreationDate() < delete_end) &&
-        predicate.Run(*cc)) {
+    if (delete_info.Matches(*cc)) {
       InternalDeleteCookie(curit, true, /*sync_to_store*/
                            DELETE_COOKIE_EXPLICIT);
       ++num_deleted;
@@ -764,8 +793,14 @@ void CookieMonster::DeleteCanonicalCookie(const CanonicalCookie& cookie,
   uint32_t result = 0u;
   for (CookieMapItPair its = cookies_.equal_range(GetKey(cookie.Domain()));
        its.first != its.second; ++its.first) {
-    // The creation date acts as the unique index...
-    if (its.first->second->CreationDate() == cookie.CreationDate()) {
+    const std::unique_ptr<CanonicalCookie>& candidate = its.first->second;
+    // Historically, this has refused modification if the cookie has changed
+    // value in between the CanonicalCookie object was returned by a getter
+    // and when this ran.  The later parts of the conditional (everything but
+    // the equivalence check) attempt to preserve this behavior.
+    if (candidate->IsEquivalent(cookie) &&
+        candidate->CreationDate() == cookie.CreationDate() &&
+        candidate->Value() == cookie.Value()) {
       InternalDeleteCookie(its.first, true, DELETE_COOKIE_EXPLICIT);
       result = 1u;
       break;
@@ -872,28 +907,17 @@ void CookieMonster::StoreLoadedCookies(
   CookieItVector cookies_with_control_chars;
 
   for (auto& cookie : cookies) {
-    int64_t cookie_creation_time = cookie->CreationDate().ToInternalValue();
+    CanonicalCookie* cookie_ptr = cookie.get();
+    CookieMap::iterator inserted = InternalInsertCookie(
+        GetKey(cookie_ptr->Domain()), std::move(cookie), false);
+    const Time cookie_access_time(cookie_ptr->LastAccessDate());
+    if (earliest_access_time_.is_null() ||
+        cookie_access_time < earliest_access_time_)
+      earliest_access_time_ = cookie_access_time;
 
-    if (creation_times_.insert(cookie_creation_time).second) {
-      CanonicalCookie* cookie_ptr = cookie.get();
-      CookieMap::iterator inserted = InternalInsertCookie(
-          GetKey(cookie_ptr->Domain()), std::move(cookie), false);
-      const Time cookie_access_time(cookie_ptr->LastAccessDate());
-      if (earliest_access_time_.is_null() ||
-          cookie_access_time < earliest_access_time_)
-        earliest_access_time_ = cookie_access_time;
-
-      if (ContainsControlCharacter(cookie_ptr->Name()) ||
-          ContainsControlCharacter(cookie_ptr->Value())) {
-        cookies_with_control_chars.push_back(inserted);
-      }
-    } else {
-      LOG(ERROR) << base::StringPrintf(
-          "Found cookies with duplicate creation "
-          "times in backing store: "
-          "{name='%s', domain='%s', path='%s'}",
-          cookie->Name().c_str(), cookie->Domain().c_str(),
-          cookie->Path().c_str());
+    if (ContainsControlCharacter(cookie_ptr->Name()) ||
+        ContainsControlCharacter(cookie_ptr->Value())) {
+      cookies_with_control_chars.push_back(inserted);
     }
   }
 
@@ -943,7 +967,6 @@ void CookieMonster::InvokeQueue() {
   DCHECK(tasks_pending_for_key_.empty());
 
   finished_fetching_all_cookies_ = true;
-  creation_times_.clear();
   keys_loaded_.clear();
 }
 
@@ -969,7 +992,7 @@ void CookieMonster::TrimDuplicateCookiesForKey(const std::string& key,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Set of cookies ordered by creation time.
-  typedef std::set<CookieMap::iterator, OrderByCreationTimeDesc> CookieSet;
+  typedef std::multiset<CookieMap::iterator, OrderByCreationTimeDesc> CookieSet;
 
   // Helper map we populate to find the duplicates.
   typedef std::map<CookieSignature, CookieSet> EquivalenceMap;
@@ -993,9 +1016,7 @@ void CookieMonster::TrimDuplicateCookiesForKey(const std::string& key,
 
     // We save the iterator into |cookies_| rather than the actual cookie
     // pointer, since we may need to delete it later.
-    bool insert_success = set.insert(it).second;
-    DCHECK(insert_success)
-        << "Duplicate creation times found in duplicate cookie name scan.";
+    set.insert(it);
   }
 
   // If there were no duplicates, we are done!
@@ -1016,8 +1037,9 @@ void CookieMonster::TrimDuplicateCookiesForKey(const std::string& key,
       continue;  // This cookiename/path has no duplicates.
     num_duplicates_found += dupes.size() - 1;
 
-    // Since |dups| is sorted by creation time (descending), the first cookie
-    // is the most recent one, so we will keep it. The rest are duplicates.
+    // Since |dupes| is sorted by creation time (descending), the first cookie
+    // is the most recent one (or tied for it), so we will keep it. The rest are
+    // duplicates.
     dupes.erase(dupes.begin());
 
     LOG(ERROR) << base::StringPrintf(

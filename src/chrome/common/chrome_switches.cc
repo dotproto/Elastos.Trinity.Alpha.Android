@@ -5,8 +5,8 @@
 #include "chrome/common/chrome_switches.h"
 
 #include "build/build_config.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 namespace switches {
 
@@ -295,11 +295,6 @@ const char kEnableDevToolsExperiments[]     = "enable-devtools-experiments";
 // Enables Domain Reliability Monitoring.
 const char kEnableDomainReliability[] = "enable-domain-reliability";
 
-// Enables an experimental full screen exit UI to allow exiting fullscreen from
-// mouse or touch.
-const char kEnableExperimentalFullscreenExitUI[] =
-    "enable-experimental-fullscreen-exit-ui";
-
 // Enables logging for extension activity.
 const char kEnableExtensionActivityLogging[] =
     "enable-extension-activity-logging";
@@ -346,10 +341,6 @@ const char kEnablePrintPreviewRegisterPromos[] =
 // Enable background mode for the Push API.
 const char kEnablePushApiBackgroundMode[] = "enable-push-api-background-mode";
 
-// Enables the site settings all sites list and site details pages in the Chrome
-// settings UI.
-const char kEnableSiteSettings[] = "enable-site-settings";
-
 // Enables user control over muting tab audio from the tab strip.
 const char kEnableTabAudioMuting[]  = "enable-tab-audio-muting";
 
@@ -391,13 +382,6 @@ const char kForceAppMode[]                  = "force-app-mode";
 // Forces Desktop to iOS promotion to appear in windows whenever an entrypoint
 // is triggered.
 const char kForceDesktopIOSPromotion[] = "force-desktop-ios-promotion";
-
-// Forces Network Quality Estimator (NQE) to return a specific effective
-// connection type.
-const char kForceEffectiveConnectionType[] = "force-effective-connection-type";
-
-// Forces metrics reporting to be enabled.
-const char kForceEnableMetricsReporting[] = "force-enable-metrics-reporting";
 
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
@@ -457,24 +441,6 @@ const char kMakeDefaultBrowser[]            = "make-default-browser";
 
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
-
-// Enables the out-of-process memory logging.
-const char kMemlog[] = "memlog";
-const char kMemlogKeepSmallAllocations[] = "memlog-keep-small-allocations";
-const char kMemlogModeAll[] = "all";
-const char kMemlogModeAllRenderers[] = "all-renderers";
-const char kMemlogModeBrowser[] = "browser";
-const char kMemlogModeGpu[] = "gpu";
-const char kMemlogModeManual[] = "manual";
-const char kMemlogModeMinimal[] = "minimal";
-const char kMemlogModeRendererSampling[] = "renderer-sampling";
-const char kMemlogSampling[] = "memlog-sampling";
-const char kMemlogSamplingRate[] = "memlog-sampling-rate";
-const char kMemlogStackMode[] = "memlog-stack-mode";
-const char kMemlogStackModeMixed[] = "mixed";
-const char kMemlogStackModeNative[] = "native";
-const char kMemlogStackModeNativeWithThreadNames[] = "native-with-thread-names";
-const char kMemlogStackModePseudo[] = "pseudo";
 
 // Allows setting a different destination ID for connection-monitoring GCM
 // messages. Useful when running against a non-prod management server.
@@ -655,6 +621,25 @@ const char kSimulateUpgrade[]               = "simulate-upgrade";
 // for the format.
 const char kSSLKeyLogFile[]               = "ssl-key-log-file";
 
+// Specifies the maximum SSL/TLS version ("tls1.2" or "tls1.3").
+const char kSSLVersionMax[] = "ssl-version-max";
+
+// Specifies the minimum SSL/TLS version ("tls1", "tls1.1", "tls1.2", or
+// "tls1.3").
+const char kSSLVersionMin[] = "ssl-version-min";
+
+// TLS 1.0 mode for the |kSSLVersionMin| switch.
+const char kSSLVersionTLSv1[] = "tls1";
+
+// TLS 1.1 mode for the |kSSLVersionMin| switch.
+const char kSSLVersionTLSv11[] = "tls1.1";
+
+// TLS 1.2 mode for |kSSLVersionMax| and |kSSLVersionMin| switches.
+const char kSSLVersionTLSv12[] = "tls1.2";
+
+// TLS 1.2 mode for |kSSLVersionMax| and |kSSLVersionMin| switches.
+const char kSSLVersionTLSv13[] = "tls1.3";
+
 // Starts the browser maximized, regardless of any previous settings.
 const char kStartMaximized[]                = "start-maximized";
 
@@ -681,6 +666,15 @@ const char kTaskManagerShowExtraRenderers[] =
 
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
+
+// Specifies the enabled TLS 1.3 variant ("disabled", "draft23").
+const char kTLS13Variant[] = "tls13-variant";
+
+// This mode disables the TLS 1.3 variants for the |kTLS13Variant| switch.
+const char kTLS13VariantDisabled[] = "disabled";
+
+// This mode enables TLS 1.3 draft-23 variant for the |kTLS13Variant| switch.
+const char kTLS13VariantDraft23[] = "draft23";
 
 // Identifies a list of download sources as trusted, but only if proper group
 // policy is set.
@@ -720,6 +714,27 @@ const char kValidateCrx[]                   = "validate-crx";
 
 // Prints version information and quits.
 const char kVersion[]                       = "version";
+
+// Allows privileged JS applications to trigger event logging for peer
+// connections, and to later upload those logs to a remote server.
+// * If "disable" or "disabled", remote-logging will be disabled.
+// * If "enable" or "enabled", remote-logging will be enabled.
+// * If unset (or set to any other value), the platform-specific behavior
+//   will be used. (This behavior may depend on additional factors.)
+const char kWebRtcRemoteEventLog[] = "webrtc-remote-event-log";
+
+// Sets the delay (in seconds) between proactive prunings of remote-bound
+// WebRTC event logs which are pending upload.
+// All positive values are legal.
+// All negative values are illegal, and ignored.
+// If set to 0, the meaning is "no proactive pruning".
+const char kWebRtcRemoteEventLogProactivePruningDelta[] =
+    "webrtc-event-log-proactive-pruning-delta";
+
+// Normally, remote-bound WebRTC event logs are uploaded only when no
+// peer connections are active. With this flag, the upload is never suppressed.
+const char kWebRtcRemoteEventLogUploadNoSuppression[] =
+    "webrtc-event-log-upload-no-suppression";
 
 // Specify the initial window position: --window-position=x,y
 const char kWindowPosition[]                = "window-position";
@@ -786,6 +801,9 @@ const char kMarketUrlForTesting[] = "market-url-for-testing";
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
 
+// Specifies a base URL for the trusted CDN for tests.
+const char kTrustedCDNBaseURLForTests[] = "trusted-cdn-base-url-for-tests";
+
 // Custom WebAPK server URL for the sake of testing.
 const char kWebApkServerUrl[] = "webapk-server-url";
 #endif  // defined(OS_ANDROID)
@@ -805,10 +823,6 @@ const char kDisableLoginScreenApps[] = "disable-login-screen-apps";
 // NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
 // change or remove the flag please update platform2/crash_reporter.
 const char kMashServiceName[] = "mash-service-name";
-
-// Disables extra Ash-specific rules for positioning new browser windows.
-const char kSkipExtraAshWindowPositioning[] =
-    "skip-extra-ash-window-positioning";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
@@ -950,10 +964,6 @@ const char kUninstall[]                     = "uninstall";
 
 // Causes the process to run as a watcher process.
 const char kWatcherProcess[]                = "watcher";
-
-// Enables custom-drawing the titlebar and tabstrip background so that it's not
-// a garish #FFFFFF like it is by default on Windows 10.
-const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
@@ -973,11 +983,6 @@ const char kAllowNaClFileHandleAPI[]        = "allow-nacl-file-handle-api";
 // Specifies comma-separated list of extension ids or hosts to grant
 // access to TCP/UDP socket APIs.
 const char kAllowNaClSocketAPI[]            = "allow-nacl-socket-api";
-#endif
-
-#if BUILDFLAG(ENABLE_WAYLAND_SERVER)
-// Enables Wayland display server support.
-const char kEnableWaylandServer[] = "enable-wayland-server";
 #endif
 
 #if defined(OS_WIN) || defined(OS_LINUX)

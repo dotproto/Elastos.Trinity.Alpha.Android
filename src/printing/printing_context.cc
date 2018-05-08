@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/values.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/page_setup.h"
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
@@ -130,9 +130,7 @@ PrintingContext::Result PrintingContext::UpdatePrintSettings(
   }
 
   bool show_system_dialog = false;
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   job_settings.GetBoolean(kSettingShowSystemDialog, &show_system_dialog);
-#endif
 
   int page_count = 0;
   job_settings.GetInteger(kSettingPreviewPageCount, &page_count);

@@ -269,8 +269,7 @@ void ExtensionService::OnExternalProviderUpdateComplete(
 
   if (!update_url_extensions.empty() && updater_) {
     // Empty params will cause pending extensions to be updated.
-    extensions::ExtensionUpdater::CheckParams empty_params;
-    updater_->CheckNow(empty_params);
+    updater_->CheckNow(extensions::ExtensionUpdater::CheckParams());
   }
 
   error_controller_->ShowErrorIfNeeded();
@@ -298,7 +297,8 @@ ExtensionService::ExtensionService(Profile* profile,
       ready_(ready),
       shared_module_service_(new extensions::SharedModuleService(profile_)),
       app_data_migrator_(new extensions::AppDataMigrator(profile_, registry_)),
-      extension_registrar_(profile_, this) {
+      extension_registrar_(profile_, this),
+      forced_extensions_tracker_(registry_, profile_->GetPrefs()) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   TRACE_EVENT0("browser,startup", "ExtensionService::ExtensionService::ctor");
 
@@ -1044,7 +1044,7 @@ void ExtensionService::CheckManagementPolicy() {
       }
     }
     if (!to_recheck.ids.empty())
-      updater_->CheckNow(to_recheck);
+      updater_->CheckNow(std::move(to_recheck));
   }
 }
 
@@ -1116,8 +1116,13 @@ void ExtensionService::OnAllExternalProvidersReady() {
   if (update_once_all_providers_are_ready_ && updater()) {
     update_once_all_providers_are_ready_ = false;
     extensions::ExtensionUpdater::CheckParams params;
-    params.callback = external_updates_finished_callback_;
-    updater()->CheckNow(params);
+    params.callback =
+        external_updates_finished_callback_.is_null()
+            ? base::OnceClosure()
+            : base::BindOnce(
+                  [](base::RepeatingClosure callback) { callback.Run(); },
+                  external_updates_finished_callback_);
+    updater()->CheckNow(std::move(params));
   }
 
   // Uninstall all the unclaimed extensions.
@@ -1199,9 +1204,9 @@ void ExtensionService::AddExtension(const Extension* extension) {
   // TODO(jstritar): We may be able to get rid of this branch by overriding the
   // default extension state to DISABLED when the --disable-extensions flag
   // is set (http://crbug.com/29067).
-  if (!extensions_enabled() && !extension->is_theme() &&
-      extension->location() != Manifest::COMPONENT &&
-      !Manifest::IsExternalLocation(extension->location()) &&
+  if (!extensions_enabled_ &&
+      !Manifest::ShouldAlwaysLoadExtension(extension->location(),
+                                           extension->is_theme()) &&
       disable_flag_exempted_extensions_.count(extension->id()) == 0) {
     return;
   }

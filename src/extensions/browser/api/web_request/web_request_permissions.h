@@ -21,10 +21,12 @@ struct WebRequestInfo;
 }
 
 // Exposed for unit testing.
-bool IsSensitiveURL(const GURL& url,
-                    bool is_request_from_browser_or_webui_renderer);
+bool IsSensitiveRequest(const extensions::WebRequestInfo& request,
+                        bool is_request_from_browser,
+                        bool is_request_from_webui_renderer);
 
-// This class is used to test whether extensions may modify web requests.
+// This class is used to test whether extensions may modify web requests. It
+// should be used on the IO thread.
 class WebRequestPermissions {
  public:
   // Different host permission checking modes for CanExtensionAccessURL.

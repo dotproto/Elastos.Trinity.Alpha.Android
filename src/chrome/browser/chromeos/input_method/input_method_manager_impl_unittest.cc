@@ -18,7 +18,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/input_method/mock_candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_engine.h"
@@ -1281,7 +1280,7 @@ TEST_F(InputMethodManagerImplTest, OverrideKeyboardUrlRefWithKeyset) {
       "chrome-extension://"
       "inputview.html#id=us.compact.qwerty.emoji&language=en-US&passwordLayout="
       "us.compact.qwerty&name=keyboard_us");
-  manager_->OverrideKeyboardUrlRef("emoji");
+  manager_->OverrideKeyboardKeyset(mojom::ImeKeyset::kEmoji);
   EXPECT_EQ(overridden_url_emoji, GetActiveIMEState()->GetInputViewUrl());
 
   // Override the keyboard url ref with 'hwt'.
@@ -1290,7 +1289,7 @@ TEST_F(InputMethodManagerImplTest, OverrideKeyboardUrlRefWithKeyset) {
       "chrome-extension://"
       "inputview.html#id=us.compact.qwerty.hwt&language=en-US&passwordLayout="
       "us.compact.qwerty&name=keyboard_us");
-  manager_->OverrideKeyboardUrlRef("hwt");
+  manager_->OverrideKeyboardKeyset(mojom::ImeKeyset::kHandwriting);
   EXPECT_EQ(overridden_url_hwt, GetActiveIMEState()->GetInputViewUrl());
 
   // Override the keyboard url ref with 'voice'.
@@ -1299,7 +1298,7 @@ TEST_F(InputMethodManagerImplTest, OverrideKeyboardUrlRefWithKeyset) {
       "chrome-extension://"
       "inputview.html#id=us.compact.qwerty.voice&language=en-US"
       "&passwordLayout=us.compact.qwerty&name=keyboard_us");
-  manager_->OverrideKeyboardUrlRef("voice");
+  manager_->OverrideKeyboardKeyset(mojom::ImeKeyset::kVoice);
   EXPECT_EQ(overridden_url_voice, GetActiveIMEState()->GetInputViewUrl());
 }
 
@@ -1310,7 +1309,7 @@ TEST_F(InputMethodManagerImplTest, OverrideDefaultKeyboardUrlRef) {
 
   EXPECT_EQ(default_url, GetActiveIMEState()->GetInputViewUrl());
 
-  manager_->OverrideKeyboardUrlRef("emoji");
+  manager_->OverrideKeyboardKeyset(mojom::ImeKeyset::kEmoji);
   EXPECT_EQ(default_url, GetActiveIMEState()->GetInputViewUrl());
 }
 

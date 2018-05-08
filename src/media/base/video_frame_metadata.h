@@ -34,6 +34,7 @@ class MEDIA_EXPORT VideoFrameMetadata {
 
     // Some VideoFrames have an indication of the color space used.  Use
     // GetInteger()/SetInteger() and ColorSpace enumeration.
+    // Reading this metadata is deprecated, use frame->ColorSpace() instead.
     COLOR_SPACE,
 
     // Indicates that this frame must be copied to a new texture before use,
@@ -121,6 +122,16 @@ class MEDIA_EXPORT VideoFrameMetadata {
     // Whether this frame was decoded in a power efficient way.
     POWER_EFFICIENT,
 
+    // CompositorFrameMetadata variables associated with this frame. Used for
+    // remote debugging.
+    // Use Get/SetDouble() for these keys.
+    // TODO(crbug.com/832220): Use a customized dictionary value instead of
+    // using these keys directly.
+    DEVICE_SCALE_FACTOR,
+    PAGE_SCALE_FACTOR,
+    ROOT_SCROLL_OFFSET_X,
+    ROOT_SCROLL_OFFSET_Y,
+
     NUM_KEYS
   };
 
@@ -158,7 +169,8 @@ class MEDIA_EXPORT VideoFrameMetadata {
 
   // For serialization.
   std::unique_ptr<base::DictionaryValue> CopyInternalValues() const;
-  void MergeInternalValuesFrom(const base::DictionaryValue& in);
+  void MergeInternalValuesFrom(const base::Value& in);
+  const base::Value& GetInternalValues() const { return dictionary_; };
 
   // Merges internal values from |metadata_source|.
   void MergeMetadataFrom(const VideoFrameMetadata* metadata_source);

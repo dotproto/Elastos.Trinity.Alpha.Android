@@ -5,6 +5,7 @@
 #ifndef SERVICES_IDENTITY_PUBLIC_CPP_IDENTITY_MANAGER_H_
 #define SERVICES_IDENTITY_PUBLIC_CPP_IDENTITY_MANAGER_H_
 
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -16,27 +17,28 @@
 #endif
 
 // Necessary to declare this class as a friend.
+namespace browser_sync {
+class ProfileSyncServiceStartupCrosTest;
+}
+
+// Necessary to declare these classes as friends.
 namespace chromeos {
 class ChromeSessionManager;
+class UserSessionManager;
 }
 
 // Necessary to declare this class as a friend.
+namespace file_manager {
+class MultiProfileFileManagerBrowserTest;
+}
+
+// Necessary to declare these classes as friends.
+class MultiProfileDownloadNotificationTest;
 class ProfileSyncServiceHarness;
-
-// Necessary to declare functions in identity_test_utils.h as friends.
-class FakeSigninManagerBase;
-class FakeSigninManager;
-
-#if defined(OS_CHROMEOS)
-using SigninManagerForTest = FakeSigninManagerBase;
-#else
-using SigninManagerForTest = FakeSigninManager;
-#endif  // OS_CHROMEOS
 
 namespace identity {
 
-// Primary client-side interface to the Identity Service, encapsulating a
-// connection to a remote implementation of mojom::IdentityManager. See
+// Gives access to information about the user's Google identities. See
 // ./README.md for detailed documentation.
 class IdentityManager : public SigninManagerBase::Observer,
 #if !defined(OS_CHROMEOS)
@@ -114,14 +116,18 @@ class IdentityManager : public SigninManagerBase::Observer,
  private:
   // These clients need to call SetPrimaryAccountSynchronouslyForTests().
   friend void MakePrimaryAccountAvailable(
-      SigninManagerForTest* signin_manager,
+      SigninManagerBase* signin_manager,
       ProfileOAuth2TokenService* token_service,
       IdentityManager* identity_manager,
       const std::string& email);
+  friend MultiProfileDownloadNotificationTest;
   friend ProfileSyncServiceHarness;
+  friend file_manager::MultiProfileFileManagerBrowserTest;
 
-  // This client needs to call SetPrimaryAccountSynchronously().
+  // These clients needs to call SetPrimaryAccountSynchronously().
   friend chromeos::ChromeSessionManager;
+  friend chromeos::UserSessionManager;
+  friend browser_sync::ProfileSyncServiceStartupCrosTest;
 
   // Sets the primary account info synchronously with both the IdentityManager
   // and its backing SigninManager/ProfileOAuth2TokenService instances.
@@ -146,7 +152,7 @@ class IdentityManager : public SigninManagerBase::Observer,
   void GoogleSignedOut(const AccountInfo& account_info) override;
 
 #if !defined(OS_CHROMEOS)
-  // SigninManagerBase::DiagnosticsClient:
+  // SigninManager::DiagnosticsClient:
   void WillFireGoogleSigninSucceeded(const AccountInfo& account_info) override;
   void WillFireGoogleSignedOut(const AccountInfo& account_info) override;
 #endif
@@ -156,6 +162,12 @@ class IdentityManager : public SigninManagerBase::Observer,
       const std::string& account_id,
       const std::string& consumer_id,
       const OAuth2TokenService::ScopeSet& scopes) override;
+
+  // Removes synchronously token from token_service
+  void HandleRemoveAccessTokenFromCache(
+      const std::string& account_id,
+      const OAuth2TokenService::ScopeSet& scopes,
+      const std::string& access_token);
 
   // Updates |primary_account_info_| and notifies observers. Invoked
   // asynchronously from GoogleSigninSucceeded() to mimic the effect of
@@ -188,6 +200,8 @@ class IdentityManager : public SigninManagerBase::Observer,
   // Makes sure lists are empty on destruction.
   base::ObserverList<Observer, true> observer_list_;
   base::ObserverList<DiagnosticsObserver, true> diagnostics_observer_list_;
+
+  base::WeakPtrFactory<IdentityManager> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(IdentityManager);
 };

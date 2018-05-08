@@ -75,6 +75,7 @@ source_set("ntp_controller") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
+    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui_util",
     "//ios/chrome/browser/ui/ntp/recent_tabs",
     "//ios/chrome/browser/ui/toolbar",
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
@@ -265,12 +266,14 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//ios/chrome/browser/web_state_list:test_support",
     "//ios/chrome/browser/web_state_list:web_state_list",
+    "//ios/chrome/common/app_group",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser/images",
     "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",
+    "//ui/base:test_support",
     "//url",
   ]
 }

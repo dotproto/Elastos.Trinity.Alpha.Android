@@ -18,8 +18,8 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
     case AutocompleteMatchType::CLIPBOARD:
     case AutocompleteMatchType::NAVSUGGEST:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
-    case AutocompleteMatchType::PHYSICAL_WEB:
-    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW:
+    case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::URL_WHAT_YOU_TYPED:
       return is_incognito ? IDR_IOS_OMNIBOX_HTTP_INCOGNITO
                           : IDR_IOS_OMNIBOX_HTTP;
@@ -28,7 +28,7 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
     case AutocompleteMatchType::HISTORY_TITLE:
     case AutocompleteMatchType::HISTORY_URL:
     case AutocompleteMatchType::SEARCH_HISTORY:
-    case AutocompleteMatchType::TAB_SEARCH:
+    case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
       return is_incognito ? IDR_IOS_OMNIBOX_HISTORY_INCOGNITO
                           : IDR_IOS_OMNIBOX_HISTORY;
     case AutocompleteMatchType::CONTACT_DEPRECATED:
@@ -47,7 +47,7 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
       // never sent to the search provider.
       DCHECK(!is_incognito);
       return IDR_IOS_OMNIBOX_CALCULATOR;
-    case AutocompleteMatchType::EXTENSION_APP:
+    case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
       NOTREACHED();
       return IDR_IOS_OMNIBOX_HTTP;

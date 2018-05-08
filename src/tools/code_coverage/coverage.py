@@ -53,6 +53,9 @@
              want to see the coverage on corpus and don't want to fuzz at all.
 
   For more options, please refer to tools/code_coverage/coverage.py -h.
+
+  For an overview of how code coverage works in Chromium, please refer to
+  https://chromium.googlesource.com/chromium/src/+/master/docs/code_coverage.md
 """
 
 from __future__ import print_function
@@ -246,8 +249,8 @@ class _CoverageReportHtmlGenerator(object):
       if summary_dict[feature]['total'] == 0:
         percentage = 0.0
       else:
-        percentage = float(summary_dict[feature]['covered']) / summary_dict[
-            feature]['total'] * 100
+        percentage = float(summary_dict[feature]
+                           ['covered']) / summary_dict[feature]['total'] * 100
 
       color_class = self._GetColorClass(percentage)
       entry[feature] = {
@@ -308,6 +311,50 @@ class _CoverageReportHtmlGenerator(object):
 
     with open(self._output_path, 'w') as html_file:
       html_file.write(html_header + html_table + html_footer)
+
+
+def _GetSharedLibraries(binary_paths):
+  """Returns set of shared libraries used by specified binaries."""
+  libraries = set()
+  cmd = []
+  shared_library_re = None
+
+  if sys.platform.startswith('linux'):
+    cmd.extend(['ldd'])
+    shared_library_re = re.compile(
+        r'.*\.so\s=>\s(.*' + BUILD_DIR + '.*\.so)\s.*')
+  elif sys.platform.startswith('darwin'):
+    cmd.extend(['otool', '-L'])
+    shared_library_re = re.compile(r'\s+(@rpath/.*\.dylib)\s.*')
+  else:
+    assert False, ('Cannot detect shared libraries used by the given targets.')
+
+  assert shared_library_re is not None
+
+  cmd.extend(binary_paths)
+  output = subprocess.check_output(cmd)
+
+  for line in output.splitlines():
+    m = shared_library_re.match(line)
+    if not m:
+      continue
+
+    shared_library_path = m.group(1)
+    if sys.platform.startswith('darwin'):
+      # otool outputs "@rpath" macro instead of the dirname of the given binary.
+      shared_library_path = shared_library_path.replace('@rpath', BUILD_DIR)
+
+    assert os.path.exists(shared_library_path), ('Shared library "%s" used by '
+                                                 'the given target(s) does not '
+                                                 'exist.' % shared_library_path)
+    with open(shared_library_path) as f:
+      data = f.read()
+
+    # Do not add non-instrumented libraries. Otherwise, llvm-cov errors outs.
+    if '__llvm_cov' in data:
+      libraries.add(shared_library_path)
+
+  return list(libraries)
 
 
 def _GetHostPlatform():
@@ -409,7 +456,7 @@ def DownloadCoverageToolsIfNeeded():
 
 
 def _GeneratePerFileLineByLineCoverageInHtml(binary_paths, profdata_file_path,
-                                             filters):
+                                             filters, ignore_filename_regex):
   """Generates per file line-by-line coverage in html using 'llvm-cov show'.
 
   For a file with absolute path /a/b/x.cc, a html report is generated as:
@@ -436,6 +483,9 @@ def _GeneratePerFileLineByLineCoverageInHtml(binary_paths, profdata_file_path,
       ['-object=' + binary_path for binary_path in binary_paths[1:]])
   _AddArchArgumentForIOSIfNeeded(subprocess_cmd, len(binary_paths))
   subprocess_cmd.extend(filters)
+  if ignore_filename_regex:
+    subprocess_cmd.append('-ignore-filename-regex=%s' % ignore_filename_regex)
+
   subprocess.check_call(subprocess_cmd)
   logging.debug('Finished running "llvm-cov show" command')
 
@@ -816,18 +866,28 @@ def _GetProfileRawDataPathsByExecutingCommands(targets, commands):
 def _ExecuteCommand(target, command):
   """Runs a single command and generates a profraw data file."""
   # Per Clang "Source-based Code Coverage" doc:
+  #
+  # "%p" expands out to the process ID. It's not used by this scripts due to:
+  # 1) If a target program spawns too many processess, it may exhaust all disk
+  #    space available. For example, unit_tests writes thousands of .profraw
+  #    files each of size 1GB+.
+  # 2) If a target binary uses shared libraries, coverage profile data for them
+  #    will be missing, resulting in incomplete coverage reports.
+  #
   # "%Nm" expands out to the instrumented binary's signature. When this pattern
   # is specified, the runtime creates a pool of N raw profiles which are used
   # for on-line profile merging. The runtime takes care of selecting a raw
   # profile from the pool, locking it, and updating it before the program exits.
-  # If N is not specified (i.e the pattern is "%m"), it's assumed that N = 1.
   # N must be between 1 and 9. The merge pool specifier can only occur once per
   # filename pattern.
   #
-  # 4 is chosen because it creates some level of parallelism, but it's not too
-  # big to consume too much computing resource or disk space.
+  # "%1m" is used when tests run in single process, such as fuzz targets.
+  #
+  # For other cases, "%4m" is chosen as it creates some level of parallelism,
+  # but it's not too big to consume too much computing resource or disk space.
+  profile_pattern_string = '%1m' if _IsFuzzerTarget(target) else '%4m'
   expected_profraw_file_name = os.extsep.join(
-      [target, '%4m', PROFRAW_FILE_EXTENSION])
+      [target, profile_pattern_string, PROFRAW_FILE_EXTENSION])
   expected_profraw_file_path = os.path.join(OUTPUT_DIR,
                                             expected_profraw_file_name)
 
@@ -840,6 +900,14 @@ def _ExecuteCommand(target, command):
     logging.warning('Command: "%s" exited with non-zero return code', command)
 
   return output
+
+
+def _IsFuzzerTarget(target):
+  """Returns true if the target is a fuzzer target."""
+  build_args = _GetBuildArgs()
+  use_libfuzzer = ('use_libfuzzer' in build_args and
+                   build_args['use_libfuzzer'] == 'true')
+  return use_libfuzzer and target.endswith('_fuzzer')
 
 
 def _ExecuteIOSCommand(target, command):
@@ -925,7 +993,8 @@ def _CreateCoverageProfileDataFromProfRawData(profraw_file_paths):
   return profdata_file_path
 
 
-def _GeneratePerFileCoverageSummary(binary_paths, profdata_file_path, filters):
+def _GeneratePerFileCoverageSummary(binary_paths, profdata_file_path, filters,
+                                    ignore_filename_regex):
   """Generates per file coverage summary using "llvm-cov export" command."""
   # llvm-cov export [options] -instr-profile PROFILE BIN [-object BIN,...]
   # [[-object BIN]] [SOURCES].
@@ -941,6 +1010,8 @@ def _GeneratePerFileCoverageSummary(binary_paths, profdata_file_path, filters):
       ['-object=' + binary_path for binary_path in binary_paths[1:]])
   _AddArchArgumentForIOSIfNeeded(subprocess_cmd, len(binary_paths))
   subprocess_cmd.extend(filters)
+  if ignore_filename_regex:
+    subprocess_cmd.append('-ignore-filename-regex=%s' % ignore_filename_regex)
 
   json_output = json.loads(subprocess.check_output(subprocess_cmd))
   assert len(json_output['data']) == 1
@@ -1162,6 +1233,14 @@ def _ParseCommandArguments():
       'the directories are included recursively.')
 
   arg_parser.add_argument(
+      '-i',
+      '--ignore-filename-regex',
+      type=str,
+      help='Skip source code files with file paths that match the given '
+      'regular expression. For example, use -i=\'.*/out/.*|.*/third_party/.*\' '
+      'to exclude files in third_party/ and out/ folders from the report.')
+
+  arg_parser.add_argument(
       '-j',
       '--jobs',
       type=int,
@@ -1229,10 +1308,13 @@ def Main():
 
   logging.info('Generating code coverage report in html (this can take a while '
                'depending on size of target!)')
+  binary_paths.extend(_GetSharedLibraries(binary_paths))
   per_file_coverage_summary = _GeneratePerFileCoverageSummary(
-      binary_paths, profdata_file_path, absolute_filter_paths)
+      binary_paths, profdata_file_path, absolute_filter_paths,
+      args.ignore_filename_regex)
   _GeneratePerFileLineByLineCoverageInHtml(binary_paths, profdata_file_path,
-                                           absolute_filter_paths)
+                                           absolute_filter_paths,
+                                           args.ignore_filename_regex)
   _GenerateFileViewHtmlIndexFile(per_file_coverage_summary)
 
   per_directory_coverage_summary = _CalculatePerDirectoryCoverageSummary(

@@ -11,7 +11,6 @@
 #include "base/hash.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/memory_coordinator_client_registry.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
@@ -26,7 +25,6 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
-#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -190,14 +188,16 @@ bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
 // Returns the GL texture ID backing the given SkImage.
 GrGLuint GlIdFromSkImage(SkImage* image) {
   DCHECK(image->isTextureBacked());
-  GrBackendObject handle =
-      image->getTextureHandle(true /* flushPendingGrContextIO */);
-  if (!handle)
+  GrBackendTexture backend_texture =
+      image->getBackendTexture(true /* flushPendingGrContextIO */);
+  if (!backend_texture.isValid())
     return 0;
-  const GrGLTextureInfo* info = skia::GrBackendObjectToGrGLTextureInfo(handle);
-  if (!info)
+
+  GrGLTextureInfo info;
+  if (!backend_texture.getGLTextureInfo(&info))
     return 0;
-  return info->fID;
+
+  return info.fID;
 }
 
 // Takes ownership of the backing texture of an SkImage. This allows us to
@@ -210,7 +210,7 @@ sk_sp<SkImage> TakeOwnershipOfSkImageBacking(GrContext* context,
   }
 
   GrSurfaceOrigin origin;
-  image->getTextureHandle(false /* flushPendingGrContextIO */, &origin);
+  image->getBackendTexture(false /* flushPendingGrContextIO */, &origin);
   SkColorType color_type = image->colorType();
   if (color_type == kUnknown_SkColorType) {
     return nullptr;
@@ -581,22 +581,14 @@ void GpuImageDecodeCache::ImageData::ValidateBudgeted() const {
 GpuImageDecodeCache::GpuImageDecodeCache(viz::RasterContextProvider* context,
                                          bool use_transfer_cache,
                                          SkColorType color_type,
-                                         size_t max_working_set_bytes)
+                                         size_t max_working_set_bytes,
+                                         int max_texture_size)
     : color_type_(color_type),
       use_transfer_cache_(use_transfer_cache),
       context_(context),
+      max_texture_size_(max_texture_size),
       persistent_cache_(PersistentCache::NO_AUTO_EVICT),
       max_working_set_bytes_(max_working_set_bytes) {
-  // Acquire the context_lock so that we can safely retrieve
-  // |max_texture_size_|.
-  {
-    base::Optional<viz::RasterContextProvider::ScopedRasterContextLock>
-        context_lock;
-    if (context_->GetLock())
-      context_lock.emplace(context_);
-    max_texture_size_ = context_->GrContext()->caps()->maxTextureSize();
-  }
-
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
   if (base::ThreadTaskRunnerHandle::IsSet()) {
@@ -870,34 +862,38 @@ void GpuImageDecodeCache::SetShouldAggressivelyFreeResources(
 
 void GpuImageDecodeCache::ClearCache() {
   base::AutoLock lock(lock_);
-  for (auto& entry : persistent_cache_) {
-    if (entry.second->decode.ref_count != 0 ||
-        entry.second->upload.ref_count != 0) {
-      // Orphan the entry so it will be deleted once no longer in use.
-      entry.second->is_orphaned = true;
-    } else if (entry.second->HasUploadedData()) {
-      DeleteImage(entry.second.get());
-    }
+  for (auto it = persistent_cache_.begin(); it != persistent_cache_.end();)
+    it = RemoveFromPersistentCache(it);
+  DCHECK(persistent_cache_.empty());
+  paint_image_entries_.clear();
+}
+
+GpuImageDecodeCache::PersistentCache::iterator
+GpuImageDecodeCache::RemoveFromPersistentCache(PersistentCache::iterator it) {
+  lock_.AssertAcquired();
+
+  if (it->second->decode.ref_count != 0 || it->second->upload.ref_count != 0) {
+    // Orphan the image and erase it from the |persisent_cache_|. This ensures
+    // that the image will be deleted once all refs are removed.
+    it->second->is_orphaned = true;
+  } else {
+    // Current entry has no refs. Ensure it is not locked.
+    DCHECK(!it->second->decode.is_locked());
+    DCHECK(!it->second->upload.is_locked());
+
+    // Unlocked images must not be budgeted.
+    DCHECK(!it->second->is_budgeted);
+
+    // Free the uploaded image if it exists.
+    if (it->second->HasUploadedData())
+      DeleteImage(it->second.get());
   }
-  persistent_cache_.Clear();
+
+  return persistent_cache_.Erase(it);
 }
 
 size_t GpuImageDecodeCache::GetMaximumMemoryLimitBytes() const {
   return max_working_set_bytes_;
-}
-
-void GpuImageDecodeCache::NotifyImageUnused(
-    const PaintImage::FrameKey& frame_key) {
-  auto it = persistent_cache_.Peek(frame_key);
-  if (it != persistent_cache_.end()) {
-    if (it->second->decode.ref_count != 0 ||
-        it->second->upload.ref_count != 0) {
-      it->second->is_orphaned = true;
-    } else if (it->second->HasUploadedData()) {
-      DeleteImage(it->second.get());
-    }
-    persistent_cache_.Erase(it);
-  }
 }
 
 bool GpuImageDecodeCache::OnMemoryDump(
@@ -1453,6 +1449,7 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
 
   // For kGpu, we upload and color convert (if necessary).
   if (image_data->mode == DecodedDataMode::kGpu) {
+    DCHECK(!use_transfer_cache_);
     base::AutoUnlock unlock(lock_);
     uploaded_image =
         uploaded_image->makeTextureImage(context_->GrContext(), nullptr);
@@ -1507,6 +1504,7 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image) {
                "GpuImageDecodeCache::CreateImageData");
   lock_.AssertAcquired();
 
+  WillAddCacheEntry(draw_image);
   int mip_level = CalculateUploadScaleMipLevel(draw_image);
   SkImageInfo image_info = CreateImageInfoForDrawImage(draw_image, mip_level);
 
@@ -1533,6 +1531,49 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image) {
   return base::WrapRefCounted(new ImageData(
       mode, data_size, draw_image.target_color_space(),
       CalculateDesiredFilterQuality(draw_image), mip_level, is_bitmap_backed));
+}
+
+void GpuImageDecodeCache::WillAddCacheEntry(const DrawImage& draw_image) {
+  lock_.AssertAcquired();
+
+  // Remove any old entries for this image. We keep at-most 2 ContentIds for a
+  // PaintImage (pending and active tree).
+  auto& cached_content_ids =
+      paint_image_entries_[draw_image.paint_image().stable_id()].content_ids;
+  const PaintImage::ContentId new_content_id =
+      draw_image.frame_key().content_id();
+
+  if (cached_content_ids[0] == new_content_id ||
+      cached_content_ids[1] == new_content_id) {
+    return;
+  }
+
+  if (cached_content_ids[0] == PaintImage::kInvalidContentId) {
+    cached_content_ids[0] = new_content_id;
+    return;
+  }
+
+  if (cached_content_ids[1] == PaintImage::kInvalidContentId) {
+    cached_content_ids[1] = new_content_id;
+    return;
+  }
+
+  const PaintImage::ContentId content_id_to_remove =
+      std::min(cached_content_ids[0], cached_content_ids[1]);
+  const PaintImage::ContentId content_id_to_keep =
+      std::max(cached_content_ids[0], cached_content_ids[1]);
+  DCHECK_NE(content_id_to_remove, content_id_to_keep);
+
+  for (auto it = persistent_cache_.begin(); it != persistent_cache_.end();) {
+    if (it->first.content_id() != content_id_to_remove) {
+      ++it;
+    } else {
+      it = RemoveFromPersistentCache(it);
+    }
+  }
+
+  cached_content_ids[0] = content_id_to_keep;
+  cached_content_ids[1] = new_content_id;
 }
 
 void GpuImageDecodeCache::DeleteImage(ImageData* image_data) {
@@ -1743,6 +1784,12 @@ bool GpuImageDecodeCache::IsInInUseCacheForTesting(
     const DrawImage& image) const {
   auto found = in_use_cache_.find(InUseCacheKey::FromDrawImage(image));
   return found != in_use_cache_.end();
+}
+
+bool GpuImageDecodeCache::IsInPersistentCacheForTesting(
+    const DrawImage& image) const {
+  auto found = persistent_cache_.Peek(image.frame_key());
+  return found != persistent_cache_.end();
 }
 
 sk_sp<SkImage> GpuImageDecodeCache::GetSWImageDecodeForTesting(

@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_test_util.h"
@@ -41,7 +40,8 @@ class MetadataDatabaseIndexOnDiskTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(database_dir_.CreateUniqueTempDir());
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ =
+        leveldb_chrome::NewMemEnv("MetadataDatabaseIndexOnDiskTest");
     db_ = InitializeLevelDB();
     index_ = MetadataDatabaseIndexOnDisk::Create(db_.get());
   }

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -19,7 +18,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 using base::UserMetricsAction;
 using content::BrowserPluginGuestDelegate;
@@ -151,6 +150,7 @@ WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
     : content::WebContentsObserver(web_view_guest->web_contents()),
       next_permission_request_id_(guest_view::kInstanceIDNone),
       web_view_guest_(web_view_guest),
+      default_media_access_permission_(false),
       weak_factory_(this) {
       web_view_permission_helper_delegate_.reset(
           ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(
@@ -203,7 +203,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
                  weak_factory_.GetWeakPtr(),
                  request,
                  callback),
-      false /* allowed_by_default */);
+      default_media_access_permission_);
 }
 
 bool WebViewPermissionHelper::CheckMediaAccessPermission(

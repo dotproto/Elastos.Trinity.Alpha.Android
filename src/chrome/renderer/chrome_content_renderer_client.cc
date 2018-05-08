@@ -12,7 +12,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
@@ -35,7 +34,6 @@
 #include "chrome/common/plugin.mojom.h"
 #include "chrome/common/prerender_types.h"
 #include "chrome/common/prerender_url_loader_throttle.h"
-#include "chrome/common/profiling/memlog_allocator_shim.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/thread_profiler.h"
@@ -63,6 +61,7 @@
 #include "chrome/renderer/prerender/prerenderer_client.h"
 #include "chrome/renderer/tts_dispatcher.h"
 #include "chrome/renderer/url_loader_throttle_provider_impl.h"
+#include "chrome/renderer/websocket_handshake_throttle_provider_impl.h"
 #include "chrome/renderer/worker_content_settings_client.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -81,11 +80,12 @@
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/safe_browsing/renderer/threat_dom_details.h"
 #include "components/safe_browsing/renderer/websocket_sb_handshake_throttle.h"
+#include "components/services/heap_profiling/public/cpp/allocator_shim.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/startup_metric_utils/common/startup_metric.mojom.h"
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
-#include "components/task_scheduler_util/common/variations_util.h"
+#include "components/task_scheduler_util/variations_util.h"
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
@@ -103,34 +103,34 @@
 #include "extensions/common/constants.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "net/base/net_errors.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ppapi/c/private/ppb_pdf.h"
-#include "ppapi/features/features.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/mojom/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebCache.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer_process_type.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebPluginParams.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/platform/scheduler/renderer_process_type.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_cache.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_heap.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
+#include "third_party/blink/public/web/web_security_policy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -352,7 +352,8 @@ void OnModuleEvent(scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
 }  // namespace
 
 ChromeContentRendererClient::ChromeContentRendererClient()
-    : main_entry_time_(base::TimeTicks::Now()) {
+    : main_entry_time_(base::TimeTicks::Now()),
+      main_thread_profiler_(ThreadProfiler::CreateAndStartOnMainThread()) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::ExtensionsClient::Set(
       extensions::ChromeExtensionsClient::GetInstance());
@@ -369,7 +370,7 @@ ChromeContentRendererClient::ChromeContentRendererClient()
   printing::SetAgent(GetUserAgent());
 #endif
 
-  profiling::SetGCHeapAllocationHookFunctions(
+  heap_profiling::SetGCHeapAllocationHookFunctions(
       &blink::WebHeap::SetAllocationHook, &blink::WebHeap::SetFreeHook);
 }
 
@@ -498,6 +499,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
         WebString::FromASCII(scheme));
   }
 
+  main_thread_profiler_->SetMainThreadTaskRunner(
+      base::ThreadTaskRunnerHandle::Get());
   ThreadProfiler::SetServiceManagerConnectorForChildProcess(
       thread->GetConnector());
 }
@@ -550,8 +553,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
   SandboxStatusExtension::Create(render_frame);
 #endif
 
-  new NetErrorHelper(render_frame,
-                     chrome_observer_ ? chrome_observer_->is_online() : true);
+  new NetErrorHelper(render_frame);
 
   new page_load_metrics::MetricsRenderFrameObserver(render_frame);
 
@@ -1107,31 +1109,6 @@ bool ChromeContentRendererClient::IsNaClAllowed(
       is_extension_force_installed ||
       is_invoked_by_webstore_installed_extension;
   bool is_nacl_allowed = is_nacl_allowed_by_location || is_nacl_unrestricted;
-  if (is_nacl_allowed) {
-    // Make sure that PPAPI 'dev' interfaces are only available for unpacked
-    // and component extensions.  Also allow dev interfaces when --enable-nacl
-    // is set, but do not allow --enable-nacl to provide dev interfaces to
-    // webstore installed and other normally allowed URLs.
-    std::string dev_attribute("@dev");
-    if (is_extension_unrestricted ||
-        (is_nacl_unrestricted && !is_nacl_allowed_by_location)) {
-      // Add the special '@dev' attribute.
-      std::vector<WebPluginMimeType::Param> mime_params;
-      mime_params.emplace_back(base::ASCIIToUTF16(dev_attribute),
-                               base::string16());
-      AppendParams(mime_params, &params->attribute_names,
-                   &params->attribute_values);
-    } else {
-      // If the params somehow contain '@dev', remove it.
-      size_t attribute_count = params->attribute_names.size();
-      for (size_t i = 0; i < attribute_count; ++i) {
-        if (params->attribute_names[i].Equals(dev_attribute.data(),
-                                              dev_attribute.length())) {
-          params->attribute_names[i] = WebString();
-        }
-      }
-    }
-  }
   return is_nacl_allowed;
 }
 #endif  // BUILDFLAG(ENABLE_NACL)
@@ -1195,6 +1172,17 @@ void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
       error_description);
 }
 
+void ChromeContentRendererClient::GetErrorDescription(
+    const blink::WebURLRequest& failed_request,
+    const blink::WebURLError& error,
+    base::string16* error_description) {
+  GetErrorDescriptionInternal(
+      failed_request,
+      error_page::Error::NetError(error.url(), error.reason(),
+                                  error.has_copy_in_cache()),
+      error_description);
+}
+
 void ChromeContentRendererClient::PrepareErrorPageInternal(
     content::RenderFrame* render_frame,
     const WebURLRequest& failed_request,
@@ -1206,6 +1194,15 @@ void ChromeContentRendererClient::PrepareErrorPageInternal(
       failed_request.GetCacheMode() == FetchCacheMode::kBypassCache;
   NetErrorHelper::Get(render_frame)
       ->PrepareErrorPage(error, is_post, is_ignoring_cache, error_html);
+  if (error_description)
+    GetErrorDescriptionInternal(failed_request, error, error_description);
+}
+
+void ChromeContentRendererClient::GetErrorDescriptionInternal(
+    const blink::WebURLRequest& failed_request,
+    const error_page::Error& error,
+    base::string16* error_description) {
+  bool is_post = failed_request.HttpMethod().Ascii() == "POST";
   if (error_description) {
     *error_description = error_page::LocalizedError::GetErrorDetails(
         error.domain(), error.reason(), is_post);
@@ -1231,7 +1228,7 @@ bool ChromeContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return !IsStandaloneExtensionProcess();
 }
 
-bool ChromeContentRendererClient::AllowStoppingWhenProcessBackgrounded() {
+bool ChromeContentRendererClient::AllowFreezingWhenProcessBackgrounded() {
   return base::FeatureList::IsEnabled(features::kStopInBackground);
 }
 
@@ -1295,22 +1292,25 @@ bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
   return false;
 }
 
-bool ChromeContentRendererClient::WillSendRequest(
+void ChromeContentRendererClient::WillSendRequest(
     WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
-    GURL* new_url) {
+    const url::Origin* initiator_origin,
+    GURL* new_url,
+    bool* attach_same_site_cookies) {
 // Check whether the request should be allowed. If not allowed, we reset the
 // URL to something invalid to prevent the request and cause an error.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (ChromeExtensionsRendererClient::GetInstance()->WillSendRequest(
-          frame, transition_type, url, new_url)) {
-    return true;
-  }
+  ChromeExtensionsRendererClient::GetInstance()->WillSendRequest(
+      frame, transition_type, url, initiator_origin, new_url,
+      attach_same_site_cookies);
+  if (!new_url->is_empty())
+    return;
 #endif
 
   if (!url.ProtocolIs(chrome::kChromeSearchScheme))
-    return false;
+    return;
 
 #if !defined(OS_ANDROID)
   SearchBox* search_box =
@@ -1325,11 +1325,9 @@ bool ChromeContentRendererClient::WillSendRequest(
       type = SearchBox::THUMB;
 
     if (type != SearchBox::NONE)
-      return search_box->GenerateImageURLFromTransientURL(url, type, new_url);
+      search_box->GenerateImageURLFromTransientURL(url, type, new_url);
   }
 #endif  // !defined(OS_ANDROID)
-
-  return false;
 }
 
 bool ChromeContentRendererClient::IsPrefetchOnly(
@@ -1394,11 +1392,20 @@ void ChromeContentRendererClient::InitSpellCheck() {
 }
 #endif
 
+// TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
+// default (https://crbug.com/825740).
 std::unique_ptr<blink::WebSocketHandshakeThrottle>
 ChromeContentRendererClient::CreateWebSocketHandshakeThrottle() {
   InitSafeBrowsingIfNecessary();
+  // This is called only for Shared Worker and Service Worker that don't have a
+  // real frame, so we specify MSG_ROUTING_NONE here.
   return std::make_unique<safe_browsing::WebSocketSBHandshakeThrottle>(
-      safe_browsing_.get());
+      safe_browsing_.get(), MSG_ROUTING_NONE);
+}
+
+std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+ChromeContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
+  return std::make_unique<WebSocketHandshakeThrottleProviderImpl>();
 }
 
 std::unique_ptr<blink::WebSpeechSynthesizer>
@@ -1441,15 +1448,6 @@ bool ChromeContentRendererClient::ShouldReportDetailedMessageForSource(
 #else
   return false;
 #endif
-}
-
-bool ChromeContentRendererClient::ShouldGatherSiteIsolationStats() const {
-  // Site isolation stats are gathered currently for non-extension renderer
-  // processes running a normal web page from the Internet.
-  // TODO(nick): https://crbug.com/268640 Gather stats for extension processes
-  // too; we would need to check the extension's manifest to know which sites
-  // it's allowed to access.
-  return !IsStandaloneExtensionProcess();
 }
 
 std::unique_ptr<blink::WebContentSettingsClient>
@@ -1690,6 +1688,8 @@ ChromeContentRendererClient::GetTaskSchedulerInitParams() {
   return task_scheduler_util::GetTaskSchedulerInitParamsForRenderer();
 }
 
+// TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
+// default (https://crbug.com/825740).
 void ChromeContentRendererClient::InitSafeBrowsingIfNecessary() {
   if (safe_browsing_)
     return;

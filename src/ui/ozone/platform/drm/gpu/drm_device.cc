@@ -15,6 +15,8 @@
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/posix/safe_strerror.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -30,9 +32,10 @@ namespace ui {
 
 namespace {
 
-using DrmEventHandler = base::Callback<void(uint32_t /* frame */,
-                                            base::TimeTicks /* timestamp */,
-                                            uint64_t /* id */)>;
+using DrmEventHandler =
+    base::RepeatingCallback<void(uint32_t /* frame */,
+                                 base::TimeTicks /* timestamp */,
+                                 uint64_t /* id */)>;
 
 bool DrmCreateDumbBuffer(int fd,
                          const SkImageInfo& info,
@@ -129,8 +132,6 @@ bool CanQueryForResources(int fd) {
   return !drmIoctl(fd, DRM_IOCTL_MODE_GETRESOURCES, &resources);
 }
 
-using ScopedDrmColorLutPtr = std::unique_ptr<drm_color_lut, base::FreeDeleter>;
-using ScopedDrmColorCtmPtr = std::unique_ptr<drm_color_ctm, base::FreeDeleter>;
 
 ScopedDrmColorLutPtr CreateLutBlob(
     const std::vector<display::GammaRampRGBEntry>& source) {
@@ -250,21 +251,21 @@ class DrmDevice::PageFlipManager {
       return;
     }
 
-    DrmDevice::PageFlipCallback callback = it->callback;
+    DrmDevice::PageFlipCallback callback = std::move(it->callback);
     it->pending_calls--;
     if (it->pending_calls)
       return;
 
     callbacks_.erase(it);
-    callback.Run(frame, timestamp);
+    std::move(callback).Run(frame, timestamp);
   }
 
   uint64_t GetNextId() { return next_id_++; }
 
   void RegisterCallback(uint64_t id,
                         uint64_t pending_calls,
-                        const DrmDevice::PageFlipCallback& callback) {
-    callbacks_.push_back({id, pending_calls, callback});
+                        DrmDevice::PageFlipCallback callback) {
+    callbacks_.push_back({id, pending_calls, std::move(callback)});
   }
 
  private:
@@ -289,7 +290,7 @@ class DrmDevice::PageFlipManager {
   DISALLOW_COPY_AND_ASSIGN(PageFlipManager);
 };
 
-class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
+class DrmDevice::IOWatcher : public base::MessagePumpLibevent::FdWatcher {
  public:
   IOWatcher(int fd, DrmDevice::PageFlipManager* page_flip_manager)
       : page_flip_manager_(page_flip_manager), controller_(FROM_HERE), fd_(fd) {
@@ -301,8 +302,8 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
  private:
   void Register() {
     DCHECK(base::MessageLoopForIO::IsCurrent());
-    base::MessageLoopForIO::current()->WatchFileDescriptor(
-        fd_, true, base::MessageLoopForIO::WATCH_READ, &controller_, this);
+    base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+        fd_, true, base::MessagePumpForIO::WATCH_READ, &controller_, this);
   }
 
   void Unregister() {
@@ -310,13 +311,14 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
     controller_.StopWatchingFileDescriptor();
   }
 
-  // base::MessagePumpLibevent::Watcher overrides:
+  // base::MessagePumpLibevent::FdWatcher overrides:
   void OnFileCanReadWithoutBlocking(int fd) override {
     DCHECK(base::MessageLoopForIO::IsCurrent());
     TRACE_EVENT1("drm", "OnDrmEvent", "socket", fd);
 
-    if (!ProcessDrmEvent(fd, base::Bind(&DrmDevice::PageFlipManager::OnPageFlip,
-                                        base::Unretained(page_flip_manager_))))
+    if (!ProcessDrmEvent(
+            fd, base::BindRepeating(&DrmDevice::PageFlipManager::OnPageFlip,
+                                    base::Unretained(page_flip_manager_))))
       Unregister();
   }
 
@@ -324,7 +326,7 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
 
   DrmDevice::PageFlipManager* page_flip_manager_;
 
-  base::MessagePumpLibevent::FileDescriptorWatcher controller_;
+  base::MessagePumpLibevent::FdWatchController controller_;
 
   int fd_;
 
@@ -341,7 +343,7 @@ DrmDevice::DrmDevice(const base::FilePath& device_path,
 
 DrmDevice::~DrmDevice() {}
 
-bool DrmDevice::Initialize(bool use_atomic) {
+bool DrmDevice::Initialize() {
   // Ignore devices that cannot perform modesetting.
   if (!CanQueryForResources(file_.GetPlatformFile())) {
     VLOG(2) << "Cannot query for resources for '" << device_path_.value()
@@ -349,13 +351,10 @@ bool DrmDevice::Initialize(bool use_atomic) {
     return false;
   }
 
-  // Use atomic only if the build, kernel & flags all allow it.
-  if (use_atomic && SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
+  // Use atomic only if kernel allows it.
+  if (SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
     plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic());
 
-  LOG_IF(WARNING, use_atomic && !plane_manager_)
-      << "Drm atomic requested but capabilities don't allow it. Falling back "
-         "to legacy page flip.";
   if (!plane_manager_)
     plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy());
   if (!plane_manager_->Initialize(this)) {
@@ -447,7 +446,7 @@ bool DrmDevice::RemoveFramebuffer(uint32_t framebuffer) {
 
 bool DrmDevice::PageFlip(uint32_t crtc_id,
                          uint32_t framebuffer,
-                         const PageFlipCallback& callback) {
+                         PageFlipCallback callback) {
   DCHECK(file_.IsValid());
   TRACE_EVENT2("drm", "DrmDevice::PageFlip", "crtc", crtc_id, "framebuffer",
                framebuffer);
@@ -458,7 +457,7 @@ bool DrmDevice::PageFlip(uint32_t crtc_id,
   if (!drmModePageFlip(file_.GetPlatformFile(), crtc_id, framebuffer,
                        DRM_MODE_PAGE_FLIP_EVENT, reinterpret_cast<void*>(id))) {
     // If successful the payload will be removed by a PageFlip event.
-    page_flip_manager_->RegisterCallback(id, 1, callback);
+    page_flip_manager_->RegisterCallback(id, 1, std::move(callback));
     return true;
   }
 
@@ -603,7 +602,7 @@ bool DrmDevice::CloseBufferHandle(uint32_t handle) {
 bool DrmDevice::CommitProperties(drmModeAtomicReq* properties,
                                  uint32_t flags,
                                  uint32_t crtc_count,
-                                 const PageFlipCallback& callback) {
+                                 PageFlipCallback callback) {
   uint64_t id = 0;
   bool page_flip_event_requested = flags & DRM_MODE_PAGE_FLIP_EVENT;
 
@@ -613,7 +612,7 @@ bool DrmDevice::CommitProperties(drmModeAtomicReq* properties,
   if (!drmModeAtomicCommit(file_.GetPlatformFile(), properties, flags,
                            reinterpret_cast<void*>(id))) {
     if (page_flip_event_requested)
-      page_flip_manager_->RegisterCallback(id, crtc_count, callback);
+      page_flip_manager_->RegisterCallback(id, crtc_count, std::move(callback));
 
     return true;
   }
@@ -693,66 +692,125 @@ bool DrmDevice::SetColorCorrection(
     const std::vector<display::GammaRampRGBEntry>& degamma_lut,
     const std::vector<display::GammaRampRGBEntry>& gamma_lut,
     const std::vector<float>& correction_matrix) {
+  const bool should_set_gamma_properties =
+      !degamma_lut.empty() || !gamma_lut.empty();
+
+  ScopedDrmCrtcPtr crtc(drmModeGetCrtc(file_.GetPlatformFile(), crtc_id));
+  // TODO(dcastagna): Precompute and cache the return value of
+  // HasColorCorrectionMatrix when we initialize DrmDevice.
+  // We currently assume that if a per-CRTC CTM is not available, per-plane
+  // CTMs will be. We can make this more explicit once we address this TODO.
+  if (!HasColorCorrectionMatrix(file_.GetPlatformFile(), crtc.get()) &&
+      !should_set_gamma_properties) {
+    return plane_manager_->SetColorCorrectionOnAllCrtcPlanes(
+        crtc_id, CreateCTMBlob(correction_matrix));
+  }
+
   ScopedDrmObjectPropertyPtr crtc_props(drmModeObjectGetProperties(
       file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC));
+
+  // Extract only the needed properties.
+  int max_num_properties_expected = 1;
+  if (should_set_gamma_properties)
+    max_num_properties_expected += 4;
+
+  // The gamma/degamma LUT sizes must be extracted first since they're needed at
+  // the time when we set the gamma/degamma properties. Hence, we'll cache the
+  // gamma/degamma properties and defer setting them later only when needed.
   uint64_t degamma_lut_size = 0;
   uint64_t gamma_lut_size = 0;
-
-  for (uint32_t i = 0; i < crtc_props->count_props; ++i) {
-    ScopedDrmPropertyPtr property(
-        drmModeGetProperty(file_.GetPlatformFile(), crtc_props->props[i]));
-    if (property && !strcmp(property->name, "DEGAMMA_LUT_SIZE")) {
-      degamma_lut_size = crtc_props->prop_values[i];
-    }
-    if (property && !strcmp(property->name, "GAMMA_LUT_SIZE")) {
-      gamma_lut_size = crtc_props->prop_values[i];
-    }
-
-    if (degamma_lut_size && gamma_lut_size)
-      break;
-  }
-
-  // If we can't find the degamma & gamma lut size, it means the properties
-  // aren't available. We should then use the legacy gamma ramp ioctl.
-  if (degamma_lut_size == 0 || gamma_lut_size == 0) {
-    return SetGammaRamp(crtc_id, gamma_lut);
-  }
-
-  ScopedDrmColorLutPtr degamma_blob_data =
-      CreateLutBlob(ResampleLut(degamma_lut, degamma_lut_size));
-  ScopedDrmColorLutPtr gamma_blob_data =
-      CreateLutBlob(ResampleLut(gamma_lut, gamma_lut_size));
-  ScopedDrmColorCtmPtr ctm_blob_data = CreateCTMBlob(correction_matrix);
-
+  ScopedDrmPropertyPtr degamma_lut_property;
+  uint32_t degamma_lut_property_index = 0;
+  ScopedDrmPropertyPtr gamma_lut_property;
+  uint32_t gamma_lut_property_index = 0;
+  int properties_counter = 0;
   for (uint32_t i = 0; i < crtc_props->count_props; ++i) {
     ScopedDrmPropertyPtr property(
         drmModeGetProperty(file_.GetPlatformFile(), crtc_props->props[i]));
     if (!property)
       continue;
 
-    if (!strcmp(property->name, "DEGAMMA_LUT")) {
-      if (!SetBlobProperty(
-              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
-              crtc_props->props[i], property->name,
-              reinterpret_cast<unsigned char*>(degamma_blob_data.get()),
-              sizeof(drm_color_lut) * degamma_lut_size))
-        return false;
+    // TODO: Cache those properties when we get the device in order to avoid
+    // looking for them every time.
+    if (should_set_gamma_properties) {
+      if (!strcmp(property->name, "DEGAMMA_LUT_SIZE")) {
+        degamma_lut_size = crtc_props->prop_values[i];
+        ++properties_counter;
+        continue;
+      }
+
+      if (!strcmp(property->name, "GAMMA_LUT_SIZE")) {
+        gamma_lut_size = crtc_props->prop_values[i];
+        ++properties_counter;
+        continue;
+      }
+
+      if (!strcmp(property->name, "DEGAMMA_LUT")) {
+        degamma_lut_property = std::move(property);
+        degamma_lut_property_index = i;
+        ++properties_counter;
+        continue;
+      }
+
+      if (!strcmp(property->name, "GAMMA_LUT")) {
+        gamma_lut_property = std::move(property);
+        gamma_lut_property_index = i;
+        ++properties_counter;
+        continue;
+      }
     }
-    if (!strcmp(property->name, "GAMMA_LUT")) {
-      if (!SetBlobProperty(
-              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
-              crtc_props->props[i], property->name,
-              reinterpret_cast<unsigned char*>(gamma_blob_data.get()),
-              sizeof(drm_color_lut) * gamma_lut_size))
-        return false;
-    }
+
     if (!strcmp(property->name, "CTM")) {
+      ScopedDrmColorCtmPtr ctm_blob_data = CreateCTMBlob(correction_matrix);
       if (!SetBlobProperty(
               file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
               crtc_props->props[i], property->name,
               reinterpret_cast<unsigned char*>(ctm_blob_data.get()),
-              sizeof(drm_color_ctm)))
+              sizeof(drm_color_ctm))) {
         return false;
+      }
+      ++properties_counter;
+      continue;
+    }
+
+    // Don't waste time checking other properties if all the needed ones are
+    // found.
+    DCHECK_LE(properties_counter, max_num_properties_expected);
+    if (properties_counter == max_num_properties_expected)
+      break;
+  }
+
+  if (should_set_gamma_properties) {
+    if (degamma_lut_size == 0 || gamma_lut_size == 0) {
+      // If we can't find the degamma & gamma lut size, it means the properties
+      // aren't available. We should then use the legacy gamma ramp ioctl.
+      return SetGammaRamp(crtc_id, gamma_lut);
+    }
+
+    if (degamma_lut_property) {
+      ScopedDrmColorLutPtr degamma_blob_data =
+          CreateLutBlob(ResampleLut(degamma_lut, degamma_lut_size));
+      if (!SetBlobProperty(
+              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
+              crtc_props->props[degamma_lut_property_index],
+              degamma_lut_property->name,
+              reinterpret_cast<unsigned char*>(degamma_blob_data.get()),
+              sizeof(drm_color_lut) * degamma_lut_size)) {
+        return false;
+      }
+    }
+
+    if (gamma_lut_property) {
+      ScopedDrmColorLutPtr gamma_blob_data =
+          CreateLutBlob(ResampleLut(gamma_lut, gamma_lut_size));
+      if (!SetBlobProperty(
+              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
+              crtc_props->props[gamma_lut_property_index],
+              gamma_lut_property->name,
+              reinterpret_cast<unsigned char*>(gamma_blob_data.get()),
+              sizeof(drm_color_lut) * gamma_lut_size)) {
+        return false;
+      }
     }
   }
 

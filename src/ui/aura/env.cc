@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -14,6 +13,7 @@
 #include "ui/aura/env_observer.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/local/window_port_local.h"
+#include "ui/aura/mouse_location_manager.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/mus/system_input_injector_mus.h"
@@ -61,9 +61,10 @@ Env::~Env() {
 }
 
 // static
-std::unique_ptr<Env> Env::CreateInstance(Mode mode) {
+std::unique_ptr<Env> Env::CreateInstance(Mode mode,
+                                         bool create_mouse_location_manager) {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
-  std::unique_ptr<Env> env(new Env(mode));
+  std::unique_ptr<Env> env(new Env(mode, create_mouse_location_manager));
   env->Init();
   return env;
 }
@@ -134,6 +135,17 @@ const gfx::Point& Env::last_mouse_location() const {
   return last_mouse_location_;
 }
 
+void Env::SetLastMouseLocation(const gfx::Point& last_mouse_location) {
+  last_mouse_location_ = last_mouse_location;
+  if (mouse_location_manager_)
+    mouse_location_manager_->SetMouseLocation(last_mouse_location);
+}
+
+mojo::ScopedSharedBufferHandle Env::GetLastMouseLocationMemory() {
+  DCHECK(mouse_location_manager_);
+  return mouse_location_manager_->GetMouseLocationMemory();
+}
+
 void Env::SetWindowTreeClient(WindowTreeClient* window_tree_client) {
   // The WindowTreeClient should only be set once. Test code may need to change
   // the value after the fact, to do that use EnvTestHelper.
@@ -155,7 +167,7 @@ void Env::ScheduleEmbed(
 // static
 bool Env::initial_throttle_input_on_resize_ = true;
 
-Env::Env(Mode mode)
+Env::Env(Mode mode, bool create_mouse_location_manager)
     : mode_(mode),
       env_controller_(new EnvInputStateController),
       mouse_button_flags_(0),
@@ -166,6 +178,8 @@ Env::Env(Mode mode)
       context_factory_private_(nullptr) {
   DCHECK(lazy_tls_ptr.Pointer()->Get() == NULL);
   lazy_tls_ptr.Pointer()->Set(this);
+  if (create_mouse_location_manager)
+    mouse_location_manager_ = std::make_unique<MouseLocationManager>();
 }
 
 void Env::Init() {

@@ -38,7 +38,7 @@
 #include "chrome/browser/ui/libgtkui/skia_utils_gtk.h"
 #include "chrome/browser/ui/libgtkui/unity_service.h"
 #include "chrome/browser/ui/libgtkui/x11_input_method_context_impl_gtk.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -76,7 +76,7 @@
 #include "chrome/browser/ui/libgtkui/settings_provider_gsettings.h"
 #endif
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 #include "printing/printing_context_linux.h"
 #endif
 
@@ -485,7 +485,7 @@ void GtkUi::Initialize() {
 
   LoadGtkValues();
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   printing::PrintingContextLinux::SetCreatePrintDialogFunction(
       &PrintDialogGtk2::CreatePrintDialog);
   printing::PrintingContextLinux::SetPdfPaperSizeFunction(

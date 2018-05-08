@@ -11,7 +11,6 @@
 #include "chrome/common/media_router/issue.h"
 #include "chrome/common/media_router/mojo/media_router.mojom.h"
 #include "chrome/common/media_router/route_request_result.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
 #include "net/base/ip_endpoint.h"
 
 namespace mojo {
@@ -444,104 +443,6 @@ struct StructTraits<media_router::mojom::MediaRouteDataView,
 
   static bool is_local_presentation(const media_router::MediaRoute& route) {
     return route.is_local_presentation();
-  }
-};
-
-// PresentationConnectionState
-
-template <>
-struct EnumTraits<media_router::mojom::MediaRouter::PresentationConnectionState,
-                  content::PresentationConnectionState> {
-  static media_router::mojom::MediaRouter::PresentationConnectionState ToMojom(
-      content::PresentationConnectionState state) {
-    switch (state) {
-      case content::PRESENTATION_CONNECTION_STATE_CONNECTING:
-        return media_router::mojom::MediaRouter::PresentationConnectionState::
-            CONNECTING;
-      case content::PRESENTATION_CONNECTION_STATE_CONNECTED:
-        return media_router::mojom::MediaRouter::PresentationConnectionState::
-            CONNECTED;
-      case content::PRESENTATION_CONNECTION_STATE_CLOSED:
-        return media_router::mojom::MediaRouter::PresentationConnectionState::
-            CLOSED;
-      case content::PRESENTATION_CONNECTION_STATE_TERMINATED:
-        return media_router::mojom::MediaRouter::PresentationConnectionState::
-            TERMINATED;
-    }
-    NOTREACHED() << "Unknown PresentationConnectionState "
-                 << static_cast<int>(state);
-    return media_router::mojom::MediaRouter::PresentationConnectionState::
-        TERMINATED;
-  }
-
-  static bool FromMojom(
-      media_router::mojom::MediaRouter::PresentationConnectionState input,
-      content::PresentationConnectionState* state) {
-    switch (input) {
-      case media_router::mojom::MediaRouter::PresentationConnectionState::
-          CONNECTING:
-        *state = content::PRESENTATION_CONNECTION_STATE_CONNECTING;
-        return true;
-      case media_router::mojom::MediaRouter::PresentationConnectionState::
-          CONNECTED:
-        *state = content::PRESENTATION_CONNECTION_STATE_CONNECTED;
-        return true;
-      case media_router::mojom::MediaRouter::PresentationConnectionState::
-          CLOSED:
-        *state = content::PRESENTATION_CONNECTION_STATE_CLOSED;
-        return true;
-      case media_router::mojom::MediaRouter::PresentationConnectionState::
-          TERMINATED:
-        *state = content::PRESENTATION_CONNECTION_STATE_TERMINATED;
-        return true;
-    }
-    return false;
-  }
-};
-
-// PresentationConnectionCloseReason
-
-template <>
-struct EnumTraits<
-    media_router::mojom::MediaRouter::PresentationConnectionCloseReason,
-    content::PresentationConnectionCloseReason> {
-  static media_router::mojom::MediaRouter::PresentationConnectionCloseReason
-  ToMojom(content::PresentationConnectionCloseReason reason) {
-    switch (reason) {
-      case content::PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR:
-        return media_router::mojom::MediaRouter::
-            PresentationConnectionCloseReason::CONNECTION_ERROR;
-      case content::PRESENTATION_CONNECTION_CLOSE_REASON_CLOSED:
-        return media_router::mojom::MediaRouter::
-            PresentationConnectionCloseReason::CLOSED;
-      case content::PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY:
-        return media_router::mojom::MediaRouter::
-            PresentationConnectionCloseReason::WENT_AWAY;
-    }
-    NOTREACHED() << "Unknown PresentationConnectionCloseReason "
-                 << static_cast<int>(reason);
-    return media_router::mojom::MediaRouter::PresentationConnectionCloseReason::
-        CONNECTION_ERROR;
-  }
-
-  static bool FromMojom(
-      media_router::mojom::MediaRouter::PresentationConnectionCloseReason input,
-      content::PresentationConnectionCloseReason* state) {
-    switch (input) {
-      case media_router::mojom::MediaRouter::PresentationConnectionCloseReason::
-          CONNECTION_ERROR:
-        *state = content::PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR;
-        return true;
-      case media_router::mojom::MediaRouter::PresentationConnectionCloseReason::
-          CLOSED:
-        *state = content::PRESENTATION_CONNECTION_CLOSE_REASON_CLOSED;
-        return true;
-      case media_router::mojom::MediaRouter::PresentationConnectionCloseReason::
-          WENT_AWAY:
-        *state = content::PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY;
-        return true;
-    }
-    return false;
   }
 };
 

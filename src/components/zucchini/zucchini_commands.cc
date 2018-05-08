@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <ostream>
+#include <string>
 #include <utility>
 
 #include "base/command_line.h"
@@ -29,6 +30,8 @@ namespace {
 /******** Command-line Switches ********/
 
 constexpr char kSwitchDump[] = "dump";
+constexpr char kSwitchImpose[] = "impose";
+constexpr char kSwitchKeep[] = "keep";
 constexpr char kSwitchRaw[] = "raw";
 
 }  // namespace
@@ -55,11 +58,18 @@ zucchini::status::Code MainGen(MainParams params) {
   zucchini::EnsemblePatchWriter patch_writer(old_image.region(),
                                              new_image.region());
 
-  auto generate = params.command_line.HasSwitch(kSwitchRaw)
-                      ? zucchini::GenerateRaw
-                      : zucchini::GenerateEnsemble;
-  zucchini::status::Code result =
-      generate(old_image.region(), new_image.region(), &patch_writer);
+  zucchini::status::Code result = zucchini::status::kStatusSuccess;
+  if (params.command_line.HasSwitch(kSwitchRaw)) {
+    result = GenerateRaw(old_image.region(), new_image.region(), &patch_writer);
+  } else {
+    // May be empty.
+    std::string imposed_matches =
+        params.command_line.GetSwitchValueASCII(kSwitchImpose);
+    result = GenerateEnsembleWithImposedMatches(
+        old_image.region(), new_image.region(), std::move(imposed_matches),
+        &patch_writer);
+  }
+
   if (result != zucchini::status::kStatusSuccess) {
     params.out << "Fatal error encountered when generating patch." << std::endl;
     return result;
@@ -79,6 +89,9 @@ zucchini::status::Code MainGen(MainParams params) {
     return zucchini::status::kStatusFileWriteError;
   }
 
+  if (params.command_line.HasSwitch(kSwitchKeep))
+    patch.Keep();
+
   if (!patch_writer.SerializeInto(patch.region()))
     return zucchini::status::kStatusPatchWriteError;
 
@@ -91,7 +104,8 @@ zucchini::status::Code MainGen(MainParams params) {
 zucchini::status::Code MainApply(MainParams params) {
   CHECK_EQ(3U, params.file_paths.size());
   return zucchini::Apply(params.file_paths[0], params.file_paths[1],
-                         params.file_paths[2]);
+                         params.file_paths[2],
+                         params.command_line.HasSwitch(kSwitchKeep));
 }
 
 zucchini::status::Code MainRead(MainParams params) {
@@ -149,9 +163,13 @@ zucchini::status::Code MainMatch(MainParams params) {
                << new_image.error();
     return zucchini::status::kStatusFileReadError;
   }
+
+  std::string imposed_matches =
+      params.command_line.GetSwitchValueASCII(kSwitchImpose);
   zucchini::status::Code status =
       zucchini::MatchAll({old_image.data(), old_image.length()},
-                         {new_image.data(), new_image.length()}, params.out);
+                         {new_image.data(), new_image.length()},
+                         std::move(imposed_matches), params.out);
   if (status != zucchini::status::kStatusSuccess)
     params.err << "Fatal error found when matching executables." << std::endl;
   return status;

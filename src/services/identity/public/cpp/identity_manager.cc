@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 #include "services/identity/public/cpp/identity_manager.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 
 namespace identity {
 
 IdentityManager::IdentityManager(SigninManagerBase* signin_manager,
                                  ProfileOAuth2TokenService* token_service)
-    : signin_manager_(signin_manager), token_service_(token_service) {
+    : signin_manager_(signin_manager),
+      token_service_(token_service),
+      weak_ptr_factory_(this) {
   primary_account_info_ = signin_manager_->GetAuthenticatedAccountInfo();
   signin_manager_->AddObserver(this);
 #if !defined(OS_CHROMEOS)
@@ -40,13 +41,24 @@ AccountInfo IdentityManager::GetPrimaryAccountInfo() {
   // where you are setting the authenticated account info in the SigninManager.
   // TODO(blundell): Add the API to do this once we hit the first case and
   // document the API to use here.
-  DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().account_id,
+  DCHECK_EQ(signin_manager_->GetAuthenticatedAccountId(),
             primary_account_info_.account_id);
-  DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().gaia,
-            primary_account_info_.gaia);
-  DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().email,
-            primary_account_info_.email);
-#endif
+#if DCHECK_IS_ON()
+  // Note: If the primary account's refresh token gets revoked, then the account
+  // gets removed from AccountTrackerService (via
+  // AccountFetcherService::OnRefreshTokenRevoked), and so SigninManager's
+  // GetAuthenticatedAccountInfo is empty (even though
+  // GetAuthenticatedAccountId is NOT empty).
+  if (!signin_manager_->GetAuthenticatedAccountInfo().account_id.empty()) {
+    DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().account_id,
+              primary_account_info_.account_id);
+    DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().gaia,
+              primary_account_info_.gaia);
+    DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().email,
+              primary_account_info_.email);
+  }
+#endif  // DCHECK_IS_ON()
+#endif  // defined(OS_CHROMEOS)
   return primary_account_info_;
 }
 
@@ -72,9 +84,10 @@ void IdentityManager::RemoveAccessTokenFromCache(
   // Call PO2TS asynchronously to mimic the eventual interaction with the
   // Identity Service.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&OAuth2TokenService::InvalidateAccessToken,
-                                base::Unretained(token_service_),
-                                account_info.account_id, scopes, access_token));
+      FROM_HERE,
+      base::BindOnce(&IdentityManager::HandleRemoveAccessTokenFromCache,
+                     weak_ptr_factory_.GetWeakPtr(), account_info.account_id,
+                     scopes, access_token));
 }
 
 void IdentityManager::AddObserver(Observer* observer) {
@@ -137,7 +150,7 @@ void IdentityManager::GoogleSigninSucceeded(const AccountInfo& account_info) {
   DCHECK(account_info.email == primary_account_info_.email);
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&IdentityManager::HandleGoogleSigninSucceeded,
-                                base::Unretained(this), account_info));
+                                weak_ptr_factory_.GetWeakPtr(), account_info));
 }
 
 void IdentityManager::GoogleSignedOut(const AccountInfo& account_info) {
@@ -147,7 +160,7 @@ void IdentityManager::GoogleSignedOut(const AccountInfo& account_info) {
   DCHECK(!HasPrimaryAccount());
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&IdentityManager::HandleGoogleSignedOut,
-                                base::Unretained(this), account_info));
+                                weak_ptr_factory_.GetWeakPtr(), account_info));
 }
 
 void IdentityManager::OnAccessTokenRequested(
@@ -158,9 +171,16 @@ void IdentityManager::OnAccessTokenRequested(
   // in asynchronously from the Identity Service rather than synchronously from
   // ProfileOAuth2TokenService.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&IdentityManager::HandleOnAccessTokenRequested,
-                     base::Unretained(this), account_id, consumer_id, scopes));
+      FROM_HERE, base::BindOnce(&IdentityManager::HandleOnAccessTokenRequested,
+                                weak_ptr_factory_.GetWeakPtr(), account_id,
+                                consumer_id, scopes));
+}
+
+void IdentityManager::HandleRemoveAccessTokenFromCache(
+    const std::string& account_id,
+    const OAuth2TokenService::ScopeSet& scopes,
+    const std::string& access_token) {
+  token_service_->InvalidateAccessToken(account_id, scopes, access_token);
 }
 
 void IdentityManager::HandleGoogleSigninSucceeded(

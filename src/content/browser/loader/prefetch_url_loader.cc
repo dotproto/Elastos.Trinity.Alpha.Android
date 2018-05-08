@@ -17,6 +17,7 @@ PrefetchURLLoader::PrefetchURLLoader(
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
+    base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
     const network::ResourceRequest& resource_request,
     network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -24,7 +25,8 @@ PrefetchURLLoader::PrefetchURLLoader(
     URLLoaderThrottlesGetter url_loader_throttles_getter,
     ResourceContext* resource_context,
     scoped_refptr<net::URLRequestContextGetter> request_context_getter)
-    : network_loader_factory_(std::move(network_loader_factory)),
+    : frame_tree_node_id_getter_(frame_tree_node_id_getter),
+      network_loader_factory_(std::move(network_loader_factory)),
       client_binding_(this),
       forwarding_client_(std::move(client)),
       url_loader_throttles_getter_(url_loader_throttles_getter),
@@ -76,7 +78,6 @@ void PrefetchURLLoader::ResumeReadingBodyFromNet() {
 
 void PrefetchURLLoader::OnReceiveResponse(
     const network::ResourceResponseHead& response,
-    const base::Optional<net::SSLInfo>& ssl_info,
     network::mojom::DownloadedTempFilePtr downloaded_file) {
   if (WebPackagePrefetchHandler::IsResponseForWebPackage(response)) {
     DCHECK(!web_package_prefetch_handler_);
@@ -84,14 +85,13 @@ void PrefetchURLLoader::OnReceiveResponse(
     // Note that after this point this doesn't directly get upcalls from the
     // network. (Until |this| calls the handler's FollowRedirect.)
     web_package_prefetch_handler_ = std::make_unique<WebPackagePrefetchHandler>(
-        response, std::move(loader_), client_binding_.Unbind(),
-        network_loader_factory_, request_initiator_,
+        frame_tree_node_id_getter_, response, std::move(loader_),
+        client_binding_.Unbind(), network_loader_factory_, request_initiator_,
         url_loader_throttles_getter_, resource_context_,
         request_context_getter_, this);
     return;
   }
-  forwarding_client_->OnReceiveResponse(response, ssl_info,
-                                        std::move(downloaded_file));
+  forwarding_client_->OnReceiveResponse(response, std::move(downloaded_file));
 }
 
 void PrefetchURLLoader::OnReceiveRedirect(
@@ -128,7 +128,7 @@ void PrefetchURLLoader::OnStartLoadingResponseBody(
   // the renderer for prefetch.
   DCHECK(!pipe_drainer_);
   pipe_drainer_ =
-      std::make_unique<mojo::common::DataPipeDrainer>(this, std::move(body));
+      std::make_unique<mojo::DataPipeDrainer>(this, std::move(body));
 }
 
 void PrefetchURLLoader::OnComplete(

@@ -36,7 +36,6 @@ schema_sources = [
   "debugger.json",
   "desktop_capture.json",
   "developer_private.idl",
-  "dial.idl",
   "downloads.idl",
   "downloads_internal.idl",
   "font_settings.json",
@@ -58,6 +57,7 @@ schema_sources = [
   "permissions.json",
   "preferences_private.json",
   "resources_private.idl",
+  "safe_browsing_private.idl",
   "sessions.json",
   "settings_private.idl",
   "signed_in_devices.idl",
@@ -117,6 +117,10 @@ if (is_chromeos) {
   ]
 } else if (is_linux || is_win) {
   schema_sources += [ "input_ime.json" ]
+}
+
+if (!is_chromeos) {
+  schema_sources += [ "enterprise_reporting_private.idl" ]
 }
 
 if (enable_print_preview && !is_chromeos) {

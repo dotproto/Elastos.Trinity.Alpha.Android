@@ -45,7 +45,7 @@ public class ContentViewLocationTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().onHide();
+                mActivityTestRule.getWebContents().onHide();
             }
         });
     }
@@ -54,7 +54,7 @@ public class ContentViewLocationTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().onShow();
+                mActivityTestRule.getWebContents().onShow();
             }
         });
     }
@@ -108,7 +108,7 @@ public class ContentViewLocationTest {
         }
 
         mTestCallbackHelperContainer =
-                new TestCallbackHelperContainer(mActivityTestRule.getContentViewCore());
+                new TestCallbackHelperContainer(mActivityTestRule.getWebContents());
         mJavascriptHelper = new OnEvaluateJavaScriptResultHelper();
 
         ensureGeolocationRunning(false);
@@ -141,8 +141,7 @@ public class ContentViewLocationTest {
         ensureGeolocationRunning(true);
 
         // Navigate away and ensure that geolocation stops.
-        mActivityTestRule.loadUrl(
-                mActivityTestRule.getContentViewCore().getWebContents().getNavigationController(),
+        mActivityTestRule.loadUrl(mActivityTestRule.getWebContents().getNavigationController(),
                 mTestCallbackHelperContainer, new LoadUrlParams("about:blank"));
         ensureGeolocationRunning(false);
     }
@@ -188,8 +187,7 @@ public class ContentViewLocationTest {
         startGeolocationWatchPosition();
         ensureGeolocationRunning(false);
 
-        mActivityTestRule.loadUrl(
-                mActivityTestRule.getContentViewCore().getWebContents().getNavigationController(),
+        mActivityTestRule.loadUrl(mActivityTestRule.getWebContents().getNavigationController(),
                 mTestCallbackHelperContainer, new LoadUrlParams("about:blank"));
         showContentViewOnUiThread();
         ensureGeolocationRunning(false);

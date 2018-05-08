@@ -34,7 +34,7 @@ class FrameGenerator : public viz::mojom::CompositorFrameSinkClient {
   void SetHighContrastMode(bool enabled);
 
   // Updates the WindowManager's SurfaceInfo.
-  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info);
+  void SetEmbeddedSurface(const viz::SurfaceInfo& surface_info);
 
   // Swaps the |window_manager_surface_info_| with that of |other|.
   void SwapSurfaceWith(FrameGenerator* other);
@@ -43,6 +43,12 @@ class FrameGenerator : public viz::mojom::CompositorFrameSinkClient {
   void OnWindowSizeChanged(const gfx::Size& pixel_size);
   void Bind(
       std::unique_ptr<viz::mojom::CompositorFrameSink> compositor_frame_sink);
+
+  const viz::SurfaceInfo& window_manager_surface_info() const {
+    return window_manager_surface_info_;
+  }
+
+  void set_scale_and_center(bool value) { scale_and_center_ = value; }
 
  private:
   // viz::mojom::CompositorFrameSinkClient implementation:
@@ -76,17 +82,18 @@ class FrameGenerator : public viz::mojom::CompositorFrameSinkClient {
   viz::BeginFrameAck current_begin_frame_ack_;
   bool high_contrast_mode_enabled_ = false;
   gfx::Size last_submitted_frame_size_;
-  viz::LocalSurfaceId local_surface_id_;
   viz::ParentLocalSurfaceIdAllocator id_allocator_;
   float last_device_scale_factor_ = 0.0f;
 
   viz::SurfaceInfo window_manager_surface_info_;
 
+  // Whether the window manager surface should be scaled and centered.
+  bool scale_and_center_ = false;
+
   DISALLOW_COPY_AND_ASSIGN(FrameGenerator);
 };
 
 }  // namespace ws
-
 }  // namespace ui
 
 #endif  // SERVICES_UI_WS_FRAME_GENERATOR_H_

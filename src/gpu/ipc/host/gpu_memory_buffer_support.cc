@@ -17,10 +17,9 @@
 namespace gpu {
 
 bool AreNativeGpuMemoryBuffersEnabled() {
-  // Disable native buffers when using software GL.
+  // Disable native buffers when using OSMesa.
   if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kUseGL) ==
-      gl::GetGLImplementationName(gl::GetSoftwareGLImplementation())) {
+          switches::kUseGL) == gl::kGLImplementationOSMesaName) {
     return false;
   }
 
@@ -58,6 +57,7 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations(
         gfx::BufferUsage::GPU_READ,
         gfx::BufferUsage::SCANOUT,
         gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
+        gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE,
         gfx::BufferUsage::SCANOUT_CPU_READ_WRITE,
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT};
@@ -70,11 +70,10 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations(
     }
   }
 
-  // Disable native buffers only when using software GL.
+  // Disable native buffers only when using OSMesa.
   bool force_native_gpu_read_write_formats =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kUseGL) !=
-      gl::GetGLImplementationName(gl::GetSoftwareGLImplementation());
+          switches::kUseGL) != gl::kGLImplementationOSMesaName;
   if (force_native_gpu_read_write_formats) {
     const gfx::BufferFormat kGPUReadWriteFormats[] = {
         gfx::BufferFormat::BGR_565,   gfx::BufferFormat::RGBA_8888,
@@ -84,6 +83,7 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations(
     const gfx::BufferUsage kGPUReadWriteUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
         gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
+        gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE,
         gfx::BufferUsage::SCANOUT_CPU_READ_WRITE,
         gfx::BufferUsage::SCANOUT_VDA_WRITE};
     for (auto format : kGPUReadWriteFormats) {

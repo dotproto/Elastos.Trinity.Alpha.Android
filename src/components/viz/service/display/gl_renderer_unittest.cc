@@ -8,9 +8,11 @@
 
 #include <memory>
 #include <set>
+#include <tuple>
 #include <vector>
 
 #include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -27,6 +29,7 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/service/display/overlay_strategy_single_on_top.h"
 #include "components/viz/service/display/overlay_strategy_underlay.h"
@@ -410,11 +413,11 @@ INSTANTIATE_TEST_CASE_P(PrecisionShadersCompile,
 class PrecisionBlendShaderPixelTest
     : public GLRendererShaderPixelTest,
       public ::testing::WithParamInterface<
-          std::tr1::tuple<TexCoordPrecision, BlendMode>> {};
+          std::tuple<TexCoordPrecision, BlendMode>> {};
 
 TEST_P(PrecisionBlendShaderPixelTest, ShadersCompile) {
-  TestShadersWithPrecisionAndBlend(std::tr1::get<0>(GetParam()),
-                                   std::tr1::get<1>(GetParam()));
+  TestShadersWithPrecisionAndBlend(std::get<0>(GetParam()),
+                                   std::get<1>(GetParam()));
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -426,11 +429,11 @@ INSTANTIATE_TEST_CASE_P(
 class PrecisionSamplerShaderPixelTest
     : public GLRendererShaderPixelTest,
       public ::testing::WithParamInterface<
-          std::tr1::tuple<TexCoordPrecision, SamplerType>> {};
+          std::tuple<TexCoordPrecision, SamplerType>> {};
 
 TEST_P(PrecisionSamplerShaderPixelTest, ShadersCompile) {
-  TestShadersWithPrecisionAndSampler(std::tr1::get<0>(GetParam()),
-                                     std::tr1::get<1>(GetParam()));
+  TestShadersWithPrecisionAndSampler(std::get<0>(GetParam()),
+                                     std::get<1>(GetParam()));
 }
 
 INSTANTIATE_TEST_CASE_P(PrecisionSamplerShadersCompile,
@@ -441,12 +444,11 @@ INSTANTIATE_TEST_CASE_P(PrecisionSamplerShadersCompile,
 class MaskShaderPixelTest
     : public GLRendererShaderPixelTest,
       public ::testing::WithParamInterface<
-          std::tr1::tuple<TexCoordPrecision, SamplerType, BlendMode, bool>> {};
+          std::tuple<TexCoordPrecision, SamplerType, BlendMode, bool>> {};
 
 TEST_P(MaskShaderPixelTest, ShadersCompile) {
-  TestShadersWithMasks(
-      std::tr1::get<0>(GetParam()), std::tr1::get<1>(GetParam()),
-      std::tr1::get<2>(GetParam()), std::tr1::get<3>(GetParam()));
+  TestShadersWithMasks(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                       std::get<2>(GetParam()), std::get<3>(GetParam()));
 }
 
 INSTANTIATE_TEST_CASE_P(MaskShadersCompile,
@@ -504,7 +506,9 @@ class GLRendererWithDefaultHarnessTest : public GLRendererTest {
     renderer_->SetVisible(true);
   }
 
-  void SwapBuffers() { renderer_->SwapBuffers(std::vector<ui::LatencyInfo>()); }
+  void SwapBuffers() {
+    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  }
 
   RendererSettings settings_;
   cc::FakeOutputSurfaceClient output_surface_client_;
@@ -538,7 +542,7 @@ class GLRendererShaderTest : public GLRendererTest {
     child_context_provider_->BindToCurrentThread();
     child_resource_provider_ =
         cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
-            child_context_provider_.get(), shared_bitmap_manager_.get());
+            child_context_provider_.get());
   }
 
   void TestRenderPassProgram(TexCoordPrecision precision,
@@ -769,24 +773,26 @@ TEST_F(GLRendererTest, InitializationDoesNotMakeSynchronousCalls) {
                           resource_provider.get());
 }
 
-class LoseContextOnFirstGetContext : public TestWebGraphicsContext3D {
+class LoseContextOnFirstGetGLES2Interface : public TestGLES2Interface {
  public:
-  LoseContextOnFirstGetContext() {}
+  LoseContextOnFirstGetGLES2Interface() {}
 
-  void getProgramiv(GLuint program, GLenum pname, GLint* value) override {
-    context_lost_ = true;
+  void GetProgramiv(GLuint program, GLenum pname, GLint* value) override {
+    LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
+                        GL_INNOCENT_CONTEXT_RESET_ARB);
     *value = 0;
   }
 
-  void getShaderiv(GLuint shader, GLenum pname, GLint* value) override {
-    context_lost_ = true;
+  void GetShaderiv(GLuint shader, GLenum pname, GLint* value) override {
+    LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
+                        GL_INNOCENT_CONTEXT_RESET_ARB);
     *value = 0;
   }
 };
 
 TEST_F(GLRendererTest, InitializationWithQuicklyLostContextDoesNotAssert) {
-  auto context = std::make_unique<LoseContextOnFirstGetContext>();
-  auto provider = TestContextProvider::Create(std::move(context));
+  auto gl_owned = std::make_unique<LoseContextOnFirstGetGLES2Interface>();
+  auto provider = TestContextProvider::Create(std::move(gl_owned));
   provider->BindToCurrentThread();
 
   cc::FakeOutputSurfaceClient output_surface_client;
@@ -944,7 +950,7 @@ class TextureStateTrackingContext : public TestWebGraphicsContext3D {
   MOCK_METHOD4(drawElements,
                void(GLenum mode, GLsizei count, GLenum type, GLintptr offset));
 
-  virtual void activeTexture(GLenum texture) {
+  void activeTexture(GLenum texture) override {
     EXPECT_NE(texture, active_texture_);
     active_texture_ = texture;
   }
@@ -991,7 +997,7 @@ TEST_F(GLRendererTest, ActiveTextureState) {
   child_context_provider->BindToCurrentThread();
   auto child_resource_provider =
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
-          child_context_provider.get(), shared_bitmap_manager.get());
+          child_context_provider.get());
 
   RenderPass* root_pass =
       cc::AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(100, 100),
@@ -1611,10 +1617,10 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
   int root_pass_id = 1;
   RenderPass* root_pass;
 
-  ResourceId mask = child_resource_provider_->CreateGpuTextureResource(
-      gfx::Size(20, 12), ResourceTextureHint::kDefault,
-      child_resource_provider_->best_texture_format(), gfx::ColorSpace());
-  child_resource_provider_->AllocateForTesting(mask);
+  auto transfer_resource = TransferableResource::MakeGL(
+      gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken());
+  ResourceId mask = child_resource_provider_->ImportResource(
+      transfer_resource, SingleReleaseCallback::Create(base::DoNothing()));
 
   // Return the mapped resource id.
   cc::ResourceProvider::ResourceIdMap resource_map =
@@ -1886,7 +1892,7 @@ class MockOutputSurface : public OutputSurface {
  public:
   explicit MockOutputSurface(scoped_refptr<ContextProvider> provider)
       : OutputSurface(std::move(provider)) {}
-  virtual ~MockOutputSurface() {}
+  ~MockOutputSurface() override {}
 
   void BindToClient(OutputSurfaceClient*) override {}
 
@@ -1908,7 +1914,6 @@ class MockOutputSurface : public OutputSurface {
   MOCK_CONST_METHOD0(IsDisplayedAsOverlayPlane, bool());
   MOCK_CONST_METHOD0(GetOverlayTextureId, unsigned());
   MOCK_CONST_METHOD0(GetOverlayBufferFormat, gfx::BufferFormat());
-  MOCK_CONST_METHOD0(SurfaceIsSuspendForRecycle, bool());
   MOCK_CONST_METHOD0(HasExternalStencilTest, bool());
   MOCK_METHOD0(ApplyExternalStencil, void());
 };
@@ -1941,7 +1946,9 @@ class MockOutputSurfaceTest : public GLRendererTest {
     Mock::VerifyAndClearExpectations(output_surface_.get());
   }
 
-  void SwapBuffers() { renderer_->SwapBuffers(std::vector<ui::LatencyInfo>()); }
+  void SwapBuffers() {
+    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  }
 
   void DrawFrame(float device_scale_factor,
                  const gfx::Size& viewport_size,
@@ -2019,7 +2026,7 @@ class TestOverlayProcessor : public OverlayProcessor {
     // to be traditionally composited. Candidates with |overlay_handled| set to
     // true must also have their |display_rect| converted to integer
     // coordinates if necessary.
-    void CheckOverlaySupport(cc::OverlayCandidateList* surfaces) {}
+    void CheckOverlaySupport(cc::OverlayCandidateList* surfaces) override {}
   };
 
   explicit TestOverlayProcessor(OutputSurface* surface)
@@ -2056,7 +2063,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   child_context_provider->BindToCurrentThread();
   auto child_resource_provider =
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
-          child_context_provider.get(), shared_bitmap_manager.get());
+          child_context_provider.get());
 
   auto transfer_resource = TransferableResource::MakeGLOverlay(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
@@ -2248,7 +2255,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   child_context_provider->BindToCurrentThread();
   auto child_resource_provider =
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
-          child_context_provider.get(), shared_bitmap_manager.get());
+          child_context_provider.get());
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                             gpu::CommandBufferId::FromUnsafeValue(0x123), 29);
@@ -2633,7 +2640,7 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
   child_context_provider->BindToCurrentThread();
   auto child_resource_provider =
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
-          child_context_provider.get(), nullptr);
+          child_context_provider.get());
 
   auto transfer_resource = TransferableResource::MakeGLOverlay(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
@@ -2740,8 +2747,8 @@ class GLRendererWithMockContextTest : public ::testing::Test {
   void SetUp() override {
     auto context_support = std::make_unique<MockContextSupport>();
     context_support_ptr_ = context_support.get();
-    auto context_provider = TestContextProvider::Create(
-        TestWebGraphicsContext3D::Create(), std::move(context_support));
+    auto context_provider =
+        TestContextProvider::Create(std::move(context_support));
     ASSERT_EQ(context_provider->BindToCurrentThread(),
               gpu::ContextResult::kSuccess);
     output_surface_ = FakeOutputSurface::Create3d(std::move(context_provider));
@@ -2857,7 +2864,7 @@ class GLRendererSwapWithBoundsTest : public GLRendererTest {
       renderer.DecideRenderPassAllocationsForFrame(
           render_passes_in_draw_order_);
       DrawFrame(&renderer, viewport_size);
-      renderer.SwapBuffers(std::vector<ui::LatencyInfo>());
+      renderer.SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
       std::vector<gfx::Rect> expected_content_bounds;
       EXPECT_EQ(content_bounds,
@@ -3011,7 +3018,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
 
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // The damage was eliminated when everything was promoted to CALayers.
   ASSERT_TRUE(output_surface().last_sent_frame()->sub_buffer_rect);
@@ -3049,7 +3056,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
 
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
@@ -3098,7 +3105,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
   EXPECT_NE(saved_texture_id, 0u);
@@ -3151,7 +3158,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // There are now 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3201,7 +3208,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
@@ -3250,7 +3257,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
   EXPECT_NE(saved_texture_id, 0u);
@@ -3301,7 +3308,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // There are now 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3349,7 +3356,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
@@ -3435,7 +3442,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   Mock::VerifyAndClearExpectations(&gl());
 
   // SwapBuffers() *does* happen this time.
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
   // There are 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3480,7 +3487,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
@@ -3524,7 +3531,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
             }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
     // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
     EXPECT_NE(sent_texture_ids[i], 0u);
@@ -3598,7 +3605,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
         }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
     // All sent textures will be checked to verify if they are free yet. There's
     // also 1 outstanding texture to check for that wasn't returned yet from the
@@ -3649,7 +3656,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
             }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
     // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
     EXPECT_NE(sent_texture_ids[i], 0u);
@@ -3689,7 +3696,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
     EXPECT_CALL(gl(), ScheduleCALayerCHROMIUM(_, _, _, _, _, _));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 
     // There's just 1 outstanding RenderPass texture to query for.
     EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(1, _));
@@ -3735,7 +3742,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
       }));
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
 }
 
 class FramebufferWatchingGLRenderer : public FakeRendererGL {

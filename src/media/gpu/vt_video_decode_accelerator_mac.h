@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -27,7 +26,6 @@
 #include "media/video/h264_poc.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gl/gl_context_cgl.h"
 #include "ui/gl/gl_image_io_surface.h"
 
 namespace media {
@@ -40,15 +38,15 @@ MEDIA_GPU_EXPORT bool InitializeVideoToolbox();
 class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
                                  public base::trace_event::MemoryDumpProvider {
  public:
-  explicit VTVideoDecodeAccelerator(
-      const MakeGLContextCurrentCallback& make_context_current_cb,
-      const BindGLImageCallback& bind_image_cb);
+  explicit VTVideoDecodeAccelerator(const BindGLImageCallback& bind_image_cb);
 
   ~VTVideoDecodeAccelerator() override;
 
   // VideoDecodeAccelerator implementation.
   bool Initialize(const Config& config, Client* client) override;
   void Decode(const BitstreamBuffer& bitstream) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
+              int32_t bitstream_id) override;
   void AssignPictureBuffers(
       const std::vector<PictureBuffer>& pictures) override;
   void ReusePictureBuffer(int32_t picture_id) override;
@@ -166,7 +164,7 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   bool FinishDelayedFrames();
 
   // |frame| is owned by |pending_frames_|.
-  void DecodeTask(const BitstreamBuffer&, Frame* frame);
+  void DecodeTask(scoped_refptr<DecoderBuffer> buffer, Frame* frame);
   void DecodeDone(Frame* frame);
 
   //
@@ -194,7 +192,6 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   //
   // GPU thread state.
   //
-  MakeGLContextCurrentCallback make_context_current_cb_;
   BindGLImageCallback bind_image_cb_;
 
   VideoDecodeAccelerator::Client* client_ = nullptr;

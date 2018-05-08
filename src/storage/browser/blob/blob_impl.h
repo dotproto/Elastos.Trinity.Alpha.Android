@@ -8,7 +8,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/public/mojom/blob/blob.mojom.h"
+#include "third_party/blink/public/mojom/blob/blob.mojom.h"
 
 namespace storage {
 
@@ -30,6 +30,7 @@ class STORAGE_EXPORT BlobImpl : public blink::mojom::Blob,
                  blink::mojom::BlobReaderClientPtr client) override;
   void ReadAll(mojo::ScopedDataPipeProducerHandle handle,
                blink::mojom::BlobReaderClientPtr client) override;
+  void ReadSideData(ReadSideDataCallback callback) override;
   void GetInternalUUID(GetInternalUUIDCallback callback) override;
 
   // network::mojom::DataPipeGetter:

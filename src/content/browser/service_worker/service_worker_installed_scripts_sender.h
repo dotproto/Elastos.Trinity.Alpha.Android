@@ -5,12 +5,13 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_INSTALLED_SCRIPTS_SENDER_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_INSTALLED_SCRIPTS_SENDER_H_
 
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "content/browser/service_worker/service_worker_installed_script_reader.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
 
 namespace content {
 
@@ -75,7 +76,7 @@ class CONTENT_EXPORT ServiceWorkerInstalledScriptsSender
 
   // Implements ServiceWorkerInstalledScriptReader::Client.
   void OnStarted(std::string encoding,
-                 std::unordered_map<std::string, std::string> headers,
+                 base::flat_map<std::string, std::string> headers,
                  mojo::ScopedDataPipeConsumerHandle body_handle,
                  uint64_t body_size,
                  mojo::ScopedDataPipeConsumerHandle meta_data_handle,

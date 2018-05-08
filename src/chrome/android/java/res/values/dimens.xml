@@ -122,6 +122,13 @@
     <!-- Overlay panel dimensions -->
     <dimen name="overlay_panel_bar_height">56dp</dimen>
 
+    <!-- Autofill keyboard accessory dimensions -->
+    <dimen name="keyboard_accessory_chip_height">32dp</dimen>
+    <dimen name="keyboard_accessory_half_padding">4dp</dimen>
+    <dimen name="keyboard_accessory_height">48dp</dimen>
+    <dimen name="keyboard_accessory_padding">8dp</dimen>
+    <dimen name="keyboard_accessory_text_size">14sp</dimen>
+
     <!-- Password generation popup dimensions -->
     <dimen name="password_generation_divider_height">1dp</dimen>
     <dimen name="password_generation_text_size">14sp</dimen>
@@ -165,6 +172,7 @@
     <dimen name="fre_vertical_spacing">32dp</dimen>
     <dimen name="fre_button_bar_height">52dp</dimen>
     <dimen name="fre_button_padding">12dp</dimen>
+    <dimen name="fre_stacked_button_margin">8dp</dimen>
     <dimen name="fre_margin">24dp</dimen>
     <dimen name="fre_image_height">120dp</dimen>
     <dimen name="fre_tos_checkbox_padding">12dp</dimen>
@@ -179,6 +187,9 @@
 
     <dimen name="signin_margin_start">16dp</dimen>
     <dimen name="signin_margin_end">16dp</dimen>
+    <dimen name="signin_divider_margin_start">48dp</dimen>
+    <dimen name="signin_drawable_padding">16dp</dimen>
+    <dimen name="signin_description_blocks_margin">16dp</dimen>
 
     <!-- Signin promo dimensions -->
     <dimen name="signin_promo_account_image_size">48dp</dimen>
@@ -204,7 +215,7 @@
     <!-- Full Screen Dimensions -->
     <!-- Should match toolbar_height_no_shadow -->
     <dimen name="control_container_height">56dp</dimen>
-    <dimen name="bottom_control_container_height">56dp</dimen>
+    <dimen name="bottom_control_container_peek_height">48dp</dimen>
     <dimen name="custom_tabs_control_container_height">56dp</dimen>
     <dimen name="fullscreen_activity_control_container_height">0dp</dimen>
 
@@ -249,7 +260,6 @@
     <dimen name="toolbar_button_width">48dp</dimen>
     <dimen name="toolbar_handle_height">3dp</dimen>
     <dimen name="toolbar_handle_width">20dp</dimen>
-    <dimen name="toolbar_handle_corner_radius">1.5dp</dimen>
     <dimen name="toolbar_handle_margin_top">12dp</dimen>
 
     <dimen name="toolbar_edge_padding">8dp</dimen>
@@ -271,7 +281,9 @@
     <!-- Modern toolbar dimensions -->
     <dimen name="modern_toolbar_background_focused_left_margin">6dp</dimen>
     <dimen name="modern_toolbar_background_size">40dp</dimen>
-    <dimen name="modern_toolbar_background_corner_radius">20dp</dimen>
+    <!-- Sometimes the modern toolbar is shown at 48dp so a corner radius of
+         24dp is needed to completely round the corners. -->
+    <dimen name="modern_toolbar_background_corner_radius">24dp</dimen>
     <dimen name="modern_toolbar_background_lateral_inset">2dp</dimen>
 
     <!-- Omnibox suggestions -->
@@ -287,7 +299,7 @@
     <dimen name="omnibox_suggestion_answer_image_vertical_spacing">5dp</dimen>
     <dimen name="omnibox_suggestion_answer_image_horizontal_spacing">4dp</dimen>
     <dimen name="omnibox_suggestion_phone_url_bar_left_offset">10dp</dimen>
-    <dimen name="omnibox_suggestion_phone_url_bar_left_offset_rtl">10dp</dimen>
+    <dimen name="omnibox_suggestion_phone_url_bar_left_offset_rtl">40dp</dimen>
     <dimen name="omnibox_suggestion_refine_width">48dp</dimen>
     <dimen name="omnibox_suggestion_text_vertical_padding">5dp</dimen>
     <dimen name="omnibox_suggestion_multiline_text_vertical_padding">10dp</dimen>
@@ -332,21 +344,23 @@
     <dimen name="ntp_logo_margin_bottom_modern">64dp</dimen>
     <dimen name="ntp_logo_max_internal_space_bottom_modern">8dp</dimen>
     <dimen name="ntp_search_box_height">62dp</dimen>
+    <dimen name="ntp_search_box_height_modern">48dp</dimen>
     <dimen name="ntp_search_box_shadow_width">4dp</dimen>
     <dimen name="ntp_search_box_transition_length">16dp</dimen>
     <dimen name="ntp_search_box_logo_padding">8dp</dimen>
     <dimen name="ntp_search_box_voice_search_margin_end_modern">6dp</dimen>
-    <!-- Negative lateral inset added to the search box bounds when modern is enabled. 8dp is added
-         to both the top and bottom bounds to bring the 40dp modern_toolbar_background_size to 56dp
+    <!-- Negative vertical inset added to the search box bounds when modern is enabled. 4dp is added
+         to both the top and bottom bounds to bring the 48dp modern_toolbar_background_size to 56dp
          (matches toolbar_height_no_shadow). -->
-    <dimen name="ntp_search_box_bounds_lateral_inset_modern">-8dp</dimen>
+    <dimen name="ntp_search_box_bounds_vertical_inset_modern">-4dp</dimen>
     <dimen name="ntp_wide_card_lateral_margins">48dp</dimen>
-    <dimen name="ntp_list_item_min_height">48dp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
     <dimen name="ntp_sign_in_promo_margin_top">20dp</dimen>
     <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
     <dimen name="snippets_thumbnail_size">124dp</dimen>
     <dimen name="snippets_thumbnail_size_modern">114dp</dimen>
+    <dimen name="snippets_thumbnail_size_small">72dp</dimen>
+    <dimen name="snippets_thumbnail_small_corner_radius">8dp</dimen>
     <!-- The default padding for the peeking card and the amount the card peeks by in the current
          peeking card animation (the calculations assume this is the same). -->
     <dimen name="snippets_padding">16dp</dimen>
@@ -363,10 +377,8 @@
     <dimen name="ntp_suggestions_footer_padding_top">40dp</dimen>
     <dimen name="ntp_suggestions_footer_padding_bottom">18dp</dimen>
     <dimen name="chrome_home_logo_minimum_height">1dp</dimen>
-    <!-- bottom_control_container_height - chrome_home_logo_minimum_height -->
-    <dimen name="chrome_home_suggestions_recycler_view_padding_top">55dp</dimen>
-    <dimen name="chrome_home_suggestions_footer_padding_top">24dp</dimen>
-    <dimen name="chrome_home_suggestions_footer_padding_bottom">24dp</dimen>
+    <dimen name="modern_suggestions_footer_padding_top">24dp</dimen>
+    <dimen name="modern_suggestions_footer_padding_bottom">24dp</dimen>
     <dimen name="content_suggestions_card_modern_margin">16dp</dimen>
     <dimen name="content_suggestions_card_modern_corner_radius">10dp</dimen>
     <dimen name="content_suggestions_card_modern_badge_size">18dp</dimen>
@@ -375,12 +387,16 @@
     <!-- Used to offset content_suggestions_card_modern_margin applied to the bottom of the
          last card. -->
     <dimen name="content_suggestions_action_modern_margin_top">-16dp</dimen>
-    <dimen name="contextual_carousel_space_between_cards">8dp</dimen>
     <dimen name="md_incognito_ntp_line_spacing">6sp</dimen>
     <dimen name="md_incognito_ntp_padding_left">16dp</dimen>
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>
+    <dimen name="recent_tabs_group_view_vertical_padding">8dp</dimen>
+    <dimen name="recent_tabs_list_item_side_padding">16dp</dimen>
+    <dimen name="recent_tabs_show_history_item_size">60dp</dimen>
+    <dimen name="recent_tabs_foreign_session_group_item_height">64dp</dimen>
+    <dimen name="recent_tabs_default_group_item_height">48dp</dimen>
 
     <!-- Snackbars -->
     <dimen name="snackbar_min_height">48dp</dimen>
@@ -543,6 +559,10 @@
     <!-- Reader Mode dimensions -->
     <!-- Padding surrounding the message. -->
     <dimen name="reader_mode_infobar_text_padding">8dp</dimen>
+
+    <!-- Contextual Suggestions Dimensions -->
+    <dimen name="contextual_suggestions_publisher_margin_top">12dp</dimen>
+    <dimen name="contextual_suggestions_toolbar_icon_size">48dp</dimen>
 
     <!-- Defaults for TabbedModeFirstRunActivity values. -->
     <item type="dimen" name="dialog_fixed_width_major">100%</item>

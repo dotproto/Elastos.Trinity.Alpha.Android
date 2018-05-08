@@ -7,9 +7,9 @@
 #include <cmath>
 
 #include "jni/AndroidUiGestureTarget_jni.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -39,7 +39,7 @@ void AndroidUiGestureTarget::DispatchWebInputEvent(
     gesture = static_cast<blink::WebGestureEvent*>(event.get());
   }
 
-  int64_t event_time_ms = event->TimeStampSeconds() * 1000;
+  int64_t event_time_ms = event->TimeStamp().since_origin().InMilliseconds();
   switch (event->GetType()) {
     case blink::WebGestureEvent::kGestureScrollBegin: {
       DCHECK(gesture->data.scroll_begin.delta_hint_units ==
@@ -93,12 +93,11 @@ void AndroidUiGestureTarget::DispatchWebInputEvent(
       Inject(content::MOTION_EVENT_ACTION_HOVER_ENTER, event_time_ms);
       break;
     case blink::WebMouseEvent::kMouseMove:
+    case blink::WebMouseEvent::kMouseLeave:
+      // We don't need to inject MOTION_EVENT_ACTION_HOVER_EXIT as the platform
+      // will generate it for us if the pointer is out of bounds.
       SetPointer(mouse->PositionInWidget().x, mouse->PositionInWidget().y);
       Inject(content::MOTION_EVENT_ACTION_HOVER_MOVE, event_time_ms);
-      break;
-    case blink::WebMouseEvent::kMouseLeave:
-      SetPointer(mouse->PositionInWidget().x, mouse->PositionInWidget().y);
-      Inject(content::MOTION_EVENT_ACTION_HOVER_EXIT, event_time_ms);
       break;
     case blink::WebMouseEvent::kMouseDown:
       // Mouse down events are translated into touch events on Android anyways,

@@ -6,16 +6,19 @@ package org.chromium.chrome.browser.suggestions;
 
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
+import android.content.res.Resources.Theme;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.media.ThumbnailUtils;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.support.annotation.DimenRes;
 import android.support.annotation.Nullable;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v4.text.BidiFormatter;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
@@ -36,6 +39,7 @@ import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.ui.DownloadFilter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.TintedImageView;
 
 /**
@@ -46,13 +50,17 @@ public class SuggestionsBinder {
     private static final String ARTICLE_AGE_FORMAT_STRING = " - %s";
     private static final int FADE_IN_ANIMATION_TIME_MS = 300;
     private static final int MAX_HEADER_LINES = 3;
+    private static final int MAX_HEADER_LINES_WITH_SNIPPET = 2;
+    private static final int MAX_SNIPPET_LINES = 3;
 
     private final ImageFetcher mImageFetcher;
     private final SuggestionsUiDelegate mUiDelegate;
+    private final boolean mIsContextual;
 
     private final View mCardContainerView;
     private final LinearLayout mTextLayout;
     private final TextView mHeadlineTextView;
+    private final @Nullable TextView mSnippetTextView;
     private final TextView mPublisherTextView;
     private final TextView mAgeTextView;
     private final TintedImageView mThumbnailView;
@@ -60,6 +68,7 @@ public class SuggestionsBinder {
     private final ImageView mOfflineBadge;
     private final View mPublisherBar;
     private final int mThumbnailSize;
+    private final int mSmallThumbnailCornerRadius;
 
     boolean mHasVideoBadge;
     boolean mHasOfflineBadge;
@@ -69,7 +78,15 @@ public class SuggestionsBinder {
 
     private SnippetArticle mSuggestion;
 
-    public SuggestionsBinder(View cardContainerView, SuggestionsUiDelegate uiDelegate) {
+    /**
+     * Creates a new SuggestionsBinder.
+     * @param cardContainerView The root container view for the card.
+     * @param uiDelegate The interface between the suggestion surface and the rest of the browser.
+     * @param isContextual Whether this binder is used to bind contextual suggestions.
+     */
+    public SuggestionsBinder(
+            View cardContainerView, SuggestionsUiDelegate uiDelegate, boolean isContextual) {
+        mIsContextual = isContextual;
         mCardContainerView = cardContainerView;
         mUiDelegate = uiDelegate;
         mImageFetcher = uiDelegate.getImageFetcher();
@@ -77,16 +94,27 @@ public class SuggestionsBinder {
         mTextLayout = mCardContainerView.findViewById(R.id.text_layout);
         mThumbnailView = mCardContainerView.findViewById(R.id.article_thumbnail);
         mHeadlineTextView = mCardContainerView.findViewById(R.id.article_headline);
+        mSnippetTextView = mCardContainerView.findViewById(R.id.article_snippet);
         mPublisherTextView = mCardContainerView.findViewById(R.id.article_publisher);
         mAgeTextView = mCardContainerView.findViewById(R.id.article_age);
         mVideoBadge = mCardContainerView.findViewById(R.id.video_badge);
         mOfflineBadge = mCardContainerView.findViewById(R.id.offline_icon);
         mPublisherBar = mCardContainerView.findViewById(R.id.publisher_bar);
 
-        mThumbnailSize = getThumbnailSize(mCardContainerView.getResources());
+        if (mIsContextual) {
+            mThumbnailSize = mCardContainerView.getResources().getDimensionPixelSize(
+                    R.dimen.snippets_thumbnail_size_small);
+        } else {
+            mThumbnailSize = getThumbnailSize(mCardContainerView.getResources());
+        }
+
+        mSmallThumbnailCornerRadius = mCardContainerView.getResources().getDimensionPixelSize(
+                R.dimen.snippets_thumbnail_small_corner_radius);
     }
 
     public void updateViewInformation(SnippetArticle suggestion) {
+        assert suggestion.isContextual() == mIsContextual;
+
         mSuggestion = suggestion;
 
         mHeadlineTextView.setText(suggestion.mTitle);
@@ -95,12 +123,17 @@ public class SuggestionsBinder {
 
         setFavicon();
         setThumbnail();
+
+        if (mSnippetTextView != null) {
+            mSnippetTextView.setText(suggestion.mSnippet);
+        }
     }
 
-    public void updateFieldsVisibility(
-            boolean showHeadline, boolean showThumbnail, boolean showThumbnailVideoBadge) {
+    public void updateFieldsVisibility(boolean showHeadline, boolean showThumbnail,
+            boolean showThumbnailVideoBadge, boolean showSnippet) {
         mHeadlineTextView.setVisibility(showHeadline ? View.VISIBLE : View.GONE);
-        mHeadlineTextView.setMaxLines(MAX_HEADER_LINES);
+        mHeadlineTextView.setMaxLines(
+                showSnippet ? MAX_HEADER_LINES_WITH_SNIPPET : MAX_HEADER_LINES);
         mThumbnailView.setVisibility(showThumbnail ? View.VISIBLE : View.GONE);
         mHasVideoBadge = showThumbnailVideoBadge;
         updateVisibilityForBadges();
@@ -121,6 +154,11 @@ public class SuggestionsBinder {
 
         mTextLayout.setMinimumHeight(showThumbnail ? mThumbnailSize : 0);
         mPublisherBar.setLayoutParams(publisherBarParams);
+
+        if (mSnippetTextView != null) {
+            mSnippetTextView.setVisibility(showSnippet ? View.VISIBLE : View.GONE);
+            mSnippetTextView.setMaxLines(MAX_SNIPPET_LINES);
+        }
     }
 
     public void updateOfflineBadgeVisibility(boolean visible) {
@@ -176,11 +214,11 @@ public class SuggestionsBinder {
 
         // Temporarily set placeholder and then fetch the thumbnail from a provider.
         mThumbnailView.setBackground(null);
-        if (SuggestionsConfig.useModernLayout()
+        if (mIsContextual) {
+            mThumbnailView.setImageDrawable(createContextualSuggestionPlaceholder());
+        } else if (SuggestionsConfig.useModernLayout()
                 && ChromeFeatureList.isEnabled(
-                           ChromeFeatureList.CONTENT_SUGGESTIONS_THUMBNAIL_DOMINANT_COLOR)
-                && !ChromeFeatureList.isEnabled(
-                           ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_ABOVE_ARTICLES)) {
+                           ChromeFeatureList.CONTENT_SUGGESTIONS_THUMBNAIL_DOMINANT_COLOR)) {
             ColorDrawable colorDrawable =
                     new ColorDrawable(mSuggestion.getThumbnailDominantColor() != null
                                     ? mSuggestion.getThumbnailDominantColor()
@@ -358,8 +396,14 @@ public class SuggestionsBinder {
                         mCapturedSuggestion.isArticle() ? ThumbnailUtils.OPTIONS_RECYCLE_INPUT : 0);
             }
 
-            Drawable drawable = ThumbnailGradient.createDrawableWithGradientIfNeeded(
-                    thumbnail, mThumbnailView.getResources());
+            Drawable drawable;
+            if (mIsContextual) {
+                drawable = ViewUtils.createRoundedBitmapDrawable(
+                        thumbnail, mSmallThumbnailCornerRadius);
+            } else {
+                drawable = ThumbnailGradient.createDrawableWithGradientIfNeeded(
+                        thumbnail, mThumbnailView.getResources());
+            }
 
             // If the device has sufficient memory, store the image to skip the download task
             // next time we display this snippet.
@@ -396,6 +440,16 @@ public class SuggestionsBinder {
     private void verifyBitmap(Bitmap bitmap) {
         assert !bitmap.isRecycled();
         assert bitmap.getWidth() <= mThumbnailSize || bitmap.getHeight() <= mThumbnailSize;
+    }
+
+    private Drawable createContextualSuggestionPlaceholder() {
+        Resources res = mThumbnailView.getResources();
+        Theme theme = mThumbnailView.getContext().getTheme();
+        Drawable drawable = VectorDrawableCompat.create(
+                res, R.drawable.contextual_suggestions_placeholder, theme);
+        Drawable background = ApiCompatibilityUtils.getDrawable(
+                res, R.drawable.contextual_suggestions_placeholder_thumbnail_background);
+        return new LayerDrawable(new Drawable[] {background, drawable});
     }
 
     private static int getThumbnailSize(Resources resources) {

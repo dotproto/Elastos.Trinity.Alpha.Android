@@ -27,6 +27,7 @@
 #include "headless/lib/headless_crash_reporter_client.h"
 #include "headless/lib/headless_macros.h"
 #include "headless/lib/utility/headless_content_utility_client.h"
+#include "services/service_manager/sandbox/switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
@@ -86,7 +87,7 @@ bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
     command_line->AppendSwitch(switches::kSingleProcess);
 
   if (browser_->options()->disable_sandbox)
-    command_line->AppendSwitch(switches::kNoSandbox);
+    command_line->AppendSwitch(service_manager::switches::kNoSandbox);
 
   if (!browser_->options()->enable_resource_scheduler)
     command_line->AppendSwitch(switches::kDisableResourceScheduler);
@@ -160,10 +161,23 @@ void HeadlessContentMainDelegate::InitLogging(
   base::FilePath log_path;
   logging::LoggingSettings settings;
 
-  if (PathService::Get(base::DIR_MODULE, &log_path)) {
+// In release builds we should log into the user profile directory.
+#ifdef NDEBUG
+  if (!browser_->options()->user_data_dir.empty()) {
+    log_path = browser_->options()->user_data_dir;
+    log_path = log_path.Append(kDefaultProfileName);
+    base::CreateDirectory(log_path);
     log_path = log_path.Append(log_filename);
-  } else {
-    log_path = log_filename;
+  }
+#endif  // NDEBUG
+
+  // Otherwise we log to where the executable is.
+  if (log_path.empty()) {
+    if (PathService::Get(base::DIR_MODULE, &log_path)) {
+      log_path = log_path.Append(log_filename);
+    } else {
+      log_path = log_filename;
+    }
   }
 
   std::string filename;

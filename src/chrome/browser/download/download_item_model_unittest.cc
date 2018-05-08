@@ -12,13 +12,12 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -65,8 +64,7 @@ class DownloadItemModelTest : public testing::Test {
   DownloadItemModelTest()
       : model_(&item_) {}
 
-  virtual ~DownloadItemModelTest() {
-  }
+  ~DownloadItemModelTest() override {}
 
  protected:
   // Sets up defaults for the download item and sets |model_| to a new
@@ -102,16 +100,14 @@ class DownloadItemModelTest : public testing::Test {
                        : DownloadItem::INTERRUPTED));
   }
 
-  content::MockDownloadItem& item() {
-    return item_;
-  }
+  download::MockDownloadItem& item() { return item_; }
 
   DownloadItemModel& model() {
     return model_;
   }
 
  private:
-  NiceMock<content::MockDownloadItem> item_;
+  NiceMock<download::MockDownloadItem> item_;
   DownloadItemModel model_;
 };
 

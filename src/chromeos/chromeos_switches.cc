@@ -40,6 +40,12 @@ const base::Feature kAssistantFeatureForLocale{
 const base::Feature kVoiceInteractionFeature{"ChromeOSVoiceInteraction",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether Instant Tethering supports hosts which use the background
+// advertisement model.
+const base::Feature kInstantTetheringBackgroundAdvertisementSupport{
+    "InstantTetheringBackgroundAdvertisementSupport",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
 }  // namespace
 
 // Please keep the order of these switches synchronized with the header file
@@ -83,6 +89,9 @@ const char kArcAvailability[] = "arc-availability";
 // DEPRECATED: Please use --arc-availability=installed.
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
+
+// Flag that forces ARC data be cleaned on each start.
+const char kArcDataCleanupOnStart[] = "arc-data-cleanup-on-start";
 
 // Used in autotest to specifies how to handle packages cache. Can be
 // copy - copy resulting packages.xml to the temporary directory.
@@ -147,6 +156,9 @@ const char kCrosRegionsModeHide[] = "hide";
 
 // "Override" value for kCrosRegionsMode (region's data is read first).
 const char kCrosRegionsModeOverride[] = "override";
+
+// Enable Crostini Files in Files app.
+const char kCrostiniFiles[] = "crostini-files";
 
 // Optional value for Data Saver prompt on cellular networks.
 const char kDataSaverPromptDemoMode[] = "demo";
@@ -223,9 +235,6 @@ const char kDisableLoginAnimations[] = "disable-login-animations";
 
 // Disables requests for an enterprise machine certificate during attestation.
 const char kDisableMachineCertRequest[] = "disable-machine-cert-request";
-
-// Disables material design Error screen.
-const char kDisableMdErrorScreen[] = "disable-md-error-screen";
 
 // Disables mtp write support.
 const char kDisableMtpWriteSupport[] = "disable-mtp-write-support";
@@ -312,9 +321,6 @@ const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
 
 // Enables demo mode feature.
 const char kEnableDemoMode[] = "enable-demo-mode";
-
-// Enables the slider in display settings to modify the display size.
-const char kEnableDisplayZoomSetting[] = "enable-display-zoom-setting";
 
 // Enables encryption migration for user's cryptohome to run latest Arc.
 const char kEnableEncryptionMigration[] = "enable-encryption-migration";
@@ -443,7 +449,7 @@ const char kHasChromeOSDiamondKey[] = "has-chromeos-diamond-key";
 // that only use external keyboards.
 const char kHasChromeOSKeyboard[] = "has-chromeos-keyboard";
 
-const char kHideNonActiveAppsFromShelf[] = "hide-non-active-apps-from-shelf";
+const char kHideActiveAppsFromShelf[] = "hide-active-apps-from-shelf";
 
 // Defines user homedir. This defaults to primary user homedir.
 const char kHomedir[] = "homedir";
@@ -514,6 +520,12 @@ const char kOobeTimerInterval[] = "oobe-timer-interval";
 // If set to "true", the profile requires policy during restart (policy load
 // must succeed, otherwise session restart should fail).
 const char kProfileRequiresPolicy[] = "profile-requires-policy";
+
+// The rlz ping delay (in seconds) that overwrites the default value.
+const char kRlzPingDelay[] = "rlz-ping-delay";
+
+// App window previews when hovering over the shelf.
+const char kShelfHoverPreviews[] = "shelf-hover-previews";
 
 // Overrides network stub behavior. By default, ethernet, wifi and vpn are
 // enabled, and transitions occur instantaneously. Multiple options can be
@@ -706,9 +718,14 @@ bool AreExperimentalAccessibilityFeaturesEnabled() {
       chromeos::switches::kEnableExperimentalAccessibilityFeatures);
 }
 
-bool IsDisplayZoomSettingEnabled() {
+bool ShouldHideActiveAppsFromShelf() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableDisplayZoomSetting);
+      kHideActiveAppsFromShelf);
+}
+
+bool IsInstantTetheringBackgroundAdvertisingSupported() {
+  return base::FeatureList::IsEnabled(
+      kInstantTetheringBackgroundAdvertisementSupport);
 }
 
 }  // namespace switches

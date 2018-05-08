@@ -511,6 +511,16 @@ const IDNTestCase idn_cases[] = {
     // ӏԃԍ.com
     {"xn--s5a8h4a.com", L"\x04cf\x0503\x050d.com", false},
 
+    // U+04CF(ӏ) is mapped to multiple characters, lowercase L(l) and
+    // lowercase I(i). Lowercase L is also regarded as similar to digit 1.
+    // The test domain list has {ig, ld, 1gd}.com for Cyrillic.
+    // ӏԍ.com
+    {"xn--s5a8j.com", L"\x04cf\x050d.com", false},
+    // ӏԃ.com
+    {"xn--s5a8h.com", L"\x04cf\x0503.com", false},
+    // ӏԍԃ.com
+    {"xn--s5a8h3a.com", L"\x04cf\x050d\x0503.com", false},
+
     // ꓲ2345б7890.com
     {"xn--23457890-e7g93622b.com", L"\xa4f2" L"2345\x0431" L"7890.com", false},
     // 1ᒿ345б7890.com
@@ -533,7 +543,8 @@ const IDNTestCase idn_cases[] = {
     // ငၔဌ၂ဝ.com (entirely made of Myanmar characters)
     {"xn--ridq5c9hnd.com", L"\x1004\x1054\x100c" L"\x1042\x101d.com", false},
 
-    // ฟรฟร.com (made of two Thai characters)
+    // ฟรฟร.com (made of two Thai characters. similar to wsws.com in
+    // some fonts)
     {"xn--w3calb.com", L"\x0e1f\x0e23\x0e1f\x0e23.com", false},
 
     // At one point the skeleton of 'w' was 'vv', ensure that
@@ -1177,6 +1188,46 @@ TEST(UrlFormatterTest, FormatUrl) {
       {"omit trivial subdomains but leave registry and domain alone - co.uk",
        "http://m.co.uk/", kFormatUrlOmitTrivialSubdomains,
        net::UnescapeRule::NORMAL, L"http://m.co.uk/", 7},
+
+      // -------- trim after host --------
+      {"omit the trailing slash when ommitting the path", "http://google.com/",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit the simple file path when ommitting the path",
+       "http://google.com/foo",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit the file and folder path when ommitting the path",
+       "http://google.com/ab/cd",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with query only",
+       "http://google.com/?foo=bar",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with ref only", "http://google.com/#foobar",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path and query only",
+       "http://google.com/foo?a=b",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path and ref only",
+       "http://google.com/foo#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with query and ref only",
+       "http://google.com/?a=b#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path, query and ref",
+       "http://google.com/foo?a=b#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with repeated delimiters (sanity check)",
+       "http://google.com////???####",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
   };
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
@@ -1552,6 +1603,28 @@ TEST(UrlFormatterTest, FormatUrlWithOffsets) {
       "http://foo.com//??###",
       kFormatUrlOmitDefaults | kFormatUrlExperimentalElideAfterHost,
       net::UnescapeRule::NORMAL, elide_after_host_offsets);
+
+  const size_t trim_after_host_offsets[] = {
+      0, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0,     1,     2,     3, 4,
+      5, 6,     7,     kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 9};
+  CheckAdjustedOffsets("http://foo.com/abcdefg",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc/def",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc?a=b",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc#def",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/a?a=b#f",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com//??###",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
 
   const size_t omit_https_offsets[] = {
       0, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0,  1,  2, 3,

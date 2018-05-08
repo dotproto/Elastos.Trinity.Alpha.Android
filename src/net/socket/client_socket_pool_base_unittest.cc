@@ -144,7 +144,7 @@ class MockClientSocket : public StreamSocket {
   // Socket implementation.
   int Read(IOBuffer* /* buf */,
            int len,
-           const CompletionCallback& /* callback */) override {
+           CompletionOnceCallback /* callback */) override {
     if (has_unread_data_ && len > 0) {
       has_unread_data_ = false;
       was_used_to_convey_data_ = true;
@@ -156,7 +156,7 @@ class MockClientSocket : public StreamSocket {
   int Write(
       IOBuffer* /* buf */,
       int len,
-      const CompletionCallback& /* callback */,
+      CompletionOnceCallback /* callback */,
       const NetworkTrafficAnnotationTag& /*traffic_annotation*/) override {
     was_used_to_convey_data_ = true;
     return len;
@@ -165,7 +165,7 @@ class MockClientSocket : public StreamSocket {
   int SetSendBufferSize(int32_t size) override { return OK; }
 
   // StreamSocket implementation.
-  int Connect(const CompletionCallback& callback) override {
+  int Connect(CompletionOnceCallback callback) override {
     connected_ = true;
     return OK;
   }
@@ -231,14 +231,14 @@ class MockClientSocketFactory : public ClientSocketFactory {
     return std::unique_ptr<DatagramClientSocket>();
   }
 
-  std::unique_ptr<StreamSocket> CreateTransportClientSocket(
+  std::unique_ptr<TransportClientSocket> CreateTransportClientSocket(
       const AddressList& addresses,
       std::unique_ptr<
           SocketPerformanceWatcher> /* socket_performance_watcher */,
       NetLog* /* net_log */,
       const NetLogSource& /*source*/) override {
     allocation_count_++;
-    return std::unique_ptr<StreamSocket>();
+    return nullptr;
   }
 
   std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
@@ -248,6 +248,19 @@ class MockClientSocketFactory : public ClientSocketFactory {
       const SSLClientSocketContext& context) override {
     NOTIMPLEMENTED();
     return std::unique_ptr<SSLClientSocket>();
+  }
+  std::unique_ptr<ProxyClientSocket> CreateProxyClientSocket(
+      std::unique_ptr<ClientSocketHandle> transport_socket,
+      const std::string& user_agent,
+      const HostPortPair& endpoint,
+      HttpAuthController* http_auth_controller,
+      bool tunnel,
+      bool using_spdy,
+      NextProto negotiated_protocol,
+      bool is_https_proxy,
+      const NetworkTrafficAnnotationTag& traffic_annotation) override {
+    NOTIMPLEMENTED();
+    return nullptr;
   }
 
   void ClearSSLSessionCache() override { NOTIMPLEMENTED(); }
@@ -2329,16 +2342,8 @@ TEST_F(ClientSocketPoolBaseTest, CleanupTimedOutIdleSocketsReuse) {
       entries, 1, NetLogEventType::SOCKET_POOL_REUSED_AN_EXISTING_SOCKET));
 }
 
-#if defined(OS_IOS)
-// TODO(droger): Enable this test (crbug.com/512595).
-#define MAYBE_CleanupTimedOutIdleSocketsNoReuse \
-  DISABLED_CleanupTimedOutIdleSocketsNoReuse
-#else
-#define MAYBE_CleanupTimedOutIdleSocketsNoReuse \
-  CleanupTimedOutIdleSocketsNoReuse
-#endif
 // Make sure we cleanup old unused sockets.
-TEST_F(ClientSocketPoolBaseTest, MAYBE_CleanupTimedOutIdleSocketsNoReuse) {
+TEST_F(ClientSocketPoolBaseTest, CleanupTimedOutIdleSocketsNoReuse) {
   CreatePoolWithIdleTimeouts(
       kDefaultMaxSockets, kDefaultMaxSocketsPerGroup,
       base::TimeDelta(),  // Time out unused sockets immediately
@@ -3803,9 +3808,7 @@ class MockLayeredPool : public HigherLayeredPool {
     pool_->AddHigherLayeredPool(this);
   }
 
-  ~MockLayeredPool() {
-    pool_->RemoveHigherLayeredPool(this);
-  }
+  ~MockLayeredPool() override { pool_->RemoveHigherLayeredPool(this); }
 
   int RequestSocket(TestClientSocketPool* pool) {
     scoped_refptr<TestSocketParams> params(new TestSocketParams());

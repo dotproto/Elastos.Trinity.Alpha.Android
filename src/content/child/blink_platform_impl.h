@@ -18,10 +18,10 @@
 #include "content/child/webfallbackthemeengine_impl.h"
 #include "content/common/content_export.h"
 #include "media/blink/webmediacapabilitiesclient_impl.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebGestureDevice.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/public_features.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_gesture_device.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/layout.h"
 
 #if BUILDFLAG(USE_DEFAULT_RENDER_THEME)
@@ -75,7 +75,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
 
   size_t MaxDecodedImageBytes() override;
   bool IsLowEndDevice() override;
-  uint32_t GetUniqueIdForProcess() override;
   blink::WebString UserAgent() override;
   std::unique_ptr<blink::WebThread> CreateThread(
       const blink::WebThreadCreationParams& params) override;

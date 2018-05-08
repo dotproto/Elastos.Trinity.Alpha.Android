@@ -4,7 +4,6 @@
 
 #include "ui/aura/mus/window_port_mus.h"
 
-#include "base/memory/ptr_util.h"
 #include "components/viz/client/local_surface_id_provider.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "ui/aura/client/aura_constants.h"
@@ -427,6 +426,12 @@ viz::ScopedSurfaceIdAllocator WindowPortMus::GetSurfaceIdAllocator(
                                        std::move(allocation_task));
 }
 
+void WindowPortMus::UpdateLocalSurfaceIdFromEmbeddedClient(
+    const viz::LocalSurfaceId& embedded_client_local_surface_id) {
+  local_surface_id_ = parent_local_surface_id_allocator_.UpdateFromChild(
+      embedded_client_local_surface_id);
+}
+
 const viz::LocalSurfaceId& WindowPortMus::GetLocalSurfaceId() {
   if (base::FeatureList::IsEnabled(features::kMash))
     return local_surface_id_;
@@ -482,7 +487,8 @@ void WindowPortMus::OnPreInit(Window* window) {
 
 void WindowPortMus::OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                                float new_device_scale_factor) {
-  if (local_surface_id_.is_valid() && local_layer_tree_frame_sink_) {
+  if (!window_->IsRootWindow() && local_surface_id_.is_valid() &&
+      local_layer_tree_frame_sink_) {
     local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
     local_layer_tree_frame_sink_->SetLocalSurfaceId(local_surface_id_);
   }

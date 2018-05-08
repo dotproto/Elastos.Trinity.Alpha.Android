@@ -21,7 +21,6 @@
 #include "ash/shell.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/common/values_struct_traits.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/layout/box_layout.h"
@@ -262,6 +261,14 @@ class LockDebugView::DebugDataDispatcherTransformer
   void OnDetachableBasePairingStatusChanged(
       DetachableBasePairingStatus pairing_status) override {
     debug_dispatcher_.SetDetachableBasePairingStatus(pairing_status);
+  }
+
+  void OnPublicSessionKeyboardLayoutsChanged(
+      const AccountId& account_id,
+      const std::string& locale,
+      const std::vector<mojom::InputMethodItemPtr>& keyboard_layouts) override {
+    debug_dispatcher_.SetPublicSessionKeyboardLayouts(account_id, locale,
+                                                      keyboard_layouts);
   }
 
  private:

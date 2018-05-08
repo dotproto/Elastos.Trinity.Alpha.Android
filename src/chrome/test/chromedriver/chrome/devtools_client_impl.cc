@@ -10,13 +10,13 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/chrome/devtools_event_listener.h"
 #include "chrome/test/chromedriver/chrome/log.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/util.h"
+#include "chrome/test/chromedriver/chrome/web_view_impl.h"
 #include "chrome/test/chromedriver/net/sync_websocket.h"
 #include "chrome/test/chromedriver/net/url_request_context_getter.h"
 
@@ -90,7 +90,9 @@ DevToolsClientImpl::DevToolsClientImpl(const SyncWebSocketFactory& factory,
     : socket_(factory.Run()),
       url_(url),
       parent_(nullptr),
+      owner_(nullptr),
       crashed_(false),
+      detached_(false),
       id_(id),
       frontend_closer_func_(base::Bind(&FakeCloseFrontends)),
       parser_func_(base::Bind(&internal::ParseInspectorMessage)),
@@ -106,7 +108,9 @@ DevToolsClientImpl::DevToolsClientImpl(
     : socket_(factory.Run()),
       url_(url),
       parent_(nullptr),
+      owner_(nullptr),
       crashed_(false),
+      detached_(false),
       id_(id),
       frontend_closer_func_(frontend_closer_func),
       parser_func_(base::Bind(&internal::ParseInspectorMessage)),
@@ -117,8 +121,10 @@ DevToolsClientImpl::DevToolsClientImpl(
 DevToolsClientImpl::DevToolsClientImpl(DevToolsClientImpl* parent,
                                        const std::string& session_id)
     : parent_(parent),
+      owner_(nullptr),
       session_id_(session_id),
       crashed_(false),
+      detached_(false),
       id_(session_id),
       frontend_closer_func_(base::BindRepeating(&FakeCloseFrontends)),
       parser_func_(base::BindRepeating(&internal::ParseInspectorMessage)),
@@ -137,7 +143,9 @@ DevToolsClientImpl::DevToolsClientImpl(
     : socket_(factory.Run()),
       url_(url),
       parent_(nullptr),
+      owner_(nullptr),
       crashed_(false),
+      detached_(false),
       id_(id),
       frontend_closer_func_(frontend_closer_func),
       parser_func_(parser_func),
@@ -272,6 +280,14 @@ Status DevToolsClientImpl::HandleEventsUntil(
   }
 }
 
+void DevToolsClientImpl::SetDetached() {
+  detached_ = true;
+}
+
+void DevToolsClientImpl::SetOwner(WebViewImpl* owner) {
+  owner_ = owner;
+}
+
 DevToolsClientImpl::ResponseInfo::ResponseInfo(const std::string& method)
     : state(kWaiting), method(method) {}
 
@@ -369,6 +385,9 @@ Status DevToolsClientImpl::ProcessNextMessage(
   if (crashed_)
     return Status(kTabCrashed);
 
+  if (detached_)
+    return Status(kTargetDetached);
+
   if (parent_ != nullptr)
     return parent_->ProcessNextMessage(-1, timeout);
 
@@ -460,7 +479,10 @@ Status DevToolsClientImpl::ProcessEvent(const internal::InspectorEvent& event) {
           kUnknownError,
           "missing sessionId in Target.receivedMessageFromTarget event");
     if (children_.count(session_id) == 0)
-      return Status(kUnknownError, "unknown sessionId");
+      // ChromeDriver only cares about iframe targets. If we don't know about
+      // this sessionId, then it must be of a different target type and should
+      // be ignored.
+      return Status(kOk);
     DevToolsClientImpl* child = children_[session_id];
     std::string message;
     if (!event.params->GetString("message", &message))
@@ -468,6 +490,7 @@ Status DevToolsClientImpl::ProcessEvent(const internal::InspectorEvent& event) {
           kUnknownError,
           "missing message in Target.receivedMessageFromTarget event");
 
+    WebViewImplHolder childHolder(child->owner_);
     return child->HandleMessage(-1, message);
   }
   return Status(kOk);

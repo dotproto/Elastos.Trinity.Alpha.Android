@@ -41,10 +41,13 @@ class VersionControlConflictsTest(unittest.TestCase):
 class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
   def testTypicalCorrectlyMatchedChange(self):
     diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
     diff_xml = ['<histogram name="Bla.Foo.Dummy"> </histogram>']
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
       MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
     ]
     warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
@@ -53,15 +56,24 @@ class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
 
   def testTypicalNotMatchedChange(self):
     diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
     mock_input_api = MockInputApi()
-    mock_input_api.files = [MockFile('some/path/foo.cc', diff_cc)]
+    mock_input_api.files = [
+      MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
+    ]
     warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
                                                    MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual('warning', warnings[0].type)
+    self.assertTrue('foo.cc' in warnings[0].items[0])
+    self.assertTrue('foo.java' in warnings[0].items[1])
 
   def testTypicalNotMatchedChangeViaSuffixes(self):
     diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
     diff_xml = ['<histogram_suffixes name="SuperHistogram">',
                 '  <suffix name="Dummy"/>',
                 '  <affected-histogram name="Snafu.Dummy"/>',
@@ -69,15 +81,20 @@ class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
       MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
     ]
     warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
                                                    MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual('warning', warnings[0].type)
+    self.assertTrue('foo.cc' in warnings[0].items[0])
+    self.assertTrue('foo.java' in warnings[0].items[1])
 
   def testTypicalCorrectlyMatchedChangeViaSuffixes(self):
     diff_cc = ['UMA_HISTOGRAM_BOOL("Bla.Foo.Dummy", true)']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram("Bla.Foo.Dummy", true)']
     diff_xml = ['<histogram_suffixes name="SuperHistogram">',
                 '  <suffix name="Dummy"/>',
                 '  <affected-histogram name="Bla.Foo"/>',
@@ -85,6 +102,7 @@ class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
       MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
     ]
     warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
@@ -93,6 +111,7 @@ class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
 
   def testTypicalCorrectlyMatchedChangeViaSuffixesWithSeparator(self):
     diff_cc = ['UMA_HISTOGRAM_BOOL("Snafu_Dummy", true)']
+    diff_java = ['RecordHistogram.recordBooleanHistogram("Snafu_Dummy", true)']
     diff_xml = ['<histogram_suffixes name="SuperHistogram" separator="_">',
                 '  <suffix name="Dummy"/>',
                 '  <affected-histogram name="Snafu"/>',
@@ -100,11 +119,63 @@ class UmaHistogramChangeMatchedOrNotTest(unittest.TestCase):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
       MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
     ]
     warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
                                                    MockOutputApi())
     self.assertEqual(0, len(warnings))
+
+  def testNameMatch(self):
+    # Check that the detected histogram name is "Dummy" and not, e.g.,
+    # "Dummy\", true);  // The \"correct"
+    diff_cc = ['UMA_HISTOGRAM_BOOL("Dummy", true);  // The "correct" histogram']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram("Dummy", true);'
+      + '  // The "correct" histogram']
+    diff_xml = ['<histogram name="Dummy"> </histogram>']
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
+      MockFile('tools/metrics/histograms/histograms.xml', diff_xml),
+    ]
+    warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
+                                                   MockOutputApi())
+    self.assertEqual(0, len(warnings))
+
+  def testSimilarMacroNames(self):
+    diff_cc = ['PUMA_HISTOGRAM_COOL("Mountain Lion", 42)']
+    diff_java = [
+      'FakeRecordHistogram.recordFakeHistogram("Mountain Lion", 42)']
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo.java', diff_java),
+    ]
+    warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
+                                                   MockOutputApi())
+    self.assertEqual(0, len(warnings))
+
+  def testMultiLine(self):
+    diff_cc = ['UMA_HISTOGRAM_BOOLEAN(', '    "Multi.Line", true)']
+    diff_cc2 = ['UMA_HISTOGRAM_BOOLEAN(', '    "Multi.Line"', '    , true)']
+    diff_java = [
+      'RecordHistogram.recordBooleanHistogram(',
+      '    "Multi.Line", true);',
+    ]
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('some/path/foo.cc', diff_cc),
+      MockFile('some/path/foo2.cc', diff_cc2),
+      MockFile('some/path/foo.java', diff_java),
+    ]
+    warnings = PRESUBMIT._CheckUmaHistogramChanges(mock_input_api,
+                                                   MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    self.assertEqual('warning', warnings[0].type)
+    self.assertTrue('foo.cc' in warnings[0].items[0])
+    self.assertTrue('foo2.cc' in warnings[0].items[1])
 
 class BadExtensionsTest(unittest.TestCase):
   def testBadRejFile(self):
@@ -503,7 +574,6 @@ class TryServerMasterTest(unittest.TestCase):
             'android_chromium_variable_nexus4',
             'android_clang_dbg_recipe',
             'android_compile_dbg',
-            'android_compile_mips_dbg',
             'android_compile_x64_dbg',
             'android_compile_x86_dbg',
             'android_coverage',
@@ -1518,6 +1588,117 @@ class NoProductionCodeUsingTestOnlyFunctions(unittest.TestCase):
 
     results = PRESUBMIT._CheckNoProductionCodeUsingTestOnlyFunctions(
         mock_input_api, MockOutputApi())
+    self.assertEqual(0, len(results))
+
+
+class NoProductionJavaCodeUsingTestOnlyFunctions(unittest.TestCase):
+  def testTruePositives(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('dir/java/src/foo.java', ['FooForTesting();']),
+      MockFile('dir/java/src/bar.java', ['FooForTests(x);']),
+      MockFile('dir/java/src/baz.java', ['FooForTest(','y',');']),
+      MockFile('dir/java/src/mult.java', [
+        'int x = SomethingLongHere()',
+        '    * SomethingLongHereForTesting();'
+      ]),
+    ]
+
+    results = PRESUBMIT._CheckNoProductionCodeUsingTestOnlyFunctionsJava(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(results))
+    self.assertEqual(4, len(results[0].items))
+    self.assertTrue('foo.java' in results[0].items[0])
+    self.assertTrue('bar.java' in results[0].items[1])
+    self.assertTrue('baz.java' in results[0].items[2])
+    self.assertTrue('mult.java' in results[0].items[3])
+
+  def testFalsePositives(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('dir/java/src/foo.xml', ['FooForTesting();']),
+      MockFile('dir/java/src/foo.java', ['FooForTests() {']),
+      MockFile('dir/java/src/bar.java', ['// FooForTest();']),
+      MockFile('dir/java/src/bar2.java', ['x = 1; // FooForTest();']),
+      MockFile('dir/javatests/src/baz.java', ['FooForTest(','y',');']),
+      MockFile('dir/junit/src/baz.java', ['FooForTest(','y',');']),
+      MockFile('dir/junit/src/javadoc.java', [
+        '/** Use FooForTest(); to obtain foo in tests.'
+        ' */'
+      ]),
+      MockFile('dir/junit/src/javadoc2.java', [
+        '/** ',
+        ' * Use FooForTest(); to obtain foo in tests.'
+        ' */'
+      ]),
+    ]
+
+    results = PRESUBMIT._CheckNoProductionCodeUsingTestOnlyFunctionsJava(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(0, len(results))
+
+
+class CheckUniquePtr(unittest.TestCase):
+  def testTruePositivesNullptr(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('dir/baz.cc', ['std::unique_ptr<T>()']),
+      MockFile('dir/baz-p.cc', ['std::unique_ptr<T<P>>()']),
+    ]
+
+    results = PRESUBMIT._CheckUniquePtr(mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(results))
+    self.assertTrue('nullptr' in results[0].message)
+    self.assertEqual(2, len(results[0].items))
+    self.assertTrue('baz.cc' in results[0].items[0])
+    self.assertTrue('baz-p.cc' in results[0].items[1])
+
+  def testTruePositivesConstructor(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('dir/foo.cc', ['return std::unique_ptr<T>(foo);']),
+      MockFile('dir/bar.mm', ['bar = std::unique_ptr<T>(foo)']),
+      MockFile('dir/mult.cc', [
+        'return',
+        '    std::unique_ptr<T>(barVeryVeryLongFooSoThatItWouldNotFitAbove);'
+      ]),
+      MockFile('dir/mult2.cc', [
+        'barVeryVeryLongLongBaaaaaarSoThatTheLineLimitIsAlmostReached =',
+        '    std::unique_ptr<T>(foo);'
+      ]),
+      MockFile('dir/mult3.cc', [
+        'bar = std::unique_ptr<T>(',
+        '    fooVeryVeryVeryLongStillGoingWellThisWillTakeAWhileFinallyThere);'
+      ]),
+    ]
+
+    results = PRESUBMIT._CheckUniquePtr(mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(results))
+    self.assertTrue('std::make_unique' in results[0].message)
+    self.assertEqual(5, len(results[0].items))
+    self.assertTrue('foo.cc' in results[0].items[0])
+    self.assertTrue('bar.mm' in results[0].items[1])
+    self.assertTrue('mult.cc' in results[0].items[2])
+    self.assertTrue('mult2.cc' in results[0].items[3])
+    self.assertTrue('mult3.cc' in results[0].items[4])
+
+  def testFalsePositives(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockFile('dir/foo.cc', ['return std::unique_ptr<T[]>(foo);']),
+      MockFile('dir/bar.mm', ['bar = std::unique_ptr<T[]>(foo)']),
+      MockFile('dir/file.cc', ['std::unique_ptr<T> p = Foo();']),
+      MockFile('dir/baz.cc', [
+        'std::unique_ptr<T> result = std::make_unique<T>();'
+      ]),
+      MockFile('dir/baz2.cc', [
+        'std::unique_ptr<T> result = std::make_unique<T>('
+      ]),
+      MockFile('dir/nested.cc', ['set<std::unique_ptr<T>>();']),
+      MockFile('dir/nested2.cc', ['map<U, std::unique_ptr<T>>();']),
+    ]
+
+    results = PRESUBMIT._CheckUniquePtr(mock_input_api, MockOutputApi())
     self.assertEqual(0, len(results))
 
 

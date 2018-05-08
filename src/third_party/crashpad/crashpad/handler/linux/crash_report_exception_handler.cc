@@ -63,7 +63,7 @@ bool CrashReportExceptionHandler::HandleExceptionWithBroker(
   Metrics::ExceptionEncountered();
 
   PtraceClient client;
-  if (client.Initialize(broker_sock, client_process_id)) {
+  if (!client.Initialize(broker_sock, client_process_id)) {
     Metrics::ExceptionCaptureResult(
         Metrics::CaptureResult::kBrokeredPtraceFailed);
     return false;
@@ -140,9 +140,6 @@ bool CrashReportExceptionHandler::HandleExceptionWithConnection(
 
     if (upload_thread_) {
       upload_thread_->ReportPending(uuid);
-    } else {
-      database_->SkipReportUpload(
-          uuid, Metrics::CrashSkippedReason::kUploadsDisabled);
     }
   }
 

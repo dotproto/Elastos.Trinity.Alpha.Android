@@ -18,12 +18,15 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/match_compare.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_switches.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_fixer.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "ui/base/l10n/l10n_util.h"
 
 // static
 size_t AutocompleteResult::GetMaxMatches() {
@@ -99,11 +102,9 @@ void AutocompleteResult::CopyOldMatches(
 void AutocompleteResult::AppendMatches(const AutocompleteInput& input,
                                        const ACMatches& matches) {
   for (const auto& i : matches) {
-#ifndef NDEBUG
     DCHECK_EQ(AutocompleteMatch::SanitizeString(i.contents), i.contents);
     DCHECK_EQ(AutocompleteMatch::SanitizeString(i.description),
               i.description);
-#endif
     matches_.push_back(i);
     if (!AutocompleteMatch::IsSearchType(i.type)) {
       const OmniboxFieldTrial::EmphasizeTitlesCondition condition(
@@ -211,6 +212,19 @@ void AutocompleteResult::SortAndCull(
       GURL() : ComputeAlternateNavUrl(input, *default_match_);
 }
 
+void AutocompleteResult::ConvertOpenTabMatches(
+    AutocompleteProviderClient* client,
+    const AutocompleteInput* input) {
+  for (auto& match : matches_) {
+    // If already converted this match, don't re-search through open tabs and
+    // possibly re-change the description.
+    if (match.has_tab_match)
+      continue;
+    // If URL is in a tab, remember that.
+    if (client->IsTabOpenWithURL(match.destination_url, input))
+      match.has_tab_match = true;
+  }
+}
 bool AutocompleteResult::HasCopiedMatches() const {
   for (ACMatches::const_iterator i(begin()); i != end(); ++i) {
     if (i->from_previous)
@@ -314,12 +328,12 @@ void AutocompleteResult::CopyFrom(const AutocompleteResult& rhs) {
   alternate_nav_url_ = rhs.alternate_nav_url_;
 }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 void AutocompleteResult::Validate() const {
   for (const_iterator i(begin()); i != end(); ++i)
     i->Validate();
 }
-#endif
+#endif  // DCHECK_IS_ON()
 
 // static
 GURL AutocompleteResult::ComputeAlternateNavUrl(

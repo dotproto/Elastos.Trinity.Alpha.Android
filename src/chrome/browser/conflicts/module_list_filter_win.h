@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "chrome/browser/conflicts/module_info_util_win.h"
+#include "base/strings/string_piece.h"
 #include "chrome/browser/conflicts/proto/module_list.pb.h"
 
 struct ModuleInfoKey;
@@ -27,14 +27,22 @@ class ModuleListFilter {
 
   bool Initialize(const base::FilePath& module_list_path);
 
-  // Returns true if the module is whitelisted.
+  // Returns true if a module is whitelisted based on the hash of its basename
+  // and code id.
   //
   // A whitelisted module should not trigger any warning to the user, nor
   // should it be blocked from loading into the process.
   //
   // Marked virtual to allow mocking.
-  virtual bool IsWhitelisted(const ModuleInfoKey& module_key,
-                             const ModuleInfoData& module_data) const;
+  virtual bool IsWhitelisted(base::StringPiece module_basename_hash,
+                             base::StringPiece module_code_id_hash) const;
+
+  // Returns true if the module is whitelisted.
+  //
+  // This is a convenience wrapper for IsWhitelisted() that accepts a pair of
+  // ModuleInfoKey and ModuleInfoData.
+  bool IsWhitelisted(const ModuleInfoKey& module_key,
+                     const ModuleInfoData& module_data) const;
 
   // Returns the BlacklistAction associated with a blacklisted module. Returns
   // null if the module is not blacklisted.
@@ -50,9 +58,6 @@ class ModuleListFilter {
       const ModuleInfoData& module_data) const;
 
  private:
-  // The certificate info of the current executable.
-  CertificateInfo exe_certificate_info_;
-
   chrome::conflicts::ModuleList module_list_;
 
   // Indicates if Initalize() has been succesfully called.

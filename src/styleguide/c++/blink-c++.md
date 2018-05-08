@@ -49,9 +49,9 @@ FrameLoader::FrameLoader(LocalFrame* frame)
 
 ## Prefer WTF types over STL types
 
-Outside of `//third_party/WebKit/common`, Blink should use WTF types. STL string
+Outside of `//third_party/blink/common`, Blink should use WTF types. STL string
 and container types should only be used at the boundary to interoperate with
-'//base', `//third_party/WebKit/common`, and other Chromium-side code.
+'//base', `//third_party/blink/common`, and other Chromium-side code.
 Similarly, Blink should prefer `KURL` over `GURL` and `SecurityOrigin` over
 `url::Origin`.
 
@@ -67,33 +67,6 @@ Similarly, Blink should prefer `KURL` over `GURL` and `SecurityOrigin` over
   std::string title;
   std::vector<GURL> urls;
   std::unordered_map<int, std::deque<url::Origin>> origins;
-```
-
-## Use Filename_h as the header include guard
-
-Header include guards in Blink should match the filename exactly, replacing the
-“.” with a “\_”.
-
-**Good:**
-```c++
-// third_party/WebKit/Source/core/html/HTMLDocument.h
-#ifndef HTMLDocument_h
-#define HTMLDocument_h
-
-// ...
-
-#endif  // HTMLDocument_h
-```
-
-**Bad:**
-```c++
-// third_party/WebKit/Source/core/html/HTMLDocument.h
-#ifndef THIRD_PARTY_WEBKIT_SOURCE_CORE_HTML_HTMLDOCUMENT_H_
-#define THIRD_PARTY_WEBKIT_SOURCE_CORE_HTML_HTMLDOCUMENT_H_
-
-// ...
-
-#endif  // THIRD_PARTY_WEBKIT_SOURCE_CORE_HTML_HTMLDOCUMENT_H_
 ```
 
 ## Naming
@@ -196,26 +169,29 @@ class RootInlineBox {
 }
 ```
 
-### Leave obvious parameter names out of function declarations
-Leave obvious parameter names out of function declarations. A good rule of
+### May leave obvious parameter names out of function declarations
+[Google C++ Style Guide] allows us to leave parameter names out only if
+the parameter is not used. In Blink, you may leave obvious parameter
+names out of function declarations for historical reason. A good rule of
 thumb is if the parameter type name contains the parameter name (without
 trailing numbers or pluralization), then the parameter name isn’t needed.
-
-`bool`, string, and numerical arguments should usually be named unless the
-meaning is apparent from the function name.
 
 **Good:**
 ```c++
 class Node {
  public:
-  Node(TreeScope*, ConstructionType);
+  Node(TreeScope* tree_scope, ConstructionType construction_type);
+  // You may leave them out like:
+  // Node(TreeScope*, ConstructionType);
 
   // The function name makes the meaning of the parameters clear.
   void SetActive(bool);
   void SetDragged(bool);
   void SetHovered(bool);
 
-  // ...
+  // Parameters are not obvious.
+  DispatchEventResult DispatchDOMActivateEvent(int detail,
+                                               Event& underlying_event);
 };
 ```
 
@@ -223,15 +199,10 @@ class Node {
 ```c++
 class Node {
  public:
-  // Parameter names simply repeat the parameter types.
-  Node(TreeScope* tree_scope, ConstructionType construction_type);
-
-  // Parameter names are redundant with function names.
-  void SetActive(bool is_active);
-  void SetDragged(bool is_dragged);
-  void SetHovered(bool is_hovered);
-
   // ...
+
+  // Parameters are not obvious.
+  DispatchEventResult DispatchDOMActivateEvent(int, Event&);
 };
 ```
 

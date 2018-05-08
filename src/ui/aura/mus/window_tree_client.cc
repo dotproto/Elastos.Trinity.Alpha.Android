@@ -86,7 +86,7 @@ struct WindowPortPropertyDataMus : public ui::PropertyData {
 // message loop starts, or upon destruction.
 class EventAckHandler : public base::RunLoop::NestingObserver {
  public:
-  explicit EventAckHandler(std::unique_ptr<EventResultCallback> ack_callback)
+  explicit EventAckHandler(EventResultCallback ack_callback)
       : ack_callback_(std::move(ack_callback)) {
     DCHECK(ack_callback_);
     base::RunLoop::AddNestingObserverOnCurrentThread(this);
@@ -96,8 +96,9 @@ class EventAckHandler : public base::RunLoop::NestingObserver {
     base::RunLoop::RemoveNestingObserverOnCurrentThread(this);
     if (ack_callback_) {
       NotifyPlatformEventSource();
-      ack_callback_->Run(handled_ ? ui::mojom::EventResult::HANDLED
-                                  : ui::mojom::EventResult::UNHANDLED);
+      std::move(ack_callback_)
+          .Run(handled_ ? ui::mojom::EventResult::HANDLED
+                        : ui::mojom::EventResult::UNHANDLED);
     }
   }
 
@@ -118,8 +119,7 @@ class EventAckHandler : public base::RunLoop::NestingObserver {
     // Otherwise we appear unresponsive for the life of the nested run loop.
     if (ack_callback_) {
       NotifyPlatformEventSource();
-      ack_callback_->Run(ui::mojom::EventResult::HANDLED);
-      ack_callback_.reset();
+      std::move(ack_callback_).Run(ui::mojom::EventResult::HANDLED);
     }
   }
 
@@ -131,7 +131,7 @@ class EventAckHandler : public base::RunLoop::NestingObserver {
 #endif
   }
 
-  std::unique_ptr<EventResultCallback> ack_callback_;
+  EventResultCallback ack_callback_;
   bool handled_ = false;
 #if defined(USE_OZONE)
   ui::Event* event_ = nullptr;
@@ -155,7 +155,7 @@ bool IsInternalProperty(const void* key) {
 
 void SetWindowTypeFromProperties(
     Window* window,
-    const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
+    const base::flat_map<std::string, std::vector<uint8_t>>& properties) {
   auto type_iter =
       properties.find(ui::mojom::WindowManager::kWindowType_InitProperty);
   if (type_iter == properties.end())
@@ -781,10 +781,10 @@ void WindowTreeClient::SetWindowTree(ui::mojom::WindowTreePtr window_tree_ptr) {
 
   WindowTreeConnectionEstablished(tree_ptr_.get());
   tree_ptr_->GetCursorLocationMemory(
-      base::Bind(&WindowTreeClient::OnReceivedCursorLocationMemory,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&WindowTreeClient::OnReceivedCursorLocationMemory,
+                     weak_factory_.GetWeakPtr()));
 
-  tree_ptr_.set_connection_error_handler(base::Bind(
+  tree_ptr_.set_connection_error_handler(base::BindOnce(
       &WindowTreeClient::OnConnectionLost, weak_factory_.GetWeakPtr()));
 
   if (window_manager_delegate_) {
@@ -885,11 +885,10 @@ WindowTreeHostMus* WindowTreeClient::WmNewDisplayAddedImpl(
   return window_tree_host_ptr;
 }
 
-std::unique_ptr<EventResultCallback>
-WindowTreeClient::CreateEventResultCallback(int32_t event_id) {
-  return std::make_unique<EventResultCallback>(
-      base::Bind(&ui::mojom::WindowTree::OnWindowInputEventAck,
-                 base::Unretained(tree_), event_id));
+EventResultCallback WindowTreeClient::CreateEventResultCallback(
+    int32_t event_id) {
+  return base::BindOnce(&ui::mojom::WindowTree::OnWindowInputEventAck,
+                        base::Unretained(tree_), event_id);
 }
 
 void WindowTreeClient::OnReceivedCursorLocationMemory(
@@ -904,11 +903,9 @@ void WindowTreeClient::SetWindowBoundsFromServer(
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   if (IsRoot(window)) {
     // WindowTreeHost expects bounds to be in pixels.
-    GetWindowTreeHostMus(window)->SetBoundsFromServer(revert_bounds_in_pixels);
-    if (local_surface_id && local_surface_id->is_valid()) {
-      ui::Compositor* compositor = window->GetWindow()->GetHost()->compositor();
-      compositor->SetLocalSurfaceId(*local_surface_id);
-    }
+    GetWindowTreeHostMus(window)->SetBoundsFromServer(
+        revert_bounds_in_pixels,
+        local_surface_id ? *local_surface_id : viz::LocalSurfaceId());
     return;
   }
 
@@ -972,7 +969,7 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
 
   DCHECK(window_manager_delegate_ || !IsRoot(window));
 
-  std::unordered_map<std::string, std::vector<uint8_t>> transport_properties;
+  base::flat_map<std::string, std::vector<uint8_t>> transport_properties;
   std::set<const void*> property_keys =
       window->GetWindow()->GetAllPropertyKeys();
   PropertyConverter* property_converter = delegate_->GetPropertyConverter();
@@ -1026,7 +1023,7 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
           base::FeatureList::IsEnabled(features::kMash)
               ? display_init_params->mirrors
               : std::vector<display::Display>(),
-          base::Bind(&OnAckMustSucceed, FROM_HERE));
+          base::BindOnce(&OnAckMustSucceed, FROM_HERE));
     }
   }
 }
@@ -1076,24 +1073,10 @@ void WindowTreeClient::OnWindowMusBoundsChanged(WindowMus* window,
   // OnWindowTreeHostBoundsWillChange(). Any bounds that happen here are a side
   // effect of those and can be ignored.
   if (IsRoot(window)) {
-    // NOTE: this has to happen to here as during the call to
-    // OnWindowTreeHostBoundsWillChange() the compositor hasn't been updated
-    // yet.
-    if (window->window_mus_type() == WindowMusType::DISPLAY_MANUALLY_CREATED) {
-      WindowTreeHost* window_tree_host = window->GetWindow()->GetHost();
-      // |window_tree_host| may be null if this is called during creation of
-      // the window associated with the WindowTreeHostMus.
-      if (window_tree_host) {
-        viz::LocalSurfaceId local_surface_id =
-            window->GetOrAllocateLocalSurfaceId(
-                window_tree_host->GetBoundsInPixels().size());
-        DCHECK(local_surface_id.is_valid());
-        window_tree_host->compositor()->SetLocalSurfaceId(local_surface_id);
-      }
-    }
+    // Do not set the LocalSurfaceId on the compositor here, because it has
+    // already been set.
     return;
   }
-
   const float device_scale_factor = window->GetDeviceScaleFactor();
   ScheduleInFlightBoundsChange(
       window, gfx::ConvertRectToPixel(device_scale_factor, old_bounds),
@@ -1701,7 +1684,7 @@ void WindowTreeClient::OnWindowInputEvent(
   if (mapped_event->type() == ui::ET_MOUSE_MOVED ||
       mapped_event->type() == ui::ET_MOUSE_DRAGGED) {
     mapped_event_with_native = std::make_unique<ui::MouseEvent>(
-        static_cast<const base::NativeEvent&>(mapped_event.get()));
+        static_cast<const ui::PlatformEvent&>(mapped_event.get()));
     // MouseEvent(NativeEvent) sets the root_location to location.
     mapped_event_with_native->set_root_location_f(
         event_location_in_screen_pixel_layout);
@@ -1803,8 +1786,8 @@ void WindowTreeClient::OnWindowSurfaceChanged(
 }
 
 void WindowTreeClient::OnDragDropStart(
-    const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data) {
-  drag_drop_controller_->OnDragDropStart(mojo::UnorderedMapToMap(mime_data));
+    const base::flat_map<std::string, std::vector<uint8_t>>& mime_data) {
+  drag_drop_controller_->OnDragDropStart(mojo::FlatMapToMap(mime_data));
 }
 
 void WindowTreeClient::OnDragEnter(ui::Id window_id,
@@ -1897,7 +1880,7 @@ void WindowTreeClient::SetBlockingContainers(
   }
   window_manager_client_->SetBlockingContainers(
       std::move(transport_all_blocking_containers),
-      base::Bind(&OnAckMustSucceed, FROM_HERE));
+      base::BindOnce(&OnAckMustSucceed, FROM_HERE));
 }
 
 void WindowTreeClient::GetWindowManager(
@@ -2037,11 +2020,11 @@ void WindowTreeClient::WmSetCanFocus(ui::Id window_id, bool can_focus) {
 void WindowTreeClient::WmCreateTopLevelWindow(
     uint32_t change_id,
     const viz::FrameSinkId& frame_sink_id,
-    const std::unordered_map<std::string, std::vector<uint8_t>>&
+    const base::flat_map<std::string, std::vector<uint8_t>>&
         transport_properties) {
   DCHECK(frame_sink_id.is_valid());
   std::map<std::string, std::vector<uint8_t>> properties =
-      mojo::UnorderedMapToMap(transport_properties);
+      mojo::FlatMapToMap(transport_properties);
   ui::mojom::WindowType window_type = ui::mojom::WindowType::UNKNOWN;
   auto type_iter =
       properties.find(ui::mojom::WindowManager::kWindowType_InitProperty);
@@ -2224,7 +2207,7 @@ void WindowTreeClient::OnAccelerator(uint32_t ack_id,
                                      uint32_t accelerator_id,
                                      std::unique_ptr<ui::Event> event) {
   DCHECK(event);
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const ui::mojom::EventResult result = window_manager_delegate_->OnAccelerator(
       accelerator_id, *event.get(), &properties);
   if (ack_id && window_manager_client_)
@@ -2341,8 +2324,8 @@ void WindowTreeClient::InjectEvent(const ui::Event& event, int64_t display_id) {
   // Check event_injector_ so we don't crash if access to the interface was
   // refused.
   if (event_injector_) {
-    event_injector_->DispatchEvent(display_id, ui::Event::Clone(event),
-                                   base::DoNothing());
+    event_injector_->InjectEvent(display_id, ui::Event::Clone(event),
+                                 base::DoNothing());
   }
 }
 
@@ -2373,7 +2356,8 @@ void WindowTreeClient::SetDisplayConfiguration(
             : display::kInvalidDisplayId;
     window_manager_client_->SetDisplayConfiguration(
         displays, std::move(viewport_metrics), primary_display_id,
-        internal_display_id, mirrors, base::Bind(&OnAckMustSucceed, FROM_HERE));
+        internal_display_id, mirrors,
+        base::BindOnce(&OnAckMustSucceed, FROM_HERE));
   }
 }
 
@@ -2392,7 +2376,7 @@ void WindowTreeClient::AddDisplayReusingWindowTreeHost(
     window_manager_client_->SetDisplayRoot(
         display, std::move(viewport_metrics), is_primary_display,
         display_root_window->server_id(), mirrors,
-        base::Bind(&OnAckMustSucceed, FROM_HERE));
+        base::BindOnce(&OnAckMustSucceed, FROM_HERE));
     window_tree_host->compositor()->SetLocalSurfaceId(
         display_root_window->GetOrAllocateLocalSurfaceId(
             window_tree_host->GetBoundsInPixels().size()));
@@ -2416,7 +2400,7 @@ void WindowTreeClient::SwapDisplayRoots(WindowTreeHostMus* window_tree_host1,
 
   if (window_manager_client_) {
     window_manager_client_->SwapDisplayRoots(
-        display_id1, display_id2, base::Bind(&OnAckMustSucceed, FROM_HERE));
+        display_id1, display_id2, base::BindOnce(&OnAckMustSucceed, FROM_HERE));
   }
 }
 
@@ -2544,7 +2528,7 @@ std::unique_ptr<WindowPortMus> WindowTreeClient::CreateWindowPortForTopLevel(
   window_port->set_server_id(next_window_id_++);
   RegisterWindowMus(window_port.get());
 
-  std::unordered_map<std::string, std::vector<uint8_t>> transport_properties;
+  base::flat_map<std::string, std::vector<uint8_t>> transport_properties;
   if (properties) {
     for (const auto& property_pair : *properties)
       transport_properties[property_pair.first] = property_pair.second;

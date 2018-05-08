@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
@@ -27,7 +26,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/proximity_auth/switches.h"
+#include "chromeos/components/proximity_auth/switches.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -43,6 +42,7 @@ namespace easy_unlock_private_api = extensions::api::easy_unlock_private;
 namespace screenlock_private_api = extensions::api::screenlock_private;
 namespace app_runtime_api = extensions::api::app_runtime;
 
+namespace chromeos {
 namespace {
 
 // Sets |*value| to true, also verifying that the value was not previously set.
@@ -139,9 +139,6 @@ class EasyUnlockAppEventConsumer
   void OnDispatchEventToExtension(const std::string& extension_id,
                                   const extensions::Event& event) override {
     if (event.event_name ==
-        easy_unlock_private_api::OnUserInfoUpdated::kEventName) {
-      ConsumeUserInfoUpdated(event.event_args.get());
-    } else if (event.event_name ==
                screenlock_private_api::OnAuthAttempted::kEventName) {
       ConsumeAuthAttempted(event.event_args.get());
     } else {
@@ -214,7 +211,7 @@ class EasyUnlockAppManagerTest : public testing::Test {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         proximity_auth::switches::kForceLoadEasyUnlockAppInTests);
     extensions::ExtensionSystem* extension_system = SetUpExtensionSystem();
-    app_manager_ = chromeos::EasyUnlockAppManager::Create(
+    app_manager_ = EasyUnlockAppManager::Create(
         extension_system, IDR_EASY_UNLOCK_MANIFEST, GetAppPath());
   }
 
@@ -231,11 +228,6 @@ class EasyUnlockAppManagerTest : public testing::Test {
     return extensions::ExtensionPrefs::Get(&profile_)
         ->install_directory()
         .AppendASCII("easy_unlock");
-  }
-
-  int UserUpdatedCount() const {
-    return event_router_->GetEventCount(
-        easy_unlock_private_api::OnUserInfoUpdated::kEventName);
   }
 
   int AuthAttemptedCount() const {
@@ -274,16 +266,16 @@ class EasyUnlockAppManagerTest : public testing::Test {
   }
 
  protected:
-  std::unique_ptr<chromeos::EasyUnlockAppManager> app_manager_;
+  std::unique_ptr<EasyUnlockAppManager> app_manager_;
 
   // Needed by extension system.
   content::TestBrowserThreadBundle thread_bundle_;
 
   // Cros settings and device settings are needed when creating user manager.
-  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
-  chromeos::ScopedTestCrosSettings test_cros_settings_;
+  ScopedTestDeviceSettingsService test_device_settings_service_;
+  ScopedTestCrosSettings test_cros_settings_;
   // Needed for creating ExtensionService.
-  chromeos::ScopedTestUserManager test_user_manager_;
+  ScopedTestUserManager test_user_manager_;
 
   TestingProfile profile_;
 
@@ -471,72 +463,6 @@ TEST_F(EasyUnlockAppManagerTest, LaunchSetupWhenNotLoaded) {
   EXPECT_EQ(0, AppLaunchedCount());
 }
 
-TEST_F(EasyUnlockAppManagerTest, SendUserUpdated) {
-  SetExtensionSystemReady();
-
-  app_manager_->LoadApp();
-  event_router_->AddLazyEventListener(
-      easy_unlock_private_api::OnUserInfoUpdated::kEventName,
-      extension_misc::kEasyUnlockAppId);
-
-  ASSERT_EQ(0, UserUpdatedCount());
-
-  EXPECT_TRUE(app_manager_->SendUserUpdatedEvent("user", true /* logged_in */,
-                                                 false /* data_ready */));
-
-  EXPECT_EQ(1, UserUpdatedCount());
-
-  EXPECT_EQ("user", event_consumer_.user_id());
-  EXPECT_TRUE(event_consumer_.user_logged_in());
-  EXPECT_FALSE(event_consumer_.user_data_ready());
-}
-
-TEST_F(EasyUnlockAppManagerTest, SendUserUpdatedInvertedFlags) {
-  SetExtensionSystemReady();
-
-  app_manager_->LoadApp();
-  event_router_->AddLazyEventListener(
-      easy_unlock_private_api::OnUserInfoUpdated::kEventName,
-      extension_misc::kEasyUnlockAppId);
-
-  ASSERT_EQ(0, UserUpdatedCount());
-
-  EXPECT_TRUE(app_manager_->SendUserUpdatedEvent("user", false /* logged_in */,
-                                                 true /* data_ready */));
-
-  EXPECT_EQ(1, UserUpdatedCount());
-
-  EXPECT_EQ("user", event_consumer_.user_id());
-  EXPECT_FALSE(event_consumer_.user_logged_in());
-  EXPECT_TRUE(event_consumer_.user_data_ready());
-}
-
-TEST_F(EasyUnlockAppManagerTest, SendUserUpdatedNoRegisteredListeners) {
-  SetExtensionSystemReady();
-
-  app_manager_->LoadApp();
-
-  ASSERT_EQ(0, UserUpdatedCount());
-
-  EXPECT_FALSE(app_manager_->SendUserUpdatedEvent("user", true, true));
-  EXPECT_EQ(0, UserUpdatedCount());
-}
-
-TEST_F(EasyUnlockAppManagerTest, SendUserUpdatedAppDisabled) {
-  SetExtensionSystemReady();
-
-  app_manager_->LoadApp();
-  event_router_->AddLazyEventListener(
-      easy_unlock_private_api::OnUserInfoUpdated::kEventName,
-      extension_misc::kEasyUnlockAppId);
-  app_manager_->DisableAppIfLoaded();
-
-  ASSERT_EQ(0, UserUpdatedCount());
-
-  EXPECT_FALSE(app_manager_->SendUserUpdatedEvent("user", true, true));
-  EXPECT_EQ(0, UserUpdatedCount());
-}
-
 TEST_F(EasyUnlockAppManagerTest, SendAuthAttempted) {
   SetExtensionSystemReady();
 
@@ -544,8 +470,6 @@ TEST_F(EasyUnlockAppManagerTest, SendAuthAttempted) {
   event_router_->AddLazyEventListener(
       screenlock_private_api::OnAuthAttempted::kEventName,
       extension_misc::kEasyUnlockAppId);
-
-  ASSERT_EQ(0, UserUpdatedCount());
 
   EXPECT_TRUE(app_manager_->SendAuthAttemptEvent());
   EXPECT_EQ(1, AuthAttemptedCount());
@@ -578,3 +502,4 @@ TEST_F(EasyUnlockAppManagerTest, SendAuthAttemptedAppDisabled) {
 }
 
 }  // namespace
+}  // namespace chromeos

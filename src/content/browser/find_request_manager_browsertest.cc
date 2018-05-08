@@ -17,7 +17,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "third_party/blink/public/web/web_find_options.h"
 
 namespace content {
 
@@ -229,6 +229,13 @@ bool ExecuteScriptAndExtractRect(FrameTreeNode* frame,
 
 // Basic test that a search result is actually brought into view.
 IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, ScrollAndZoomIntoView) {
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  WebPreferences prefs =
+      web_contents->GetRenderViewHost()->GetWebkitPreferences();
+  prefs.smooth_scroll_for_find_enabled = false;
+  web_contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+
   LoadAndWait("/find_in_page_desktop.html");
   if (GetParam())
     MakeChildFrameCrossProcess();

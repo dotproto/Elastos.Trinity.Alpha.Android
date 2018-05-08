@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/atomicops.h"
-#include "base/memory/ptr_util.h"
+#include "base/containers/flat_map.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
@@ -24,6 +24,7 @@
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/drag_controller.h"
+#include "services/ui/ws/event_dispatcher_impl_test_api.h"
 #include "services/ui/ws/event_processor.h"
 #include "services/ui/ws/event_targeter.h"
 #include "services/ui/ws/gpu_host.h"
@@ -136,8 +137,8 @@ class WindowTreeTestApi {
   }
   void AckLastAccelerator(
       mojom::EventResult result,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& properties =
-          std::unordered_map<std::string, std::vector<uint8_t>>()) {
+      const base::flat_map<std::string, std::vector<uint8_t>>& properties =
+          base::flat_map<std::string, std::vector<uint8_t>>()) {
     tree_->OnAcceleratorAck(tree_->event_ack_id_, result, properties);
   }
 
@@ -232,15 +233,6 @@ class WindowManagerStateTestApi {
   explicit WindowManagerStateTestApi(WindowManagerState* wms) : wms_(wms) {}
   ~WindowManagerStateTestApi() {}
 
-  void DispatchInputEventToWindow(ServerWindow* target,
-                                  ClientSpecificId client_id,
-                                  const EventLocation& event_location,
-                                  const ui::Event& event,
-                                  Accelerator* accelerator) {
-    wms_->DispatchInputEventToWindow(target, client_id, event_location, event,
-                                     accelerator);
-  }
-
   ClientSpecificId GetEventTargetClientId(ServerWindow* window,
                                           bool in_nonclient_area) {
     return wms_->GetEventTargetClientId(window, in_nonclient_area);
@@ -250,33 +242,42 @@ class WindowManagerStateTestApi {
     wms_->ProcessEvent(event, display_id);
   }
 
-  void OnEventAckTimeout(ClientSpecificId client_id) {
-    wms_->OnEventAckTimeout(client_id);
-  }
-
   ClientSpecificId GetEventTargetClientId(const ServerWindow* window,
                                           bool in_nonclient_area) {
     return wms_->GetEventTargetClientId(window, in_nonclient_area);
   }
 
-  WindowTree* tree_awaiting_input_ack() {
-    return wms_->in_flight_event_dispatch_details_
-               ? wms_->in_flight_event_dispatch_details_->tree
-               : nullptr;
+  void OnEventAckTimeout(ClientSpecificId client_id) {
+    EventDispatcherImplTestApi(&wms_->event_dispatcher_)
+        .OnDispatchInputEventTimeout();
   }
-
-  bool is_event_tasks_empty() const { return wms_->event_tasks_.empty(); }
 
   const std::vector<std::unique_ptr<WindowManagerDisplayRoot>>&
   window_manager_display_roots() const {
     return wms_->window_manager_display_roots_;
   }
 
+  // TODO(sky): convert calling code to use EventDispatcherImplTestApi directly.
+  void DispatchInputEventToWindow(ServerWindow* target,
+                                  ClientSpecificId client_id,
+                                  const EventLocation& event_location,
+                                  const ui::Event& event,
+                                  Accelerator* accelerator) {
+    EventDispatcherImplTestApi(&wms_->event_dispatcher_)
+        .DispatchInputEventToWindow(target, client_id, event_location, event,
+                                    accelerator);
+  }
+  WindowTree* tree_awaiting_input_ack() {
+    return EventDispatcherImplTestApi(&wms_->event_dispatcher_)
+        .GetTreeThatWillAckEvent();
+  }
+  bool is_event_tasks_empty() const {
+    return EventDispatcherImplTestApi(&wms_->event_dispatcher_)
+        .is_event_tasks_empty();
+  }
   bool AckInFlightEvent(mojom::EventResult result) {
-    if (!wms_->in_flight_event_dispatch_details_)
-      return false;
-    wms_->OnEventAck(wms_->in_flight_event_dispatch_details_->tree, result);
-    return true;
+    return EventDispatcherImplTestApi(&wms_->event_dispatcher_)
+        .OnDispatchInputEventDone(result);
   }
 
  private:
@@ -402,7 +403,7 @@ class TestWindowManager : public mojom::WindowManager {
   void WmCreateTopLevelWindow(
       uint32_t change_id,
       const viz::FrameSinkId& frame_sink_id,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& properties)
+      const base::flat_map<std::string, std::vector<uint8_t>>& properties)
       override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
@@ -537,9 +538,8 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
   void OnWindowCursorChanged(Id window_id, ui::CursorData cursor) override;
   void OnWindowSurfaceChanged(Id window_id,
                               const viz::SurfaceInfo& surface_info) override;
-  void OnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
-      override;
+  void OnDragDropStart(const base::flat_map<std::string, std::vector<uint8_t>>&
+                           mime_data) override;
   void OnDragEnter(Id window,
                    uint32_t key_state,
                    const gfx::Point& position,

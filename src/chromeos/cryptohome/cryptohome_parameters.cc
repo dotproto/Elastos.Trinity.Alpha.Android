@@ -11,6 +11,8 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 
+using chromeos::ChallengeResponseKey;
+
 namespace cryptohome {
 namespace {
 
@@ -172,30 +174,40 @@ bool KeyDefinition::ProviderData::operator==(const ProviderData& other) const {
          (!has_bytes || (*bytes == *other.bytes));
 }
 
-KeyDefinition::KeyDefinition() : type(TYPE_PASSWORD),
-                                 privileges(0),
-                                 revision(0) {
+KeyDefinition KeyDefinition::CreateForPassword(
+    const std::string& secret,
+    const std::string& label,
+    int /*AuthKeyPrivileges*/ privileges) {
+  KeyDefinition key_def;
+  key_def.type = TYPE_PASSWORD;
+  key_def.label = label;
+  key_def.privileges = privileges;
+  key_def.secret = secret;
+  return key_def;
 }
 
-KeyDefinition::KeyDefinition(const std::string& secret,
-                             const std::string& label,
-                             int /*AuthKeyPrivileges*/ privileges)
-    : type(TYPE_PASSWORD),
-      label(label),
-      privileges(privileges),
-      revision(0),
-      secret(secret) {
+KeyDefinition KeyDefinition::CreateForChallengeResponse(
+    const std::vector<ChallengeResponseKey>& challenge_response_keys,
+    const std::string& label,
+    int /*AuthKeyPrivileges*/ privileges) {
+  KeyDefinition key_def;
+  key_def.type = TYPE_CHALLENGE_RESPONSE;
+  key_def.label = label;
+  key_def.privileges = privileges;
+  key_def.challenge_response_keys = challenge_response_keys;
+  return key_def;
 }
+
+KeyDefinition::KeyDefinition() = default;
 
 KeyDefinition::KeyDefinition(const KeyDefinition& other) = default;
 
 KeyDefinition::~KeyDefinition() = default;
 
 bool KeyDefinition::operator==(const KeyDefinition& other) const {
-  if (type != other.type ||
-      label != other.label ||
-      privileges != other.privileges ||
-      revision != other.revision ||
+  if (type != other.type || label != other.label ||
+      privileges != other.privileges || revision != other.revision ||
+      challenge_response_keys != other.challenge_response_keys ||
       authorization_data.size() != other.authorization_data.size() ||
       provider_data.size() != other.provider_data.size()) {
     return false;

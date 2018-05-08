@@ -31,12 +31,12 @@ class PowerButtonControllerTestApi {
   explicit PowerButtonControllerTestApi(PowerButtonController* controller);
   ~PowerButtonControllerTestApi();
 
-  // Returns true when |controller_->shutdown_timer_| is running.
-  bool ShutdownTimerIsRunning() const;
+  // Returns true when |controller_->pre_shutdown_timer_| is running.
+  bool PreShutdownTimerIsRunning() const;
 
-  // If |controller_->shutdown_timer_| is running, stops it, runs its task, and
-  // returns true. Otherwise, returns false.
-  bool TriggerShutdownTimeout() WARN_UNUSED_RESULT;
+  // If |controller_->pre_shutdown_timer_| is running, stops it, runs its task,
+  // and returns true. Otherwise, returns false.
+  bool TriggerPreShutdownTimeout() WARN_UNUSED_RESULT;
 
   // Returns true when |power_button_menu_timer_| is running.
   bool PowerButtonMenuTimerIsRunning() const;
@@ -61,14 +61,11 @@ class PowerButtonControllerTestApi {
   // True if |controller_|'s menu has a sign out item.
   bool MenuHasSignOutItem() const;
 
-  // True if should turn screen off when tapping the power button.
-  bool ShouldTurnScreenOffForTap() const;
-
   PowerButtonScreenshotController* GetScreenshotController();
 
   void SetPowerButtonType(PowerButtonController::ButtonType button_type);
 
-  void SetTickClock(base::TickClock* tick_clock);
+  void SetTickClock(const base::TickClock* tick_clock);
 
   void SetTurnScreenOffForTap(bool turn_screen_off_for_tap);
 

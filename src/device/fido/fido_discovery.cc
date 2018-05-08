@@ -20,26 +20,25 @@ namespace device {
 namespace {
 
 std::unique_ptr<FidoDiscovery> CreateFidoDiscoveryImpl(
-    U2fTransportProtocol transport,
+    FidoTransportProtocol transport,
     service_manager::Connector* connector) {
-  std::unique_ptr<FidoDiscovery> discovery;
   switch (transport) {
-    case U2fTransportProtocol::kUsbHumanInterfaceDevice:
+    case FidoTransportProtocol::kUsbHumanInterfaceDevice:
 #if !defined(OS_ANDROID)
       DCHECK(connector);
-      discovery = std::make_unique<FidoHidDiscovery>(connector);
+      return std::make_unique<FidoHidDiscovery>(connector);
 #else
       NOTREACHED() << "USB HID not supported on Android.";
+      return nullptr;
 #endif  // !defined(OS_ANDROID)
-      break;
-    case U2fTransportProtocol::kBluetoothLowEnergy:
-      discovery = std::make_unique<FidoBleDiscovery>();
-      break;
+    case FidoTransportProtocol::kBluetoothLowEnergy:
+      return std::make_unique<FidoBleDiscovery>();
+    case FidoTransportProtocol::kNearFieldCommunication:
+      // TODO(https://crbug.com/825949): Add NFC support.
+      return nullptr;
   }
-
-  DCHECK(discovery);
-  DCHECK_EQ(discovery->transport(), transport);
-  return discovery;
+  NOTREACHED();
+  return nullptr;
 }
 
 }  // namespace
@@ -52,12 +51,12 @@ FidoDiscovery::FactoryFuncPtr FidoDiscovery::g_factory_func_ =
 
 // static
 std::unique_ptr<FidoDiscovery> FidoDiscovery::Create(
-    U2fTransportProtocol transport,
+    FidoTransportProtocol transport,
     service_manager::Connector* connector) {
   return (*g_factory_func_)(transport, connector);
 }
 
-FidoDiscovery::FidoDiscovery(U2fTransportProtocol transport)
+FidoDiscovery::FidoDiscovery(FidoTransportProtocol transport)
     : transport_(transport) {}
 
 FidoDiscovery::~FidoDiscovery() = default;
@@ -143,21 +142,22 @@ bool FidoDiscovery::RemoveDevice(base::StringPiece device_id) {
 namespace internal {
 
 ScopedFidoDiscoveryFactory::ScopedFidoDiscoveryFactory() {
-  original_factory_ = std::exchange(g_current_factory, this);
+  DCHECK(!g_current_factory);
+  g_current_factory = this;
   original_factory_func_ =
       std::exchange(FidoDiscovery::g_factory_func_,
                     &ForwardCreateFidoDiscoveryToCurrentFactory);
 }
 
 ScopedFidoDiscoveryFactory::~ScopedFidoDiscoveryFactory() {
-  g_current_factory = original_factory_;
+  g_current_factory = nullptr;
   FidoDiscovery::g_factory_func_ = original_factory_func_;
 }
 
 // static
 std::unique_ptr<FidoDiscovery>
 ScopedFidoDiscoveryFactory::ForwardCreateFidoDiscoveryToCurrentFactory(
-    U2fTransportProtocol transport,
+    FidoTransportProtocol transport,
     ::service_manager::Connector* connector) {
   DCHECK(g_current_factory);
   return g_current_factory->CreateFidoDiscovery(transport, connector);

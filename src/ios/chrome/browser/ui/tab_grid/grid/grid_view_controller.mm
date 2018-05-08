@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_view_controller.h"
 
+#import "base/logging.h"
 #import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_cell.h"
@@ -33,10 +34,15 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @property(nonatomic, weak) UICollectionView* collectionView;
 // The local model backing the collection view.
 @property(nonatomic, strong) NSMutableArray<GridItem*>* items;
-// Index of the selected item. This value is disregarded if |self.items| is
+// Identifier of the selected item. This value is disregarded if |self.items| is
 // empty. This bookkeeping is done to set the correct selection on
 // |-viewWillAppear:|.
-@property(nonatomic, assign) NSUInteger selectedIndex;
+@property(nonatomic, copy) NSString* selectedItemID;
+// Index of the selected item in |items|.
+@property(nonatomic, readonly) NSUInteger selectedIndex;
+// The gesture recognizer used for interactive item reordering.
+@property(nonatomic, strong)
+    UILongPressGestureRecognizer* itemReorderRecognizer;
 @end
 
 @implementation GridViewController
@@ -47,7 +53,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // Private properties.
 @synthesize collectionView = _collectionView;
 @synthesize items = _items;
-@synthesize selectedIndex = _selectedIndex;
+@synthesize selectedItemID = _selectedItemID;
+@synthesize itemReorderRecognizer = _itemReorderRecognizer;
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -69,6 +76,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   if (@available(iOS 11, *))
     collectionView.contentInsetAdjustmentBehavior =
         UIScrollViewContentInsetAdjustmentAlways;
+  self.itemReorderRecognizer = [[UILongPressGestureRecognizer alloc]
+      initWithTarget:self
+              action:@selector(handleItemReorderingWithGesture:)];
+  // The collection view cells will by default get touch events in parallel with
+  // the reorder recognizer. When this happens, long-pressing on a non-selected
+  // cell will cause the selected cell to briefly become unselected and then
+  // selected again. To avoid this, the recognizer delays touchesBegan: calls
+  // until it fails to recognize a long-press.
+  self.itemReorderRecognizer.delaysTouchesBegan = YES;
+  [collectionView addGestureRecognizer:self.itemReorderRecognizer];
   self.collectionView = collectionView;
   self.view = collectionView;
 }
@@ -76,7 +93,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   [self.collectionView reloadData];
-  self.collectionView.backgroundView.hidden = (self.items.count > 0);
+  self.emptyStateView.hidden = (self.items.count > 0);
   // Selection is invalid if there are no items.
   if (self.items.count == 0)
     return;
@@ -109,11 +126,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (BOOL)isSelectedCellVisible {
-  if (self.collectionView.indexPathsForSelectedItems.count == 0)
+  // The collection view's selected item may not have updated yet, so use the
+  // selected index.
+  NSUInteger selectedIndex = self.selectedIndex;
+  if (selectedIndex == NSNotFound)
     return NO;
+  NSIndexPath* selectedIndexPath = CreateIndexPath(selectedIndex);
   return [self.collectionView.indexPathsForVisibleItems
-      containsObject:self.collectionView.indexPathsForSelectedItems
-                         .firstObject];
+      containsObject:selectedIndexPath];
 }
 
 - (GridTransitionLayout*)transitionLayout {
@@ -156,63 +176,88 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   cell.accessibilityIdentifier =
       [NSString stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix,
                                  base::checked_cast<long>(indexPath.item)];
-  cell.delegate = self;
-  cell.theme = self.theme;
   GridItem* item = self.items[indexPath.item];
-  cell.itemIdentifier = item.identifier;
-  cell.title = item.title;
-  NSString* itemIdentifier = item.identifier;
-  [self.imageDataSource
-      faviconForIdentifier:itemIdentifier
-                completion:^(UIImage* icon) {
-                  if (icon && cell.itemIdentifier == itemIdentifier)
-                    cell.icon = icon;
-                }];
-  [self.imageDataSource
-      snapshotForIdentifier:itemIdentifier
-                 completion:^(UIImage* snapshot) {
-                   if (snapshot && cell.itemIdentifier == itemIdentifier)
-                     cell.snapshot = snapshot;
-                 }];
+  [self configureCell:cell withItem:item];
   return cell;
+}
+
+- (BOOL)collectionView:(UICollectionView*)collectionView
+    canMoveItemAtIndexPath:(NSIndexPath*)indexPath {
+  return indexPath && self.items.count > 1;
+}
+
+- (void)collectionView:(UICollectionView*)collectionView
+    moveItemAtIndexPath:(NSIndexPath*)sourceIndexPath
+            toIndexPath:(NSIndexPath*)destinationIndexPath {
+  NSUInteger source = base::checked_cast<NSUInteger>(sourceIndexPath.item);
+  NSUInteger destination =
+      base::checked_cast<NSUInteger>(destinationIndexPath.item);
+  // Update |items| before informing the delegate, so the state of the UI
+  // is correctly represented before any updates occur.
+  GridItem* item = self.items[source];
+  [self.items removeObjectAtIndex:source];
+  [self.items insertObject:item atIndex:destination];
+
+  [self.delegate gridViewController:self
+                  didMoveItemWithID:item.identifier
+                            toIndex:destination];
 }
 
 #pragma mark - UICollectionViewDelegate
 
 - (void)collectionView:(UICollectionView*)collectionView
     didSelectItemAtIndexPath:(NSIndexPath*)indexPath {
-  [self.delegate gridViewController:self didSelectItemAtIndex:indexPath.item];
+  NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
+  DCHECK_LT(index, self.items.count);
+  NSString* itemID = self.items[index].identifier;
+  [self.delegate gridViewController:self didSelectItemWithID:itemID];
 }
 
 #pragma mark - GridCellDelegate
 
 - (void)closeButtonTappedForCell:(GridCell*)cell {
-  NSInteger index = [self.collectionView indexPathForCell:cell].item;
-  [self.delegate gridViewController:self
-                didCloseItemAtIndex:base::checked_cast<NSUInteger>(index)];
+  NSUInteger index = base::checked_cast<NSUInteger>(
+      [self.collectionView indexPathForCell:cell].item);
+  DCHECK_LT(index, self.items.count);
+  NSString* itemID = self.items[index].identifier;
+  [self.delegate gridViewController:self didCloseItemWithID:itemID];
 }
 
 #pragma mark - GridConsumer
 
 - (void)populateItems:(NSArray<GridItem*>*)items
-        selectedIndex:(NSUInteger)selectedIndex {
+       selectedItemID:(NSString*)selectedItemID {
+#ifndef NDEBUG
+  // Consistency check: ensure no IDs are duplicated.
+  NSMutableSet<NSString*>* identifiers = [[NSMutableSet alloc] init];
+  for (GridItem* item in items) {
+    [identifiers addObject:item.identifier];
+  }
+  CHECK_EQ(identifiers.count, items.count);
+#endif
+
   self.items = [items mutableCopy];
-  self.selectedIndex = selectedIndex;
-  if (![self isViewVisible])
-    return;
-  [self.collectionView reloadData];
-  [self.collectionView selectItemAtIndexPath:CreateIndexPath(selectedIndex)
-                                    animated:YES
-                              scrollPosition:UICollectionViewScrollPositionTop];
+  self.selectedItemID = selectedItemID;
+  if ([self isViewVisible]) {
+    [self.collectionView reloadData];
+    [self.collectionView
+        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                     animated:YES
+               scrollPosition:UICollectionViewScrollPositionTop];
+  }
+  // Whether the view is visible or not, the delegate must be updated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
 }
 
 - (void)insertItem:(GridItem*)item
            atIndex:(NSUInteger)index
-     selectedIndex:(NSUInteger)selectedIndex {
+    selectedItemID:(NSString*)selectedItemID {
+  // Consistency check: |item|'s ID is not in |items|.
+  // (using DCHECK rather than DCHECK_EQ to avoid a checked_cast on NSNotFound).
+  DCHECK([self indexOfItemWithID:item.identifier] == NSNotFound);
   auto performDataSourceUpdates = ^{
     [self.items insertObject:item atIndex:index];
-    self.selectedIndex = selectedIndex;
+    self.selectedItemID = selectedItemID;
   };
   if (![self isViewVisible]) {
     performDataSourceUpdates();
@@ -221,12 +266,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   }
   auto performAllUpdates = ^{
     performDataSourceUpdates();
-    self.collectionView.backgroundView.hidden = YES;
+    self.emptyStateView.hidden = YES;
     [self.collectionView insertItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
   };
   auto completion = ^(BOOL finished) {
     [self.collectionView
-        selectItemAtIndexPath:CreateIndexPath(selectedIndex)
+        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                      animated:YES
                scrollPosition:UICollectionViewScrollPositionNone];
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
@@ -235,11 +280,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                 completion:completion];
 }
 
-- (void)removeItemAtIndex:(NSUInteger)index
-            selectedIndex:(NSUInteger)selectedIndex {
+- (void)removeItemWithID:(NSString*)removedItemID
+          selectedItemID:(NSString*)selectedItemID {
+  NSUInteger index = [self indexOfItemWithID:removedItemID];
   auto performDataSourceUpdates = ^{
     [self.items removeObjectAtIndex:index];
-    self.selectedIndex = selectedIndex;
+    self.selectedItemID = selectedItemID;
   };
   if (![self isViewVisible]) {
     performDataSourceUpdates();
@@ -249,15 +295,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   auto performAllUpdates = ^{
     performDataSourceUpdates();
     [self.collectionView deleteItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
+    if (self.items.count == 0) {
+      [self animateEmptyStateIntoView];
+    }
   };
   auto completion = ^(BOOL finished) {
     if (self.items.count > 0) {
       [self.collectionView
-          selectItemAtIndexPath:CreateIndexPath(selectedIndex)
+          selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                        animated:YES
                  scrollPosition:UICollectionViewScrollPositionNone];
-    } else {
-      self.collectionView.backgroundView.hidden = NO;
     }
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
   };
@@ -265,32 +312,42 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                 completion:completion];
 }
 
-- (void)selectItemAtIndex:(NSUInteger)selectedIndex {
-  self.selectedIndex = selectedIndex;
+- (void)selectItemWithID:(NSString*)selectedItemID {
+  self.selectedItemID = selectedItemID;
   if (![self isViewVisible])
     return;
   [self.collectionView
-      selectItemAtIndexPath:CreateIndexPath(selectedIndex)
+      selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                    animated:YES
              scrollPosition:UICollectionViewScrollPositionNone];
 }
 
-- (void)replaceItemAtIndex:(NSUInteger)index withItem:(GridItem*)item {
+- (void)replaceItemID:(NSString*)itemID withItem:(GridItem*)item {
+  // Consistency check: |item|'s ID is either |itemID| or not in |items|.
+  DCHECK([item.identifier isEqualToString:itemID] ||
+         [self indexOfItemWithID:item.identifier] == NSNotFound);
+  NSUInteger index = [self indexOfItemWithID:itemID];
   self.items[index] = item;
   if (![self isViewVisible])
     return;
-  [self.collectionView reloadItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
+  GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
+      [self.collectionView cellForItemAtIndexPath:CreateIndexPath(index)]);
+  [self configureCell:cell withItem:item];
 }
 
-- (void)moveItemFromIndex:(NSUInteger)fromIndex
-                  toIndex:(NSUInteger)toIndex
-            selectedIndex:(NSUInteger)selectedIndex {
+- (void)moveItemWithID:(NSString*)itemID toIndex:(NSUInteger)toIndex {
+  NSUInteger fromIndex = [self indexOfItemWithID:itemID];
+  // If this move would be a no-op, early return and avoid spurious UI updates.
+  if (fromIndex == toIndex)
+    return;
+
   auto performDataSourceUpdates = ^{
     GridItem* item = self.items[fromIndex];
     [self.items removeObjectAtIndex:fromIndex];
     [self.items insertObject:item atIndex:toIndex];
-    self.selectedIndex = selectedIndex;
   };
+  // If the view isn't visible, there's no need for the collection view to
+  // update.
   if (![self isViewVisible]) {
     performDataSourceUpdates();
     return;
@@ -302,7 +359,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   };
   auto completion = ^(BOOL finished) {
     [self.collectionView
-        selectItemAtIndexPath:CreateIndexPath(selectedIndex)
+        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                      animated:YES
                scrollPosition:UICollectionViewScrollPositionNone];
   };
@@ -310,13 +367,108 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                 completion:completion];
 }
 
+#pragma mark - Private properties
+
+- (NSUInteger)selectedIndex {
+  return [self indexOfItemWithID:self.selectedItemID];
+}
+
 #pragma mark - Private
+
+// Returns the index in |self.items| of the first item whose identifier is
+// |identifier|.
+- (NSUInteger)indexOfItemWithID:(NSString*)identifier {
+  auto selectedTest = ^BOOL(GridItem* item, NSUInteger index, BOOL* stop) {
+    return [item.identifier isEqualToString:identifier];
+  };
+  return [self.items indexOfObjectPassingTest:selectedTest];
+}
 
 // If the view is not visible, there is no need to update the collection view.
 - (BOOL)isViewVisible {
-  // Invoking the view method causes the view to load (if it is not loaded)
-  // which is unnecessary.
-  return (self.isViewLoaded && self.view.window);
+  return self.viewIfLoaded.window != nil;
+}
+
+// Configures |cell|'s title synchronously, and favicon and snapshot
+// asynchronously with information from |item|. Updates the |cell|'s theme to
+// this view controller's theme. This view controller becomes the delegate for
+// the cell.
+- (void)configureCell:(GridCell*)cell withItem:(GridItem*)item {
+  DCHECK(cell);
+  DCHECK(item);
+  cell.delegate = self;
+  cell.theme = self.theme;
+  cell.itemIdentifier = item.identifier;
+  cell.title = item.title;
+  NSString* itemIdentifier = item.identifier;
+  [self.imageDataSource faviconForIdentifier:itemIdentifier
+                                  completion:^(UIImage* icon) {
+                                    // Only update the icon if the cell is not
+                                    // already reused for another item.
+                                    if (cell.itemIdentifier == itemIdentifier)
+                                      cell.icon = icon;
+                                  }];
+  [self.imageDataSource snapshotForIdentifier:itemIdentifier
+                                   completion:^(UIImage* snapshot) {
+                                     // Only update the icon if the cell is not
+                                     // already reused for another item.
+                                     if (cell.itemIdentifier == itemIdentifier)
+                                       cell.snapshot = snapshot;
+                                   }];
+}
+
+// Animates the empty state into view.
+- (void)animateEmptyStateIntoView {
+  // TODO(crbug.com/820410) : Polish the animation, and put constants where they
+  // belong.
+  CGFloat scale = 0.8f;
+  CGAffineTransform originalTransform = self.emptyStateView.transform;
+  self.emptyStateView.transform =
+      CGAffineTransformScale(self.emptyStateView.transform, scale, scale);
+  self.emptyStateView.alpha = 0.0f;
+  self.emptyStateView.hidden = NO;
+  [UIView animateWithDuration:1.0f
+                        delay:0.0f
+       usingSpringWithDamping:1.0f
+        initialSpringVelocity:0.7f
+                      options:UIViewAnimationCurveEaseOut
+                   animations:^{
+                     self.emptyStateView.alpha = 1.0f;
+                     self.emptyStateView.transform = originalTransform;
+                   }
+                   completion:nil];
+}
+
+// Handle the long-press gesture used to reorder cells in the collection view.
+- (void)handleItemReorderingWithGesture:(UIGestureRecognizer*)gesture {
+  DCHECK(gesture == self.itemReorderRecognizer);
+  CGPoint location = [gesture locationInView:self.collectionView];
+  switch (gesture.state) {
+    case UIGestureRecognizerStateBegan: {
+      NSIndexPath* path =
+          [self.collectionView indexPathForItemAtPoint:location];
+      BOOL moving =
+          [self.collectionView beginInteractiveMovementForItemAtIndexPath:path];
+      if (!moving) {
+        gesture.enabled = NO;
+      }
+      break;
+    }
+    case UIGestureRecognizerStateChanged:
+      [self.collectionView updateInteractiveMovementTargetPosition:location];
+      break;
+    case UIGestureRecognizerStateEnded:
+      [self.collectionView endInteractiveMovement];
+      break;
+    case UIGestureRecognizerStateCancelled:
+      [self.collectionView cancelInteractiveMovement];
+      // Re-enable cancelled gesture.
+      gesture.enabled = YES;
+      break;
+    case UIGestureRecognizerStatePossible:
+    case UIGestureRecognizerStateFailed:
+      NOTREACHED() << "Unexpected long-press recognizer state";
+  }
 }
 
 @end

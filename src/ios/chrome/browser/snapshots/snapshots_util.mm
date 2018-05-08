@@ -7,7 +7,6 @@
 #import <UIKit/UIKit.h>
 
 #include "base/files/file_util.h"
-#include "base/ios/ios_util.h"
 #include "base/location.h"
 #include "base/mac/foundation_util.h"
 #include "base/macros.h"
@@ -51,7 +50,7 @@ void ClearIOSSnapshots(base::OnceClosure callback) {
 void GetSnapshotsPaths(std::vector<base::FilePath>* snapshots_paths) {
   DCHECK(snapshots_paths);
   base::FilePath snapshots_dir;
-  PathService::Get(base::DIR_CACHE, &snapshots_dir);
+  base::PathService::Get(base::DIR_CACHE, &snapshots_dir);
   // Snapshots are located in a path with the bundle ID used twice.
   snapshots_dir = snapshots_dir.Append("Snapshots")
                       .Append(base::mac::BaseBundleID())

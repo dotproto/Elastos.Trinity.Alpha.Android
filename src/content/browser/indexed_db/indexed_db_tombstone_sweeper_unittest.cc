@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
@@ -16,6 +15,7 @@
 #include "content/browser/indexed_db/leveldb/leveldb_database.h"
 #include "content/browser/indexed_db/leveldb/mock_level_db.h"
 #include "content/common/indexed_db/indexed_db_metadata.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -66,7 +66,7 @@ class MockTickClock : public base::TickClock {
   MockTickClock() {}
   ~MockTickClock() override {}
 
-  MOCK_METHOD0(NowTicks, base::TimeTicks());
+  MOCK_CONST_METHOD0(NowTicks, base::TimeTicks());
 };
 
 class Comparator : public LevelDBComparator {
@@ -243,6 +243,9 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
 
   // Used to verify recorded data.
   base::HistogramTester histogram_tester_;
+
+ private:
+  TestBrowserThreadBundle thread_bundle_;
 };
 
 TEST_P(IndexedDBTombstoneSweeperTest, EmptyDB) {

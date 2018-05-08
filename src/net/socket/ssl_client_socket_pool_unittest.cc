@@ -409,8 +409,7 @@ TEST_F(SSLClientSocketPoolTest, DirectWithNPN) {
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
   TestLoadTimingInfo(handle);
-  SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
-  EXPECT_TRUE(ssl_socket->WasAlpnNegotiated());
+  EXPECT_TRUE(handle.socket()->WasAlpnNegotiated());
 }
 
 TEST_F(SSLClientSocketPoolTest, DirectGotSPDY) {
@@ -437,9 +436,8 @@ TEST_F(SSLClientSocketPoolTest, DirectGotSPDY) {
   EXPECT_TRUE(handle.socket());
   TestLoadTimingInfo(handle);
 
-  SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
-  EXPECT_TRUE(ssl_socket->WasAlpnNegotiated());
-  EXPECT_EQ(kProtoHTTP2, ssl_socket->GetNegotiatedProtocol());
+  EXPECT_TRUE(handle.socket()->WasAlpnNegotiated());
+  EXPECT_EQ(kProtoHTTP2, handle.socket()->GetNegotiatedProtocol());
 }
 
 TEST_F(SSLClientSocketPoolTest, SOCKSFail) {
@@ -735,8 +733,8 @@ TEST_F(SSLClientSocketPoolTest, NeedProxyAuth) {
   EXPECT_FALSE(handle.is_ssl_error());
   const HttpResponseInfo& tunnel_info = handle.ssl_error_response_info();
   EXPECT_EQ(tunnel_info.headers->response_code(), 407);
-  std::unique_ptr<ClientSocketHandle> tunnel_handle(
-      handle.release_pending_http_proxy_connection());
+  std::unique_ptr<ClientSocketHandle> tunnel_handle =
+      handle.release_pending_http_proxy_connection();
   EXPECT_TRUE(tunnel_handle->socket());
   EXPECT_FALSE(tunnel_handle->socket()->IsConnected());
 }

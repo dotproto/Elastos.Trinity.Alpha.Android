@@ -4,7 +4,6 @@
 
 #include "components/viz/service/display/software_renderer.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/paint/render_surface_filters.h"
@@ -66,11 +65,13 @@ void SoftwareRenderer::FinishDrawingFrame() {
   output_device_->EndPaint();
 }
 
-void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
+void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                                   bool need_presentation_feedback) {
   DCHECK(visible_);
   TRACE_EVENT0("viz", "SoftwareRenderer::SwapBuffers");
   OutputSurfaceFrame output_frame;
   output_frame.latency_info = std::move(latency_info);
+  output_frame.need_presentation_feedback = need_presentation_feedback;
   output_surface_->SwapBuffers(std::move(output_frame));
 }
 
@@ -169,16 +170,8 @@ void SoftwareRenderer::PrepareSurfaceForPass(
 }
 
 bool SoftwareRenderer::IsSoftwareResource(ResourceId resource_id) const {
-  switch (resource_provider_->GetResourceType(resource_id)) {
-    case ResourceType::kGpuMemoryBuffer:
-    case ResourceType::kTexture:
-      return false;
-    case ResourceType::kBitmap:
-      return true;
-  }
-
-  LOG(FATAL) << "Invalid resource type.";
-  return false;
+  return resource_provider_->GetResourceType(resource_id) ==
+         ResourceType::kBitmap;
 }
 
 void SoftwareRenderer::DoDrawQuad(const DrawQuad* quad,

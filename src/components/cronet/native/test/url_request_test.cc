@@ -19,6 +19,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+using cronet::test::TestUrlRequestCallback;
+
 namespace {
 
 class UrlRequestTest : public ::testing::Test {
@@ -30,17 +32,15 @@ class UrlRequestTest : public ::testing::Test {
 
   void TearDown() override { cronet::TestServer::Shutdown(); }
 
-  std::unique_ptr<cronet::test::TestUrlRequestCallback> StartAndWaitForComplete(
-      const std::string& url) {
-    auto test_callback =
-        std::make_unique<cronet::test::TestUrlRequestCallback>();
-
+  std::unique_ptr<TestUrlRequestCallback> StartAndWaitForComplete(
+      const std::string& url,
+      std::unique_ptr<TestUrlRequestCallback> test_callback) {
     Cronet_EnginePtr engine = cronet::test::CreateTestEngine(0);
     Cronet_UrlRequestPtr request = Cronet_UrlRequest_Create();
     Cronet_UrlRequestParamsPtr request_params =
         Cronet_UrlRequestParams_Create();
-    // Executor provided by the application.
-    Cronet_ExecutorPtr executor = test_callback->CreateExecutor(false);
+    // Executor provided by the application is owned by |test_callback|.
+    Cronet_ExecutorPtr executor = test_callback->GetExecutor(false);
     // Callback provided by the application.
     Cronet_UrlRequestCallbackPtr callback =
         test_callback->CreateUrlRequestCallback();
@@ -59,14 +59,18 @@ class UrlRequestTest : public ::testing::Test {
     Cronet_UrlRequestParams_Destroy(request_params);
     Cronet_UrlRequest_Destroy(request);
     Cronet_UrlRequestCallback_Destroy(callback);
-    Cronet_Executor_Destroy(executor);
     Cronet_Engine_Destroy(engine);
     return test_callback;
   }
 
+  std::unique_ptr<TestUrlRequestCallback> StartAndWaitForComplete(
+      const std::string& url) {
+    return StartAndWaitForComplete(url,
+                                   std::make_unique<TestUrlRequestCallback>());
+  }
+
   void CheckResponseInfo(
-      const cronet::test::TestUrlRequestCallback::UrlResponseInfo&
-          response_info,
+      const TestUrlRequestCallback::UrlResponseInfo& response_info,
       const std::string& expected_url,
       int expected_http_status_code,
       const std::string& expected_http_status_text) {
@@ -78,8 +82,7 @@ class UrlRequestTest : public ::testing::Test {
   }
 
   void CheckResponseInfoHeader(
-      const cronet::test::TestUrlRequestCallback::UrlResponseInfo&
-          response_info,
+      const TestUrlRequestCallback::UrlResponseInfo& response_info,
       const std::string& header_name,
       const std::string& header_value) {
     for (const auto& header : response_info.all_headers) {
@@ -92,8 +95,8 @@ class UrlRequestTest : public ::testing::Test {
   }
 
   void ExpectResponseInfoEquals(
-      const cronet::test::TestUrlRequestCallback::UrlResponseInfo& expected,
-      const cronet::test::TestUrlRequestCallback::UrlResponseInfo& actual) {
+      const TestUrlRequestCallback::UrlResponseInfo& expected,
+      const TestUrlRequestCallback::UrlResponseInfo& actual) {
     EXPECT_EQ(expected.url, actual.url);
     EXPECT_EQ(expected.url_chain, actual.url_chain);
     EXPECT_EQ(expected.http_status_code, actual.http_status_code);
@@ -104,6 +107,11 @@ class UrlRequestTest : public ::testing::Test {
     EXPECT_EQ(expected.proxy_server, actual.proxy_server);
     EXPECT_EQ(expected.received_byte_count, actual.received_byte_count);
   }
+
+  void TestCancel(TestUrlRequestCallback::FailureType failure_type,
+                  TestUrlRequestCallback::ResponseStep failure_step,
+                  bool expect_response_info,
+                  bool expect_error);
 
  protected:
   // Provide a message loop for use by TestExecutor instances.
@@ -120,14 +128,15 @@ TEST_F(UrlRequestTest, InitChecks) {
   Cronet_EngineParams_enable_check_result_set(engine_params, false);
   EXPECT_EQ(Cronet_RESULT_SUCCESS,
             Cronet_Engine_StartWithParams(engine, engine_params));
+  Cronet_EngineParams_Destroy(engine_params);
 
   Cronet_UrlRequestPtr request = Cronet_UrlRequest_Create();
   Cronet_UrlRequestParamsPtr request_params = Cronet_UrlRequestParams_Create();
   const std::string url = cronet::TestServer::GetEchoMethodURL();
 
-  cronet::test::TestUrlRequestCallback test_callback;
-  // Executor provided by the application.
-  Cronet_ExecutorPtr executor = test_callback.CreateExecutor(false);
+  TestUrlRequestCallback test_callback;
+  // Executor provided by the application is owned by |test_callback|.
+  Cronet_ExecutorPtr executor = test_callback.GetExecutor(false);
   // Callback provided by the application.
   Cronet_UrlRequestCallbackPtr callback =
       test_callback.CreateUrlRequestCallback();
@@ -193,7 +202,6 @@ TEST_F(UrlRequestTest, InitChecks) {
   Cronet_UrlRequest_Destroy(request);
   Cronet_UrlRequestParams_Destroy(request_params);
   Cronet_UrlRequestCallback_Destroy(callback);
-  Cronet_Executor_Destroy(executor);
   Cronet_Engine_Destroy(engine);
 }
 
@@ -206,7 +214,7 @@ TEST_F(UrlRequestTest, SimpleGet) {
   EXPECT_EQ(0, callback->redirect_count_);
   EXPECT_EQ(callback->response_step_, callback->ON_SUCCEEDED);
   CheckResponseInfo(*callback->response_info_, url, 200, "OK");
-  cronet::test::TestUrlRequestCallback::UrlResponseInfo expected_response_info(
+  TestUrlRequestCallback::UrlResponseInfo expected_response_info(
       std::vector<std::string>({url}), "OK", 200, 86,
       std::vector<std::string>({"Connection", "close", "Content-Length", "3",
                                 "Content-Type", "text/plain"}));
@@ -219,9 +227,9 @@ TEST_F(UrlRequestTest, SimpleRequest) {
   Cronet_UrlRequestParamsPtr request_params = Cronet_UrlRequestParams_Create();
   std::string url = cronet::TestServer::GetSimpleURL();
 
-  cronet::test::TestUrlRequestCallback test_callback;
-  // Executor provided by the application.
-  Cronet_ExecutorPtr executor = test_callback.CreateExecutor(false);
+  TestUrlRequestCallback test_callback;
+  // Executor provided by the application is owned by |test_callback|.
+  Cronet_ExecutorPtr executor = test_callback.GetExecutor(false);
   // Callback provided by the application.
   Cronet_UrlRequestCallbackPtr callback =
       test_callback.CreateUrlRequestCallback();
@@ -239,7 +247,6 @@ TEST_F(UrlRequestTest, SimpleRequest) {
   Cronet_UrlRequestParams_Destroy(request_params);
   Cronet_UrlRequest_Destroy(request);
   Cronet_UrlRequestCallback_Destroy(callback);
-  Cronet_Executor_Destroy(executor);
   Cronet_Engine_Destroy(engine);
 }
 
@@ -251,37 +258,34 @@ TEST_F(UrlRequestTest, MultiRedirect) {
   EXPECT_EQ(2ul, callback->redirect_response_info_list_.size());
 
   // Check first redirect (multiredirect.html -> redirect.html).
-  cronet::test::TestUrlRequestCallback::UrlResponseInfo
-      first_expected_response_info(
-          std::vector<std::string>({url}), "Found", 302, 76,
-          std::vector<std::string>(
-              {"Location", GURL(cronet::TestServer::GetRedirectURL()).path(),
-               "redirect-header0", "header-value"}));
+  TestUrlRequestCallback::UrlResponseInfo first_expected_response_info(
+      std::vector<std::string>({url}), "Found", 302, 76,
+      std::vector<std::string>(
+          {"Location", GURL(cronet::TestServer::GetRedirectURL()).path(),
+           "redirect-header0", "header-value"}));
   ExpectResponseInfoEquals(first_expected_response_info,
                            *callback->redirect_response_info_list_.front());
 
   // Check second redirect (redirect.html -> success.txt).
-  cronet::test::TestUrlRequestCallback::UrlResponseInfo
-      second_expected_response_info(
-          std::vector<std::string>({cronet::TestServer::GetMultiRedirectURL(),
-                                    cronet::TestServer::GetRedirectURL()}),
-          "Found", 302, 149,
-          std::vector<std::string>(
-              {"Location", GURL(cronet::TestServer::GetSuccessURL()).path(),
-               "redirect-header", "header-value"}));
+  TestUrlRequestCallback::UrlResponseInfo second_expected_response_info(
+      std::vector<std::string>({cronet::TestServer::GetMultiRedirectURL(),
+                                cronet::TestServer::GetRedirectURL()}),
+      "Found", 302, 149,
+      std::vector<std::string>(
+          {"Location", GURL(cronet::TestServer::GetSuccessURL()).path(),
+           "redirect-header", "header-value"}));
   ExpectResponseInfoEquals(second_expected_response_info,
                            *callback->redirect_response_info_list_.back());
   // Check final response (success.txt).
-  cronet::test::TestUrlRequestCallback::UrlResponseInfo
-      final_expected_response_info(
-          std::vector<std::string>({cronet::TestServer::GetMultiRedirectURL(),
-                                    cronet::TestServer::GetRedirectURL(),
-                                    cronet::TestServer::GetSuccessURL()}),
-          "OK", 200, 334,
-          std::vector<std::string>(
-              {"Content-Type", "text/plain", "Access-Control-Allow-Origin", "*",
-               "header-name", "header-value", "multi-header-name",
-               "header-value1", "multi-header-name", "header-value2"}));
+  TestUrlRequestCallback::UrlResponseInfo final_expected_response_info(
+      std::vector<std::string>({cronet::TestServer::GetMultiRedirectURL(),
+                                cronet::TestServer::GetRedirectURL(),
+                                cronet::TestServer::GetSuccessURL()}),
+      "OK", 200, 334,
+      std::vector<std::string>(
+          {"Content-Type", "text/plain", "Access-Control-Allow-Origin", "*",
+           "header-name", "header-value", "multi-header-name", "header-value1",
+           "multi-header-name", "header-value2"}));
   ExpectResponseInfoEquals(final_expected_response_info,
                            *callback->response_info_);
   EXPECT_NE(0, callback->response_data_length_);
@@ -294,11 +298,11 @@ TEST_F(UrlRequestTest, CancelRequest) {
   Cronet_UrlRequestParamsPtr request_params = Cronet_UrlRequestParams_Create();
   std::string url = cronet::TestServer::GetSimpleURL();
 
-  cronet::test::TestUrlRequestCallback test_callback;
+  TestUrlRequestCallback test_callback;
   test_callback.set_failure(test_callback.CANCEL_SYNC,
                             test_callback.ON_RESPONSE_STARTED);
-  // Executor provided by the application.
-  Cronet_ExecutorPtr executor = test_callback.CreateExecutor(false);
+  // Executor provided by the application is owned by |test_callback|.
+  Cronet_ExecutorPtr executor = test_callback.GetExecutor(false);
   // Callback provided by the application.
   Cronet_UrlRequestCallbackPtr callback =
       test_callback.CreateUrlRequestCallback();
@@ -317,7 +321,6 @@ TEST_F(UrlRequestTest, CancelRequest) {
   Cronet_UrlRequestParams_Destroy(request_params);
   Cronet_UrlRequest_Destroy(request);
   Cronet_UrlRequestCallback_Destroy(callback);
-  Cronet_Executor_Destroy(executor);
   Cronet_Engine_Destroy(engine);
 }
 
@@ -327,9 +330,9 @@ TEST_F(UrlRequestTest, FailedRequestHostNotFound) {
   Cronet_UrlRequestParamsPtr request_params = Cronet_UrlRequestParams_Create();
   std::string url = "https://notfound.example.com";
 
-  cronet::test::TestUrlRequestCallback test_callback;
-  // Executor provided by the application.
-  Cronet_ExecutorPtr executor = test_callback.CreateExecutor(false);
+  TestUrlRequestCallback test_callback;
+  // Executor provided by the application is owned by |test_callback|.
+  Cronet_ExecutorPtr executor = test_callback.GetExecutor(false);
   // Callback provided by the application.
   Cronet_UrlRequestCallbackPtr callback =
       test_callback.CreateUrlRequestCallback();
@@ -362,8 +365,63 @@ TEST_F(UrlRequestTest, FailedRequestHostNotFound) {
   Cronet_UrlRequestParams_Destroy(request_params);
   Cronet_UrlRequest_Destroy(request);
   Cronet_UrlRequestCallback_Destroy(callback);
-  Cronet_Executor_Destroy(executor);
   Cronet_Engine_Destroy(engine);
+}
+
+void UrlRequestTest::TestCancel(
+    TestUrlRequestCallback::FailureType failure_type,
+    TestUrlRequestCallback::ResponseStep failure_step,
+    bool expect_response_info,
+    bool expect_error) {
+  auto callback = std::make_unique<TestUrlRequestCallback>();
+  callback->set_failure(failure_type, failure_step);
+  const std::string url = cronet::TestServer::GetRedirectURL();
+  callback = StartAndWaitForComplete(url, std::move(callback));
+  EXPECT_EQ(1, callback->redirect_count_);
+  EXPECT_EQ(1ul, callback->redirect_response_info_list_.size());
+
+  if (failure_type == TestUrlRequestCallback::CANCEL_SYNC ||
+      failure_type == TestUrlRequestCallback::CANCEL_ASYNC) {
+    EXPECT_EQ(TestUrlRequestCallback::ON_CANCELED, callback->response_step_);
+  }
+
+  EXPECT_EQ(expect_response_info, callback->response_info_ != nullptr);
+  EXPECT_EQ(expect_error, callback->last_error_ != nullptr);
+  EXPECT_EQ(expect_error, callback->on_error_called_);
+
+  // When |failure_type| is CANCEL_ASYNC_WITHOUT_PAUSE and |failure_step|
+  // is ON_READ_COMPLETED, there might be an onSucceeded() task
+  // already posted. If that's the case, onCanceled() will not be invoked. See
+  // crbug.com/657415.
+  if (!(failure_type == TestUrlRequestCallback::CANCEL_ASYNC_WITHOUT_PAUSE &&
+        failure_step == TestUrlRequestCallback::ON_READ_COMPLETED)) {
+    EXPECT_TRUE(callback->on_canceled_called_);
+  }
+}
+
+TEST_F(UrlRequestTest, TestCancel) {
+  TestCancel(TestUrlRequestCallback::CANCEL_SYNC,
+             TestUrlRequestCallback::ON_RECEIVED_REDIRECT, false, false);
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC,
+             TestUrlRequestCallback::ON_RECEIVED_REDIRECT, false, false);
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC_WITHOUT_PAUSE,
+             TestUrlRequestCallback::ON_RECEIVED_REDIRECT, false, false);
+
+  TestCancel(TestUrlRequestCallback::CANCEL_SYNC,
+             TestUrlRequestCallback::ON_RESPONSE_STARTED, true, false);
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC,
+             TestUrlRequestCallback::ON_RESPONSE_STARTED, true, false);
+  // https://crbug.com/812334 - If request is canceled asynchronously, the
+  // 'OnReadCompleted' callback may arrive AFTER 'OnCanceled'.
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC_WITHOUT_PAUSE,
+             TestUrlRequestCallback::ON_RESPONSE_STARTED, true, false);
+
+  TestCancel(TestUrlRequestCallback::CANCEL_SYNC,
+             TestUrlRequestCallback::ON_READ_COMPLETED, true, false);
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC,
+             TestUrlRequestCallback::ON_READ_COMPLETED, true, false);
+  TestCancel(TestUrlRequestCallback::CANCEL_ASYNC_WITHOUT_PAUSE,
+             TestUrlRequestCallback::ON_READ_COMPLETED, true, false);
 }
 
 TEST_F(UrlRequestTest, PerfTest) {
@@ -382,10 +440,10 @@ TEST_F(UrlRequestTest, PerfTest) {
     Cronet_UrlRequestPtr request = Cronet_UrlRequest_Create();
     Cronet_UrlRequestParamsPtr request_params =
         Cronet_UrlRequestParams_Create();
-    cronet::test::TestUrlRequestCallback test_callback;
+    TestUrlRequestCallback test_callback;
     test_callback.set_accumulate_response_data(false);
-    // Executor provided by the application.
-    Cronet_ExecutorPtr executor = test_callback.CreateExecutor(false);
+    // Executor provided by the application is owned by |test_callback|.
+    Cronet_ExecutorPtr executor = test_callback.GetExecutor(false);
     // Callback provided by the application.
     Cronet_UrlRequestCallbackPtr callback =
         test_callback.CreateUrlRequestCallback();
@@ -402,7 +460,6 @@ TEST_F(UrlRequestTest, PerfTest) {
     Cronet_UrlRequestParams_Destroy(request_params);
     Cronet_UrlRequest_Destroy(request);
     Cronet_UrlRequestCallback_Destroy(callback);
-    Cronet_Executor_Destroy(executor);
   }
   base::Time end = base::Time::Now();
   base::TimeDelta delta = end - start;

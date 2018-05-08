@@ -31,7 +31,7 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -101,13 +101,14 @@ class FakeControllerConnection final
 
   // blink::mojom::PresentationConnection implementation
   void OnMessage(content::PresentationConnectionMessage message,
-                 OnMessageCallback callback) {
+                 OnMessageCallback callback) override {
     OnMessageMock(message);
     std::move(callback).Run(true);
   }
   MOCK_METHOD1(OnMessageMock,
                void(content::PresentationConnectionMessage message));
-  void DidChangeState(content::PresentationConnectionState state) override {}
+  void DidChangeState(
+      blink::mojom::PresentationConnectionState state) override {}
   void RequestClose() override {}
 
   blink::mojom::PresentationConnectionRequest MakeConnectionRequest() {

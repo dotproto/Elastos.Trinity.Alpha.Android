@@ -60,6 +60,13 @@ bssl::UniquePtr<SSL_CTX> TlsClientHandshaker::CreateSslCtx() {
 }
 
 bool TlsClientHandshaker::CryptoConnect() {
+  CrypterPair crypters;
+  CryptoUtils::CreateTlsInitialCrypters(Perspective::IS_CLIENT,
+                                        session()->connection_id(), &crypters);
+  session()->connection()->SetEncrypter(ENCRYPTION_NONE,
+                                        std::move(crypters.encrypter));
+  session()->connection()->SetDecrypter(ENCRYPTION_NONE,
+                                        std::move(crypters.decrypter));
   state_ = STATE_HANDSHAKE_RUNNING;
   // Configure certificate verification.
   // TODO(nharper): This only verifies certs on initial connection, not on
@@ -97,6 +104,13 @@ bool TlsClientHandshaker::WasChannelIDSent() const {
 bool TlsClientHandshaker::WasChannelIDSourceCallbackRun() const {
   // Channel ID is not used with TLS in QUIC.
   return false;
+}
+
+QuicLongHeaderType TlsClientHandshaker::GetLongHeaderType(
+    QuicStreamOffset offset) const {
+  // TODO(fayang): Returns the right header type when actually using TLS
+  // handshaker.
+  return offset == 0 ? INITIAL : HANDSHAKE;
 }
 
 QuicString TlsClientHandshaker::chlo_hash() const {
@@ -180,16 +194,21 @@ void TlsClientHandshaker::FinishHandshake() {
   }
 
   QUIC_LOG(INFO) << "Client: setting crypters";
-  QuicEncrypter* initial_encrypter = CreateEncrypter(client_secret);
-  session()->connection()->SetEncrypter(ENCRYPTION_INITIAL, initial_encrypter);
-  QuicEncrypter* encrypter = CreateEncrypter(client_secret);
-  session()->connection()->SetEncrypter(ENCRYPTION_FORWARD_SECURE, encrypter);
+  std::unique_ptr<QuicEncrypter> initial_encrypter =
+      CreateEncrypter(client_secret);
+  session()->connection()->SetEncrypter(ENCRYPTION_INITIAL,
+                                        std::move(initial_encrypter));
+  std::unique_ptr<QuicEncrypter> encrypter = CreateEncrypter(client_secret);
+  session()->connection()->SetEncrypter(ENCRYPTION_FORWARD_SECURE,
+                                        std::move(encrypter));
 
-  QuicDecrypter* initial_decrypter = CreateDecrypter(server_secret);
-  session()->connection()->SetDecrypter(ENCRYPTION_INITIAL, initial_decrypter);
-  QuicDecrypter* decrypter = CreateDecrypter(server_secret);
+  std::unique_ptr<QuicDecrypter> initial_decrypter =
+      CreateDecrypter(server_secret);
+  session()->connection()->SetDecrypter(ENCRYPTION_INITIAL,
+                                        std::move(initial_decrypter));
+  std::unique_ptr<QuicDecrypter> decrypter = CreateDecrypter(server_secret);
   session()->connection()->SetAlternativeDecrypter(ENCRYPTION_FORWARD_SECURE,
-                                                   decrypter, true);
+                                                   std::move(decrypter), true);
 
   session()->connection()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
 
@@ -218,7 +237,7 @@ enum ssl_verify_result_t TlsClientHandshaker::VerifyCert(uint8_t* out_alert) {
     verify_result_ = ssl_verify_retry;
     return result;
   }
-  STACK_OF(CRYPTO_BUFFER)* cert_chain = SSL_get0_peer_certificates(ssl());
+  const STACK_OF(CRYPTO_BUFFER)* cert_chain = SSL_get0_peer_certificates(ssl());
   if (cert_chain == nullptr) {
     *out_alert = SSL_AD_INTERNAL_ERROR;
     return ssl_verify_invalid;

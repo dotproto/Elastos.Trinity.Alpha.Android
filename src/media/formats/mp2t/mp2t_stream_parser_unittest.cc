@@ -27,7 +27,7 @@
 #include "media/base/test_data_util.h"
 #include "media/base/text_track_config.h"
 #include "media/base/video_decoder_config.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_HLS_SAMPLE_AES)
@@ -127,8 +127,7 @@ std::string DecryptBuffer(const StreamParserBuffer& buffer,
   EXPECT_TRUE(scheme.is_encrypted());
   EXPECT_TRUE(scheme.mode() == EncryptionScheme::CIPHER_MODE_AES_CBC);
   bool has_pattern = scheme.pattern().IsInEffect();
-  EXPECT_TRUE(!has_pattern ||
-              scheme.pattern().Matches(EncryptionPattern(1, 9)));
+  EXPECT_TRUE(!has_pattern || scheme.pattern() == EncryptionPattern(1, 9));
 
   std::string key;
   EXPECT_TRUE(

@@ -109,7 +109,6 @@ class TabletModeWindowManagerTest : public AshTestBase {
   aura::Window* CreateWindowWithWidget(const gfx::Rect& bounds) {
     views::Widget* widget = new views::Widget();
     views::Widget::InitParams params;
-    params.context = CurrentContext();
     // Note: The widget will get deleted with the window.
     widget->Init(params);
     widget->Show();
@@ -904,6 +903,58 @@ TEST_F(TabletModeWindowManagerTest, MinimizedEnterAndLeaveTabletMode) {
   EXPECT_TRUE(window_state->IsMinimized());
 }
 
+// Tests that pre-minimized window show state is persistent after entering and
+// leaving tablet mode, that is not cleared in tablet mode.
+TEST_F(TabletModeWindowManagerTest, PersistPreMinimizedShowState) {
+  gfx::Rect rect(10, 10, 100, 100);
+  std::unique_ptr<aura::Window> window(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  wm::WindowState* window_state = wm::GetWindowState(window.get());
+  window_state->Maximize();
+  window_state->Minimize();
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED,
+            window->GetProperty(aura::client::kPreMinimizedShowStateKey));
+
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  window_state->Unminimize();
+  // Check that pre-minimized window show state is not cleared due to
+  // unminimizing in tablet mode.
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED,
+            window->GetProperty(aura::client::kPreMinimizedShowStateKey));
+  window_state->Minimize();
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED,
+            window->GetProperty(aura::client::kPreMinimizedShowStateKey));
+
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  window_state->Unminimize();
+  EXPECT_TRUE(window_state->IsMaximized());
+}
+
+// Tests unminimizing in tablet mode and then existing tablet mode should have
+// pre-minimized window show state.
+TEST_F(TabletModeWindowManagerTest, UnminimizeInTabletMode) {
+  // Tests restoring to maximized show state.
+  gfx::Rect rect(10, 10, 100, 100);
+  std::unique_ptr<aura::Window> window(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  wm::WindowState* window_state = wm::GetWindowState(window.get());
+  window_state->Maximize();
+  window_state->Minimize();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  window_state->Unminimize();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  EXPECT_TRUE(window_state->IsMaximized());
+
+  // Tests restoring to normal show state.
+  window_state->Restore();
+  EXPECT_EQ(gfx::Rect(10, 10, 100, 100), window->GetBoundsInScreen());
+  window_state->Minimize();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  window_state->Unminimize();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  EXPECT_EQ(gfx::Rect(10, 10, 100, 100), window->GetBoundsInScreen());
+}
+
 // Check that a full screen window remains full screen upon entering maximize
 // mode. Furthermore, checks that this window is not full screen upon exiting
 // tablet mode if it was un-full-screened while in tablet mode.
@@ -1632,6 +1683,7 @@ class TestObserver : public wm::WindowStateObserver {
   void OnPostWindowStateTypeChange(wm::WindowState* window_state,
                                    mojom::WindowStateType old_type) override {
     post_count_++;
+    post_layer_visibility_ = window_state->window()->layer()->visible();
     EXPECT_EQ(last_old_state_, old_type);
   }
 
@@ -1647,6 +1699,12 @@ class TestObserver : public wm::WindowStateObserver {
     return r;
   }
 
+  bool GetPostLayerVisibilityAndReset() {
+    bool r = post_layer_visibility_;
+    post_layer_visibility_ = false;
+    return r;
+  }
+
   mojom::WindowStateType GetLastOldStateAndReset() {
     mojom::WindowStateType r = last_old_state_;
     last_old_state_ = mojom::WindowStateType::DEFAULT;
@@ -1656,6 +1714,7 @@ class TestObserver : public wm::WindowStateObserver {
  private:
   int pre_count_ = 0;
   int post_count_ = 0;
+  bool post_layer_visibility_ = false;
   mojom::WindowStateType last_old_state_ = mojom::WindowStateType::DEFAULT;
 
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
@@ -1711,6 +1770,7 @@ TEST_F(TabletModeWindowManagerTest, StateTypeChange) {
   EXPECT_EQ(1, observer.GetPostCountAndReset());
   EXPECT_EQ(mojom::WindowStateType::MINIMIZED,
             observer.GetLastOldStateAndReset());
+  EXPECT_EQ(true, observer.GetPostLayerVisibilityAndReset());
 
   window_state->RemoveObserver(&observer);
 

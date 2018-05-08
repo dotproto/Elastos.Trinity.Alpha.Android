@@ -37,7 +37,6 @@ const char kReadFromDisk[] = "SafeBrowsing.V4ReadFromDisk";
 const char kApplyUpdate[] = ".ApplyUpdate";
 const char kDecodeAdditions[] = ".DecodeAdditions";
 const char kDecodeRemovals[] = ".DecodeRemovals";
-const char kMergeUpdate[] = ".MergeUpdate";
 // Part 3: Represent the unit of value being measured and logged.
 const char kResult[] = ".Result";
 const char kTime[] = ".Time";
@@ -50,6 +49,10 @@ const char kTime[] = ".Time";
 
 const uint32_t kFileMagic = 0x600D71FE;
 const uint32_t kFileVersion = 9;
+
+// Set a common sense limit on the store file size we try to read.
+// The maximum store file size, as of today, is about 6MB.
+constexpr size_t kMaxStoreSizeBytes = 50 * 1000 * 1000;
 
 void RecordTimeWithAndWithoutSuffix(const std::string& metric,
                                     base::TimeDelta time,
@@ -100,10 +103,6 @@ void RecordEnumWithAndWithoutSuffix(const std::string& metric,
   }
 }
 
-void RecordAddUnlumpedHashesTime(base::TimeDelta time) {
-  UMA_HISTOGRAM_LONG_TIMES("SafeBrowsing.V4AddUnlumpedHashes.Time", time);
-}
-
 void RecordApplyUpdateResult(const std::string& base_metric,
                              ApplyUpdateResult result,
                              const base::FilePath& file_path) {
@@ -143,12 +142,6 @@ void RecordDecodeRemovalsTime(const std::string& base_metric,
                               const base::FilePath& file_path) {
   RecordTimeWithAndWithoutSuffix(base_metric + kDecodeRemovals, time,
                                  file_path);
-}
-
-void RecordMergeUpdateTime(const std::string& base_metric,
-                           base::TimeDelta time,
-                           const base::FilePath& file_path) {
-  RecordTimeWithAndWithoutSuffix(base_metric + kMergeUpdate, time, file_path);
 }
 
 void RecordStoreReadResult(StoreReadResult result) {
@@ -325,7 +318,6 @@ ApplyUpdateResult V4Store::ProcessUpdate(
     expected_checksum = response->checksum().sha256();
   }
 
-  TimeTicks before = TimeTicks::Now();
   if (delay_checksum_check) {
     DCHECK(hash_prefix_map_old.empty());
     DCHECK(!raw_removals);
@@ -346,7 +338,6 @@ ApplyUpdateResult V4Store::ProcessUpdate(
       return apply_update_result;
     }
   }
-  RecordMergeUpdateTime(metric, TimeTicks::Now() - before, store_path_);
 
   state_ = response->new_client_state();
   return APPLY_UPDATE_SUCCESS;
@@ -479,11 +470,9 @@ ApplyUpdateResult V4Store::AddUnlumpedHashes(PrefixSize prefix_size,
     return ADDITIONS_SIZE_UNEXPECTED_FAILURE;
   }
 
-  TimeTicks before = TimeTicks::Now();
   // TODO(vakh): Figure out a way to avoid the following copy operation.
   (*additions_map)[prefix_size] =
       std::string(raw_hashes_begin, raw_hashes_begin + raw_hashes_length);
-  RecordAddUnlumpedHashesTime(TimeTicks::Now() - before);
   return APPLY_UPDATE_SUCCESS;
 }
 
@@ -689,8 +678,8 @@ StoreReadResult V4Store::ReadFromDisk() {
     // A temporary scope to make sure that |contents| get destroyed as soon as
     // we are doing using it.
     std::string contents;
-    bool read_success = base::ReadFileToString(store_path_, &contents);
-    if (!read_success) {
+    if (!base::ReadFileToStringWithMaxSize(store_path_, &contents,
+                                           kMaxStoreSizeBytes)) {
       return FILE_UNREADABLE_FAILURE;
     }
 

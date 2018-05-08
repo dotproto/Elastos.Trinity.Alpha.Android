@@ -61,7 +61,7 @@
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/platform/api/quic_url.h"
-#include "net/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client.h"
 #include "net/tools/quic/synchronous_host_resolver.h"
@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
   net::EpollServer epoll_server;
   net::QuicServerId server_id(url.host(), url.port(),
                               net::PRIVACY_MODE_DISABLED);
-  net::ParsedQuicVersionVector versions = net::AllSupportedVersions();
+  net::ParsedQuicVersionVector versions = net::CurrentSupportedVersions();
   if (FLAGS_quic_version != -1) {
     versions.clear();
     versions.push_back(net::ParsedQuicVersion(
@@ -288,12 +288,13 @@ int main(int argc, char* argv[]) {
   }
   if (!client.Connect()) {
     net::QuicErrorCode error = client.session()->error();
-    if (FLAGS_version_mismatch_ok && error == net::QUIC_INVALID_VERSION) {
+    if (error == net::QUIC_INVALID_VERSION) {
       cout << "Server talks QUIC, but none of the versions supported by "
            << "this client: " << ParsedQuicVersionVectorToString(versions)
            << endl;
-      // Version mismatch is not deemed a failure.
-      return 0;
+      // 0: No error.
+      // 20: Failed to connect due to QUIC_INVALID_VERSION.
+      return FLAGS_version_mismatch_ok ? 0 : 20;
     }
     cerr << "Failed to connect to " << host_port
          << ". Error: " << net::QuicErrorCodeToString(error) << endl;

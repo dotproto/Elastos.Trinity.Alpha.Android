@@ -4,7 +4,6 @@
 
 #include "ui/aura/mus/window_tree_host_mus.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/input_method_mus.h"
 #include "ui/aura/mus/window_port_mus.h"
@@ -98,12 +97,6 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
 
   // Mus windows are assumed hidden.
   compositor()->SetVisible(false);
-
-  if (window_mus->window_mus_type() ==
-      WindowMusType::DISPLAY_MANUALLY_CREATED) {
-    compositor()->SetLocalSurfaceId(
-        window_mus->GetOrAllocateLocalSurfaceId(bounds_in_pixels.size()));
-  }
 }
 
 WindowTreeHostMus::~WindowTreeHostMus() {
@@ -127,9 +120,11 @@ WindowTreeHostMus* WindowTreeHostMus::ForWindow(aura::Window* window) {
   return root->GetProperty(kWindowTreeHostMusKey);
 }
 
-void WindowTreeHostMus::SetBoundsFromServer(const gfx::Rect& bounds_in_pixels) {
+void WindowTreeHostMus::SetBoundsFromServer(
+    const gfx::Rect& bounds_in_pixels,
+    const viz::LocalSurfaceId& local_surface_id) {
   base::AutoReset<bool> resetter(&in_set_bounds_from_server_, true);
-  SetBoundsInPixels(bounds_in_pixels);
+  SetBoundsInPixels(bounds_in_pixels, local_surface_id);
 }
 
 void WindowTreeHostMus::SetClientArea(
@@ -207,10 +202,12 @@ void WindowTreeHostMus::HideImpl() {
   window()->Hide();
 }
 
-void WindowTreeHostMus::SetBoundsInPixels(const gfx::Rect& bounds) {
+void WindowTreeHostMus::SetBoundsInPixels(
+    const gfx::Rect& bounds,
+    const viz::LocalSurfaceId& local_surface_id) {
   if (!in_set_bounds_from_server_)
     delegate_->OnWindowTreeHostBoundsWillChange(this, bounds);
-  WindowTreeHostPlatform::SetBoundsInPixels(bounds);
+  WindowTreeHostPlatform::SetBoundsInPixels(bounds, local_surface_id);
 }
 
 void WindowTreeHostMus::DispatchEvent(ui::Event* event) {

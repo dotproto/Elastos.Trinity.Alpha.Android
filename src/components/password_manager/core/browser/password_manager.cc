@@ -20,11 +20,11 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/form_saver_impl.h"
 #include "components/password_manager/core/browser/keychain_migration_status_mac.h"
 #include "components/password_manager/core/browser/log_manager.h"
+#include "components/password_manager/core/browser/new_password_form_manager.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -157,24 +157,6 @@ bool IsPredictedTypeNotPasswordPrediction(
     autofill::ServerFieldType field_type) {
   return field_type == autofill::CREDIT_CARD_NUMBER ||
          field_type == autofill::CREDIT_CARD_VERIFICATION_CODE;
-}
-
-bool PreferredRealmIsFromAndroid(
-    const autofill::PasswordFormFillData& fill_data) {
-  return FacetURI::FromPotentiallyInvalidSpec(
-             fill_data.preferred_realm).IsValidAndroidFacetURI();
-}
-
-bool ContainsAndroidCredentials(
-    const autofill::PasswordFormFillData& fill_data) {
-  for (const auto& login : fill_data.additional_logins) {
-    if (FacetURI::FromPotentiallyInvalidSpec(
-            login.second.realm).IsValidAndroidFacetURI()) {
-      return true;
-    }
-  }
-
-  return PreferredRealmIsFromAndroid(fill_data);
 }
 
 bool AreAllFieldsEmpty(const PasswordForm& form) {
@@ -376,8 +358,8 @@ void PasswordManager::ProvisionallySavePassword(
     return;
   }
 
-  // No password to save? Then don't.
-  if (PasswordFormManager::PasswordToSave(form).empty()) {
+  // No password value to save? Then don't.
+  if (PasswordFormManager::PasswordToSave(form).first.empty()) {
     client_->GetMetricsRecorder().RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::EMPTY_PASSWORD, main_frame_url_,
         form.origin, logger.get());
@@ -447,6 +429,7 @@ void PasswordManager::UpdateFormManagers() {
 
 void PasswordManager::DropFormManagers() {
   pending_login_managers_.clear();
+  form_managers_.clear();
   provisional_save_manager_.reset();
   all_visible_forms_.clear();
 }
@@ -482,6 +465,7 @@ void PasswordManager::RemoveObserver(LoginModelObserver* observer) {
 void PasswordManager::DidNavigateMainFrame() {
   entry_to_check_ = NavigationEntryToCheck::LAST_COMMITTED;
   pending_login_managers_.clear();
+  form_managers_.clear();
 }
 
 void PasswordManager::OnPasswordFormSubmitted(
@@ -548,7 +532,6 @@ void PasswordManager::ShowManualFallbackForSaving(
     client_->ShowManualFallbackForSaving(std::move(provisional_save_manager_),
                                          has_generated_password, is_update);
   } else {
-    provisional_save_manager_.reset();
     HideManualFallbackForSaving();
   }
 }
@@ -571,6 +554,11 @@ void PasswordManager::CreatePendingLoginManagers(
     logger.reset(
         new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_CREATE_LOGIN_MANAGERS_METHOD);
+  }
+
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kNewPasswordFormParsing)) {
+    CreateFormManagers(driver, forms);
   }
 
   const PasswordForm::Scheme effective_form_scheme =
@@ -669,6 +657,30 @@ void PasswordManager::CreatePendingLoginManagers(
   if (logger) {
     logger->LogNumber(Logger::STRING_NEW_NUMBER_LOGIN_MANAGERS,
                       pending_login_managers_.size());
+  }
+}
+
+void PasswordManager::CreateFormManagers(
+    password_manager::PasswordManagerDriver* driver,
+    const std::vector<autofill::PasswordForm>& forms) {
+  // Find new forms.
+  std::vector<const autofill::FormData*> new_forms;
+  for (const autofill::PasswordForm& form : forms) {
+    bool form_manager_exists =
+        std::any_of(form_managers_.begin(), form_managers_.end(),
+                    [&form](const auto& form_manager) {
+                      return form_manager->DoesManage(form.form_data);
+                    });
+    if (!form_manager_exists)
+      new_forms.push_back(&form.form_data);
+  }
+
+  // Create form manager for new forms.
+  for (const autofill::FormData* new_form : new_forms) {
+    form_managers_.push_back(std::make_unique<NewPasswordFormManager>(
+        client_,
+        driver ? driver->AsWeakPtr() : base::WeakPtr<PasswordManagerDriver>(),
+        *new_form, nullptr));
   }
 }
 
@@ -855,10 +867,10 @@ void PasswordManager::OnLoginSuccessful() {
   }
 
   DCHECK(provisional_save_manager_->submitted_form());
-  if (!client_->GetStoreResultFilter()->ShouldSave(
-          *provisional_save_manager_->submitted_form(),
-          client_->GetMainFrameURL())) {
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  if (client_->GetStoreResultFilter()->ShouldSavePasswordHash(
+          *provisional_save_manager_->submitted_form()))
     // When |username_value| is empty, it's not clear whether the submitted
     // credentials are really sync credentials. Don't save sync password hash
     // in that case.
@@ -881,6 +893,9 @@ void PasswordManager::OnLoginSuccessful() {
       }
     }
 #endif
+
+  if (!client_->GetStoreResultFilter()->ShouldSave(
+          *provisional_save_manager_->submitted_form())) {
     provisional_save_manager_->WipeStoreCopyIfOutdated();
     client_->GetMetricsRecorder().RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::SYNC_CREDENTIAL, main_frame_url_,
@@ -925,64 +940,6 @@ void PasswordManager::OnLoginSuccessful() {
       provisional_save_manager_.reset();
     }
   }
-}
-
-void PasswordManager::Autofill(
-    password_manager::PasswordManagerDriver* driver,
-    const PasswordForm& form_for_autofill,
-    const std::map<base::string16, const PasswordForm*>& best_matches,
-    const std::vector<const PasswordForm*>& federated_matches,
-    const PasswordForm& preferred_match,
-    bool wait_for_username) const {
-  DCHECK_EQ(PasswordForm::SCHEME_HTML, preferred_match.scheme);
-
-  std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (password_manager_util::IsLoggingActive(client_)) {
-    logger.reset(
-        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
-    logger->LogMessage(Logger::STRING_PASSWORDMANAGER_AUTOFILL);
-  }
-
-  autofill::PasswordFormFillData fill_data;
-  InitPasswordFormFillData(form_for_autofill, best_matches, &preferred_match,
-                           wait_for_username, OtherPossibleUsernamesEnabled(),
-                           &fill_data);
-  if (logger)
-    logger->LogBoolean(Logger::STRING_WAIT_FOR_USERNAME, wait_for_username);
-  UMA_HISTOGRAM_BOOLEAN(
-      "PasswordManager.FillSuggestionsIncludeAndroidAppCredentials",
-      ContainsAndroidCredentials(fill_data));
-  metrics_util::LogFilledCredentialIsFromAndroidApp(
-      PreferredRealmIsFromAndroid(fill_data));
-  driver->FillPasswordForm(fill_data);
-
-  client_->PasswordWasAutofilled(best_matches, form_for_autofill.origin,
-                                 &federated_matches);
-}
-
-void PasswordManager::ShowInitialPasswordAccountSuggestions(
-    password_manager::PasswordManagerDriver* driver,
-    const PasswordForm& form_for_autofill,
-    const std::map<base::string16, const PasswordForm*>& best_matches,
-    const PasswordForm& preferred_match,
-    bool wait_for_username) const {
-  DCHECK_EQ(PasswordForm::SCHEME_HTML, preferred_match.scheme);
-
-  std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (password_manager_util::IsLoggingActive(client_)) {
-    logger.reset(
-        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
-    logger->LogMessage(
-        Logger::
-            STRING_PASSWORDMANAGER_SHOW_INITIAL_PASSWORD_ACCOUNT_SUGGESTIONS);
-  }
-  autofill::PasswordFormFillData fill_data;
-  InitPasswordFormFillData(form_for_autofill, best_matches, &preferred_match,
-                           wait_for_username, OtherPossibleUsernamesEnabled(),
-                           &fill_data);
-  if (logger)
-    logger->LogBoolean(Logger::STRING_WAIT_FOR_USERNAME, wait_for_username);
-  driver->ShowInitialPasswordAccountSuggestions(fill_data);
 }
 
 void PasswordManager::AutofillHttpAuth(

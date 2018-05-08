@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/files/file_proxy.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/file_stream.h"
@@ -63,8 +64,8 @@ void CreateTemporaryFileStream(
   base::FileProxy* proxy = file_proxy.get();
   proxy->CreateTemporary(
       base::File::FLAG_ASYNC,
-      base::Bind(&DidCreateTemporaryFile, callback, Passed(&file_proxy),
-                 std::move(task_runner)));
+      base::BindOnce(&DidCreateTemporaryFile, callback, std::move(file_proxy),
+                     std::move(task_runner)));
 }
 
 }  // namespace content

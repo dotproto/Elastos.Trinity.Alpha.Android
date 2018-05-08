@@ -68,6 +68,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
@@ -87,6 +88,7 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 
+import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -121,9 +123,15 @@ public class SavePasswordsPreferencesTest {
         // The faked contents of the saves password exceptions to be displayed.
         private ArrayList<String> mSavedPasswordExeptions = new ArrayList<>();
 
-        // This is set once {@link #serializePasswords()} is called.
+        // The following three data members are set once {@link #serializePasswords()} is called.
         @Nullable
-        private ByteArrayIntCallback mExportCallback;
+        private Callback<Integer> mExportSuccessCallback;
+
+        @Nullable
+        private Callback<String> mExportErrorCallback;
+
+        @Nullable
+        private String mExportFileName;
 
         public void setSavedPasswords(ArrayList<SavedPasswordEntry> savedPasswords) {
             mSavedPasswords = savedPasswords;
@@ -133,8 +141,16 @@ public class SavePasswordsPreferencesTest {
             mSavedPasswordExeptions = savedPasswordExceptions;
         }
 
-        public ByteArrayIntCallback getExportCallback() {
-            return mExportCallback;
+        public Callback<Integer> getExportSuccessCallback() {
+            return mExportSuccessCallback;
+        }
+
+        public Callback<String> getExportErrorCallback() {
+            return mExportErrorCallback;
+        }
+
+        public String getExportFileName() {
+            return mExportFileName;
         }
 
         /**
@@ -178,8 +194,11 @@ public class SavePasswordsPreferencesTest {
         }
 
         @Override
-        public void serializePasswords(ByteArrayIntCallback callback) {
-            mExportCallback = callback;
+        public void serializePasswords(String targetPath, Callback<Integer> successCallback,
+                Callback<String> errorCallback) {
+            mExportSuccessCallback = successCallback;
+            mExportErrorCallback = errorCallback;
+            mExportFileName = targetPath;
         }
     }
 
@@ -296,8 +315,9 @@ public class SavePasswordsPreferencesTest {
                 // Disable the timer for progress bar.
                 SavePasswordsPreferences fragment =
                         (SavePasswordsPreferences) preferences.getFragmentForTest();
-                fragment.getDialogManagerForTesting().replaceCallbackDelayerForTesting(
-                        mManualDelayer);
+                fragment.getExportFlowForTesting()
+                        .getDialogManagerForTesting()
+                        .replaceCallbackDelayerForTesting(mManualDelayer);
                 // Now call onResume to nudge Chrome into continuing the export flow.
                 preferences.getFragmentForTest().onResume();
             }
@@ -328,24 +348,29 @@ public class SavePasswordsPreferencesTest {
                 .check(matches(isDisplayed()));
     }
 
+    /** Requests showing an arbitrary password export error. */
+    private void requestShowingExportError() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { mHandler.getExportErrorCallback().onResult("Arbitrary error"); });
+    }
+
     /**
-     * Requests showing an arbitrary password export error.
+     * Requests showing an arbitrary password export error with a particular positive button to be
+     * shown. If you don't care about the button, just call {@link #requestShowingExportError}.
      * @param preferences is the SavePasswordsPreferences instance being tested.
      * @param positiveButtonLabelId controls which label the positive button ends up having.
      */
-    private void requestShowingExportError(Preferences preferences, int positiveButtonLabelId) {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                SavePasswordsPreferences fragment =
-                        (SavePasswordsPreferences) preferences.getFragmentForTest();
-                // To show an error, the error type for UMA needs to be specified. Because it is not
-                // relevant for cases when the error is forcibly displayed in tests,
-                // EXPORT_RESULT_NO_CONSUMER is passed as an arbitrarily chosen value.
-                fragment.showExportErrorAndAbort(R.string.save_password_preferences_export_no_app,
-                        null, positiveButtonLabelId,
-                        SavePasswordsPreferences.EXPORT_RESULT_NO_CONSUMER);
-            }
+    private void requestShowingExportErrorWithButton(
+            Preferences preferences, int positiveButtonLabelId) {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            SavePasswordsPreferences fragment =
+                    (SavePasswordsPreferences) preferences.getFragmentForTest();
+            // To show an error, the error type for UMA needs to be specified. Because it is not
+            // relevant for cases when the error is forcibly displayed in tests,
+            // EXPORT_RESULT_NO_CONSUMER is passed as an arbitrarily chosen value.
+            fragment.getExportFlowForTesting().showExportErrorAndAbort(
+                    R.string.save_password_preferences_export_no_app, null, positiveButtonLabelId,
+                    ExportFlow.EXPORT_RESULT_NO_CONSUMER);
         });
     }
 
@@ -597,7 +622,8 @@ public class SavePasswordsPreferencesTest {
         Espresso.onView(withText(R.string.save_password_preferences_export_action_title))
                 .perform(click());
 
-        Assert.assertTrue(mHandler.getExportCallback() != null);
+        File exportPath = new File(mHandler.getExportFileName());
+        Assert.assertTrue(exportPath.canRead());
     }
 
     /**
@@ -627,7 +653,7 @@ public class SavePasswordsPreferencesTest {
 
         MetricsUtils.HistogramDelta userAbortedDelta =
                 new MetricsUtils.HistogramDelta("PasswordManager.ExportPasswordsToCSVResult",
-                        SavePasswordsPreferences.EXPORT_RESULT_USER_ABORTED);
+                        ExportFlow.EXPORT_RESULT_USER_ABORTED);
 
         // Hit the Cancel button to cancel the flow.
         Espresso.onView(withText(R.string.cancel)).perform(click());
@@ -845,19 +871,22 @@ public class SavePasswordsPreferencesTest {
         reauthenticateAndRequestExport(preferences);
 
         // Pretend that passwords have been serialized to go directly to the intent.
-        mHandler.getExportCallback().onResult(new byte[] {5, 6, 7}, 123);
+        mHandler.getExportSuccessCallback().onResult(123);
 
         // Before triggering the sharing intent chooser, stub it out to avoid leaving system UI open
         // after the test is finished.
         intending(hasAction(equalTo(Intent.ACTION_CHOOSER)))
                 .respondWith(new Instrumentation.ActivityResult(Activity.RESULT_OK, null));
 
-        MetricsUtils.HistogramDelta successDelta =
-                new MetricsUtils.HistogramDelta("PasswordManager.ExportPasswordsToCSVResult",
-                        SavePasswordsPreferences.EXPORT_RESULT_SUCCESS);
+        MetricsUtils.HistogramDelta successDelta = new MetricsUtils.HistogramDelta(
+                "PasswordManager.ExportPasswordsToCSVResult", ExportFlow.EXPORT_RESULT_SUCCESS);
 
         MetricsUtils.HistogramDelta countDelta = new MetricsUtils.HistogramDelta(
                 "PasswordManager.ExportedPasswordsPerUserInCSV", 123);
+
+        MetricsUtils.HistogramDelta progressBarDelta = new MetricsUtils.HistogramDelta(
+                "PasswordManager.Android.ExportPasswordsProgressBarUsage",
+                ExportFlow.PROGRESS_NOT_SHOWN);
 
         // Confirm the export warning to fire the sharing intent.
         Espresso.onView(withText(R.string.save_password_preferences_export_action_title))
@@ -871,6 +900,7 @@ public class SavePasswordsPreferencesTest {
 
         Assert.assertEquals(1, successDelta.getDelta());
         Assert.assertEquals(1, countDelta.getDelta());
+        Assert.assertEquals(1, progressBarDelta.getDelta());
     }
 
     /**
@@ -906,16 +936,15 @@ public class SavePasswordsPreferencesTest {
         });
 
         // Pretend that passwords have been serialized to go directly to the intent.
-        mHandler.getExportCallback().onResult(new byte[] {1, 2, 3}, 56);
+        mHandler.getExportSuccessCallback().onResult(56);
 
         // Before triggering the sharing intent chooser, stub it out to avoid leaving system UI open
         // after the test is finished.
         intending(hasAction(equalTo(Intent.ACTION_CHOOSER)))
                 .respondWith(new Instrumentation.ActivityResult(Activity.RESULT_OK, null));
 
-        MetricsUtils.HistogramDelta successDelta =
-                new MetricsUtils.HistogramDelta("PasswordManager.ExportPasswordsToCSVResult",
-                        SavePasswordsPreferences.EXPORT_RESULT_SUCCESS);
+        MetricsUtils.HistogramDelta successDelta = new MetricsUtils.HistogramDelta(
+                "PasswordManager.ExportPasswordsToCSVResult", ExportFlow.EXPORT_RESULT_SUCCESS);
 
         MetricsUtils.HistogramDelta countDelta = new MetricsUtils.HistogramDelta(
                 "PasswordManager.ExportedPasswordsPerUserInCSV", 56);
@@ -1121,8 +1150,12 @@ public class SavePasswordsPreferencesTest {
         Espresso.onView(withText(R.string.settings_passwords_preparing_export))
                 .check(matches(isDisplayed()));
 
+        MetricsUtils.HistogramDelta progressBarDelta = new MetricsUtils.HistogramDelta(
+                "PasswordManager.Android.ExportPasswordsProgressBarUsage",
+                ExportFlow.PROGRESS_HIDDEN_DELAYED);
+
         // Now pretend that passwords have been serialized.
-        mHandler.getExportCallback().onResult(new byte[] {5, 6, 7}, 12);
+        mHandler.getExportSuccessCallback().onResult(12);
 
         // Check that the progress bar is still shown, though, because the timer has not gone off
         // yet.
@@ -1139,6 +1172,7 @@ public class SavePasswordsPreferencesTest {
                         allOf(hasAction(equalTo(Intent.ACTION_SEND)), hasType("text/csv"))))));
 
         Intents.release();
+        Assert.assertEquals(1, progressBarDelta.getDelta());
     }
 
     /**
@@ -1178,9 +1212,13 @@ public class SavePasswordsPreferencesTest {
         Espresso.onView(withText(R.string.settings_passwords_preparing_export))
                 .check(matches(isDisplayed()));
 
+        MetricsUtils.HistogramDelta progressBarDelta = new MetricsUtils.HistogramDelta(
+                "PasswordManager.Android.ExportPasswordsProgressBarUsage",
+                ExportFlow.PROGRESS_HIDDEN_DIRECTLY);
+
         // Now pretend that passwords have been serialized.
         allowProgressBarToBeHidden(preferences);
-        mHandler.getExportCallback().onResult(new byte[] {5, 6, 7}, 12);
+        mHandler.getExportSuccessCallback().onResult(12);
 
         // After simulating the serialized passwords being received, check that the progress bar is
         // hidden.
@@ -1192,6 +1230,7 @@ public class SavePasswordsPreferencesTest {
                         allOf(hasAction(equalTo(Intent.ACTION_SEND)), hasType("text/csv"))))));
 
         Intents.release();
+        Assert.assertEquals(1, progressBarDelta.getDelta());
     }
 
     /**
@@ -1228,7 +1267,7 @@ public class SavePasswordsPreferencesTest {
 
         MetricsUtils.HistogramDelta userAbortedDelta =
                 new MetricsUtils.HistogramDelta("PasswordManager.ExportPasswordsToCSVResult",
-                        SavePasswordsPreferences.EXPORT_RESULT_USER_ABORTED);
+                        ExportFlow.EXPORT_RESULT_USER_ABORTED);
 
         // Hit the Cancel button.
         Espresso.onView(withText(R.string.cancel)).perform(click());
@@ -1267,11 +1306,10 @@ public class SavePasswordsPreferencesTest {
         // Show an arbitrary error. This should replace the progress bar if that has been shown in
         // the meantime.
         allowProgressBarToBeHidden(preferences);
-        requestShowingExportError(
-                preferences, R.string.save_password_preferences_export_learn_google_drive);
+        requestShowingExportError();
 
         // Check that the error prompt is showing.
-        Espresso.onView(withText(R.string.save_password_preferences_export_no_app))
+        Espresso.onView(withText(R.string.save_password_preferences_export_error_title))
                 .check(matches(isDisplayed()));
 
         // Hit the negative button on the error prompt.
@@ -1310,7 +1348,7 @@ public class SavePasswordsPreferencesTest {
         // Show an arbitrary error but ensure that the positive button label is the one for "try
         // again".
         allowProgressBarToBeHidden(preferences);
-        requestShowingExportError(preferences, R.string.try_again);
+        requestShowingExportErrorWithButton(preferences, R.string.try_again);
 
         // Hit the positive button to try again.
         Espresso.onView(withText(R.string.try_again)).perform(click());
@@ -1348,7 +1386,7 @@ public class SavePasswordsPreferencesTest {
         // Show an arbitrary error but ensure that the positive button label is the one for the
         // Google Drive help site.
         allowProgressBarToBeHidden(preferences);
-        requestShowingExportError(
+        requestShowingExportErrorWithButton(
                 preferences, R.string.save_password_preferences_export_learn_google_drive);
 
         Intents.init();
@@ -1391,8 +1429,7 @@ public class SavePasswordsPreferencesTest {
         reauthenticateAndRequestExport(preferences);
 
         // Request showing an arbitrary error while the confirmation dialog is still up.
-        requestShowingExportError(
-                preferences, R.string.save_password_preferences_export_learn_google_drive);
+        requestShowingExportError();
 
         // Check that the confirmation dialog is showing and dismiss it.
         Espresso.onView(withText(R.string.save_password_preferences_export_action_title))
@@ -1402,7 +1439,7 @@ public class SavePasswordsPreferencesTest {
         allowProgressBarToBeHidden(preferences);
         Espresso.onView(withText(R.string.settings_passwords_preparing_export))
                 .check(doesNotExist());
-        Espresso.onView(withText(R.string.save_password_preferences_export_no_app))
+        Espresso.onView(withText(R.string.save_password_preferences_export_error_title))
                 .check(matches(isDisplayed()));
 
         // Close the error dialog and abort the export.

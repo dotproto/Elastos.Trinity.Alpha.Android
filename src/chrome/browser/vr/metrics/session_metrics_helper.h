@@ -17,6 +17,48 @@
 
 namespace vr {
 
+// This enum describes various ways a Chrome VR session started.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// Ensure that this stays in sync with VRSessionStartAction in enums.xml
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.vr_shell
+enum class VrStartAction : int {
+  // The user activated a headset. For example, inserted phone in Daydream, or
+  // put on an Occulus or Vive.
+  kHeadsetActivation = 1,
+  // The user triggered a presentation request on a page, probably by clicking
+  // an enter VR button.
+  kPresentationRequest = 2,
+  // The user launched a deep linked app, probably from Daydream home.
+  kDeepLinkedApp = 3,
+  // Chrome VR was started by an intent from another app. Most likely the user
+  // clicked the icon in Daydream home.
+  kIntentLaunch = 4,
+  kMaxValue = kIntentLaunch,
+};
+
+// The source of a request to enter XR Presentation.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// Ensure that this stays in sync with VRPresentationStartAction in enums.xml.
+enum PresentationStartAction {
+  // A catch all for methods of Presentation entry that are not otherwise
+  // logged.
+  kOther = 0,
+  // The user triggered a presentation request on a page in 2D, probably by
+  // clicking an enter VR button.
+  kRequestFrom2dBrowsing = 1,
+  // The user triggered a presentation request on a page in VR browsing,
+  // probably by clicking an enter VR button.
+  kRequestFromVrBrowsing = 2,
+  // The user activated a headset on a page that listens for headset activations
+  // and requests presentation.
+  kHeadsetActivation = 3,
+  // The user opened a deep linked app, probably from the Daydream homescreen.
+  kDeepLinkedApp = 4,
+  kMaxValue = kDeepLinkedApp,
+};
+
 // SessionTimer will monitor the time between calls to StartSession and
 // StopSession.  It will combine multiple segments into a single session if they
 // are sufficiently close in time.  It will also only include segments if they
@@ -121,6 +163,10 @@ class SessionMetricsHelper : public content::WebContentsObserver {
   void RecordVoiceSearchStarted();
   void RecordUrlRequested(GURL url, NavigationMethod method);
 
+  void RecordVrStartAction(VrStartAction action);
+  void RecordPresentationStartAction(PresentationStartAction action);
+  void ReportRequestPresent();
+
  private:
   SessionMetricsHelper(content::WebContents* contents,
                        Mode initial_mode,
@@ -140,6 +186,9 @@ class SessionMetricsHelper : public content::WebContentsObserver {
 
   void SetVrMode(Mode mode);
   void UpdateMode();
+
+  void LogVrStartAction(VrStartAction action);
+  void LogPresentationStartAction(PresentationStartAction action);
 
   void OnEnterAnyVr();
   void OnExitAllVr();
@@ -168,6 +217,9 @@ class SessionMetricsHelper : public content::WebContentsObserver {
 
   GURL last_requested_url_;
   NavigationMethod last_url_request_method_;
+
+  base::Optional<VrStartAction> pending_page_session_start_action_;
+  base::Optional<PresentationStartAction> pending_presentation_start_action_;
 
   int num_videos_playing_ = 0;
   int num_session_navigation_ = 0;

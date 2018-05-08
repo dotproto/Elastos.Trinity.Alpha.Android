@@ -18,9 +18,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "components/variations/variations_associated_data.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 
 namespace autofill {
 
@@ -34,6 +36,8 @@ const base::Feature kAutofillCreditCardAssist{
     "AutofillCreditCardAssist", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillScanCardholderName{
     "AutofillScanCardholderName", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillCreditCardBankNameDisplay{
+    "AutofillCreditCardBankNameDisplay", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillCreditCardAblationExperiment{
     "AutofillCreditCardAblationExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillCreditCardPopupLayout{
@@ -51,20 +55,20 @@ const base::Feature kAutofillPreferServerNamePredictions{
 const base::Feature kAutofillRationalizeFieldTypePredictions{
     "AutofillRationalizeFieldTypePredictions",
     base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kAutofillSendBillingCustomerNumber{
-    "AutofillSendBillingCustomerNumber", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAutofillSuppressDisusedAddresses{
     "AutofillSuppressDisusedAddresses", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAutofillSuppressDisusedCreditCards{
     "AutofillSuppressDisusedCreditCards", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamAllowAllEmailDomains{
     "AutofillUpstreamAllowAllEmailDomains", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kAutofillUpstreamRequestCvcIfMissing{
-    "AutofillUpstreamRequestCvcIfMissing", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamSendDetectedValues{
     "AutofillUpstreamSendDetectedValues", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamSendPanFirstSix{
     "AutofillUpstreamSendPanFirstSix", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillUpstreamUpdatePromptExplanation{
+    "AutofillUpstreamUpdatePromptExplanation",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const char kCreditCardSigninPromoImpressionLimitParamKey[] = "impression_limit";
 const char kAutofillCreditCardPopupBackgroundColorKey[] = "background_color";
 const char kAutofillCreditCardPopupDividerColorKey[] = "dropdown_divider_color";
@@ -81,6 +85,8 @@ const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[] =
 #if defined(OS_MACOSX)
 const base::Feature kCreditCardAutofillTouchBar{
     "CreditCardAutofillTouchBar", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kMacViewsAutofillPopup{"MacViewsAutofillPopup",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
 
 namespace {
@@ -127,6 +133,10 @@ bool IsAutofillAutoDismissableUpstreamBubbleExperimentEnabled() {
 
 bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled() {
   return base::FeatureList::IsEnabled(kAutofillCreditCardLastUsedDateDisplay);
+}
+
+bool IsAutofillCreditCardBankNameDisplayExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillCreditCardBankNameDisplay);
 }
 
 // |GetCreditCardPopupParameterUintValue| returns 0 if experiment parameter is
@@ -228,24 +238,14 @@ bool IsCreditCardUploadEnabled(const PrefService* pref_service,
     return false;
   }
 
-  // Check if sync is not in a permanent error state.
-  syncer::SyncService::SyncTokenStatus token_status =
-      sync_service->GetSyncTokenStatus();
-  if ((token_status.connection_status ==
-           syncer::ConnectionStatus::CONNECTION_AUTH_ERROR ||
-       token_status.connection_status ==
-           syncer::ConnectionStatus::CONNECTION_SERVER_ERROR) &&
-      token_status.last_get_token_error.IsPersistentError()) {
-    return false;
-  }
-
-  // Users who have enabled a passphrase have chosen to not make their sync
-  // information accessible to Google. Since upload makes credit card data
-  // available to other Google systems, disable it for passphrase users.
-  // We can't determine the passphrase state until the sync engine is
-  // initialized so disable upload if sync is not yet available.
-  if (!sync_service->IsEngineInitialized() ||
-      sync_service->IsUsingSecondaryPassphrase()) {
+  // Check if the upload to Google state is active. This also returns false for
+  // users that have a secondary passphrase. Users who have enabled a passphrase
+  // have chosen to not make their sync information accessible to Google. Since
+  // upload makes credit card data available to other Google systems, disable it
+  // for passphrase users.
+  if (syncer::GetUploadToGoogleState(sync_service,
+                                     syncer::ModelType::AUTOFILL_WALLET_DATA) !=
+      syncer::UploadState::ACTIVE) {
     return false;
   }
 
@@ -280,18 +280,6 @@ bool IsCreditCardUploadEnabled(const PrefService* pref_service,
   return !group_name.empty() && group_name != "Disabled";
 }
 
-bool IsAutofillSendBillingCustomerNumberExperimentEnabled() {
-  return base::FeatureList::IsEnabled(kAutofillSendBillingCustomerNumber);
-}
-
-bool IsAutofillUpstreamRequestCvcIfMissingExperimentEnabled() {
-#if defined(OS_ANDROID)
-  return false;
-#else
-  return base::FeatureList::IsEnabled(kAutofillUpstreamRequestCvcIfMissing);
-#endif
-}
-
 bool IsAutofillUpstreamSendDetectedValuesExperimentEnabled() {
   return base::FeatureList::IsEnabled(kAutofillUpstreamSendDetectedValues);
 }
@@ -300,9 +288,22 @@ bool IsAutofillUpstreamSendPanFirstSixExperimentEnabled() {
   return base::FeatureList::IsEnabled(kAutofillUpstreamSendPanFirstSix);
 }
 
+bool IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillUpstreamUpdatePromptExplanation);
+}
+
 #if defined(OS_MACOSX)
 bool IsCreditCardAutofillTouchBarExperimentEnabled() {
   return base::FeatureList::IsEnabled(kCreditCardAutofillTouchBar);
+}
+
+bool IsMacViewsAutofillPopupExperimentEnabled() {
+#if BUILDFLAG(MAC_VIEWS_BROWSER)
+  if (!features::IsViewsBrowserCocoa())
+    return true;
+#endif
+
+  return base::FeatureList::IsEnabled(kMacViewsAutofillPopup);
 }
 #endif  // defined(OS_MACOSX)
 

@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
@@ -922,6 +921,18 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, TapGestureWithCtrlKey) {
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
   // Check that we create the background tab.
   ASSERT_EQ(0, browser()->tab_strip_model()->active_index());
+}
+
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, MultiplePopupsViaPostMessage) {
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL("/popup_blocker/post-message-popup.html"));
+  content::WebContents* opener =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  int popups = 0;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
+      opener, "openPopupsAndReport();", &popups));
+  EXPECT_EQ(1, popups);
 }
 
 // Test that popup blocker can show blocked contents in new foreground tab.

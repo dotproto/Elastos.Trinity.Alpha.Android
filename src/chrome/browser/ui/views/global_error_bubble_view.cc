@@ -21,8 +21,8 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
+#include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views_mode_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -47,16 +47,16 @@ const int kMaxBubbleViewWidth = 362;
 
 #if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 
-views::View* GetBubbleAnchorView(Browser* browser) {
+views::View* GetGlobalErrorBubbleAnchorView(Browser* browser) {
 #if BUILDFLAG(MAC_VIEWS_BROWSER)
   if (views_mode_controller::IsViewsBrowserCocoa())
     return nullptr;
 #endif
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  return browser_view->button_provider()->GetAppMenuButton();
+  return browser_view->toolbar_button_provider()->GetAppMenuButton();
 }
 
-gfx::Rect GetBubbleAnchorRect(Browser* browser) {
+gfx::Rect GetGlobalErrorBubbleAnchorRect(Browser* browser) {
 #if BUILDFLAG(MAC_VIEWS_BROWSER)
   if (views_mode_controller::IsViewsBrowserCocoa())
     return bubble_anchor_util::GetAppMenuAnchorRectCocoa(browser);
@@ -75,10 +75,10 @@ gfx::Rect GetBubbleAnchorRect(Browser* browser) {
 GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
     Browser* browser,
     const base::WeakPtr<GlobalErrorWithStandardBubble>& error) {
-  views::View* anchor_view = GetBubbleAnchorView(browser);
+  views::View* anchor_view = GetGlobalErrorBubbleAnchorView(browser);
   gfx::Rect anchor_rect;
   if (!anchor_view)
-    anchor_rect = GetBubbleAnchorRect(browser);
+    anchor_rect = GetGlobalErrorBubbleAnchorRect(browser);
   GlobalErrorBubbleView* bubble_view = new GlobalErrorBubbleView(
       anchor_view, anchor_rect, views::BubbleBorder::TOP_RIGHT, browser, error);
   views::BubbleDialogDelegateView::CreateBubble(bubble_view);
@@ -180,8 +180,8 @@ void GlobalErrorBubbleView::UpdateButton(views::LabelButton* button,
     if (type == ui::DIALOG_BUTTON_OK &&
         error_->ShouldAddElevationIconToAcceptButton()) {
       elevation_icon_setter_.reset(new ElevationIconSetter(
-          button, base::Bind(&GlobalErrorBubbleView::SizeToContents,
-                             base::Unretained(this))));
+          button, base::BindOnce(&GlobalErrorBubbleView::SizeToContents,
+                                 base::Unretained(this))));
     }
   }
 }
@@ -207,6 +207,12 @@ int GlobalErrorBubbleView::GetDialogButtons() const {
                   error_->GetBubbleViewCancelButtonLabel().empty()
               ? 0
               : ui::DIALOG_BUTTON_CANCEL);
+}
+
+int GlobalErrorBubbleView::GetDefaultDialogButton() const {
+  if (!error_)
+    return views::BubbleDialogDelegateView::GetDefaultDialogButton();
+  return error_->GetDefaultDialogButton();
 }
 
 views::View* GlobalErrorBubbleView::CreateExtraView() {

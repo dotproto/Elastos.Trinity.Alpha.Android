@@ -54,20 +54,21 @@ ProxyResolvingClientSocket::~ProxyResolvingClientSocket() {
 
 int ProxyResolvingClientSocket::Read(net::IOBuffer* buf,
                                      int buf_len,
-                                     const net::CompletionCallback& callback) {
+                                     net::CompletionOnceCallback callback) {
   if (socket_handle_->socket())
-    return socket_handle_->socket()->Read(buf, buf_len, callback);
+    return socket_handle_->socket()->Read(buf, buf_len, std::move(callback));
   return net::ERR_SOCKET_NOT_CONNECTED;
 }
 
 int ProxyResolvingClientSocket::Write(
     net::IOBuffer* buf,
     int buf_len,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
-  if (socket_handle_->socket())
-    return socket_handle_->socket()->Write(buf, buf_len, callback,
+  if (socket_handle_->socket()) {
+    return socket_handle_->socket()->Write(buf, buf_len, std::move(callback),
                                            traffic_annotation);
+  }
   return net::ERR_SOCKET_NOT_CONNECTED;
 }
 
@@ -83,14 +84,13 @@ int ProxyResolvingClientSocket::SetSendBufferSize(int32_t size) {
   return net::ERR_SOCKET_NOT_CONNECTED;
 }
 
-int ProxyResolvingClientSocket::Connect(
-    const net::CompletionCallback& callback) {
+int ProxyResolvingClientSocket::Connect(net::CompletionOnceCallback callback) {
   DCHECK(user_connect_callback_.is_null());
 
   next_state_ = STATE_PROXY_RESOLVE;
   int result = DoLoop(net::OK);
   if (result == net::ERR_IO_PENDING) {
-    user_connect_callback_ = callback;
+    user_connect_callback_ = std::move(callback);
   }
   return result;
 }
@@ -200,7 +200,7 @@ void ProxyResolvingClientSocket::OnIOComplete(int result) {
   DCHECK_NE(net::ERR_IO_PENDING, result);
   int net_error = DoLoop(result);
   if (net_error != net::ERR_IO_PENDING)
-    base::ResetAndReturn(&user_connect_callback_).Run(net_error);
+    std::move(user_connect_callback_).Run(net_error);
 }
 
 int ProxyResolvingClientSocket::DoLoop(int result) {
@@ -312,8 +312,7 @@ int ProxyResolvingClientSocket::DoInitConnectionComplete(int result) {
       // code expects an SSLClientSocket. The tunnel restart code is careful to
       // put it back to the socket pool before returning control to the rest of
       // this class.
-      socket_handle_.reset(
-          socket_handle_->release_pending_http_proxy_connection());
+      socket_handle_ = socket_handle_->release_pending_http_proxy_connection();
     }
     next_state_ = STATE_RESTART_TUNNEL_AUTH;
     return result;
@@ -382,7 +381,7 @@ int ProxyResolvingClientSocket::ReconsiderProxyAfterError(int error) {
   DCHECK_NE(error, net::ERR_IO_PENDING);
 
   // Check if the error was a proxy failure.
-  if (!net::CanFalloverToNextProxy(&error))
+  if (!net::CanFalloverToNextProxy(proxy_info_.proxy_server(), error, &error))
     return error;
 
   if (proxy_info_.is_https() && ssl_config_.send_client_cert) {

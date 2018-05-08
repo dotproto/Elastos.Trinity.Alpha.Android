@@ -24,9 +24,9 @@
 // Set this to 1 to enable debug traces to the Android log.
 // Note that LOG() from "base/logging.h" cannot be used, since it is
 // in base/ which hasn't been loaded yet.
-#define DEBUG 1
+#define DEBUG 0
 
-#define TAG "chromium"
+#define TAG "cr_ChromiumAndroidLinker"
 
 #if DEBUG
 #define LOG_INFO(FORMAT, ...) \

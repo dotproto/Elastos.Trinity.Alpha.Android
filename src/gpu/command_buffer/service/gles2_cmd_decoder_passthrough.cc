@@ -82,7 +82,7 @@ void APIENTRY GLDebugMessageCallback(GLenum source,
                                      GLenum severity,
                                      GLsizei length,
                                      const GLchar* message,
-                                     GLvoid* user_param) {
+                                     const GLvoid* user_param) {
   DCHECK(user_param != nullptr);
   GLES2DecoderPassthroughImpl* command_decoder =
       static_cast<GLES2DecoderPassthroughImpl*>(const_cast<void*>(user_param));
@@ -629,13 +629,13 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     if (request_optional_extensions_) {
       static constexpr const char* kOptionalFunctionalityExtensions[] = {
           "GL_ANGLE_depth_texture",
-          "GL_ANGLE_texture_usage",
           "GL_ANGLE_framebuffer_blit",
           "GL_ANGLE_framebuffer_multisample",
           "GL_ANGLE_instanced_arrays",
           "GL_ANGLE_pack_reverse_row_order",
           "GL_ANGLE_texture_compression_dxt3",
           "GL_ANGLE_texture_compression_dxt5",
+          "GL_ANGLE_texture_usage",
           "GL_ANGLE_translated_shader_source",
           "GL_CHROMIUM_framebuffer_mixed_samples",
           "GL_CHROMIUM_path_rendering",
@@ -658,10 +658,14 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
           "GL_NV_pack_subimage",
           "GL_OES_compressed_ETC1_RGB8_texture",
           "GL_OES_depth32",
+          "GL_OES_EGL_image",
+          "GL_OES_EGL_image_external",
+          "GL_OES_EGL_image_external_essl3",
           "GL_OES_fbo_render_mipmap",
           "GL_OES_packed_depth_stencil",
           "GL_OES_rgb8_rgba8",
           "GL_OES_vertex_array_object",
+          "NV_EGL_stream_consumer_external",
       };
       RequestExtensions(api(), requestable_extensions,
                         kOptionalFunctionalityExtensions,
@@ -1205,6 +1209,9 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.post_sub_buffer = surface_->SupportsPostSubBuffer();
   caps.surfaceless = !offscreen_ && surface_->IsSurfaceless();
   caps.flips_vertically = !offscreen_ && surface_->FlipsVertically();
+  caps.msaa_is_slow = feature_info_->workarounds().msaa_is_slow;
+  caps.avoid_stencil_buffers =
+      feature_info_->workarounds().avoid_stencil_buffers;
   caps.multisample_compatibility =
       feature_info_->feature_flags().ext_multisample_compatibility;
   caps.dc_layers = !offscreen_ && surface_->SupportsDCLayers();
@@ -1486,6 +1493,11 @@ void GLES2DecoderPassthroughImpl::OnDebugMessage(GLenum source,
   if (type == GL_DEBUG_TYPE_ERROR && source == GL_DEBUG_SOURCE_API) {
     had_error_callback_ = true;
   }
+}
+
+void GLES2DecoderPassthroughImpl::SetCopyTextureResourceManagerForTest(
+    CopyTextureCHROMIUMResourceManager* copy_texture_resource_manager) {
+  NOTIMPLEMENTED();
 }
 
 const char* GLES2DecoderPassthroughImpl::GetCommandName(

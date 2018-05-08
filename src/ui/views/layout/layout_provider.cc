@@ -5,7 +5,6 @@
 #include "ui/views/layout/layout_provider.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/font_list.h"
 #include "ui/views/style/typography.h"
@@ -43,6 +42,7 @@ int LayoutProvider::GetControlHeightForFont(int context,
 }
 
 gfx::Insets LayoutProvider::GetInsetsMetric(int metric) const {
+  DCHECK_GE(metric, VIEWS_INSETS_START);
   DCHECK_LT(metric, VIEWS_INSETS_MAX);
   switch (metric) {
     case InsetsMetric::INSETS_DIALOG:
@@ -72,7 +72,8 @@ gfx::Insets LayoutProvider::GetInsetsMetric(int metric) const {
 }
 
 int LayoutProvider::GetDistanceMetric(int metric) const {
-  DCHECK_GE(metric, VIEWS_INSETS_MAX);
+  DCHECK_GE(metric, VIEWS_DISTANCE_START);
+  DCHECK_LT(metric, VIEWS_DISTANCE_MAX);
   switch (metric) {
     case DistanceMetric::DISTANCE_BUTTON_HORIZONTAL_PADDING:
       return 16;
@@ -138,6 +139,29 @@ gfx::Insets LayoutProvider::GetDialogInsetsForContentType(
   const gfx::Insets dialog_insets = GetInsetsMetric(INSETS_DIALOG);
   return gfx::Insets(top_margin, dialog_insets.left(), bottom_margin,
                      dialog_insets.right());
+}
+
+int LayoutProvider::GetCornerRadiusMetric(EmphasisMetric emphasis_metric,
+                                          const gfx::Size& size) const {
+  const bool is_touch =
+      ui::MaterialDesignController::IsTouchOptimizedUiEnabled();
+  switch (emphasis_metric) {
+    case EMPHASIS_LOW:
+      return is_touch ? 4 : 2;
+    case EMPHASIS_MEDIUM:
+      return is_touch ? 8 : 4;
+    case EMPHASIS_HIGH:
+      return std::min(size.width(), size.height()) / 2;
+    default:
+      NOTREACHED();
+      return 0;
+  }
+}
+
+int LayoutProvider::GetShadowElevationMetric(
+    EmphasisMetric emphasis_metric) const {
+  // Just return a value for now.
+  return 2;
 }
 
 }  // namespace views

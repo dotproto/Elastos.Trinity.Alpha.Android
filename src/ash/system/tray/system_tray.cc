@@ -32,6 +32,8 @@
 #include "ash/system/ime/tray_ime_chromeos.h"
 #include "ash/system/keyboard_brightness/tray_keyboard_brightness.h"
 #include "ash/system/media_security/multi_profile_media_tray_item.h"
+#include "ash/system/model/clock_model.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/tray_network.h"
 #include "ash/system/network/tray_vpn.h"
 #include "ash/system/night_light/tray_night_light.h"
@@ -236,14 +238,14 @@ SystemTray::~SystemTray() {
 
 void SystemTray::InitializeTrayItems(
     WebNotificationTray* web_notification_tray) {
-  DCHECK(web_notification_tray);
+  DCHECK(web_notification_tray || features::IsSystemTrayUnifiedEnabled());
   web_notification_tray_ = web_notification_tray;
   TrayBackgroundView::Initialize();
   CreateItems();
 }
 
 void SystemTray::Shutdown() {
-  DCHECK(web_notification_tray_);
+  DCHECK(web_notification_tray_ || features::IsSystemTrayUnifiedEnabled());
   web_notification_tray_ = nullptr;
 }
 
@@ -266,11 +268,11 @@ void SystemTray::CreateItems() {
   AddTrayItem(base::WrapUnique(tray_accessibility_));
   tray_tracing_ = new TrayTracing(this);
   AddTrayItem(base::WrapUnique(tray_tracing_));
-  AddTrayItem(
-      std::make_unique<TrayPower>(this, message_center::MessageCenter::Get()));
+  AddTrayItem(std::make_unique<TrayPower>(this));
   tray_network_ = new TrayNetwork(this);
   AddTrayItem(base::WrapUnique(tray_network_));
-  AddTrayItem(std::make_unique<TrayVPN>(this));
+  tray_vpn_ = new TrayVPN(this);
+  AddTrayItem(base::WrapUnique(tray_vpn_));
   tray_bluetooth_ = new TrayBluetooth(this);
   AddTrayItem(base::WrapUnique(tray_bluetooth_));
   tray_cast_ = new TrayCast(this);
@@ -415,8 +417,23 @@ TrayAccessibility* SystemTray::GetTrayAccessibility() const {
   return tray_accessibility_;
 }
 
+TrayVPN* SystemTray::GetTrayVPN() const {
+  return tray_vpn_;
+}
+
 TrayIME* SystemTray::GetTrayIME() const {
   return tray_ime_;
+}
+
+void SystemTray::RecordTimeToClick() {
+  // Ignore if the tray bubble is not opened by click.
+  if (!last_button_clicked_)
+    return;
+
+  UMA_HISTOGRAM_TIMES("ChromeOS.SystemTray.TimeToClick",
+                      base::TimeTicks::Now() - last_button_clicked_.value());
+
+  last_button_clicked_.reset();
 }
 
 void SystemTray::CanSwitchAwayFromActiveUser(
@@ -526,6 +543,11 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
   // tint the background.
   if (full_system_tray_menu_)
     SetIsActive(true);
+
+  // If the current view is not the default view or opened by click, reset the
+  // last button click time.
+  if (detailed || !show_by_click)
+    last_button_clicked_.reset();
 }
 
 void SystemTray::UpdateWebNotifications() {
@@ -549,7 +571,7 @@ void SystemTray::UpdateWebNotifications() {
 base::string16 SystemTray::GetAccessibleTimeString(
     const base::Time& now) const {
   base::HourClockType hour_type =
-      Shell::Get()->system_tray_controller()->hour_clock_type();
+      Shell::Get()->system_tray_model()->clock()->hour_clock_type();
   return base::TimeFormatTimeOfDayWithHourClockType(now, hour_type,
                                                     base::kKeepAmPm);
 }
@@ -597,6 +619,8 @@ void SystemTray::ClickedOutsideBubble() {
 bool SystemTray::PerformAction(const ui::Event& event) {
   UserMetricsRecorder::RecordUserClickOnTray(
       LoginMetricsRecorder::TrayClickTarget::kSystemTray);
+
+  last_button_clicked_ = base::TimeTicks::Now();
 
   if (features::IsSystemTrayUnifiedEnabled()) {
     return shelf()->GetStatusAreaWidget()->unified_system_tray()->PerformAction(
@@ -721,6 +745,18 @@ void SystemTray::RecordSystemMenuMetrics() {
         "Ash.SystemMenu.PercentageOfWorkAreaHeightCoveredByMenu",
         100 * bubble_view->height() / work_area_height, 1, 300, 100);
   }
+}
+
+TimeToClickRecorder::TimeToClickRecorder(SystemTray* tray) : tray_(tray) {}
+
+void TimeToClickRecorder::OnEvent(ui::Event* event) {
+  // Ignore if the event is neither click nor tap.
+  if (event->type() != ui::ET_MOUSE_PRESSED &&
+      event->type() != ui::ET_GESTURE_TAP) {
+    return;
+  }
+
+  tray_->RecordTimeToClick();
 }
 
 }  // namespace ash

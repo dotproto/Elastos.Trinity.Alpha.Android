@@ -47,6 +47,9 @@ Polymer({
     pageVisibility_: {type: Object, value: settings.pageVisibility},
 
     /** @private */
+    showCrostini_: Boolean,
+
+    /** @private */
     showAndroidApps_: Boolean,
 
     /** @private */
@@ -59,7 +62,7 @@ Polymer({
     lastSearchQuery_: {
       type: String,
       value: '',
-    }
+    },
   },
 
   listeners: {
@@ -130,6 +133,8 @@ Polymer({
     };
     // </if>
 
+    this.showCrostini_ = loadTimeData.valueExists('showCrostini') &&
+        loadTimeData.getBoolean('showCrostini');
     this.showAndroidApps_ = loadTimeData.valueExists('androidAppsVisible') &&
         loadTimeData.getBoolean('androidAppsVisible');
     this.showMultidevice_ = this.showAndroidApps_ &&

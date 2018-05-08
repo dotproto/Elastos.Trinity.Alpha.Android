@@ -14,12 +14,14 @@
 
 #include "base/memory/ref_counted.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
+#include "ui/base/ime/chromeos/public/interfaces/ime_keyset.mojom.h"
 #include "ui/base/ime/ui_base_ime_export.h"
 
 class Profile;
 
 namespace ui {
 class IMEEngineHandlerInterface;
+class InputMethodKeyboardController;
 }  // namespace ui
 
 namespace chromeos {
@@ -327,10 +329,9 @@ class UI_BASE_IME_EXPORT InputMethodManager {
   // is different from previous.
   virtual void MaybeNotifyImeMenuActivationChanged() = 0;
 
-  // Overrides the keyboard url ref (stuff following '#' to the end of the
-  // string) with the given keyset (emoji, hwt or voice). If |keyset| is empty,
-  // it indicates that we should override the url back with the keyboard keyset.
-  virtual void OverrideKeyboardUrlRef(const std::string& keyset) = 0;
+  // Overrides active keyset with the given keyset if the active IME supports
+  // the given keyset.
+  virtual void OverrideKeyboardKeyset(mojom::ImeKeyset keyset) = 0;
 
   // Enables or disables some advanced features, e.g. handwiring, voices input.
   virtual void SetImeMenuFeatureEnabled(ImeMenuFeature feature,
@@ -342,6 +343,10 @@ class UI_BASE_IME_EXPORT InputMethodManager {
   // Notifies when any of the extra inputs (emoji, handwriting, voice) enabled
   // status has changed.
   virtual void NotifyObserversImeExtraInputStateChange() = 0;
+
+  // Gets the implementation of the keyboard controller.
+  virtual ui::InputMethodKeyboardController*
+  GetInputMethodKeyboardController() = 0;
 };
 
 }  // namespace input_method

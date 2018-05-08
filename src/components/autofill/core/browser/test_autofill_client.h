@@ -34,7 +34,6 @@ class TestAutofillClient : public AutofillClient {
   identity::IdentityManager* GetIdentityManager() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   AddressNormalizer* GetAddressNormalizer() override;
-  SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -45,7 +44,6 @@ class TestAutofillClient : public AutofillClient {
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
-      bool should_cvc_be_requested,
       const base::Closure& callback) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    const base::Closure& callback) override;
@@ -83,14 +81,16 @@ class TestAutofillClient : public AutofillClient {
 
   void set_form_origin(const GURL& url) { form_origin_ = url; }
 
+  void set_sync_service(syncer::SyncService* test_sync_service) {
+    test_sync_service_ = test_sync_service;
+  }
+
  private:
   identity::IdentityTestEnvironment identity_test_env_;
+  syncer::SyncService* test_sync_service_ = nullptr;
 
   // NULL by default.
   std::unique_ptr<PrefService> prefs_;
-#if !defined(OS_ANDROID)
-  std::unique_ptr<SaveCardBubbleController> save_card_bubble_controller_;
-#endif
   GURL form_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillClient);

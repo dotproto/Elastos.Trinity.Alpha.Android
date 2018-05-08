@@ -5,7 +5,6 @@
 #include "content/browser/memory/memory_coordinator_impl.h"
 
 #include "base/memory/memory_coordinator_client_registry.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -277,7 +276,8 @@ MemoryState MemoryCoordinatorImpl::GetStateForProcess(
 
   for (auto& iter : children()) {
     auto* render_process_host = GetRenderProcessHost(iter.first);
-    if (render_process_host && render_process_host->GetHandle() == handle)
+    if (render_process_host &&
+        render_process_host->GetProcess().Handle() == handle)
       return iter.second.memory_state;
   }
   return MemoryState::UNKNOWN;
@@ -335,7 +335,7 @@ void MemoryCoordinatorImpl::AddChildForTesting(
 }
 
 void MemoryCoordinatorImpl::SetTickClockForTesting(
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
 }
 

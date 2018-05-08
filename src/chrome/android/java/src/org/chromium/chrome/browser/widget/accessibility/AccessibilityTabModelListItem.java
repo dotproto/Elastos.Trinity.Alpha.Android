@@ -323,7 +323,7 @@ public class AccessibilityTabModelListItem extends FrameLayout implements OnClic
 
         if (FeatureUtilities.isChromeModernDesignEnabled()) {
             if (mTab.isIncognito()) {
-                setBackgroundResource(R.color.incognito_primary_color);
+                setBackgroundResource(R.color.incognito_modern_primary_color);
                 mFaviconView.getBackground().setLevel(mIncognitoLevel);
                 ApiCompatibilityUtils.setTextAppearance(mTitleView, R.style.WhiteTitle1);
                 ApiCompatibilityUtils.setTextAppearance(mDescriptionView, R.style.WhiteBody);
@@ -349,13 +349,14 @@ public class AccessibilityTabModelListItem extends FrameLayout implements OnClic
         if (mTab != null) {
             Bitmap bitmap = mTab.getFavicon();
             if (bitmap != null) {
+                // Don't tint favicon bitmaps.
+                ((TintedImageView) mFaviconView).setTint(null);
                 mFaviconView.setImageBitmap(bitmap);
             } else {
                 mFaviconView.setImageResource(R.drawable.ic_globe_24dp);
-            }
-
-            if (FeatureUtilities.isChromeModernDesignEnabled()) {
-                ((TintedImageView) mFaviconView).setTint(bitmap != null ? null : mDarkIconColor);
+                if (FeatureUtilities.isChromeModernDesignEnabled()) {
+                    ((TintedImageView) mFaviconView).setTint(mDarkIconColor);
+                }
             }
         }
     }

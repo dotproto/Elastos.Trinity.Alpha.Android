@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/protected_memory.h"
 #include "base/memory/protected_memory_cfi.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -39,7 +38,8 @@ const struct {
     {kGLImplementationAppleName, kGLImplementationAppleGL},
 #endif
     {kGLImplementationEGLName, kGLImplementationEGLGLES2},
-    {kGLImplementationMockName, kGLImplementationMockGL}};
+    {kGLImplementationMockName, kGLImplementationMockGL},
+    {kGLImplementationDisabledName, kGLImplementationDisabled}};
 
 typedef std::vector<base::NativeLibrary> LibraryArray;
 
@@ -122,7 +122,9 @@ GLImplementation GetNamedGLImplementation(const std::string& name) {
 }
 
 GLImplementation GetSoftwareGLImplementation() {
-#if (defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)))
+#if (defined(OS_WIN) ||                                                     \
+     (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)) || \
+     (defined(OS_MACOSX) && defined(USE_EGL)))
   return kGLImplementationSwiftShaderGL;
 #else
   return kGLImplementationOSMesaGL;

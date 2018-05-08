@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -183,7 +184,7 @@ void DumpResidency(size_t start,
 }  // namespace
 
 // static
-bool NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary() {
+bool NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary(bool ordered_only) {
 #if defined(CYGPROFILE_INSTRUMENTATION)
   // Avoid forking with cygprofile instrumentation because the child process
   // would create a dump as well.
@@ -200,13 +201,22 @@ bool NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary() {
   // state of its parent thread. It cannot rely on being able to acquire any
   // lock (unless special care is taken in a pre-fork handler), including being
   // able to call malloc().
-  const auto& range = GetTextRange();
+  //
+  // Always prefetch the ordered section first, as it's reached early during
+  // startup, and not necessarily located at the beginning of .text.
+  std::vector<std::pair<size_t, size_t>> ranges = {GetOrderedTextRange()};
+  if (!ordered_only)
+    ranges.push_back(GetTextRange());
 
   pid_t pid = fork();
   if (pid == 0) {
     setpriority(PRIO_PROCESS, 0, kBackgroundPriority);
     // _exit() doesn't call the atexit() handlers.
-    _exit(Prefetch(range.first, range.second) ? 0 : 1);
+    for (const auto& range : ranges) {
+      if (!Prefetch(range.first, range.second))
+        _exit(EXIT_FAILURE);
+    }
+    _exit(EXIT_SUCCESS);
   } else {
     if (pid < 0) {
       return false;
@@ -215,7 +225,7 @@ bool NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary() {
     const pid_t result = HANDLE_EINTR(waitpid(pid, &status, 0));
     if (result == pid) {
       if (WIFEXITED(status)) {
-        return WEXITSTATUS(status) == 0;
+        return WEXITSTATUS(status) == EXIT_SUCCESS;
       }
     }
     return false;

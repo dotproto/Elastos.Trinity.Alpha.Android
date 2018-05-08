@@ -43,10 +43,12 @@ static scoped_refptr<DecoderBuffer> CreateFakeEncryptedStreamBuffer(
   scoped_refptr<DecoderBuffer> buffer(new DecoderBuffer(kFakeBufferSize));
   std::string iv = is_clear ? std::string() :
       std::string(reinterpret_cast<const char*>(kFakeIv), arraysize(kFakeIv));
-  buffer->set_decrypt_config(std::unique_ptr<DecryptConfig>(
-      new DecryptConfig(std::string(reinterpret_cast<const char*>(kFakeKeyId),
-                                    arraysize(kFakeKeyId)),
-                        iv, std::vector<SubsampleEntry>())));
+  if (!is_clear) {
+    buffer->set_decrypt_config(DecryptConfig::CreateCencConfig(
+        std::string(reinterpret_cast<const char*>(kFakeKeyId),
+                    arraysize(kFakeKeyId)),
+        iv, {}));
+  }
   return buffer;
 }
 
@@ -80,7 +82,7 @@ class DecryptingDemuxerStreamTest : public testing::Test {
         encrypted_buffer_(CreateFakeEncryptedStreamBuffer(false)),
         decrypted_buffer_(new DecoderBuffer(kFakeBufferSize)) {}
 
-  virtual ~DecryptingDemuxerStreamTest() {
+  ~DecryptingDemuxerStreamTest() override {
     if (is_initialized_)
       EXPECT_CALL(*decryptor_, CancelDecrypt(_));
     demuxer_stream_.reset();
@@ -149,7 +151,7 @@ class DecryptingDemuxerStreamTest : public testing::Test {
 
   void ReadAndExpectBufferReadyWith(
       DemuxerStream::Status status,
-      const scoped_refptr<DecoderBuffer>& decrypted_buffer) {
+      scoped_refptr<DecoderBuffer> decrypted_buffer) {
     if (status != DemuxerStream::kOk)
       EXPECT_CALL(*this, BufferReady(status, IsNull()));
     else if (decrypted_buffer->end_of_stream())
@@ -162,10 +164,11 @@ class DecryptingDemuxerStreamTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void EnterClearReadingState(bool is_stream_encrytped) {
-    EXPECT_TRUE(clear_encrypted_stream_buffer_->decrypt_config());
+  void EnterClearReadingState(bool is_stream_encrypted) {
+    // Unencrypted streams never have a DecryptConfig.
+    EXPECT_FALSE(clear_encrypted_stream_buffer_->decrypt_config());
     EXPECT_CALL(*input_audio_stream_, Read(_))
-        .WillOnce(ReturnBuffer(is_stream_encrytped
+        .WillOnce(ReturnBuffer(is_stream_encrypted
                                    ? clear_encrypted_stream_buffer_
                                    : clear_buffer_));
 
@@ -254,8 +257,8 @@ class DecryptingDemuxerStreamTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  MOCK_METHOD2(BufferReady, void(DemuxerStream::Status,
-                                 const scoped_refptr<DecoderBuffer>&));
+  MOCK_METHOD2(BufferReady,
+               void(DemuxerStream::Status, scoped_refptr<DecoderBuffer>));
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
 
   base::MessageLoop message_loop_;
@@ -323,9 +326,6 @@ TEST_F(DecryptingDemuxerStreamTest, Read_Normal) {
 }
 
 // Test normal read case where the buffer is clear.
-// TODO(xhwang): Unify clear buffer handling in clear and encrypted stream.
-// See http://crbug.com/675003
-
 TEST_F(DecryptingDemuxerStreamTest, Read_ClearBufferInEncryptedStream) {
   Initialize();
   EnterClearReadingState(true);

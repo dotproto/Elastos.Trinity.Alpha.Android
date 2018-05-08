@@ -1311,26 +1311,51 @@ class TestBrowserClient : public ChromeContentBrowserClient {
   DISALLOW_COPY_AND_ASSIGN(TestBrowserClient);
 };
 
+// Earlier injection of TestBrowserClient (a ContentBrowserClient) is needed to
+// make sure it is active during creation of the first spare RenderProcessHost.
+// Without this change, the tests would be surprised that they cannot find an
+// injected message filter via GetTextInputClientMessageFilterForProcess.
+class SitePerProcessCustomTextInputManagerFilteringTest
+    : public SitePerProcessTextInputManagerTest {
+ public:
+  SitePerProcessCustomTextInputManagerFilteringTest() {}
+  ~SitePerProcessCustomTextInputManagerFilteringTest() override {}
+
+  void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
+    SitePerProcessTextInputManagerTest::CreatedBrowserMainParts(parts);
+    browser_client_ = std::make_unique<TestBrowserClient>();
+  }
+
+  void TearDown() override {
+    browser_client_.reset();
+    SitePerProcessTextInputManagerTest::TearDown();
+  }
+
+  scoped_refptr<content::TestTextInputClientMessageFilter>
+  GetTextInputClientMessageFilterForProcess(
+      content::RenderProcessHost* process_host) const {
+    return browser_client_->GetTextInputClientMessageFilterForProcess(
+        process_host);
+  }
+
+ private:
+  std::unique_ptr<TestBrowserClient> browser_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(SitePerProcessCustomTextInputManagerFilteringTest);
+};
+
 // This test verifies that requests for dictionary lookup based on selection
 // range are routed to the focused RenderWidgetHost.
 // Test is flaky: http://crbug.com/710842
-IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+IN_PROC_BROWSER_TEST_F(SitePerProcessCustomTextInputManagerFilteringTest,
                        DISABLED_LookUpStringForRangeRoutesToFocusedWidget) {
-  // TestBrowserClient needs to replace the ChromeContenBrowserClient after most
-  // things are initialized but before the WebContents is created. Here we make
-  // that happen by creating a new WebContents in a new tab. But before the test
-  // exits, we must destroy the contents and replace the old
-  // ContentBrowserClient because the original WebContents and the new one have
-  // been initialized with the original ContentBrowserClient and the new
-  // TestBrowserClient, respectively.
-  TestBrowserClient browser_client;
-
-  content::WebContents* new_contents =
+  std::unique_ptr<content::WebContents> new_contents =
       content::WebContents::Create(content::WebContents::CreateParams(
           active_contents()->GetBrowserContext(), nullptr));
-  browser()->tab_strip_model()->InsertWebContentsAt(1, new_contents,
+  content::WebContents* raw_new_contents = new_contents.get();
+  browser()->tab_strip_model()->InsertWebContentsAt(1, std::move(new_contents),
                                                     TabStripModel::ADD_ACTIVE);
-  EXPECT_EQ(active_contents(), new_contents);
+  EXPECT_EQ(active_contents(), raw_new_contents);
 
   // Starting the test body.
   CreateIframePage("a(b)");
@@ -1360,8 +1385,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   content::AskForLookUpDictionaryForRange(views[0], gfx::Range(0, 4));
 
   // Wait until the result comes back.
-  auto root_filter = browser_client.GetTextInputClientMessageFilterForProcess(
-      frames[0]->GetProcess());
+  auto root_filter =
+      GetTextInputClientMessageFilterForProcess(frames[0]->GetProcess());
   EXPECT_TRUE(root_filter);
   root_filter->WaitForStringFromRange();
 
@@ -1382,8 +1407,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   content::AskForLookUpDictionaryForRange(views[0], gfx::Range(0, 5));
 
   // Wait until the result comes back.
-  auto child_filter = browser_client.GetTextInputClientMessageFilterForProcess(
-      frames[1]->GetProcess());
+  auto child_filter =
+      GetTextInputClientMessageFilterForProcess(frames[1]->GetProcess());
   child_filter->WaitForStringFromRange();
 
   EXPECT_EQ("child", child_filter->string_from_range());
@@ -1403,16 +1428,15 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
 // crash. This test covers the case where the target RenderWidgetHost is that of
 // an OOPIF.
 IN_PROC_BROWSER_TEST_F(
-    SitePerProcessTextInputManagerTest,
+    SitePerProcessCustomTextInputManagerFilteringTest,
     DoNotCrashBrowserInWordLookUpForDestroyedWidget_ChildFrame) {
-  TestBrowserClient browser_client;
-
-  content::WebContents* new_contents =
+  std::unique_ptr<content::WebContents> new_contents =
       content::WebContents::Create(content::WebContents::CreateParams(
           active_contents()->GetBrowserContext(), nullptr));
-  browser()->tab_strip_model()->InsertWebContentsAt(1, new_contents,
+  content::WebContents* raw_new_contents = new_contents.get();
+  browser()->tab_strip_model()->InsertWebContentsAt(1, std::move(new_contents),
                                                     TabStripModel::ADD_ACTIVE);
-  EXPECT_EQ(active_contents(), new_contents);
+  EXPECT_EQ(active_contents(), raw_new_contents);
 
   // Simple page with 1 cross origin (out-of-process) <iframe>.
   CreateIframePage("a(b)");
@@ -1427,9 +1451,8 @@ IN_PROC_BROWSER_TEST_F(
 
   content::RenderWidgetHostView* child_view = child_frame->GetView();
   scoped_refptr<content::TestTextInputClientMessageFilter>
-      child_message_filter =
-          browser_client.GetTextInputClientMessageFilterForProcess(
-              child_view->GetRenderWidgetHost()->GetProcess());
+      child_message_filter = GetTextInputClientMessageFilterForProcess(
+          child_view->GetRenderWidgetHost()->GetProcess());
   DCHECK(child_message_filter);
 
   // We need to wait for test scenario to complete before leaving this block.
@@ -1462,7 +1485,7 @@ IN_PROC_BROWSER_TEST_F(
           ->GetRenderWidgetHostView();
 
   // The dictionary request to be made will be routed to the focused frame.
-  ASSERT_EQ(child_frame, new_contents->GetFocusedFrame());
+  ASSERT_EQ(child_frame, raw_new_contents->GetFocusedFrame());
 
   // Request for the dictionary lookup and intercept the word on its way back.
   // The request is always on the tab's view which is a RenderWidgetHostViewMac.
@@ -1476,16 +1499,15 @@ IN_PROC_BROWSER_TEST_F(
 // crash. This test covers the case where the target RenderWidgetHost is that of
 // the main frame (no OOPIFs on page).
 IN_PROC_BROWSER_TEST_F(
-    SitePerProcessTextInputManagerTest,
+    SitePerProcessCustomTextInputManagerFilteringTest,
     DoNotCrashBrowserInWordLookUpForDestroyedWidget_MainFrame) {
-  TestBrowserClient browser_client;
-
-  content::WebContents* new_contents =
+  std::unique_ptr<content::WebContents> new_contents =
       content::WebContents::Create(content::WebContents::CreateParams(
           active_contents()->GetBrowserContext(), nullptr));
-  browser()->tab_strip_model()->InsertWebContentsAt(1, new_contents,
+  content::WebContents* raw_new_contents = new_contents.get();
+  browser()->tab_strip_model()->InsertWebContentsAt(1, std::move(new_contents),
                                                     TabStripModel::ADD_ACTIVE);
-  EXPECT_EQ(active_contents(), new_contents);
+  EXPECT_EQ(active_contents(), raw_new_contents);
 
   // Simple page with no <iframe>s.
   CreateIframePage("a()");
@@ -1499,7 +1521,7 @@ IN_PROC_BROWSER_TEST_F(
 
   content::RenderWidgetHostView* page_rwhv = main_frame->GetView();
   scoped_refptr<content::TestTextInputClientMessageFilter> message_filter =
-      browser_client.GetTextInputClientMessageFilterForProcess(
+      GetTextInputClientMessageFilterForProcess(
           page_rwhv->GetRenderWidgetHost()->GetProcess());
   DCHECK(message_filter);
 

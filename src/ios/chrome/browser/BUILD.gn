@@ -5,7 +5,7 @@
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ios/rules.gni")
-import("//rlz/features/features.gni")
+import("//rlz/buildflags/buildflags.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 source_set("chrome_paths") {
@@ -102,7 +102,6 @@ source_set("browser") {
     "//components/search_provider_logos",
     "//components/security_state/core",
     "//components/signin/core/browser",
-    "//components/ssl_config",
     "//components/strings",
     "//components/sync",
     "//components/translate/core/browser",
@@ -117,6 +116,7 @@ source_set("browser") {
     "//ios/chrome/browser/browsing_data:features",
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/drag_and_drop",
+    "//ios/chrome/browser/itunes_links",
     "//ios/chrome/browser/mailto:features",
     "//ios/chrome/browser/payments:constants",
     "//ios/chrome/browser/ssl:features",
@@ -124,6 +124,7 @@ source_set("browser") {
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/external_search:features",
+    "//ios/chrome/browser/ui/fullscreen:features",
     "//ios/chrome/browser/ui/history:history_base_feature",
     "//ios/chrome/browser/ui/main:feature_flags",
     "//ios/chrome/browser/ui/omnibox",
@@ -137,7 +138,7 @@ source_set("browser") {
     "//ios/web",
     "//ios/web/public",
     "//net",
-    "//rlz/features",
+    "//rlz/buildflags",
     "//url",
   ]
   public_deps = [
@@ -174,7 +175,6 @@ source_set("browser_impl") {
     "//components/net_log",
     "//components/network_time",
     "//components/open_from_clipboard",
-    "//components/physical_web/data_source",
     "//components/prefs",
     "//components/rappor",
     "//components/translate/core/browser",
@@ -202,7 +202,7 @@ source_set("browser_impl") {
     "//ios/web",
     "//ios/web/public/app",
     "//net",
-    "//rlz/features",
+    "//rlz/buildflags",
     "//ui/base",
   ]
 
@@ -241,7 +241,6 @@ source_set("unit_tests") {
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/proxy_config",
-    "//components/ssl_config",
     "//components/variations",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/signin",

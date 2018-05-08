@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -106,7 +105,7 @@ scoped_refptr<UpdateContext> PingManagerTest::MakeMockUpdateContext() const {
 TEST_F(PingManagerTest, SendPing) {
   auto interceptor_factory =
       std::make_unique<InterceptorFactory>(base::ThreadTaskRunnerHandle::Get());
-  auto* interceptor = interceptor_factory->CreateInterceptor();
+  auto interceptor = interceptor_factory->CreateInterceptor();
   EXPECT_TRUE(interceptor);
 
   // Test eventresult="1" is sent for successful updates.
@@ -114,13 +113,13 @@ TEST_F(PingManagerTest, SendPing) {
 
   {
     Component component(*update_context, "abc");
-
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.state_ = std::make_unique<Component::StateUpdated>(&component);
     component.previous_version_ = base::Version("1.0");
     component.next_version_ = base::Version("2.0");
     component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -147,13 +146,14 @@ TEST_F(PingManagerTest, SendPing) {
   {
     // Test eventresult="0" is sent for failed updates.
     Component component(*update_context, "abc");
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.state_ =
         std::make_unique<Component::StateUpdateError>(&component);
     component.previous_version_ = base::Version("1.0");
     component.next_version_ = base::Version("2.0");
     component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -170,6 +170,7 @@ TEST_F(PingManagerTest, SendPing) {
   {
     // Test the error values and the fingerprints.
     Component component(*update_context, "abc");
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.state_ =
         std::make_unique<Component::StateUpdateError>(&component);
     component.previous_version_ = base::Version("1.0");
@@ -185,7 +186,7 @@ TEST_F(PingManagerTest, SendPing) {
     component.crx_diffurls_.push_back(GURL("http://host/path"));
     component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -206,13 +207,14 @@ TEST_F(PingManagerTest, SendPing) {
   {
     // Test an invalid |next_version| is not serialized.
     Component component(*update_context, "abc");
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.state_ =
         std::make_unique<Component::StateUpdateError>(&component);
     component.previous_version_ = base::Version("1.0");
 
     component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -229,10 +231,11 @@ TEST_F(PingManagerTest, SendPing) {
     // Test a valid |previouversion| and |next_version| = base::Version("0")
     // are serialized correctly under <event...> for uninstall.
     Component component(*update_context, "abc");
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.Uninstall(base::Version("1.2.3.4"), 0);
     component.AppendEvent(BuildUninstalledEventElement(component));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -249,6 +252,7 @@ TEST_F(PingManagerTest, SendPing) {
   {
     // Test the download metrics.
     Component component(*update_context, "abc");
+    component.crx_component_ = std::make_unique<CrxComponent>();
     component.state_ = std::make_unique<Component::StateUpdated>(&component);
     component.previous_version_ = base::Version("1.0");
     component.next_version_ = base::Version("2.0");
@@ -274,7 +278,7 @@ TEST_F(PingManagerTest, SendPing) {
     component.AppendEvent(
         BuildDownloadCompleteEventElement(component, download_metrics));
 
-    EXPECT_TRUE(interceptor->ExpectRequest(new AnyMatch));
+    EXPECT_TRUE(interceptor->ExpectRequest(std::make_unique<AnyMatch>()));
     ping_manager_->SendPing(component, MakePingCallback());
     RunThreads();
 
@@ -306,9 +310,10 @@ TEST_F(PingManagerTest, RequiresEncryption) {
   const auto update_context = MakeMockUpdateContext();
 
   Component component(*update_context, "abc");
+  component.crx_component_ = std::make_unique<CrxComponent>();
 
   // The default value for |requires_network_encryption| is true.
-  EXPECT_TRUE(component.crx_component_.requires_network_encryption);
+  EXPECT_TRUE(component.crx_component_->requires_network_encryption);
 
   component.state_ = std::make_unique<Component::StateUpdated>(&component);
   component.previous_version_ = base::Version("1.0");

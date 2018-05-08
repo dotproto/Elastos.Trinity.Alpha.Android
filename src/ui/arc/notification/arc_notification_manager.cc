@@ -7,15 +7,13 @@
 #include <memory>
 #include <utility>
 
-#include "ash/shell.h"
-#include "ash/system/toast/toast_manager.h"
-#include "base/memory/ptr_util.h"
-#include "base/memory/singleton.h"
+// TODO(https://crbug.com/768439): Remove nogncheck when moved to ash.
+#include "ash/login_status.h"                // nogncheck
+#include "ash/session/session_controller.h"  // nogncheck
+#include "ash/shell.h"                       // nogncheck
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "components/arc/arc_util.h"
+#include "components/arc/mojo_channel.h"
 #include "ui/arc/notification/arc_notification_delegate.h"
 #include "ui/arc/notification/arc_notification_item_impl.h"
 #include "ui/arc/notification/arc_notification_view.h"
@@ -35,43 +33,51 @@ std::unique_ptr<message_center::MessageView> CreateCustomMessageView(
   return arc_delegate->CreateCustomMessageView(notification);
 }
 
-// Singleton factory for ArcNotificationManager.
-class ArcNotificationManagerFactory
-    : public internal::ArcBrowserContextKeyedServiceFactoryBase<
-          ArcNotificationManager,
-          ArcNotificationManagerFactory> {
- public:
-  // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
-  static constexpr const char* kName = "ArcNotificationManagerFactory";
+bool IsPublicSessionOrKiosk() {
+  const ash::LoginStatus login_status =
+      ash::Shell::Get()->session_controller()->login_status();
 
-  static ArcNotificationManagerFactory* GetInstance() {
-    return base::Singleton<ArcNotificationManagerFactory>::get();
-  }
-
- private:
-  friend base::DefaultSingletonTraits<ArcNotificationManagerFactory>;
-  ArcNotificationManagerFactory() = default;
-  ~ArcNotificationManagerFactory() override = default;
-};
+  return login_status == ash::LoginStatus::PUBLIC ||
+         login_status == ash::LoginStatus::KIOSK_APP ||
+         login_status == ash::LoginStatus::ARC_KIOSK_APP;
+}
 
 }  // namespace
 
-// static
-ArcNotificationManager* ArcNotificationManager::GetForBrowserContext(
-    content::BrowserContext* context) {
-  return ArcNotificationManagerFactory::GetForBrowserContext(context);
-}
+class ArcNotificationManager::InstanceOwner {
+ public:
+  InstanceOwner() = default;
+  ~InstanceOwner() = default;
 
-// static
-std::unique_ptr<ArcNotificationManager>
-ArcNotificationManager::CreateForTesting(
-    ArcBridgeService* bridge_service,
-    const AccountId& main_profile_id,
-    message_center::MessageCenter* message_center) {
-  // MakeUnique cannot be used because the used ctor is private.
-  return base::WrapUnique(new ArcNotificationManager(
-      bridge_service, main_profile_id, message_center));
-}
+  void SetInstancePtr(mojom::NotificationsInstancePtr instance_ptr) {
+    DCHECK(!channel_);
+
+    channel_ = std::make_unique<
+        MojoChannel<mojom::NotificationsInstance, mojom::NotificationsHost>>(
+        &holder_, std::move(instance_ptr));
+
+    // Using base::Unretained because |this| owns |channel_|.
+    channel_->set_connection_error_handler(
+        base::BindOnce(&InstanceOwner::OnDisconnected, base::Unretained(this)));
+    channel_->QueryVersion();
+  }
+
+  ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>*
+  holder() {
+    return &holder_;
+  }
+
+ private:
+  void OnDisconnected() { channel_.reset(); }
+
+  ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>
+      holder_;
+  std::unique_ptr<
+      MojoChannel<mojom::NotificationsInstance, mojom::NotificationsHost>>
+      channel_;
+
+  DISALLOW_COPY_AND_ASSIGN(InstanceOwner);
+};
 
 // static
 void ArcNotificationManager::SetCustomNotificationViewFactory() {
@@ -79,28 +85,34 @@ void ArcNotificationManager::SetCustomNotificationViewFactory() {
       base::Bind(&CreateCustomMessageView));
 }
 
-ArcNotificationManager::ArcNotificationManager(content::BrowserContext* context,
-                                               ArcBridgeService* bridge_service)
-    : ArcNotificationManager(bridge_service,
-                             ArcServiceManager::Get()->account_id(),
-                             message_center::MessageCenter::Get()) {}
-
 ArcNotificationManager::ArcNotificationManager(
-    ArcBridgeService* bridge_service,
     const AccountId& main_profile_id,
     message_center::MessageCenter* message_center)
-    : arc_bridge_service_(bridge_service),
-      main_profile_id_(main_profile_id),
-      message_center_(message_center) {
-  arc_bridge_service_->notifications()->SetHost(this);
-  arc_bridge_service_->notifications()->AddObserver(this);
+    : main_profile_id_(main_profile_id),
+      message_center_(message_center),
+      instance_owner_(std::make_unique<InstanceOwner>()) {
+  instance_owner_->holder()->SetHost(this);
+  instance_owner_->holder()->AddObserver(this);
   if (!message_center::MessageViewFactory::HasCustomNotificationViewFactory())
     SetCustomNotificationViewFactory();
 }
 
 ArcNotificationManager::~ArcNotificationManager() {
-  arc_bridge_service_->notifications()->RemoveObserver(this);
-  arc_bridge_service_->notifications()->SetHost(nullptr);
+  instance_owner_->holder()->RemoveObserver(this);
+  instance_owner_->holder()->SetHost(nullptr);
+
+  // Ensures that any callback tied to |instance_owner_| is not invoked.
+  instance_owner_.reset();
+}
+
+void ArcNotificationManager::SetInstance(
+    mojom::NotificationsInstancePtr instance) {
+  instance_owner_->SetInstancePtr(std::move(instance));
+}
+
+ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>*
+ArcNotificationManager::GetConnectionHolderForTest() {
+  return instance_owner_->holder();
 }
 
 void ArcNotificationManager::OnConnectionReady() {
@@ -140,9 +152,10 @@ void ArcNotificationManager::OnNotificationPosted(
     DCHECK(result.second);
     it = result.first;
   }
-  const std::string app_id =
-      data->package_name ? GetAppId(data->package_name.value()) : std::string();
-  it->second->OnUpdatedFromAndroid(std::move(data), app_id);
+
+  GetAppId(data->package_name.value_or(std::string()),
+           base::BindOnce(&ArcNotificationManager::OnGotAppId,
+                          weak_ptr_factory_.GetWeakPtr(), std::move(data)));
 }
 
 void ArcNotificationManager::OnNotificationUpdated(
@@ -157,8 +170,9 @@ void ArcNotificationManager::OnNotificationUpdated(
   if (it == items_.end())
     return;
 
-  const std::string app_id = GetAppId(data->package_name.value());
-  it->second->OnUpdatedFromAndroid(std::move(data), app_id);
+  GetAppId(data->package_name.value_or(std::string()),
+           base::BindOnce(&ArcNotificationManager::OnGotAppId,
+                          weak_ptr_factory_.GetWeakPtr(), std::move(data)));
 }
 
 void ArcNotificationManager::OnNotificationRemoved(const std::string& key) {
@@ -189,7 +203,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
   items_.erase(it);
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), SendNotificationEventToAndroid);
+      instance_owner_->holder(), SendNotificationEventToAndroid);
 
   // On shutdown, the ARC channel may quit earlier than notifications.
   if (!notifications_instance) {
@@ -211,7 +225,7 @@ void ArcNotificationManager::SendNotificationClickedOnChrome(
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), SendNotificationEventToAndroid);
+      instance_owner_->holder(), SendNotificationEventToAndroid);
 
   // On shutdown, the ARC channel may quit earlier than notifications.
   if (!notifications_instance) {
@@ -234,7 +248,7 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), SendNotificationEventToAndroid);
+      instance_owner_->holder(), SendNotificationEventToAndroid);
 
   // On shutdown, the ARC channel may quit earlier than notifications.
   if (!notifications_instance) {
@@ -277,7 +291,7 @@ void ArcNotificationManager::CreateNotificationWindow(const std::string& key) {
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), CreateNotificationWindow);
+      instance_owner_->holder(), CreateNotificationWindow);
   if (!notifications_instance)
     return;
 
@@ -292,7 +306,7 @@ void ArcNotificationManager::CloseNotificationWindow(const std::string& key) {
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), CloseNotificationWindow);
+      instance_owner_->holder(), CloseNotificationWindow);
   if (!notifications_instance)
     return;
 
@@ -307,7 +321,7 @@ void ArcNotificationManager::OpenNotificationSettings(const std::string& key) {
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), OpenNotificationSettings);
+      instance_owner_->holder(), OpenNotificationSettings);
 
   // On shutdown, the ARC channel may quit earlier than notifications.
   if (!notifications_instance)
@@ -318,7 +332,7 @@ void ArcNotificationManager::OpenNotificationSettings(const std::string& key) {
 
 bool ArcNotificationManager::IsOpeningSettingsSupported() const {
   const auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), OpenNotificationSettings);
+      instance_owner_->holder(), OpenNotificationSettings);
   return notifications_instance != nullptr;
 }
 
@@ -331,7 +345,7 @@ void ArcNotificationManager::SendNotificationToggleExpansionOnChrome(
   }
 
   auto* notifications_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->notifications(), SendNotificationEventToAndroid);
+      instance_owner_->holder(), SendNotificationEventToAndroid);
 
   // On shutdown, the ARC channel may quit earlier than notifications.
   if (!notifications_instance) {
@@ -344,37 +358,40 @@ void ArcNotificationManager::SendNotificationToggleExpansionOnChrome(
       key, mojom::ArcNotificationEvent::TOGGLE_EXPANSION);
 }
 
-void ArcNotificationManager::Shutdown() {
-  get_app_id_callback_.Reset();
-}
-
-void ArcNotificationManager::OnToastPosted(mojom::ArcToastDataPtr data) {
-  const base::string16 text16(
-      base::UTF8ToUTF16(data->text.has_value() ? *data->text : std::string()));
-  const base::string16 dismiss_text16(base::UTF8ToUTF16(
-      data->dismiss_text.has_value() ? *data->dismiss_text : std::string()));
-  ash::Shell::Get()->toast_manager()->Show(
-      ash::ToastData(data->id, text16, data->duration, dismiss_text16));
-}
-
-void ArcNotificationManager::OnToastCancelled(mojom::ArcToastDataPtr data) {
-  ash::Shell::Get()->toast_manager()->Cancel(data->id);
-}
-
 bool ArcNotificationManager::ShouldIgnoreNotification(
     arc::mojom::ArcNotificationData* data) {
+  if (data->priority == mojom::ArcNotificationPriority::NONE)
+    return true;
+
   // Notifications from Play Store are ignored in Public Session and Kiosk mode.
   // TODO: Use centralized const for Play Store package.
-  return data->package_name.has_value() &&
-         *data->package_name == kPlayStorePackageName && IsRobotAccountMode();
+  if (data->package_name.has_value() &&
+      *data->package_name == kPlayStorePackageName &&
+      IsPublicSessionOrKiosk()) {
+    return true;
+  }
+
+  return false;
 }
 
-std::string ArcNotificationManager::GetAppId(
-    const std::string& package_name) const {
-  if (get_app_id_callback_.is_null())
-    return std::string();
+void ArcNotificationManager::GetAppId(const std::string& package_name,
+                                      GetAppIdResponseCallback callback) const {
+  if (get_app_id_callback_.is_null() || package_name.empty()) {
+    std::move(callback).Run(std::string());
+    return;
+  }
 
-  return get_app_id_callback_.Run(package_name);
+  get_app_id_callback_.Run(package_name, std::move(callback));
+}
+
+void ArcNotificationManager::OnGotAppId(mojom::ArcNotificationDataPtr data,
+                                        const std::string& app_id) {
+  const std::string& key = data->key;
+  auto it = items_.find(key);
+  if (it == items_.end())
+    return;
+
+  it->second->OnUpdatedFromAndroid(std::move(data), app_id);
 }
 
 }  // namespace arc

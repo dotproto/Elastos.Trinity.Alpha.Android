@@ -1,11 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/public/common/content_switches.h"
 
 #include "build/build_config.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 namespace switches {
 
@@ -169,9 +169,6 @@ const char kDisableGpuProcessCrashLimit[] = "disable-gpu-process-crash-limit";
 // during fast scrolling especially on slower devices.
 const char kDisableLowResTiling[] = "disable-low-res-tiling";
 
-// Disable the GPU process sandbox.
-const char kDisableGpuSandbox[]             = "disable-gpu-sandbox";
-
 // Disable the thread that crashes the GPU process if it stops responding to
 // messages.
 const char kDisableGpuWatchdog[] = "disable-gpu-watchdog";
@@ -196,9 +193,6 @@ const char kDisableKillAfterBadIPC[]        = "disable-kill-after-bad-ipc";
 // Disables LCD text.
 const char kDisableLCDText[]                = "disable-lcd-text";
 
-// Disables distance field text.
-const char kDisableDistanceFieldText[]      = "disable-distance-field-text";
-
 // Disable LocalStorage.
 const char kDisableLocalStorage[]           = "disable-local-storage";
 
@@ -208,9 +202,6 @@ const char kDisableLogging[]                = "disable-logging";
 
 // Disables using CODECAPI_AVLowLatencyMode when creating DXVA decoders.
 const char kDisableLowLatencyDxva[]         = "disable-low-latency-dxva";
-
-// Disables usage of the namespace sandbox.
-const char kDisableNamespaceSandbox[]       = "disable-namespace-sandbox";
 
 // Disables clearing the rendering output of a renderer when it didn't commit
 // new output for a while after a top-frame navigation.
@@ -338,10 +329,6 @@ const char kDumpBlinkRuntimeCallStats[] = "dump-blink-runtime-call-stats";
 // Enables LCD text.
 const char kEnableLCDText[]                 = "enable-lcd-text";
 
-// Enables using signed distance fields when rendering text.
-// Only valid if GPU rasterization is enabled as well.
-const char kEnableDistanceFieldText[]       = "enable-distance-field-text";
-
 // Enable the creation of compositing layers when it would prevent LCD text.
 const char kEnablePreferCompositingToLCDText[] =
     "enable-prefer-compositing-to-lcd-text";
@@ -355,6 +342,10 @@ const char kEnableBackgroundFetchPersistence[] =
 // Applied before kDisableBlinkFeatures, and after other flags that change these
 // features.
 const char kEnableBlinkFeatures[]           = "enable-blink-features";
+
+// A shorthand for adding both "--enable-blink-features=BlinkGenPropertyTrees"
+// and "--enable-layer-lists".
+const char kEnableBlinkGenPropertyTrees[] = "enable-blink-gen-property-trees";
 
 // Enables Web Platform features that are in development.
 const char kEnableExperimentalWebPlatformFeatures[] =
@@ -411,10 +402,6 @@ const char kEnableRGBA4444Textures[] = "enable-rgba-4444-textures";
 // Set options to cache V8 data. (off, preparse data, or code)
 const char kV8CacheOptions[] = "v8-cache-options";
 
-// Cause the OS X sandbox write to syslog every time an access to a resource
-// is denied by the sandbox.
-const char kEnableSandboxLogging[]          = "enable-sandbox-logging";
-
 // Enables the Skia benchmarking extension
 const char kEnableSkiaBenchmarking[]        = "enable-skia-benchmarking";
 
@@ -467,6 +454,10 @@ const char kEnableVtune[]                   = "enable-vtune-support";
 
 // Enable Vulkan support, must also have ENABLE_VULKAN defined.
 const char kEnableVulkan[] = "enable-vulkan";
+
+// Enable the Web Authentication Testing API.
+// https://w3c.github.io/webauthn
+const char kEnableWebAuthTestingAPI[] = "enable-web-authentication-testing-api";
 
 // Enables WebGL extensions not yet approved by the community.
 const char kEnableWebGLDraftExtensions[] = "enable-webgl-draft-extensions";
@@ -581,6 +572,18 @@ const char kLogFile[] = "log-file";
 const char kMainFrameResizesAreOrientationChanges[] =
     "main-frame-resizes-are-orientation-changes";
 
+// Specifies the maximum cache size per an origin for the ApplicationCache.
+// The default value is 5MB.
+const char kMaxAppCacheOriginCacheSizeMb[] =
+    "max-appcache-origin-cache-size-mb";
+
+// Specifies the maximum disk cache size for the ApplicationCache. The default
+// value is 250MB.
+const char kMaxAppCacheDiskCacheSizeMb[] = "max-appcache-disk-cache-size-mb";
+
+// Sets the maximium decoded image size limitation.
+const char kMaxDecodedImageSizeMb[] = "max-decoded-image-size-mb";
+
 // Sets the width and height above which a composited layer will get tiled.
 const char kMaxUntiledLayerHeight[]         = "max-untiled-layer-height";
 const char kMaxUntiledLayerWidth[]          = "max-untiled-layer-width";
@@ -597,9 +600,6 @@ const char kMHTMLSkipNostoreAll[]           = "skip-nostore-all";
 
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
-
-// Disables the sandbox for all process types that are normally sandboxed.
-const char kNoSandbox[]                     = "no-sandbox";
 
 // Disables the use of a zygote process for forking child processes. Instead,
 // child processes will be forked and exec'd directly. Note that --no-sandbox
@@ -698,7 +698,8 @@ const char kProxyServer[] = "proxy-server";
 
 // Enables or disables pull-to-refresh gesture in response to vertical
 // overscroll.
-// Set the value to '1' to enable the feature, and set to '0' to disable.
+// Set the value to '0' to disable the feature, set to '1' to enable it for both
+// touchpad and touchscreen, and set to '2' to enable it only for touchscreen.
 // Defaults to disabled.
 const char kPullToRefresh[] = "pull-to-refresh";
 
@@ -726,8 +727,8 @@ const char kRendererProcess[]               = "renderer";
 const char kRendererProcessLimit[]          = "renderer-process-limit";
 
 // Causes the renderer process to display a dialog on launch. Passing this flag
-// also adds kNoSandbox on Windows non-official builds, since that's needed to
-// show a dialog.
+// also adds service_manager::kNoSandbox on Windows non-official builds, since
+// that's needed to show a dialog.
 const char kRendererStartupDialog[]         = "renderer-startup-dialog";
 
 // Reduce the default `referer` header's granularity.

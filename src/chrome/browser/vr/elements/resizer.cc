@@ -56,20 +56,21 @@ void Resizer::SetEnabled(bool enabled) {
 
 void Resizer::Reset() {
   transform_.MakeIdentity();
+  set_world_space_transform_dirty();
   t_ = initial_t_ = kDefaultFraction;
 }
 
 void Resizer::UpdateTransform(const gfx::Transform& head_pose) {
   float delta = touchpad_position_.y() - initial_touchpad_position_.y();
-  t_ = base::ClampToRange(initial_t_ - delta, 0.0f, 1.0f);
+  t_ = base::ClampToRange(initial_t_ + delta, 0.0f, 1.0f);
   float scale =
       gfx::Tween::FloatValueBetween(t_, kMinResizerScale, kMaxResizerScale);
   transform_.MakeIdentity();
   transform_.Scale(scale, scale);
+  set_world_space_transform_dirty();
 }
 
-bool Resizer::OnBeginFrame(const base::TimeTicks& time,
-                           const gfx::Transform& head_pose) {
+bool Resizer::OnBeginFrame(const gfx::Transform& head_pose) {
   if (enabled_) {
     UpdateTransform(head_pose);
     return true;
@@ -85,5 +86,10 @@ void Resizer::DumpGeometry(std::ostringstream* os) const {
   *os << "s(" << right.x() << ") ";
 }
 #endif
+
+bool Resizer::ShouldUpdateWorldSpaceTransform(
+    bool parent_transform_changed) const {
+  return true;
+}
 
 }  // namespace vr

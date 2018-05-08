@@ -10,12 +10,12 @@
 #include "base/bind.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "printing/backend/print_backend.h"
 #include "printing/backend/win_helper.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/print_settings_initializer_win.h"
 #include "printing/printed_document.h"
 #include "printing/printing_context_system_dialog_win.h"
@@ -37,9 +37,12 @@ void AssignResult(PrintingContext::Result* out, PrintingContext::Result in) {
 
 // static
 std::unique_ptr<PrintingContext> PrintingContext::Create(Delegate* delegate) {
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   return base::WrapUnique(new PrintingContextSystemDialogWin(delegate));
 #else
+  // The code in printing/ is still built when the GN |enable_basic_printing|
+  // variable is set to false. Just return PrintingContextWin as a dummy
+  // context.
   return base::WrapUnique(new PrintingContextWin(delegate));
 #endif
 }
@@ -270,8 +273,8 @@ PrintingContext::Result PrintingContextWin::NewDocument(
   }
 
   // No message loop running in unit tests.
-  DCHECK(!base::MessageLoop::current() ||
-         !base::MessageLoop::current()->NestableTasksAllowed());
+  DCHECK(!base::MessageLoopCurrent::Get() ||
+         !base::MessageLoopCurrent::Get()->NestableTasksAllowed());
 
   // Begin a print job by calling the StartDoc function.
   // NOTE: StartDoc() starts a message loop. That causes a lot of problems with

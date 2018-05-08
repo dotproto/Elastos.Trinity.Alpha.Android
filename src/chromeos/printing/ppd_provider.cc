@@ -522,9 +522,8 @@ class PpdProviderImpl : public PpdProvider, public net::URLFetcherDelegate {
                            ResolvePpdReferenceCallback cb) override {
     // In v2 metadata, we work with lowercased effective_make_and_models.
     PrinterSearchData lowercase_search_data(search_data);
-    for (auto& make_and_model : search_data.make_and_model) {
-      lowercase_search_data.make_and_model.push_back(
-          base::ToLowerASCII(make_and_model));
+    for (auto& make_and_model : lowercase_search_data.make_and_model) {
+      make_and_model = base::ToLowerASCII(make_and_model);
     }
 
     ppd_reference_resolution_queue_.push_back(
@@ -691,7 +690,7 @@ class PpdProviderImpl : public PpdProvider, public net::URLFetcherDelegate {
           disk_task_runner_.get(), FROM_HERE,
           base::BindOnce(&FetchFile, url, content_ptr),
           base::BindOnce(&PpdProviderImpl::OnFileFetchComplete, this,
-                         base::Passed(&file_contents)));
+                         std::move(file_contents)));
     }
   }
 

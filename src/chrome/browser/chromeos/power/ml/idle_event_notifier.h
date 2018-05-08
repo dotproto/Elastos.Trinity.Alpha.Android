@@ -11,6 +11,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_event.pb.h"
@@ -109,7 +110,7 @@ class IdleEventNotifier : public PowerManagerClient::Observer,
 
   // Set test clock so that we can check activity time.
   void SetClockForTesting(scoped_refptr<base::SequencedTaskRunner> task_runner,
-                          std::unique_ptr<base::Clock> test_clock,
+                          base::Clock* test_clock,
                           std::unique_ptr<BootClock> test_boot_clock);
 
   // Adds or removes an observer.
@@ -162,7 +163,7 @@ class IdleEventNotifier : public PowerManagerClient::Observer,
   void ResetTimestampsPerIdleEvent();
 
   // It is base::DefaultClock, but will be set to a mock clock for tests.
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
 
   // It is RealBootClock, but will be set to FakeBootClock for tests.
   std::unique_ptr<BootClock> boot_clock_;

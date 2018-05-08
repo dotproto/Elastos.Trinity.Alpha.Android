@@ -13,7 +13,7 @@
 
 #include "base/callback.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/origin.h"
 
 namespace storage {
@@ -79,7 +79,7 @@ class STORAGE_EXPORT QuotaClient {
 };
 
 // TODO(dmikurube): Replace it to std::vector for efficiency.
-typedef std::list<QuotaClient*> QuotaClientList;
+using QuotaClientList = std::list<QuotaClient*>;
 
 }  // namespace storage
 

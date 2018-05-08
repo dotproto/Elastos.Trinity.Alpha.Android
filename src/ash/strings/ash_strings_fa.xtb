@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">راه‌انداز</translation>
 <translation id="1525508553941733066">رد کردن</translation>
+<translation id="1537254971476575106">ذره‌بین تمام‌صفحه</translation>
 <translation id="15373452373711364">نشانگر موشواره بزرگ</translation>
 <translation id="1550523713251050646">برای گزینه‌های بیشتر کلیک کنید</translation>
 <translation id="1567387640189251553">بعد از آخرین باری که گذرواژه‌تان را وارد کردید، صفحه‌کلید دیگری متصل شده است. ممکن است تلاش کند ضربه‌کلیدهای شما را به سرقت ببرد.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">متأسفیم، گذرواژه‌تان هنوز تأیید نشده است. توجه: اگر به‌تازگی گذرواژه‌تان را تغییر داده‌اید، گذرواژه جدید شما هنگامی‌که از سیستم خارج شوید، اعمال می‌شود؛ لطفاً اینجا از گذرواژه قدیمی خود استفاده کنید.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> باقی‌مانده</translation>
 <translation id="1698760176351776263">‏نشانی IPv6: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">سرپرست دستگاه ممکن است بر فعالیتتان نظارت داشته باشد.</translation>
 <translation id="1734367976349034509">این دستگاه توسط سازمانی مدیریت می‌شود</translation>
 <translation id="1746730358044914197">روش‌های ورودی توسط سرپرستتان پیکربندی می‌شوند.</translation>
 <translation id="1747827819627189109">صفحه‌کلید روی صفحه فعال شد</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">دکمه سرریز</translation>
 <translation id="1951012854035635156">دستیار</translation>
 <translation id="1957803754585243749">۰ درجه</translation>
+<translation id="1957958912175573503">تنظیم زبان</translation>
 <translation id="1969011864782743497">‏<ph name="DEVICE_NAME" /> (‏USB)</translation>
 <translation id="1995660704900986789">خاموش کردن</translation>
 <translation id="2012624427112548395">Ctrl+Search+H</translation>
 <translation id="2049639323467105390">این دستگاه توسط <ph name="DOMAIN" /> مدیریت می‌شود.</translation>
 <translation id="2050339315714019657">عمودی</translation>
 <translation id="2067602449040652523">روشنایی صفحه‌کلید</translation>
+<translation id="2081529251031312395">$1 همچنان می‌تواند بعداً به سیستم وارد شود.</translation>
 <translation id="2122028596993374965">شروع ارسال محتوای <ph name="TAB_NAME" /> به <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">شارژر برق ضعیف</translation>
+<translation id="2135456203358955318">ذره‌بین متصل</translation>
 <translation id="2144487987174258011">‏برای به‌روزرسانی Adobe Flash Player، راه‌اندازی مجدد کنید</translation>
-<translation id="2191905770366256395">لازم است صفحه‌کلید قابل جدا شدن به‌روزرسانی ضروری شود</translation>
 <translation id="2208323208084708176">حالت میزکار یکپارچه</translation>
 <translation id="2220572644011485463">پین یا گذرواژه</translation>
 <translation id="225680501294068881">درحال جستجو برای دستگاه‌ها...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">مقیاس نمایش</translation>
 <translation id="2303600792989757991">مروری کلی بر پنجره تغییر حالت</translation>
 <translation id="2338501278241028356">برای کاوش دستگاه‌های همین اطراف، بلوتوث را روشن کنید</translation>
+<translation id="2339073806695260576">برای یادداشت‌برداری، گرفتن عکس صفحه‌نمایش، استفاده از اشاره‌گر لیزری یا ذره‌بین روی دکمه قلم در قفسه ضربه بزنید.</translation>
 <translation id="2351266942280602854">زبان و ورودی</translation>
 <translation id="2352467521400612932">تنظیمات قلم</translation>
 <translation id="2354174487190027830">فعال‌سازی <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">ارائه</translation>
 <translation id="2675319268637823299">یکی از سرپرست‌ها ورود چندگانه به سیستم را برای <ph name="USER_EMAIL" /> غیرمجاز کرده است.
     برای ادامه دادن، همه کاربران باید از سیستم خارج شوند.</translation>
+<translation id="2696763960464195425">هنگامی‌که از سیستم خارج شوید، اطلاعاتتان حذف خواهد شد. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">تنظیم صفحه‌کلید</translation>
 <translation id="2718395828230677721">نور شب</translation>
 <translation id="2727977024730340865">باتری به شارژر برق ضعیف متصل است. شارژ باتری ممکن است قابل اطمینان نباشد.</translation>
 <translation id="2761704814324807722">سینی وضعیت، زمان <ph name="TIME" />، ‏<ph name="BATTERY" /></translation>
@@ -240,14 +247,12 @@
 <translation id="6521655319214113338">ورودی دست‌نویس</translation>
 <translation id="6528179044667508675">مزاحم نشوید</translation>
 <translation id="6537270692134705506">ضبط کردن صفحه</translation>
-<translation id="6580955892089546165">این قابلیت به شما امکان می‌دهد به سرعت به هر کاربری که وارد سیستم شده بدون نیاز به گذرواژه دسترسی داشته باشید.
-
-از این قابلیت تنها با حساب‌های مورد اعتمادتان استفاده کنید.</translation>
 <translation id="6585808820553845416">جلسه در <ph name="SESSION_TIME_REMAINING" /> به پایان می‌رسد.</translation>
 <translation id="6627638273713273709">Search+Shift+K</translation>
 <translation id="6650933572246256093">دستگاه بلوتوث «<ph name="DEVICE_NAME" />» برای مرتبط‌سازی به مجوز نیاز دارد. لطفاً این کلیدواژه را در آن دستگاه وارد کنید: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">گذرواژه</translation>
 <translation id="6691659475504239918">Search+Shift+H</translation>
+<translation id="6696025732084565524">لازم است صفحه‌کلید قابل جدا شدن به‌روزرسانی ضروری شود</translation>
 <translation id="6700713906295497288">‏دکمه منو IME</translation>
 <translation id="6713285437468012787">دستگاه بلوتوث «<ph name="DEVICE_NAME" />» مرتبط شده است و اکنون برای همه کاربران در دسترس است. می‌توانید این مرتبط‌سازی را با استفاده از تنظیمات حذف کنید.</translation>
 <translation id="6715542151869432661">هیچ دستگاه همراهی پیدا نشد.</translation>
@@ -261,7 +266,6 @@
 <translation id="7029814467594812963">خروج از جلسه</translation>
 <translation id="7034339000180558234">ارسال محتوای <ph name="TAB_NAME" /> به <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">تنظیم کاغذدیواری...</translation>
-<translation id="7054808953701320293">متوجه شدم، دیگر به من نشان داده نشود.</translation>
 <translation id="7066646422045619941">این شبکه توسط سرپرست شما غیرفعال شده است.</translation>
 <translation id="7067196344162293536">چرخش خودکار</translation>
 <translation id="7098389117866926363">‏دستگاه USB-C (درگاه عقب سمت چپ)</translation>
@@ -300,8 +304,6 @@
 <translation id="7994370417837006925">ورود چندگانه به سیستم</translation>
 <translation id="8000066093800657092">بدون شبکه</translation>
 <translation id="8054466585765276473">درحال محاسبه زمان شارژ باتری.</translation>
-<translation id="8056430285089645882">متوجه شدم، دیگر به من نشان داده نشود.</translation>
-<translation id="8088137642766812908">مراقب باشید، این ویژگی ممکن است آسیب برساند</translation>
 <translation id="8098591350844501178">توقف ارسال محتوای صفحه به <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">متصل به <ph name="NAME" /></translation>
 <translation id="813913629614996137">درحال مقداردهی اولیه…</translation>
@@ -327,10 +329,8 @@
 <translation id="8673028979667498656">‎۲۷۰°‎</translation>
 <translation id="8676770494376880701">شارژر برق متصل شده ضعیف است</translation>
 <translation id="8734991477317290293">ممکن است تلاش کند ضربه‌کلیدهای شما را به سرقت ببرد</translation>
+<translation id="8809737090443522491">نام برنامه یا سندی را وارد کنید</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">انتقال پنجره‌ها به میزکار دیگری ممکن است منجر به رفتاری غیرمنتظره شود.
-
-اعلان‌ها، پنجره‌ها و کادرهای گفتگوی بعدی ممکن است بین میزکارها تقسیم شوند.</translation>
 <translation id="8825534185036233643">«نمایش صفحه‌نمایش روی دستگاه دیگر» با بیش از دو نمایشگر پشتیبانی نمی‌شود.</translation>
 <translation id="8828714802988429505">۹۰°</translation>
 <translation id="8841375032071747811">دکمه برگشت</translation>

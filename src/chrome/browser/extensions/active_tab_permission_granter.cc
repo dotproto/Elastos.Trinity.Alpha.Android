@@ -7,7 +7,9 @@
 #include <set>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -16,8 +18,8 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_messages.h"
-#include "extensions/common/feature_switch.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/user_script.h"
@@ -116,7 +118,14 @@ void ActiveTabPermissionGranter::GrantIfRequested(const Extension* extension) {
   if (should_grant_active_tab &&
       (permissions_data->HasWithheldImpliedAllHosts() ||
        permissions_data->HasAPIPermission(APIPermission::kActiveTab))) {
-    new_hosts.AddOrigin(UserScript::ValidUserScriptSchemes(),
+    // Gate activeTab for file urls on extensions having explicit access to file
+    // urls.
+    int valid_schemes = UserScript::ValidUserScriptSchemes();
+    if (!util::AllowFileAccess(extension->id(),
+                               web_contents()->GetBrowserContext())) {
+      valid_schemes &= ~URLPattern::SCHEME_FILE;
+    }
+    new_hosts.AddOrigin(valid_schemes,
                         web_contents()->GetVisibleURL().GetOrigin());
     new_apis.insert(APIPermission::kTab);
   }
@@ -175,9 +184,9 @@ void ActiveTabPermissionGranter::DidFinishNavigation(
   // between same-origin and cross-origin navigations when the
   // script-require-action flag is on. It's not clear it's good for general
   // activeTab consumption (we likely need to build some UI around it first).
-  // However, the scripts-require-action feature is all-but unusable without
+  // However, features::kRuntimeHostPermissions is all-but unusable without
   // this behaviour.
-  if (FeatureSwitch::scripts_require_action()->IsEnabled()) {
+  if (base::FeatureList::IsEnabled(features::kRuntimeHostPermissions)) {
     const content::NavigationEntry* navigation_entry =
         web_contents()->GetController().GetVisibleEntry();
     if (!navigation_entry ||

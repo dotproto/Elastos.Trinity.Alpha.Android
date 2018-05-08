@@ -17,7 +17,6 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
@@ -27,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -111,6 +111,16 @@ enum RequestAction {
   MODIFY_RESPONSE_HEADERS = 3,
   SET_AUTH_CREDENTIALS = 4,
   MAX
+};
+
+// Corresponds to the "WebRequestEventResponse" histogram enumeration type in
+// src/tools/metrics/histograms/enums.xml.
+//
+// DO NOT REORDER OR CHANGE THE MEANING OF THESE VALUES.
+enum class WebRequestEventResponse {
+  kIgnored,
+  kObserved,
+  kMaxValue = kObserved,
 };
 
 const char kWebRequestEventPrefix[] = "webRequest.";
@@ -442,7 +452,9 @@ bool WebRequestAPI::MaybeProxyURLLoaderFactory(
   }
 
   auto proxy = base::MakeRefCounted<WebRequestProxyingURLLoaderFactory>(
-      frame->GetProcess()->GetBrowserContext(), info_map_);
+      frame->GetProcess()->GetBrowserContext(),
+      frame->GetProcess()->GetBrowserContext()->GetResourceContext(),
+      info_map_);
   proxies_.emplace(proxy.get(), proxy);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -744,6 +756,11 @@ int ExtensionWebRequestEventRouter::OnBeforeSendHeaders(
                       std::move(event_details));
   }
 
+  UMA_HISTOGRAM_ENUMERATION(
+      "Extensions.WebRequest.OnBeforeSendHeadersEventResponse",
+      initialize_blocked_requests ? WebRequestEventResponse::kObserved
+                                  : WebRequestEventResponse::kIgnored);
+
   if (!initialize_blocked_requests)
     return net::OK;  // Nobody saw a reason for modifying the request.
 
@@ -822,6 +839,11 @@ int ExtensionWebRequestEventRouter::OnHeadersReceived(
         DispatchEvent(browser_context, extension_info_map, request, listeners,
                       std::move(event_details));
   }
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Extensions.WebRequest.OnHeadersReceivedEventResponse",
+      initialize_blocked_requests ? WebRequestEventResponse::kObserved
+                                  : WebRequestEventResponse::kIgnored);
 
   if (!initialize_blocked_requests)
     return net::OK;  // Nobody saw a reason for modifying the request.
@@ -1763,8 +1785,9 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(void* browser_context,
   } else if (blocked_request.event == kOnBeforeSendHeaders) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeSendHeadersResponses(
-        blocked_request.response_deltas, blocked_request.request_headers,
-        &warnings, request->logger.get(), &request_headers_modified);
+        request->url, blocked_request.response_deltas,
+        blocked_request.request_headers, &warnings, request->logger.get(),
+        &request_headers_modified);
   } else if (blocked_request.event == kOnHeadersReceived) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnHeadersReceivedResponses(

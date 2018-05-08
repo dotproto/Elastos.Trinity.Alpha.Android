@@ -103,9 +103,7 @@ class ASH_EXPORT TabletModeController
   void AddObserver(TabletModeObserver* observer);
   void RemoveObserver(TabletModeObserver* observer);
 
-  // Checks if we should auto hide title bars in tablet mode. If |widget| is not
-  // null this also checks if the window associated with |widget| is in an auto
-  // hide state.
+  // Checks if we should auto hide title bars for the |widget| in tablet mode.
   bool ShouldAutoHideTitlebars(views::Widget* widget);
 
   // Flushes the mojo message pipe to chrome.
@@ -153,7 +151,7 @@ class ASH_EXPORT TabletModeController
   // artificially and deterministically control the current time.
   // This does not take the ownership of the tick_clock. |tick_clock| must
   // outlive the TabletModeController instance.
-  void SetTickClockForTest(base::TickClock* tick_clock);
+  void SetTickClockForTest(const base::TickClock* tick_clock);
 
   // Detect hinge rotation from base and lid accelerometers and automatically
   // start / stop tablet mode.
@@ -228,7 +226,7 @@ class ASH_EXPORT TabletModeController
   base::TimeTicks first_unstable_lid_angle_time_;
 
   // Source for the current time in base::TimeTicks.
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Set when tablet mode switch is on. This is used to force tablet mode.
   bool tablet_mode_switch_is_on_ = false;

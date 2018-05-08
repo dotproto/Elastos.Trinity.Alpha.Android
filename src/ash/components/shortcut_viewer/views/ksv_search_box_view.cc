@@ -6,6 +6,7 @@
 
 #include "ash/components/shortcut_viewer/vector_icons/vector_icons.h"
 #include "ash/components/strings/grit/ash_components_strings.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/search_box/search_box_view_delegate.h"
 #include "ui/gfx/canvas.h"
@@ -18,7 +19,7 @@ namespace keyboard_shortcut_viewer {
 namespace {
 
 constexpr SkColor kDefaultSearchBoxBackgroundColor =
-    SkColorSetARGBMacro(0x28, 0x80, 0x86, 0x8B);
+    SkColorSetARGB(0x28, 0x80, 0x86, 0x8B);
 
 constexpr int kIconSize = 20;
 
@@ -33,7 +34,7 @@ KSVSearchBoxView::KSVSearchBoxView(search_box::SearchBoxViewDelegate* delegate)
   SetSearchBoxBackgroundColor(kDefaultSearchBoxBackgroundColor);
   search_box()->SetBackgroundColor(SK_ColorTRANSPARENT);
   constexpr SkColor kSearchBoxTextColor =
-      SkColorSetARGBMacro(0xFF, 0x3C, 0x40, 0x43);
+      SkColorSetARGB(0xFF, 0x3C, 0x40, 0x43);
   search_box()->SetColor(kSearchBoxTextColor);
   search_box()->set_placeholder_text_color(kSearchBoxTextColor);
   search_box()->set_placeholder_text_draw_flags(gfx::Canvas::TEXT_ALIGN_CENTER);
@@ -43,13 +44,18 @@ KSVSearchBoxView::KSVSearchBoxView(search_box::SearchBoxViewDelegate* delegate)
   search_box()->SetAccessibleName(search_box_name);
 
   constexpr SkColor kSearchBarIconColor =
-      SkColorSetARGBMacro(0xFF, 0x3C, 0x40, 0x43);
+      SkColorSetARGB(0xFF, 0x3C, 0x40, 0x43);
   SetSearchIconImage(
       gfx::CreateVectorIcon(kKsvSearchBarIcon, kSearchBarIconColor));
 }
 
 gfx::Size KSVSearchBoxView::CalculatePreferredSize() const {
   return gfx::Size(740, 32);
+}
+
+void KSVSearchBoxView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ax::mojom::Role::kSearchBox;
+  node_data->SetValue(accessible_value_);
 }
 
 void KSVSearchBoxView::OnKeyEvent(ui::KeyEvent* event) {
@@ -74,6 +80,11 @@ void KSVSearchBoxView::ButtonPressed(views::Button* sender,
   SearchBoxViewBase::ButtonPressed(sender, event);
 }
 
+void KSVSearchBoxView::SetAccessibleValue(const base::string16& value) {
+  accessible_value_ = value;
+  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
+}
+
 void KSVSearchBoxView::UpdateBackgroundColor(SkColor color) {
   SetSearchBoxBackgroundColor(color);
 }
@@ -85,10 +96,8 @@ void KSVSearchBoxView::UpdateSearchBoxBorder() {
     SetSearchBoxActive(false);
 
   constexpr int kBorderThichness = 2;
-  constexpr SkColor kActiveBorderColor =
-      SkColorSetARGBMacro(0x7F, 0x1A, 0x73, 0xE8);
-  constexpr SkColor kActiveFillColor =
-      SkColorSetARGBMacro(0xFF, 0xF1, 0xF3, 0xF4);
+  constexpr SkColor kActiveBorderColor = SkColorSetARGB(0x7F, 0x1A, 0x73, 0xE8);
+  constexpr SkColor kActiveFillColor = SkColorSetARGB(0xFF, 0xF1, 0xF3, 0xF4);
 
   if (search_box()->HasFocus() || is_search_box_active()) {
     SetBorder(views::CreateRoundedRectBorder(
@@ -102,8 +111,7 @@ void KSVSearchBoxView::UpdateSearchBoxBorder() {
 }
 
 void KSVSearchBoxView::SetupCloseButton() {
-  constexpr SkColor kCloseIconColor =
-      SkColorSetARGBMacro(0xFF, 0x80, 0x86, 0x8B);
+  constexpr SkColor kCloseIconColor = SkColorSetARGB(0xFF, 0x80, 0x86, 0x8B);
   views::ImageButton* close = close_button();
   close->SetImage(views::ImageButton::STATE_NORMAL,
                   gfx::CreateVectorIcon(kKsvSearchCloseIcon, kCloseIconColor));
@@ -118,8 +126,7 @@ void KSVSearchBoxView::SetupCloseButton() {
 }
 
 void KSVSearchBoxView::SetupBackButton() {
-  constexpr SkColor kBackIconColor =
-      SkColorSetARGBMacro(0xFF, 0x42, 0x85, 0xF4);
+  constexpr SkColor kBackIconColor = SkColorSetARGB(0xFF, 0x42, 0x85, 0xF4);
   views::ImageButton* back = back_button();
   back->SetImage(views::ImageButton::STATE_NORMAL,
                  gfx::CreateVectorIcon(kKsvSearchBackIcon, kBackIconColor));

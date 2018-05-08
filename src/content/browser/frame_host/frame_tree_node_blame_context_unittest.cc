@@ -17,7 +17,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
 
 namespace content {
 
@@ -208,7 +208,7 @@ TEST_F(FrameTreeNodeBlameContextTest, URLChange) {
   trace_analyzer::Start("*");
   root()->SetCurrentURL(url1);
   root()->SetCurrentURL(url2);
-  root()->ResetForNewProcess();
+  root()->SetCurrentURL(GURL());
   auto analyzer = trace_analyzer::Stop();
 
   trace_analyzer::TraceEventVector events;

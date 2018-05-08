@@ -12,16 +12,16 @@
 
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_metrics.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/pagination_controller.h"
@@ -644,6 +644,12 @@ void AppsGridView::StopPageFlipTimer() {
   page_flip_target_ = -1;
 }
 
+const gfx::Rect& AppsGridView::GetIdealBounds(AppListItemView* view) const {
+  const int index = view_model_.GetIndexOfView(view);
+  DCHECK_NE(-1, index);
+  return view_model_.ideal_bounds(index);
+}
+
 AppListItemView* AppsGridView::GetItemViewAt(int index) const {
   return view_model_.view_at(index);
 }
@@ -905,8 +911,13 @@ void AppsGridView::OnGestureEvent(ui::GestureEvent* event) {
     return;
   }
 
-  if (pagination_controller_->OnGestureEvent(*event, GetContentsBounds()))
+  // Scroll begin events should not be passed to ancestor views if it occurs
+  // inside the folder bounds even it is not handled. This prevents user from
+  // closing the folder when scrolling inside it.
+  if (pagination_controller_->OnGestureEvent(*event, GetContentsBounds()) ||
+      (folder_delegate_ && event->type() == ui::ET_GESTURE_SCROLL_BEGIN)) {
     event->SetHandled();
+  }
 }
 
 void AppsGridView::Update() {
@@ -1753,6 +1764,22 @@ bool AppsGridView::HandleScrollFromAppListView(int offset, ui::EventType type) {
   return true;
 }
 
+bool AppsGridView::IsEventNearAppIcon(const ui::LocatedEvent& event) {
+  // Convert the event location to AppsGridView coordinates.
+  std::unique_ptr<ui::Event> cloned_event = ui::Event::Clone(event);
+  ui::LocatedEvent* cloned_located_event = cloned_event->AsLocatedEvent();
+  event.target()->ConvertEventToTarget(this, cloned_located_event);
+  const gfx::Point point_in_apps_grid_view = cloned_located_event->location();
+
+  // GetNearestTileIndexForPoint will always return a slot, even if the point is
+  // outside of this.
+  if (!bounds().Contains(point_in_apps_grid_view))
+    return false;
+
+  return GetViewDisplayedAtSlotOnCurrentPage(
+      GetNearestTileIndexForPoint(point_in_apps_grid_view).slot);
+}
+
 AppListItemView* AppsGridView::GetCurrentPageFirstItemViewInFolder() {
   DCHECK(folder_delegate_);
   int first_index = pagination_model_.selected_page() * kMaxFolderItemsPerPage;
@@ -1839,10 +1866,12 @@ void AppsGridView::MaybeStartPageFlipTimer(const gfx::Point& drag_point) {
   // Drag zones are at the edges of the scroll axis.
   if (pagination_controller_->scroll_axis() ==
       PaginationController::SCROLL_AXIS_VERTICAL) {
-    if (drag_point.y() < kPageFlipZoneSize)
+    if (drag_point.y() < kPageFlipZoneSize) {
       new_page_flip_target = pagination_model_.selected_page() - 1;
-    else if (drag_point.y() > height() - kPageFlipZoneSize)
+    } else if (IsPointWithinBottomDragBuffer(drag_point)) {
+      // If the drag point is within the drag buffer, but not over the shelf.
       new_page_flip_target = pagination_model_.selected_page() + 1;
+    }
   } else {
     // TODO(xiyuan): Fix this for RTL.
     if (new_page_flip_target == -1 && drag_point.x() < kPageFlipZoneSize)
@@ -2167,6 +2196,19 @@ bool AppsGridView::IsPointWithinPageFlipBuffer(const gfx::Point& point) const {
   return display.work_area().Contains(point_in_screen);
 }
 
+bool AppsGridView::IsPointWithinBottomDragBuffer(
+    const gfx::Point& point) const {
+  gfx::Point point_in_screen = point;
+  ConvertPointToScreen(this, &point_in_screen);
+  const display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestView(
+          GetWidget()->GetNativeView());
+
+  return point_in_screen.y() >
+             GetBoundsInScreen().height() - kPageFlipZoneSize &&
+         point_in_screen.y() < display.work_area().height();
+}
+
 void AppsGridView::ButtonPressed(views::Button* sender,
                                  const ui::Event& event) {
   if (dragging())
@@ -2257,7 +2299,6 @@ void AppsGridView::SelectedPageChanged(int old_selected, int new_selected) {
 }
 
 void AppsGridView::TransitionStarted() {
-  contents_view_->app_list_view()->SetIsIgnoringScrollEvents(true);
   CancelContextMenusOnCurrentPage();
   pagination_animation_start_frame_number_ =
       GetCompositorActivatedFrameCount(layer()->GetCompositor());
@@ -2273,7 +2314,6 @@ void AppsGridView::TransitionChanged() {
 }
 
 void AppsGridView::TransitionEnded() {
-  contents_view_->app_list_view()->SetIsIgnoringScrollEvents(false);
   const base::TimeDelta duration =
       pagination_model_.GetTransitionAnimationSlideDuration();
 

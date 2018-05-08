@@ -25,28 +25,15 @@
 
 #### Compositor Frame Observation Timeouts
 # WaitForChildFrameSurfaceReady crashes crbug.com/787945
--PDFExtensionTest.ContextMenuCoordinates
+-PDFExtensionHitTestTest.ContextMenuCoordinates*
 -SitePerProcessDevToolsSanityTest.InputDispatchEventsToOOPIF
--WebViewTests/WebViewTest.InterstitialPageFocusedWidget/1
--WebViewTests/WebViewTest.ReloadAfterCrash/1
-
-# WebViewBrowserTest::ScrollWaiter Doesn't Work in Viz crbug.com/796336
--WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/0
--WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/1
--WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/2
--WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/3
-
-#### FrameSinkManager Crashes
-# FrameSinkManagerImpl::RegisterFrameSinkHierarchy Crash crbug.com/796344
-# Linux and Windows failures
--WebViewTests/WebViewTest.Shim_TestAssignSrcAfterCrash/0
--WebViewTests/WebViewTest.Shim_TestContentScriptIsInjectedAfterTerminateAndReloadWebView/0
--WebViewTests/WebViewTest.Shim_TestReloadAfterTerminate/0
--WebViewTests/WebViewTest.Shim_TestTerminateAfterExit/0
+-WebViewTest.InterstitialPageFocusedWidget
+-WebViewTest.ReloadAfterCrash
+-WebViewGuestTouchFocusBrowserPluginSpecificTest.TouchFocusesBrowserPluginInEmbedder
 
 #### Hit Testing
 # Incorrect Focus State crbug.com/818205
--WebViewTests/WebViewFocusTest.TouchFocusesEmbedder/0
+-WebViewFocusBrowserPluginSpecificTest.TouchFocusesEmbedder
 
 #### Surface Invariants
 # Surface Invariants Failure on Mac http://crbug.com/817827
@@ -99,8 +86,13 @@
 -ThumbnailTest.ShouldContainProperContentIfCapturedOnTabSwitch
 
 # Windows timeouts. https://crbug.com/821029
+-BrowserNavigatorTest.Disposition_NewPopupFromAppPopup
+-ExtensionApiCaptureTest.CaptureNullWindow
 -ManifestVerifierBrowserTest.*
+-OmniboxPopupContentsViewTest.ThemeIntegration/*
+-PDFIsolatedExtensionTest.MultipleDomains
 -PrefHashBrowserTest*
+-StartupBrowserCreatorTest.ProfilesWithoutPagesNotLaunched
 -UserInitiatedRunsDisabled*
 -UserInitiatedRunsEnabled*
 -WithVaryingSeeds/ChromeCleanerPromptUserTest.*

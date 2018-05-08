@@ -4,7 +4,7 @@
 
 #include "ash/content/screen_orientation_delegate_chromeos.h"
 
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/shell.h"
 #include "content/public/browser/web_contents.h"
 
@@ -54,8 +54,8 @@ void ScreenOrientationDelegateChromeos::Lock(
     content::WebContents* web_contents,
     blink::WebScreenOrientationLockType orientation_lock) {
   Shell::Get()->screen_orientation_controller()->LockOrientationForWindow(
-      web_contents->GetNativeView(), ToAshOrientationLockType(orientation_lock),
-      ScreenOrientationController::LockCompletionBehavior::None);
+      web_contents->GetNativeView(),
+      ToAshOrientationLockType(orientation_lock));
 }
 
 bool ScreenOrientationDelegateChromeos::ScreenOrientationProviderSupported() {

@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -242,6 +241,7 @@ AppWindow::AppWindow(BrowserContext* context,
                      const Extension* extension)
     : browser_context_(context),
       extension_id_(extension->id()),
+      session_id_(SessionID::NewUnique()),
       app_delegate_(app_delegate),
       image_loader_ptr_factory_(this) {
   ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
@@ -366,14 +366,14 @@ WebContents* AppWindow::OpenURLFromTab(WebContents* source,
 }
 
 void AppWindow::AddNewContents(WebContents* source,
-                               WebContents* new_contents,
+                               std::unique_ptr<WebContents> new_contents,
                                WindowOpenDisposition disposition,
                                const gfx::Rect& initial_rect,
                                bool user_gesture,
                                bool* was_blocked) {
   DCHECK(new_contents->GetBrowserContext() == browser_context_);
-  app_delegate_->AddNewContents(browser_context_, new_contents, disposition,
-                                initial_rect, user_gesture);
+  app_delegate_->AddNewContents(browser_context_, std::move(new_contents),
+                                disposition, initial_rect, user_gesture);
 }
 
 content::KeyboardEventProcessingResult AppWindow::PreHandleKeyboardEvent(
@@ -644,6 +644,10 @@ bool AppWindow::IsHtmlApiFullscreen() const {
   return (fullscreen_types_ & FULLSCREEN_TYPE_HTML_API) != 0;
 }
 
+bool AppWindow::IsOsFullscreen() const {
+  return (fullscreen_types_ & FULLSCREEN_TYPE_OS) != 0;
+}
+
 void AppWindow::Fullscreen() {
   SetFullscreen(FULLSCREEN_TYPE_WINDOW_API, true);
 }
@@ -789,8 +793,8 @@ void AppWindow::StartAppIconDownload() {
       true,   // is a favicon
       0,      // no maximum size
       false,  // normal cache policy
-      base::Bind(&AppWindow::DidDownloadFavicon,
-                 image_loader_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&AppWindow::DidDownloadFavicon,
+                     image_loader_ptr_factory_.GetWeakPtr()));
 }
 
 void AppWindow::DidDownloadFavicon(
@@ -900,8 +904,10 @@ void AppWindow::NavigationStateChanged(content::WebContents* source,
     native_app_window_->UpdateWindowIcon();
 }
 
-void AppWindow::EnterFullscreenModeForTab(content::WebContents* source,
-                                          const GURL& origin) {
+void AppWindow::EnterFullscreenModeForTab(
+    content::WebContents* source,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   ToggleFullscreenModeForTab(source, true);
 }
 
@@ -911,9 +917,6 @@ void AppWindow::ExitFullscreenModeForTab(content::WebContents* source) {
 
 void AppWindow::OnAppWindowReady() {
   window_ready_ = true;
-
-  if (app_window_contents_)
-    app_window_contents_->OnWindowReady();
 
   if (app_icon_url_.is_valid())
     StartAppIconDownload();

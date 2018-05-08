@@ -34,9 +34,9 @@
 #include "ipc/message_filter.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "storage/common/fileapi/file_system_types.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -71,6 +71,7 @@ using test_server::EmbeddedTestServer;
 namespace content {
 
 class BrowserContext;
+struct FrameVisualProperties;
 class InterstitialPage;
 class MessageLoopRunner;
 class NavigationHandle;
@@ -119,6 +120,12 @@ void PrepContentsForBeforeUnloadTest(WebContents* web_contents);
 // progress, the method will return right away.
 void WaitForResizeComplete(WebContents* web_contents);
 #endif  // defined(USE_AURA) || defined(OS_ANDROID)
+
+// Allows tests to set the last committed origin of |render_frame_host|, to
+// simulate a scenario that might happen with a compromised renderer or might
+// not otherwise be possible.
+void OverrideLastCommittedOrigin(RenderFrameHost* render_frame_host,
+                                 const url::Origin& origin);
 
 // Causes the specified web_contents to crash. Blocks until it is crashed.
 void CrashTab(WebContents* web_contents);
@@ -193,7 +200,7 @@ void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
 // Generates a TouchStart at |point|.
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point);
 
-void SimulateLongPressAt(WebContents* web_contents, const gfx::Point& point);
+void SimulateLongTapAt(WebContents* web_contents, const gfx::Point& point);
 #endif
 
 // Taps the screen with modifires at |point|.
@@ -577,8 +584,7 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
  private:
   // Overridden RenderProcessHost::LifecycleObserver methods.
   void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override;
+                           const ChildProcessTerminationInfo& info) override;
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
 
   RenderProcessHost* render_process_host_;
@@ -708,6 +714,14 @@ class RenderFrameSubmissionObserver
 
   // Blocks the browser ui thread until the next OnRenderFrameMetadataChanged.
   void WaitForMetadataChange();
+
+  // Blocks the browser ui thread until RenderFrameMetadata arrives where its
+  // scroll offset matches |expected_offset|.
+  void WaitForScrollOffset(const gfx::Vector2dF& expected_offset);
+
+  // Blocks the browser ui thread until RenderFrameMetadata arrives where its
+  // scroll offset at top matches |expected_scroll_offset_at_top|.
+  void WaitForScrollOffsetAtTop(bool expected_scroll_offset_at_top);
 
   const cc::RenderFrameMetadata& LastRenderFrameMetadata() const;
 
@@ -864,9 +878,6 @@ class BrowserTestClipboardScope {
 
 // This observer is used to wait for its owner Frame to become focused.
 class FrameFocusedObserver {
-  // Private impl struct which hides non public types including FrameTreeNode.
-  class FrameTreeNodeObserverImpl;
-
  public:
   explicit FrameFocusedObserver(RenderFrameHost* owner_host);
   ~FrameFocusedObserver();
@@ -874,10 +885,31 @@ class FrameFocusedObserver {
   void Wait();
 
  private:
+  // Private impl struct which hides non public types including FrameTreeNode.
+  class FrameTreeNodeObserverImpl;
+
   // FrameTreeNode::Observer
   std::unique_ptr<FrameTreeNodeObserverImpl> impl_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameFocusedObserver);
+};
+
+// This observer is used to wait for its owner FrameTreeNode to become deleted.
+class FrameDeletedObserver {
+ public:
+  explicit FrameDeletedObserver(RenderFrameHost* owner_host);
+  ~FrameDeletedObserver();
+
+  void Wait();
+
+ private:
+  // Private impl struct which hides non public types including FrameTreeNode.
+  class FrameTreeNodeObserverImpl;
+
+  // FrameTreeNode::Observer
+  std::unique_ptr<FrameTreeNodeObserverImpl> impl_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameDeletedObserver);
 };
 
 // This class can be used to pause and resume navigations, based on a URL
@@ -1116,6 +1148,71 @@ void EnsureCookiesFlushed(BrowserContext* browser_context);
 // Returns true if there is a valid process for |process_group_name|. Must be
 // called on the IO thread.
 bool HasValidProcessForProcessGroup(const std::string& process_group_name);
+
+// Performs a simple auto-resize flow and ensures that the embedder gets a
+// single response messages back from the guest, with the expected values.
+bool TestChildOrGuestAutoresize(bool is_guest,
+                                RenderProcessHost* embedder_rph,
+                                RenderWidgetHost* guest_rwh);
+
+// Class to sniff incoming IPCs for either
+// FrameHostMsg_SynchronizeVisualProperties or
+// BrowserPluginHostMsg_SynchronizeVisualProperties messages. This allows the
+// message to continue to the target child so that processing can be verified by
+// tests.
+class SynchronizeVisualPropertiesMessageFilter
+    : public content::BrowserMessageFilter {
+ public:
+  SynchronizeVisualPropertiesMessageFilter();
+
+  gfx::Rect last_rect() const { return last_rect_; }
+
+  void WaitForRect();
+  void ResetRectRunLoop();
+
+  // Returns the new viz::FrameSinkId immediately if the IPC has been received.
+  // Otherwise this will block the UI thread until it has been received, then it
+  // will return the new viz::FrameSinkId.
+  viz::FrameSinkId GetOrWaitForId();
+
+  // Waits for the next viz::LocalSurfaceId be received and returns it.
+  viz::LocalSurfaceId WaitForSurfaceId();
+
+ protected:
+  ~SynchronizeVisualPropertiesMessageFilter() override;
+
+ private:
+  void OnSynchronizeFrameHostVisualProperties(
+      const viz::SurfaceId& surface_id,
+      const FrameVisualProperties& visual_properties);
+  void OnSynchronizeBrowserPluginVisualProperties(
+      int browser_plugin_guest_instance_id,
+      viz::LocalSurfaceId surface_id,
+      FrameVisualProperties visual_properties);
+  void OnSynchronizeVisualProperties(
+      const viz::LocalSurfaceId& surface_id,
+      const viz::FrameSinkId& frame_sink_id,
+      const FrameVisualProperties& visual_properties);
+  // |rect| is in DIPs.
+  void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
+  void OnUpdatedFrameSinkIdOnUI();
+  void OnUpdatedSurfaceIdOnUI(viz::LocalSurfaceId surface_id);
+
+  bool OnMessageReceived(const IPC::Message& message) override;
+
+  static const uint32_t kMessageClassesToFilter[2];
+  viz::FrameSinkId frame_sink_id_;
+  base::RunLoop frame_sink_id_run_loop_;
+
+  std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
+  bool screen_space_rect_received_;
+  gfx::Rect last_rect_;
+
+  viz::LocalSurfaceId last_surface_id_;
+  std::unique_ptr<base::RunLoop> surface_id_run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(SynchronizeVisualPropertiesMessageFilter);
+};
 
 }  // namespace content
 

@@ -9,7 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -32,7 +31,7 @@
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_network_session.h"
-#include "net/net_features.h"
+#include "net/net_buildflags.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/channel_id_service.h"
@@ -106,7 +105,7 @@ void ShellURLRequestContextGetter::NotifyContextShuttingDown() {
 
 std::unique_ptr<net::NetworkDelegate>
 ShellURLRequestContextGetter::CreateNetworkDelegate() {
-  return base::WrapUnique(new ShellNetworkDelegate);
+  return std::make_unique<ShellNetworkDelegate>();
 }
 
 std::unique_ptr<net::CertVerifier>
@@ -151,9 +150,8 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     builder.set_user_agent(GetShellUserAgent());
 
     builder.SetCertVerifier(GetCertVerifier());
-    builder.set_ct_verifier(base::WrapUnique(new net::DoNothingCTVerifier));
-    builder.set_ct_policy_enforcer(
-        base::WrapUnique(new IgnoresCTPolicyEnforcer));
+    builder.set_ct_verifier(std::make_unique<net::DoNothingCTVerifier>());
+    builder.set_ct_policy_enforcer(std::make_unique<IgnoresCTPolicyEnforcer>());
 
     std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service =
         GetProxyService();
@@ -194,9 +192,8 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     // ShellContentBrowserClient::IsHandledURL().
 
     for (auto& protocol_handler : protocol_handlers_) {
-      builder.SetProtocolHandler(
-          protocol_handler.first,
-          base::WrapUnique(protocol_handler.second.release()));
+      builder.SetProtocolHandler(protocol_handler.first,
+                                 std::move(protocol_handler.second));
     }
     protocol_handlers_.clear();
 
@@ -219,6 +216,8 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
       builder.set_reporting_policy(std::move(reporting_policy));
     }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
+
+    builder.set_enable_brotli(true);
 
     url_request_context_ = builder.Build();
   }

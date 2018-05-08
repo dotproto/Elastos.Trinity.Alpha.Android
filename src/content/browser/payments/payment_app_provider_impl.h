@@ -33,7 +33,7 @@ class CONTENT_EXPORT PaymentAppProviderImpl : public PaymentAppProvider {
       const std::string& sw_js_url,
       const std::string& sw_scope,
       bool sw_use_cache,
-      const std::vector<std::string>& enabled_methods,
+      const std::string& method,
       InvokePaymentAppCallback callback) override;
   void CanMakePayment(BrowserContext* browser_context,
                       int64_t registration_id,
@@ -44,6 +44,7 @@ class CONTENT_EXPORT PaymentAppProviderImpl : public PaymentAppProvider {
                     PaymentEventResultCallback callback) override;
   void SetOpenedWindow(WebContents* web_contents) override;
   void CloseOpenedWindow(BrowserContext* browser_context) override;
+  void OnClosingOpenedWindow(BrowserContext* browser_context) override;
 
  private:
   PaymentAppProviderImpl();

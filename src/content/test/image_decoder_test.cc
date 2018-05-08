@@ -17,10 +17,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebImage.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/web/WebImageDecoder.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_image.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/web_image_decoder.h"
 
 // Uncomment this to recalculate the MD5 sums; see header comments.
 // #define CALCULATE_MD5_SUMS
@@ -107,7 +107,7 @@ void VerifyImage(const blink::WebImageDecoder& decoder,
 
 void ImageDecoderTest::SetUp() {
   base::FilePath data_dir;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &data_dir));
+  ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &data_dir));
   data_dir_ = data_dir.AppendASCII("webkit").AppendASCII("data").AppendASCII(
       format_ + "_decoder");
   if (!base::PathExists(data_dir_)) {

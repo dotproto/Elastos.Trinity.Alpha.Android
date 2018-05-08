@@ -25,6 +25,7 @@ import android.os.SystemClock;
 import android.support.annotation.CallSuper;
 import android.util.DisplayMetrics;
 import android.util.Pair;
+import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -57,6 +58,7 @@ import org.chromium.chrome.browser.appmenu.AppMenu;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryCoordinator;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -66,6 +68,8 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.contextual_suggestions.ContextualSuggestionsCoordinator;
+import org.chromium.chrome.browser.contextual_suggestions.PageViewTimer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager.ContextualSearchTabPromotionDelegate;
@@ -102,7 +106,7 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
-import org.chromium.chrome.browser.page_info.PageInfoPopup;
+import org.chromium.chrome.browser.page_info.PageInfoController;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
@@ -115,7 +119,6 @@ import org.chromium.chrome.browser.snackbar.DataReductionPromoSnackbarController
 import org.chromium.chrome.browser.snackbar.DataUseSnackbarController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
-import org.chromium.chrome.browser.suggestions.ContextualSuggestionsManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.tab.Tab;
@@ -127,20 +130,20 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.toolbar.BottomToolbarController;
 import org.chromium.chrome.browser.toolbar.Toolbar;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.vr_shell.OnExitVrRequestListener;
 import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
 import org.chromium.chrome.browser.webapps.AddToHomescreenManager;
 import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.chrome.browser.widget.FadingBackgroundView;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
-import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.widget.textbubble.TextBubble;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -159,6 +162,7 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.widget.Toast;
 import org.chromium.webapk.lib.client.WebApkNavigationClient;
 import org.chromium.webapk.lib.client.WebApkValidator;
@@ -257,9 +261,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private AppMenuHandler mAppMenuHandler;
     private ToolbarManager mToolbarManager;
     private FindToolbarManager mFindToolbarManager;
+    private BottomSheetController mBottomSheetController;
+    private BottomToolbarController mBottomToolbarController;
     private BottomSheet mBottomSheet;
-    private ContextualSuggestionsManager mContextualSuggestionsManager;
+    private ContextualSuggestionsCoordinator mContextualSuggestionsCoordinator;
     private FadingBackgroundView mFadingBackgroundView;
+    private KeyboardAccessoryCoordinator mKeyboardAccessoryCoordinator;
 
     // Time in ms that it took took us to inflate the initial layout
     private long mInflateInitialLayoutDurationMs;
@@ -283,6 +290,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     /** Whether or not a PolicyChangeListener was added. */
     private boolean mDidAddPolicyChangeListener;
 
+    /** Adds TabObserver and TabModelObserver to measure page view times. */
+    private PageViewTimer mPageViewTimer;
+
     /**
      * @param factory The {@link AppMenuHandlerFactory} for creating {@link #mAppMenuHandler}
      */
@@ -300,11 +310,24 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     public void preInflationStartup() {
         super.preInflationStartup();
 
-        // We need to explicitly enable VR mode here so that the system doesn't kick us out of VR
-        // mode while we prepare for VR rendering.
-        if (VrIntentUtils.isVrIntent(getIntent())) {
-            VrShellDelegate.setVrModeEnabled(this);
+        if (VrShellDelegate.bootsToVr()) {
+            // TODO(mthiesse): Remove this once b/78108624 is fixed. This is a workaround for a
+            // platform bug where Chrome crashes on launch for standalone devices if not launched
+            // onto the primary display (There's a virtual display 2D apps are default launched onto
+            // with different display properties). Re-launch with the same intent but to the primary
+            // display.
+            if (DisplayAndroid.getNonMultiDisplay(this).getDisplayId() != Display.DEFAULT_DISPLAY) {
+                finish();
+                startActivity(getIntent(),
+                        ApiCompatibilityUtils.createLaunchDisplayIdActivityOptions(
+                                Display.DEFAULT_DISPLAY));
+                return;
+            }
         }
+
+        // We need to explicitly enable VR mode here so that the system doesn't kick us out of VR,
+        // or drop us into the 2D-in-VR rendering mode, while we prepare for VR rendering.
+        if (VrIntentUtils.isLaunchingIntoVr(this)) VrShellDelegate.setVrModeEnabled(this, true);
 
         // Force a partner customizations refresh if it has yet to be initialized.  This can happen
         // if Chrome is killed and you refocus a previous activity from Android recents, which does
@@ -340,12 +363,16 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mAssistStatusHandler.updateAssistState();
         }
 
-        // If a user had ALLOW_LOW_END_DEVICE_UI explicitly set to false then we manually override
-        // SysUtils.isLowEndDevice() with a switch so that they continue to see the normal UI. This
-        // is only the case for grandfathered-in svelte users. We no longer do so for newer users.
-        if (!ChromePreferenceManager.getInstance().getAllowLowEndDeviceUi()) {
-            CommandLine.getInstance().appendSwitch(
-                    BaseSwitches.DISABLE_LOW_END_DEVICE_MODE);
+        // This check is only applicable for JB since in KK svelte was supported from the start.
+        // See https://crbug.com/826460 for context.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            // If a user had ALLOW_LOW_END_DEVICE_UI explicitly set to false then we manually
+            // override SysUtils.isLowEndDevice() with a switch so that they continue to see the
+            // normal UI. This is only the case for grandfathered-in svelte users. We no longer do
+            // so for newer users.
+            if (!ChromePreferenceManager.getInstance().getAllowLowEndDeviceUi()) {
+                CommandLine.getInstance().appendSwitch(BaseSwitches.DISABLE_LOW_END_DEVICE_MODE);
+            }
         }
 
         AccessibilityManager manager = (AccessibilityManager)
@@ -364,9 +391,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         // SurfaceView's 'hole' clipping during animations that are notified to the window.
         getWindowAndroid().setAnimationPlaceholderView(mCompositorViewHolder.getCompositorView());
 
-        // Inform the WindowAndroid of the keyboard accessory view.
-        getWindowAndroid().setKeyboardAccessoryView(
-                (ViewGroup) findViewById(R.id.keyboard_accessory));
+        mKeyboardAccessoryCoordinator = new KeyboardAccessoryCoordinator(
+                getWindowAndroid(), findViewById(R.id.keyboard_accessory_stub));
+
         initializeToolbar();
         initializeTabModels();
         if (!isFinishing() && getFullscreenManager() != null) {
@@ -379,6 +406,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         ((BottomContainer) findViewById(R.id.bottom_container)).initialize(mFullscreenManager);
 
         mModalDialogManager = createModalDialogManager();
+        mPageViewTimer = new PageViewTimer(mTabModelSelector);
     }
 
     @Override
@@ -645,6 +673,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
+     * @return The {@link KeyboardAccessoryCoordinator} that belongs to this activity.
+     */
+    public KeyboardAccessoryCoordinator getKeyboardAccessory() {
+        return mKeyboardAccessoryCoordinator;
+    }
+
+    /**
      * @return The resource id for the menu to use in {@link AppMenu}. Default is R.menu.main_menu.
      */
     protected int getAppMenuLayoutId() {
@@ -843,8 +878,15 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (getActivityTab() != null) {
             LaunchMetrics.commitLaunchMetrics(getActivityTab().getWebContents());
         }
-        ContentViewCore cvc = getContentViewCore();
-        if (cvc != null) cvc.onResume();
+
+        for (TabModel model : getTabModelSelector().getModels()) {
+            int count = model.getCount();
+            for (int i = 0; i < count; ++i) {
+                ContentViewCore cvc = model.getTabAt(i).getContentViewCore();
+                if (cvc != null) cvc.onResume();
+            }
+        }
+
         FeatureUtilities.setCustomTabVisible(isCustomTab());
         FeatureUtilities.setIsInMultiWindowMode(
                 MultiWindowUtils.getInstance().isInMultiWindowMode(this));
@@ -875,8 +917,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         RecordUserAction.record("MobileGoToBackground");
         Tab tab = getActivityTab();
         if (tab != null) getTabContentManager().cacheTabThumbnail(tab);
-        ContentViewCore cvc = getContentViewCore();
-        if (cvc != null) cvc.onPause();
+        for (TabModel model : getTabModelSelector().getModels()) {
+            int count = model.getCount();
+            for (int i = 0; i < count; ++i) {
+                ContentViewCore cvc = model.getTabAt(i).getContentViewCore();
+                if (cvc != null) cvc.onPause();
+            }
+        }
         VrShellDelegate.maybeUnregisterVrEntryHook(this);
         markSessionEnd();
         super.onPauseWithNative();
@@ -933,6 +980,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return Whether the given activity contains a CustomTab.
      */
     public boolean isCustomTab() {
+        return false;
+    }
+
+    /**
+     * @return Whether the given activity can show the publisher URL from a trusted CDN.
+     */
+    public boolean canShowTrustedCdnPublisherUrl() {
         return false;
     }
 
@@ -1099,6 +1153,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @SuppressLint("NewApi")
     @Override
     protected final void onDestroy() {
+        if (mPageViewTimer != null) {
+            mPageViewTimer.destroy();
+            mPageViewTimer = null;
+        }
+
         if (mReaderModeManager != null) {
             mReaderModeManager.destroy();
             mReaderModeManager = null;
@@ -1107,6 +1166,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (mContextualSearchManager != null) {
             mContextualSearchManager.destroy();
             mContextualSearchManager = null;
+        }
+
+        if (mModalDialogManager != null) {
+            mModalDialogManager.destroy();
+            mModalDialogManager = null;
         }
 
         if (mTabModelSelectorTabObserver != null) {
@@ -1134,6 +1198,16 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mBottomSheet = null;
         }
 
+        if (mBottomToolbarController != null) {
+            mBottomToolbarController.destroy();
+            mBottomToolbarController = null;
+        }
+
+        if (mContextualSuggestionsCoordinator != null) {
+            mContextualSuggestionsCoordinator.destroy();
+            mContextualSuggestionsCoordinator = null;
+        }
+
         if (mTabModelsInitialized) {
             TabModelSelector selector = getTabModelSelector();
             if (selector != null) selector.destroy();
@@ -1147,6 +1221,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (mTabContentManager != null) {
             mTabContentManager.destroy();
             mTabContentManager = null;
+        }
+
+        if (mKeyboardAccessoryCoordinator != null) {
+            mKeyboardAccessoryCoordinator.destroy();
+            mKeyboardAccessoryCoordinator = null;
         }
 
         AccessibilityManager manager = (AccessibilityManager)
@@ -1175,7 +1254,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      */
     @Override
     public SnackbarManager getSnackbarManager() {
-        return mSnackbarManager;
+        return mBottomSheetController != null
+                        && mBottomSheetController.getBottomSheet().isSheetOpen()
+                ? mBottomSheetController.getSnackbarManager()
+                : mSnackbarManager;
     }
 
     /**
@@ -1244,23 +1326,28 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         super.finishNativeInitialization();
 
         if (FeatureUtilities.isChromeDuplexEnabled()) {
+            ViewGroup coordinator = findViewById(R.id.coordinator);
+            mBottomToolbarController = new BottomToolbarController(mFullscreenManager,
+                    mCompositorViewHolder.getResourceManager(),
+                    mCompositorViewHolder.getLayoutManager(), coordinator);
+        }
+
+        if (supportsContextualSuggestionsBottomSheet()
+                && FeatureUtilities.isContextualSuggestionsBottomSheetEnabled(isTablet())) {
             ViewGroup coordinator = (ViewGroup) findViewById(R.id.coordinator);
             getLayoutInflater().inflate(R.layout.bottom_sheet, coordinator);
             mBottomSheet = coordinator.findViewById(R.id.bottom_sheet);
             mBottomSheet.init(coordinator, this);
-            mBottomSheet.setSheetState(BottomSheet.SHEET_STATE_PEEK, true);
+
+            ((BottomContainer) findViewById(R.id.bottom_container)).setBottomSheet(mBottomSheet);
 
             mFadingBackgroundView = (FadingBackgroundView) findViewById(R.id.fading_focus_target);
-            mBottomSheet.addObserver(new EmptyBottomSheetObserver() {
-                @Override
-                public void onTransitionPeekToHalf(float transitionFraction) {
-                    mFadingBackgroundView.setViewAlpha(transitionFraction);
-                }
-            });
-            mFadingBackgroundView.addObserver(mBottomSheet);
+            mBottomSheetController = new BottomSheetController(this, getTabModelSelector(),
+                    getCompositorViewHolder().getLayoutManager(), mFadingBackgroundView,
+                    getContextualSearchManager(), mBottomSheet);
 
-            mContextualSuggestionsManager = new ContextualSuggestionsManager(
-                    this, mBottomSheet, getTabModelSelector(), getSnackbarManager());
+            mContextualSuggestionsCoordinator = new ContextualSuggestionsCoordinator(
+                    this, mBottomSheetController, getTabModelSelector());
         }
     }
 
@@ -1285,6 +1372,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (mToolbarManager != null) mToolbarManager.onAccessibilityStatusChanged(enabled);
         if (mContextualSearchManager != null) {
             mContextualSearchManager.onAccessibilityModeChanged(enabled);
+        }
+        if (mContextualSuggestionsCoordinator != null) {
+            mContextualSuggestionsCoordinator.onAccessibilityModeChanged(enabled);
         }
     }
 
@@ -1526,11 +1616,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
-     * @return The current ContentViewCore, or null if the tab does not exist or is not showing a
-     *         ContentViewCore.
+     * @return The current WebContents, or null if the tab does not exist or is not showing a
+     *         WebContents.
      */
-    public ContentViewCore getCurrentContentViewCore() {
-        return TabModelUtils.getCurrentContentViewCore(getCurrentTabModel());
+    public WebContents getCurrentWebContents() {
+        return TabModelUtils.getCurrentWebContents(getCurrentTabModel());
     }
 
     /**
@@ -1605,7 +1695,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
         if (getFullscreenManager() != null
                 && getFullscreenManager().getPersistentFullscreenMode()) {
-            getFullscreenManager().setPersistentFullscreenMode(false);
+            getFullscreenManager().exitPersistentFullscreenMode();
             return true;
         }
         return false;
@@ -1718,10 +1808,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     private static boolean isInVrUiMode(int uiMode) {
-        // TODO(mthiesse): Use Configuration.UI_MODE_TYPE_VR_HEADSET when building against the O
-        // sdk.
-        final int uiModeTypeVrHeadset = 0x07;
-        return (uiMode & Configuration.UI_MODE_TYPE_MASK) == uiModeTypeVrHeadset;
+        return (uiMode & Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_VR_HEADSET;
     }
 
     /**
@@ -1805,20 +1892,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
     }
 
-    private ContentViewCore getContentViewCore() {
-        Tab tab = getActivityTab();
-        if (tab == null) return null;
-        return tab.getContentViewCore();
-    }
-
-    private WebContents getWebContents() {
-        Tab tab = getActivityTab();
-        if (tab == null) return null;
-        return tab.getWebContents();
-    }
-
     private SelectionPopupController getSelectionPopupController() {
-        WebContents webContents = getWebContents();
+        WebContents webContents = getCurrentWebContents();
         return webContents != null ? SelectionPopupController.fromWebContents(webContents) : null;
     }
 
@@ -1932,7 +2007,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 RecordUserAction.record("MobileMenuReload");
             }
         } else if (id == R.id.info_menu_id) {
-            PageInfoPopup.show(this, currentTab, null, PageInfoPopup.OPENED_FROM_MENU);
+            PageInfoController.show(this, currentTab, null, PageInfoController.OPENED_FROM_MENU);
         } else if (id == R.id.open_history_menu_id) {
             if (NewTabPage.isNTPUrl(currentTab.getUrl())) {
                 NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_HISTORY_MANAGER);
@@ -2191,16 +2266,15 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * is in Android N multi-window mode.
      */
     protected void recordMultiWindowModeScreenWidth() {
-        if (!DeviceFormFactor.isTablet()) return;
+        if (!isTablet()) return;
 
         RecordHistogram.recordBooleanHistogram(
                 "Android.MultiWindowMode.IsTabletScreenWidthBelow600",
                 mScreenWidthDp < DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP);
 
         if (mScreenWidthDp < DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP) {
-            RecordHistogram.recordLinearCountHistogram(
-                    "Android.MultiWindowMode.TabletScreenWidth", mScreenWidthDp, 1,
-                    DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP, 50);
+            RecordHistogram.recordLinearCountHistogram("Android.MultiWindowMode.TabletScreenWidth",
+                    mScreenWidthDp, 1, DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP, 50);
         }
     }
 
@@ -2239,6 +2313,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
+     * @return Whether this Activity supports showing contextual suggestions in a bottom sheet.
+     */
+    public boolean supportsContextualSuggestionsBottomSheet() {
+        return false;
+    }
+
+    /**
      * @return the reference pool for this activity.
      * @deprecated Use {@link ChromeApplication#getReferencePool} instead.
      */
@@ -2260,21 +2341,34 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     public void startActivity(Intent intent, Bundle options) {
-        if (!VrShellDelegate.isInVr() || VrIntentUtils.isVrIntent(intent)) {
+        if (VrShellDelegate.canLaunch2DIntents() || VrIntentUtils.isVrIntent(intent)) {
             super.startActivity(intent, options);
             return;
         }
-        VrShellDelegate.requestToExitVr(new OnExitVrRequestListener() {
-            @Override
-            public void onSucceeded() {
-                if (VrShellDelegate.isInVr()) {
-                    throw new IllegalStateException("Still in VR after having exited VR.");
-                }
-                startActivity(intent, options);
+        VrShellDelegate.requestToExitVrAndRunOnSuccess(() -> {
+            if (!VrShellDelegate.canLaunch2DIntents()) {
+                throw new IllegalStateException("Still in VR after having exited VR.");
             }
+            super.startActivity(intent, options);
+        });
+    }
 
-            @Override
-            public void onDenied() {}
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode) {
+        startActivityForResult(intent, requestCode, null);
+    }
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
+        if (VrShellDelegate.canLaunch2DIntents() || VrIntentUtils.isVrIntent(intent)) {
+            super.startActivityForResult(intent, requestCode, options);
+            return;
+        }
+        VrShellDelegate.requestToExitVrAndRunOnSuccess(() -> {
+            if (!VrShellDelegate.canLaunch2DIntents()) {
+                throw new IllegalStateException("Still in VR after having exited VR.");
+            }
+            super.startActivityForResult(intent, requestCode, options);
         });
     }
 
@@ -2288,5 +2382,21 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         // Avoid starting Activities when possible while in VR.
         if (VrShellDelegate.isInVr() && !VrIntentUtils.isVrIntent(intent)) return false;
         return super.startActivityIfNeeded(intent, requestCode, options);
+    }
+
+    /**
+     * If the density of the device changes while Chrome is in the background (not resumed), we
+     * won't have received an onConfigurationChanged yet for this new density. In this case, the
+     * density this Activity thinks it's in, and the actual display density will differ.
+     * @return The density this Activity thinks it's in (the density it was in last time it was in
+     *         the resumed state).
+     */
+    public float getLastActiveDensity() {
+        return mDensityDpi;
+    }
+
+    @VisibleForTesting
+    public ContextualSuggestionsCoordinator getContextualSuggestionsCoordinatorForTesting() {
+        return mContextualSuggestionsCoordinator;
     }
 }

@@ -16,6 +16,10 @@ source_set("common_constants") {
     "constants.h",
   ]
 
+  deps = [
+    "//base",
+  ]
+
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }
@@ -175,6 +179,8 @@ if (enable_extensions) {
       "manifest_handler_helpers.h",
       "manifest_handlers/app_isolation_info.cc",
       "manifest_handlers/app_isolation_info.h",
+      "manifest_handlers/automation.cc",
+      "manifest_handlers/automation.h",
       "manifest_handlers/background_info.cc",
       "manifest_handlers/background_info.h",
       "manifest_handlers/content_capabilities_handler.cc",
@@ -304,11 +310,14 @@ if (enable_extensions) {
       "//chrome:resources",
       "//components/crx_file",
       "//components/nacl/common:buildflags",
+      "//components/url_formatter",
       "//components/url_matcher",
+      "//components/version_info",
       "//crypto",
       "//device/bluetooth",
       "//device/usb",
       "//device/usb/public/cpp",
+      "//device/usb/public/mojom",
       "//extensions:extensions_resources",
       "//extensions/common/api",
       "//extensions/strings",
@@ -369,6 +378,7 @@ if (enable_extensions) {
       "extension_resource_path_normalizer_unittest.cc",
       "extension_resource_unittest.cc",
       "extension_set_unittest.cc",
+      "extension_unittest.cc",
       "features/complex_feature_unittest.cc",
       "features/feature_provider_unittest.cc",
       "features/simple_feature_unittest.cc",

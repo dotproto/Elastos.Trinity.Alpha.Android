@@ -9,11 +9,23 @@
 #include "base/supports_user_data.h"
 #include "build/build_config.h"
 #include "extensions/renderer/bindings/get_per_context_data.h"
+#include "extensions/renderer/bindings/js_runner.h"
 #include "gin/converter.h"
 #include "gin/per_context_data.h"
 
 namespace extensions {
 namespace binding {
+
+namespace {
+
+bool g_response_validation_enabled =
+#if DCHECK_IS_ON()
+    true;
+#else
+    false;
+#endif
+
+}  // namespace
 
 class ContextInvalidationData : public base::SupportsUserData::Data {
  public:
@@ -75,7 +87,18 @@ bool IsContextValid(v8::Local<v8::Context> context) {
           ContextInvalidationData::kPerContextDataKey));
   // The context is valid if we've never created invalidation data for it, or if
   // we have and it hasn't been marked as invalid.
-  return !invalidation_data || invalidation_data->is_context_valid();
+  bool is_context_valid =
+      !invalidation_data || invalidation_data->is_context_valid();
+
+  if (is_context_valid) {
+    // As long as the context is valid, there should be an associated
+    // JSRunner.
+    // TODO(devlin): (Likely) Remove this once https://crbug.com/819968, since
+    // this shouldn't necessarily be a hard dependency. At least downgrade it
+    // to a DCHECK.
+    CHECK(JSRunner::Get(context));
+  }
+  return is_context_valid;
 }
 
 bool IsContextValidOrThrowError(v8::Local<v8::Context> context) {
@@ -136,6 +159,16 @@ void ContextInvalidationListener::OnInvalidated() {
   DCHECK(on_invalidated_);
   context_invalidation_data_ = nullptr;
   std::move(on_invalidated_).Run();
+}
+
+bool IsResponseValidationEnabled() {
+  return g_response_validation_enabled;
+}
+
+std::unique_ptr<base::AutoReset<bool>> SetResponseValidationEnabledForTesting(
+    bool is_enabled) {
+  return std::make_unique<base::AutoReset<bool>>(&g_response_validation_enabled,
+                                                 is_enabled);
 }
 
 }  // namespace binding

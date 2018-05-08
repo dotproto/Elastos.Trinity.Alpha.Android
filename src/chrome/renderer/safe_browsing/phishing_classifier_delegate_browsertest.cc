@@ -18,8 +18,8 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
 
 using base::ASCIIToUTF16;
@@ -38,7 +38,7 @@ class MockPhishingClassifier : public PhishingClassifier {
   explicit MockPhishingClassifier(content::RenderFrame* render_frame)
       : PhishingClassifier(render_frame, NULL /* clock */) {}
 
-  virtual ~MockPhishingClassifier() {}
+  ~MockPhishingClassifier() override {}
 
   MOCK_METHOD2(BeginClassification,
                void(const base::string16*, const DoneCallback&));
@@ -51,7 +51,7 @@ class MockPhishingClassifier : public PhishingClassifier {
 class MockScorer : public Scorer {
  public:
   MockScorer() : Scorer() {}
-  virtual ~MockScorer() {}
+  ~MockScorer() override {}
 
   MOCK_CONST_METHOD1(ComputeScore, double(const FeatureMap&));
 

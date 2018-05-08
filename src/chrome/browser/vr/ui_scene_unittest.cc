@@ -44,10 +44,7 @@ class AlwaysDirty : public UiElement {
  public:
   ~AlwaysDirty() override {}
 
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override {
-    return true;
-  }
+  bool OnBeginFrame(const gfx::Transform& head_pose) override { return true; }
 };
 
 }  // namespace
@@ -88,6 +85,36 @@ TEST(UiScene, AddRemoveElements) {
   EXPECT_EQ(removed_parent.get(), parent);
   EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 1u);
   EXPECT_EQ(scene.GetUiElementById(parent_id), nullptr);
+}
+
+TEST(UiScene, IsVisibleInHiddenSubtree) {
+  UiScene scene;
+
+  // Always start with the root element.
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 1u);
+
+  auto element = std::make_unique<UiElement>();
+  element->SetDrawPhase(kPhaseForeground);
+  UiElement* parent = element.get();
+  scene.AddUiElement(kRoot, std::move(element));
+
+  element = std::make_unique<UiElement>();
+  element->SetDrawPhase(kPhaseForeground);
+  UiElement* child = element.get();
+
+  parent->AddChild(std::move(element));
+
+  // Set initial computed opacity.
+  scene.OnBeginFrame(MsToTicks(1), kStartHeadPose);
+
+  parent->SetVisible(false);
+
+  scene.OnBeginFrame(MsToTicks(2), kStartHeadPose);
+
+  // On the second walk, we should skip the child.
+  scene.OnBeginFrame(MsToTicks(3), kStartHeadPose);
+
+  EXPECT_FALSE(child->IsVisible());
 }
 
 // This test creates a parent and child UI element, each with their own
@@ -163,10 +190,10 @@ TEST(UiScene, NoViewportAwareElementWhenNoVisibleChild) {
   element->SetDrawPhase(kPhaseOverlayForeground);
   child->AddChild(std::move(element));
 
-  EXPECT_FALSE(scene.GetVisibleWebVrOverlayElementsToDraw().empty());
+  EXPECT_FALSE(scene.GetWebVrOverlayElementsToDraw().empty());
   child->SetVisible(false);
   scene.OnBeginFrame(MsToTicks(0), kStartHeadPose);
-  EXPECT_TRUE(scene.GetVisibleWebVrOverlayElementsToDraw().empty());
+  EXPECT_TRUE(scene.GetWebVrOverlayElementsToDraw().empty());
 }
 
 TEST(UiScene, InvisibleElementsDoNotCauseAnimationDirtiness) {

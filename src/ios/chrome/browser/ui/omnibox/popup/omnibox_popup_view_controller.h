@@ -20,16 +20,15 @@
 // is the first responder, this view controller cannot receive these events.
 // Hence the delegation.
 @interface OmniboxPopupViewController
-    : UITableViewController<AutocompleteResultConsumer,
-                            OmniboxSuggestionCommands>
+    : UIViewController<AutocompleteResultConsumer, OmniboxSuggestionCommands>
 
 @property(nonatomic, assign) BOOL incognito;
 @property(nonatomic, weak) id<AutocompleteResultConsumerDelegate> delegate;
 @property(nonatomic, weak) id<ImageRetriever> imageRetriever;
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
+
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
-- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 

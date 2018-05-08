@@ -201,7 +201,7 @@ bool CalledOnIOThread() {
   // Check if this function call is on the IO thread, except for unittests where
   // an IO thread might not have been created.
   return BrowserThread::CurrentlyOn(BrowserThread::IO) ||
-         !BrowserThread::IsMessageLoopValid(BrowserThread::IO);
+         !BrowserThread::IsThreadInitialized(BrowserThread::IO);
 }
 
 bool GetDeviceIDFromHMAC(const std::string& salt,
@@ -1312,9 +1312,10 @@ void MediaStreamManager::FinalizeRequestFailed(
       break;
     }
     case MEDIA_OPEN_DEVICE_PEPPER_ONLY: {
-      DCHECK(request->open_device_cb);
-      std::move(request->open_device_cb)
-          .Run(false /* success */, std::string(), MediaStreamDevice());
+      if (request->open_device_cb) {
+        std::move(request->open_device_cb)
+            .Run(false /* success */, std::string(), MediaStreamDevice());
+      }
       break;
     }
     case MEDIA_DEVICE_ACCESS: {
@@ -1334,10 +1335,10 @@ void MediaStreamManager::FinalizeRequestFailed(
 void MediaStreamManager::FinalizeOpenDevice(const std::string& label,
                                             DeviceRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(request->open_device_cb);
-
-  std::move(request->open_device_cb)
-      .Run(true /* success */, label, request->devices.front());
+  if (request->open_device_cb) {
+    std::move(request->open_device_cb)
+        .Run(true /* success */, label, request->devices.front());
+  }
 }
 
 void MediaStreamManager::FinalizeMediaAccessRequest(
@@ -1378,7 +1379,7 @@ void MediaStreamManager::InitializeMaybeAsync(
 
   // We want to be notified of IO message loop destruction to delete the thread
   // and the device managers.
-  base::MessageLoop::current()->AddDestructionObserver(this);
+  base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
 
   video_capture_manager_ =
       new VideoCaptureManager(std::move(video_capture_provider),

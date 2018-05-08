@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -27,8 +28,8 @@
 #include "media/base/audio_parameters.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaConstraints.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/rtc_base/refcountedobject.h"
 
@@ -65,7 +66,7 @@ const int kMaxNumberOfPlayoutDataChannels = 2;
 
 void ReadDataFromSpeechFile(char* data, int length) {
   base::FilePath file;
-  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &file));
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &file));
   file = file.Append(FILE_PATH_LITERAL("media"))
              .Append(FILE_PATH_LITERAL("test"))
              .Append(FILE_PATH_LITERAL("data"))
@@ -84,8 +85,8 @@ class AecDumpMessageFilterForTest : public AecDumpMessageFilter {
   // This class is only used for setting |override_aec3_|, so we simply inject
   // the current task runner.
   AecDumpMessageFilterForTest()
-      : AecDumpMessageFilter(base::MessageLoop::current()->task_runner(),
-                             base::MessageLoop::current()->task_runner()) {}
+      : AecDumpMessageFilter(base::MessageLoopCurrent::Get()->task_runner(),
+                             base::MessageLoopCurrent::Get()->task_runner()) {}
 
   void set_override_aec3(base::Optional<bool> override_aec3) {
     override_aec3_ = override_aec3;

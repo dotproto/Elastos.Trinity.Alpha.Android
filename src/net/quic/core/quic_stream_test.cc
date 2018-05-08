@@ -124,7 +124,9 @@ class QuicStreamTest : public QuicTestWithParam<bool> {
     write_blocked_list_ =
         QuicSessionPeer::GetWriteBlockedStreams(session_.get());
     if (!session_->register_streams_early()) {
-      write_blocked_list_->RegisterStream(kTestStreamId, kV3HighestPriority);
+      write_blocked_list_->RegisterStream(kTestStreamId,
+                                          /*is_static_stream=*/false,
+                                          kV3HighestPriority);
     }
   }
 
@@ -175,7 +177,7 @@ TEST_F(QuicStreamTest, WriteAllData) {
       1 + QuicPacketCreator::StreamFramePacketOverhead(
               connection_->transport_version(), PACKET_8BYTE_CONNECTION_ID,
               !kIncludeVersion, !kIncludeDiversificationNonce,
-              PACKET_6BYTE_PACKET_NUMBER, 0u);
+              PACKET_4BYTE_PACKET_NUMBER, 0u);
   connection_->SetMaxPacketLength(length);
 
   EXPECT_CALL(*session_, WritevData(stream_, kTestStreamId, _, _, _))
@@ -256,7 +258,7 @@ TEST_F(QuicStreamTest, WriteOrBufferData) {
       1 + QuicPacketCreator::StreamFramePacketOverhead(
               connection_->transport_version(), PACKET_8BYTE_CONNECTION_ID,
               !kIncludeVersion, !kIncludeDiversificationNonce,
-              PACKET_6BYTE_PACKET_NUMBER, 0u);
+              PACKET_4BYTE_PACKET_NUMBER, 0u);
   connection_->SetMaxPacketLength(length);
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _))
@@ -967,9 +969,6 @@ TEST_F(QuicStreamTest, WriteMemSlices) {
   set_initial_flow_control_window_bytes(500000);
 
   Initialize(kShouldProcessData);
-  if (!session_->can_use_slices()) {
-    return;
-  }
   char data[1024];
   std::vector<std::pair<char*, size_t>> buffers;
   buffers.push_back(std::make_pair(data, QUIC_ARRAYSIZE(data)));
@@ -1032,9 +1031,6 @@ TEST_F(QuicStreamTest, WriteMemSlices) {
 TEST_F(QuicStreamTest, WriteMemSlicesReachStreamLimit) {
   SetQuicReloadableFlag(quic_stream_too_long, true);
   Initialize(kShouldProcessData);
-  if (!session_->can_use_slices()) {
-    return;
-  }
   QuicStreamPeer::SetStreamBytesWritten(kMaxStreamLength - 5u, stream_);
   char data[5];
   std::vector<std::pair<char*, size_t>> buffers;
@@ -1223,20 +1219,14 @@ TEST_F(QuicStreamTest, MarkConnectionLevelWriteBlockedOnWindowUpdateFrame) {
                                       1234);
 
   stream_->OnWindowUpdateFrame(window_update);
-  if (session_->session_unblocks_stream()) {
-    // Verify stream is marked connection level write blocked.
-    EXPECT_TRUE(HasWriteBlockedStreams());
-    EXPECT_TRUE(stream_->HasBufferedData());
-  } else {
-    EXPECT_FALSE(HasWriteBlockedStreams());
-    EXPECT_FALSE(stream_->HasBufferedData());
-  }
+  // Verify stream is marked connection level write blocked.
+  EXPECT_TRUE(HasWriteBlockedStreams());
+  EXPECT_TRUE(stream_->HasBufferedData());
 }
 
 // Regression test for b/73282665.
 TEST_F(QuicStreamTest,
        MarkConnectionLevelWriteBlockedOnWindowUpdateFrameWithNoBufferedData) {
-  SetQuicReloadableFlag(quic_streams_unblocked_by_session2, true);
   // Set a small initial flow control window size.
   const uint32_t kSmallWindow = 100;
   set_initial_flow_control_window_bytes(kSmallWindow);

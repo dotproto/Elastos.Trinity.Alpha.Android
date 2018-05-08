@@ -23,11 +23,11 @@ namespace ui {
 
 InputMethodAuraLinux::InputMethodAuraLinux(
     internal::InputMethodDelegate* delegate)
-    : text_input_type_(TEXT_INPUT_TYPE_NONE),
+    : InputMethodBase(delegate),
+      text_input_type_(TEXT_INPUT_TYPE_NONE),
       is_sync_mode_(false),
       composition_changed_(false),
       weak_ptr_factory_(this) {
-  SetDelegate(delegate);
   context_ =
       LinuxInputMethodContextFactory::instance()->CreateInputMethodContext(
           this, false);
@@ -45,12 +45,6 @@ LinuxInputMethodContext* InputMethodAuraLinux::GetContextForTesting(
 }
 
 // Overriden from InputMethod.
-
-bool InputMethodAuraLinux::OnUntranslatedIMEMessage(
-    const base::NativeEvent& event,
-    NativeEventResult* result) {
-  return false;
-}
 
 ui::EventDispatchDetails InputMethodAuraLinux::DispatchKeyEvent(
     ui::KeyEvent* event) {

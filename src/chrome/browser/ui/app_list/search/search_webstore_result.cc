@@ -28,13 +28,13 @@ SearchWebstoreResult::SearchWebstoreResult(
       launch_url_(extension_urls::GetWebstoreSearchPageUrl(query)) {
   set_id(launch_url_.spec());
   set_relevance(0.0);
-
+  set_result_type(ash::SearchResultType::kWebStoreApp);
   set_title(base::UTF8ToUTF16(query));
 
   const base::string16 details =
       l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE);
   Tags details_tags;
-  details_tags.push_back(Tag(SearchResult::Tag::DIM, 0, details.length()));
+  details_tags.push_back(Tag(ash::SearchResultTag::DIM, 0, details.length()));
 
   set_details(details);
   set_details_tags(details_tags);
@@ -58,9 +58,8 @@ void SearchWebstoreResult::Open(int event_flags) {
                        ui::DispositionFromEventFlags(event_flags));
 }
 
-std::unique_ptr<SearchResult> SearchWebstoreResult::Duplicate() const {
-  return std::unique_ptr<SearchResult>(
-      new SearchWebstoreResult(profile_, controller_, query_));
+std::unique_ptr<ChromeSearchResult> SearchWebstoreResult::Duplicate() const {
+  return std::make_unique<SearchWebstoreResult>(profile_, controller_, query_);
 }
 
 }  // namespace app_list

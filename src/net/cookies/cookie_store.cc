@@ -13,8 +13,8 @@ namespace net {
 CookieStore::~CookieStore() = default;
 
 void CookieStore::DeleteAllAsync(DeleteCallback callback) {
-  DeleteAllCreatedBetweenAsync(base::Time(), base::Time::Max(),
-                               std::move(callback));
+  DeleteAllCreatedInTimeRangeAsync(CookieDeletionInfo::TimeRange(),
+                                   std::move(callback));
 }
 
 void CookieStore::SetForceKeepSessionState() {
@@ -39,6 +39,10 @@ void CookieStore::SetChannelIDServiceID(int id) {
 int CookieStore::GetChannelIDServiceID() {
   return channel_id_service_id_;
 }
+
+void CookieStore::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_absolute_name) const {}
 
 CookieStore::CookieStore() : channel_id_service_id_(-1) {}
 

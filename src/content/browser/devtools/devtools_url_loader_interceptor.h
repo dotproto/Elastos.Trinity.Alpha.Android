@@ -40,6 +40,9 @@ class DevToolsURLLoaderInterceptor {
       std::unique_ptr<
           DevToolsNetworkInterceptor::GetResponseBodyForInterceptionCallback>
           callback);
+  void TakeResponseBodyPipe(
+      const std::string& interception_id,
+      DevToolsNetworkInterceptor::TakeResponseBodyPipeCallback callback);
   void ContinueInterceptedRequest(
       const std::string& interception_id,
       std::unique_ptr<DevToolsNetworkInterceptor::Modifications> modifications,
@@ -50,6 +53,7 @@ class DevToolsURLLoaderInterceptor {
   bool CreateProxyForInterception(
       const base::UnguessableToken frame_token,
       int process_id,  // 0 for navigation
+      bool has_suggested_download_filename,
       network::mojom::URLLoaderFactoryRequest* request) const;
 
  private:

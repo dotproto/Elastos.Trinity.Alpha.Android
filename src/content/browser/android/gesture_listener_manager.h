@@ -22,6 +22,7 @@ class Vector2dF;
 
 namespace content {
 
+class NavigationHandle;
 class WebContentsImpl;
 
 // Native class for GestureListenerManagerImpl.
@@ -33,6 +34,16 @@ class GestureListenerManager : public RenderWidgetHostConnector {
   ~GestureListenerManager() override;
 
   void Reset(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void ResetGestureDetection(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj);
+  void SetDoubleTapSupportEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean enabled);
+  void SetMultiTouchZoomSupportEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean enabled);
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result);
   void DidStopFlinging();
@@ -49,14 +60,24 @@ class GestureListenerManager : public RenderWidgetHostConnector {
                         const float content_offset,
                         const float top_shown_pix,
                         bool top_changed);
+  void UpdateOnTouchDown();
 
   // RendetWidgetHostConnector implementation.
   void UpdateRenderProcessConnection(
       RenderWidgetHostViewAndroid* old_rwhva,
       RenderWidgetHostViewAndroid* new_rhwva) override;
 
+  void OnNavigationFinished(NavigationHandle* navigation_handle);
+  void OnRenderProcessGone();
+
  private:
+  class ResetScrollObserver;
+
+  void ResetPopupsAndInput(bool render_process_gone);
+
+  std::unique_ptr<ResetScrollObserver> reset_scroll_observer_;
   WebContentsImpl* web_contents_;
+  RenderWidgetHostViewAndroid* rwhva_ = nullptr;
 
   // A weak reference to the Java GestureListenerManager object.
   JavaObjectWeakGlobalRef java_ref_;

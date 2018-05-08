@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
+#include "services/network/network_usage_accumulator.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/resource_scheduler_client.h"
 #include "services/network/url_loader.h"
@@ -20,12 +21,17 @@ constexpr int URLLoaderFactory::kMaxKeepaliveConnectionsPerProcessForFetchAPI;
 URLLoaderFactory::URLLoaderFactory(
     NetworkContext* context,
     uint32_t process_id,
-    scoped_refptr<ResourceSchedulerClient> resource_scheduler_client)
+    scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
+    mojom::URLLoaderFactoryRequest request)
     : context_(context),
       process_id_(process_id),
       resource_scheduler_client_(std::move(resource_scheduler_client)) {
+  binding_set_.AddBinding(this, std::move(request));
+  binding_set_.set_connection_error_handler(base::BindRepeating(
+      &URLLoaderFactory::DeleteIfNeeded, base::Unretained(this)));
+
   if (context_->network_service()) {
-    context->network_service()->keepalive_statistics_recorder()->Register(
+    context_->network_service()->keepalive_statistics_recorder()->Register(
         process_id_);
   }
 }
@@ -34,6 +40,15 @@ URLLoaderFactory::~URLLoaderFactory() {
   if (context_->network_service()) {
     context_->network_service()->keepalive_statistics_recorder()->Unregister(
         process_id_);
+    // Reset bytes transferred for the process if this is the last
+    // |URLLoaderFactory|.
+    if (!context_->network_service()
+             ->keepalive_statistics_recorder()
+             ->HasRecordForProcess(process_id_)) {
+      context_->network_service()
+          ->network_usage_accumulator()
+          ->ClearBytesTransferredForProcess(process_id_);
+    }
   }
 }
 
@@ -56,11 +71,14 @@ void URLLoaderFactory::CreateLoaderAndStart(
 
   mojom::NetworkServiceClient* network_service_client = nullptr;
   base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder;
+  base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator;
   if (context_->network_service()) {
     network_service_client = context_->network_service()->client();
     keepalive_statistics_recorder = context_->network_service()
                                         ->keepalive_statistics_recorder()
                                         ->AsWeakPtr();
+    network_usage_accumulator =
+        context_->network_service()->network_usage_accumulator()->AsWeakPtr();
   }
 
   if (url_request.keepalive && keepalive_statistics_recorder) {
@@ -97,18 +115,33 @@ void URLLoaderFactory::CreateLoaderAndStart(
     }
   }
 
-  new URLLoader(
-      context_->url_request_context_getter(), network_service_client,
+  url_loaders_.insert(std::make_unique<URLLoader>(
+      context_->url_request_context(), network_service_client,
+      base::BindOnce(&URLLoaderFactory::DestroyURLLoader,
+                     base::Unretained(this)),
       std::move(request), options, url_request, report_raw_headers,
       std::move(client),
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
       process_id_, request_id, resource_scheduler_client_,
-      std::move(keepalive_statistics_recorder));
+      std::move(keepalive_statistics_recorder),
+      std::move(network_usage_accumulator)));
 }
 
 void URLLoaderFactory::Clone(mojom::URLLoaderFactoryRequest request) {
-  context_->CreateURLLoaderFactory(std::move(request), process_id_,
-                                   resource_scheduler_client_);
+  binding_set_.AddBinding(this, std::move(request));
+}
+
+void URLLoaderFactory::DestroyURLLoader(URLLoader* url_loader) {
+  auto it = url_loaders_.find(url_loader);
+  DCHECK(it != url_loaders_.end());
+  url_loaders_.erase(it);
+  DeleteIfNeeded();
+}
+
+void URLLoaderFactory::DeleteIfNeeded() {
+  if (!binding_set_.empty() || !url_loaders_.empty())
+    return;
+  context_->DestroyURLLoaderFactory(this);
 }
 
 }  // namespace network

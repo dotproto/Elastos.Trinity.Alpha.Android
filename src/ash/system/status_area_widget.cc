@@ -9,6 +9,7 @@
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/system/dictation/dictation_button_tray.h"
 #include "ash/system/flag_warning/flag_warning_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/overview/overview_button_tray.h"
@@ -19,6 +20,7 @@
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/system/web_notification/web_notification_tray.h"
+#include "base/command_line.h"
 #include "base/i18n/time_formatting.h"
 #include "ui/display/display.h"
 #include "ui/native_theme/native_theme_dark_aura.h"
@@ -56,9 +58,11 @@ void StatusAreaWidget::Initialize() {
   }
 
   // Must happen after the widget is initialized so the native window exists.
-  web_notification_tray_ =
-      std::make_unique<WebNotificationTray>(shelf_, GetNativeWindow());
-  status_area_widget_delegate_->AddChildView(web_notification_tray_.get());
+  if (!features::IsSystemTrayUnifiedEnabled()) {
+    web_notification_tray_ =
+        std::make_unique<WebNotificationTray>(shelf_, GetNativeWindow());
+    status_area_widget_delegate_->AddChildView(web_notification_tray_.get());
+  }
 
   palette_tray_ = std::make_unique<PaletteTray>(shelf_);
   status_area_widget_delegate_->AddChildView(palette_tray_.get());
@@ -72,6 +76,13 @@ void StatusAreaWidget::Initialize() {
   logout_button_tray_ = std::make_unique<LogoutButtonTray>(shelf_);
   status_area_widget_delegate_->AddChildView(logout_button_tray_.get());
 
+  // Dictation is currently only available behind the experimental
+  // accessibility features flag.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableExperimentalAccessibilityFeatures)) {
+    dictation_button_tray_ = std::make_unique<DictationButtonTray>(shelf_);
+    status_area_widget_delegate_->AddChildView(dictation_button_tray_.get());
+  }
   if (Shell::GetAshConfig() == ash::Config::MASH) {
     // Flag warning tray is not currently used in non-MASH environments, because
     // mus will roll out via experiment/Finch trial and showing the tray would
@@ -85,12 +96,18 @@ void StatusAreaWidget::Initialize() {
   status_area_widget_delegate_->UpdateLayout();
 
   // Initialize after all trays have been created.
-  system_tray_->InitializeTrayItems(web_notification_tray_.get());
-  web_notification_tray_->Initialize();
+  if (web_notification_tray_) {
+    system_tray_->InitializeTrayItems(web_notification_tray_.get());
+    web_notification_tray_->Initialize();
+  } else {
+    system_tray_->InitializeTrayItems(nullptr);
+  }
   palette_tray_->Initialize();
   virtual_keyboard_tray_->Initialize();
   ime_menu_tray_->Initialize();
   overview_button_tray_->Initialize();
+  if (dictation_button_tray_)
+    dictation_button_tray_->Initialize();
   UpdateAfterShelfAlignmentChange();
   UpdateAfterLoginStatusChange(
       Shell::Get()->session_controller()->login_status());
@@ -111,6 +128,7 @@ StatusAreaWidget::~StatusAreaWidget() {
   palette_tray_.reset();
   logout_button_tray_.reset();
   overview_button_tray_.reset();
+  dictation_button_tray_.reset();
   flag_warning_tray_.reset();
 
   // All child tray views have been removed.
@@ -119,12 +137,15 @@ StatusAreaWidget::~StatusAreaWidget() {
 
 void StatusAreaWidget::UpdateAfterShelfAlignmentChange() {
   system_tray_->UpdateAfterShelfAlignmentChange();
-  web_notification_tray_->UpdateAfterShelfAlignmentChange();
+  if (web_notification_tray_)
+    web_notification_tray_->UpdateAfterShelfAlignmentChange();
   logout_button_tray_->UpdateAfterShelfAlignmentChange();
   virtual_keyboard_tray_->UpdateAfterShelfAlignmentChange();
   ime_menu_tray_->UpdateAfterShelfAlignmentChange();
   palette_tray_->UpdateAfterShelfAlignmentChange();
   overview_button_tray_->UpdateAfterShelfAlignmentChange();
+  if (dictation_button_tray_)
+    dictation_button_tray_->UpdateAfterShelfAlignmentChange();
   if (flag_warning_tray_)
     flag_warning_tray_->UpdateAfterShelfAlignmentChange();
   status_area_widget_delegate_->UpdateLayout();
@@ -171,18 +192,22 @@ bool StatusAreaWidget::ShouldShowShelf() const {
 
 bool StatusAreaWidget::IsMessageBubbleShown() const {
   return system_tray_->IsSystemBubbleVisible() ||
-         web_notification_tray_->IsMessageCenterVisible();
+         (web_notification_tray_ &&
+          web_notification_tray_->IsMessageCenterVisible());
 }
 
 void StatusAreaWidget::SchedulePaint() {
   status_area_widget_delegate_->SchedulePaint();
-  web_notification_tray_->SchedulePaint();
+  if (web_notification_tray_)
+    web_notification_tray_->SchedulePaint();
   system_tray_->SchedulePaint();
   virtual_keyboard_tray_->SchedulePaint();
   logout_button_tray_->SchedulePaint();
   ime_menu_tray_->SchedulePaint();
   palette_tray_->SchedulePaint();
   overview_button_tray_->SchedulePaint();
+  if (dictation_button_tray_)
+    dictation_button_tray_->SchedulePaint();
   if (flag_warning_tray_)
     flag_warning_tray_->SchedulePaint();
 }
@@ -191,19 +216,24 @@ const ui::NativeTheme* StatusAreaWidget::GetNativeTheme() const {
   return ui::NativeThemeDarkAura::instance();
 }
 
-void StatusAreaWidget::OnNativeWidgetActivationChanged(bool active) {
-  Widget::OnNativeWidgetActivationChanged(active);
+bool StatusAreaWidget::OnNativeWidgetActivationChanged(bool active) {
+  if (!Widget::OnNativeWidgetActivationChanged(active))
+    return false;
   if (active)
     status_area_widget_delegate_->SetPaneFocusAndFocusDefault();
+  return true;
 }
 
 void StatusAreaWidget::UpdateShelfItemBackground(SkColor color) {
-  web_notification_tray_->UpdateShelfItemBackground(color);
+  if (web_notification_tray_)
+    web_notification_tray_->UpdateShelfItemBackground(color);
   system_tray_->UpdateShelfItemBackground(color);
   virtual_keyboard_tray_->UpdateShelfItemBackground(color);
   ime_menu_tray_->UpdateShelfItemBackground(color);
   palette_tray_->UpdateShelfItemBackground(color);
   overview_button_tray_->UpdateShelfItemBackground(color);
+  if (dictation_button_tray_)
+    dictation_button_tray_->UpdateShelfItemBackground(color);
 }
 
 }  // namespace ash

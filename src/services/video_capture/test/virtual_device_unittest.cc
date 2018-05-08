@@ -26,8 +26,6 @@ const std::string kTestDeviceName = "Test Device";
 const gfx::Size kTestFrameSize = {640 /* width */, 480 /* height */};
 const media::VideoPixelFormat kTestPixelFormat =
     media::VideoPixelFormat::PIXEL_FORMAT_I420;
-const media::VideoPixelStorage kTestPixelStorage =
-    media::VideoPixelStorage::CPU;
 
 }  // anonymous namespace
 
@@ -69,14 +67,14 @@ class VirtualDeviceTest : public ::testing::Test {
     for (int i = 0;
          i < VirtualDeviceMojoAdapter::max_buffer_pool_buffer_count(); i++) {
       device_adapter_->RequestFrameBuffer(
-          kTestFrameSize, kTestPixelFormat, kTestPixelStorage,
+          kTestFrameSize, kTestPixelFormat,
           base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                      base::Unretained(this), true /* valid_buffer_expected */));
     }
 
     // No more buffer available. Invalid buffer id should be returned.
     device_adapter_->RequestFrameBuffer(
-        kTestFrameSize, kTestPixelFormat, kTestPixelStorage,
+        kTestFrameSize, kTestPixelFormat,
         base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                    base::Unretained(this), false /* valid_buffer_expected */));
 
@@ -119,7 +117,7 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithoutReceiver) {
   // buffer.
   EXPECT_CALL(*producer_, DoOnNewBufferHandle(_, _, _)).Times(0);
   device_adapter_->RequestFrameBuffer(
-      kTestFrameSize, kTestPixelFormat, kTestPixelStorage,
+      kTestFrameSize, kTestPixelFormat,
       base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                  base::Unretained(this), true /* valid_buffer_expected */));
 
@@ -136,7 +134,7 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithReceiver) {
   mojom::ReceiverPtr receiver_proxy;
   MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
   EXPECT_CALL(receiver, OnStarted());
-  EXPECT_CALL(receiver, DoOnNewBufferHandle(_, _))
+  EXPECT_CALL(receiver, DoOnNewBuffer(_, _))
       .Times(VirtualDeviceMojoAdapter::max_buffer_pool_buffer_count());
   EXPECT_CALL(receiver, DoOnFrameReadyInBuffer(_, _, _, _))
       .Times(VirtualDeviceMojoAdapter::max_buffer_pool_buffer_count());
@@ -144,8 +142,7 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithReceiver) {
                          std::move(receiver_proxy));
   for (auto buffer_id : received_buffer_ids_) {
     media::mojom::VideoFrameInfoPtr info = media::mojom::VideoFrameInfo::New();
-    // |info->metadata| cannot be a nullptr when going over mojo boundary.
-    info->metadata = std::make_unique<base::DictionaryValue>();
+    info->metadata = base::Value(base::Value::Type::DICTIONARY);
     device_adapter_->OnFrameReadyInBuffer(buffer_id, std::move(info));
   }
   wait_loop.RunUntilIdle();
@@ -164,7 +161,6 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithReceiver) {
         EXPECT_TRUE(base::ContainsValue(received_buffer_ids_, buffer_id));
       }));
   device_adapter_->RequestFrameBuffer(kTestFrameSize, kTestPixelFormat,
-                                      kTestPixelStorage,
                                       request_frame_buffer_callback.Get());
   wait_loop2.RunUntilIdle();
 }

@@ -14,7 +14,6 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/lazy_background_page_test_util.h"
-#include "chrome/browser/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/fake_gcm_driver_for_instance_id.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
@@ -776,7 +776,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerTest, EventsToStoppedWorker) {
 // Tests that events to service worker arrives correctly event if the owner
 // extension of the worker is not running.
 IN_PROC_BROWSER_TEST_P(ServiceWorkerLazyBackgroundTest,
-                       EventsToStoppedExtension) {
+                       DISABLED_EventsToStoppedExtension) {
   LazyBackgroundObserver lazy_observer;
   ResultCatcher catcher;
   const Extension* extension = LoadExtensionWithFlags(
@@ -878,7 +878,9 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerLazyBackgroundTest,
   lazy_observer.Wait();
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerLazyBackgroundTest, EventsAfterRestart) {
+// Flaky: http://crbug/834200.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerLazyBackgroundTest,
+                       DISABLED_EventsAfterRestart) {
   ExtensionTestMessageListener newtab_listener("hello-newtab", false);
   content::WebContents* new_web_contents =
       AddTab(browser(), GURL(url::kAboutBlankURL));

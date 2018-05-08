@@ -146,7 +146,8 @@ TEST_F(OmniboxEditModelTest, AdjustTextForCopy) {
   };
 
   for (size_t i = 0; i < arraysize(input); ++i) {
-    toolbar_model()->set_text(base::ASCIIToUTF16(input[i].url_for_editing));
+    toolbar_model()->set_formatted_full_url(
+        base::ASCIIToUTF16(input[i].url_for_editing));
     model()->ResetDisplayUrls();
 
     model()->SetInputInProgress(input[i].is_match_selected_in_popup);
@@ -229,4 +230,15 @@ TEST_F(OmniboxEditModelTest, AlternateNavHasHTTP) {
                      alternate_nav_url, base::string16(), 0);
   EXPECT_TRUE(AutocompleteInput::HasHTTPScheme(
       client->alternate_nav_match().fill_into_edit));
+}
+
+TEST_F(OmniboxEditModelTest, GenerateMatchesFromFullFormattedUrl) {
+  toolbar_model()->set_formatted_full_url(
+      base::ASCIIToUTF16("http://localhost/"));
+  toolbar_model()->set_url_for_display(base::ASCIIToUTF16("localhost"));
+  model()->ResetDisplayUrls();
+
+  // Bypass the test class's mock method to test the real behavior.
+  AutocompleteMatch match = model()->OmniboxEditModel::CurrentMatch(nullptr);
+  EXPECT_EQ(AutocompleteMatchType::URL_WHAT_YOU_TYPED, match.type);
 }

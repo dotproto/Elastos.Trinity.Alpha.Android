@@ -18,7 +18,7 @@
 #include "content/common/cursors/webcursor.h"
 #include "ipc/ipc_mojo_param_traits.h"
 #include "storage/common/blob_storage/blob_handle.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/accessibility/ax_modes.h"
 
 namespace blink {
@@ -29,6 +29,13 @@ struct TransferableMessage;
 namespace content {
 struct FrameMsg_ViewChanged_Params;
 }
+
+namespace viz {
+class FrameSinkId;
+class LocalSurfaceId;
+class SurfaceId;
+class SurfaceInfo;
+}  // namespace viz
 
 namespace IPC {
 
@@ -106,6 +113,46 @@ struct CONTENT_EXPORT ParamTraits<content::FrameMsg_ViewChanged_Params> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* p);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<viz::FrameSinkId> {
+  typedef viz::FrameSinkId param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<viz::LocalSurfaceId> {
+  typedef viz::LocalSurfaceId param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<viz::SurfaceId> {
+  typedef viz::SurfaceId param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<viz::SurfaceInfo> {
+  typedef viz::SurfaceInfo param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 

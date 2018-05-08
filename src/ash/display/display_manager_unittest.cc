@@ -10,7 +10,7 @@
 #include "ash/display/display_util.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/mirror_window_test_api.h"
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/app_types.h"
@@ -39,13 +39,13 @@
 #include "ui/display/display_layout_builder.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/display_switches.h"
-#include "ui/display/manager/chromeos/display_change_observer.h"
-#include "ui/display/manager/chromeos/display_util.h"
-#include "ui/display/manager/chromeos/test/touch_device_manager_test_api.h"
+#include "ui/display/manager/display_change_observer.h"
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager_utilities.h"
+#include "ui/display/manager/display_util.h"
 #include "ui/display/manager/fake_display_snapshot.h"
 #include "ui/display/manager/managed_display_info.h"
+#include "ui/display/manager/test/touch_device_manager_test_api.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/devices/touchscreen_device.h"
@@ -204,11 +204,14 @@ TEST_F(DisplayManagerTest, UpdateDisplayTest) {
             display_manager()->GetDisplayAt(0).bounds().ToString());
 
   EXPECT_EQ("2 1 0 1 1", GetCountSummary());
-  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[0].id());
-  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[1].id());
+  // Metrics change immediately when new displays set shelf work area insets.
+  // After that, DisplayManager::OnNativeDisplaysChanged trigger changes of the
+  // primary display's metrics. So the observed order of changes is [1, 0].
+  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[1].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[0].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), added()[0].id());
-  EXPECT_EQ("0,0 500x500", changed()[0].bounds().ToString());
-  EXPECT_EQ("500,0 400x400", changed()[1].bounds().ToString());
+  EXPECT_EQ("0,0 500x500", changed()[1].bounds().ToString());
+  EXPECT_EQ("500,0 400x400", changed()[0].bounds().ToString());
   // Secondary display is on right.
   EXPECT_EQ("500,0 400x400", added()[0].bounds().ToString());
   EXPECT_EQ("0,501 400x400",
@@ -343,14 +346,17 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
             display_manager()->GetDisplayAt(2).bounds().ToString());
 
   EXPECT_EQ("3 2 0 1 1", GetCountSummary());
-  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[0].id());
-  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[1].id());
-  EXPECT_EQ(display_manager()->GetDisplayAt(2).id(), changed()[2].id());
+  // Metrics change immediately when new displays set shelf work area insets.
+  // After that, DisplayManager::OnNativeDisplaysChanged trigger changes of the
+  // primary display's metrics. So the observed order of changes is [1, 2, 0].
+  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[2].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[0].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(2).id(), changed()[1].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), added()[0].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(2).id(), added()[1].id());
-  EXPECT_EQ("0,0 640x480", changed()[0].bounds().ToString());
-  EXPECT_EQ("640,0 320x200", changed()[1].bounds().ToString());
-  EXPECT_EQ("960,0 400x300", changed()[2].bounds().ToString());
+  EXPECT_EQ("0,0 640x480", changed()[2].bounds().ToString());
+  EXPECT_EQ("640,0 320x200", changed()[0].bounds().ToString());
+  EXPECT_EQ("960,0 400x300", changed()[1].bounds().ToString());
   // Secondary and terniary displays are on right.
   EXPECT_EQ("640,0 320x200", added()[0].bounds().ToString());
   EXPECT_EQ("1000,0 320x200",
@@ -1301,7 +1307,7 @@ TEST_F(DisplayManagerTest, UpdateDisplayZoomTest) {
 
   float zoom_factor_1 = 2.0f;
   display_manager()->UpdateZoomFactor(info_1.id(), zoom_factor_1);
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
             zoom_factor_1);
 
   // With the zoom factor set for the display. The effective zoom factor
@@ -1314,7 +1320,7 @@ TEST_F(DisplayManagerTest, UpdateDisplayZoomTest) {
   float zoom_factor_2 = 1.5f;
   display_manager()->UpdateZoomFactor(info_1.id(), zoom_factor_2);
 
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
             zoom_factor_2);
 
   // Change the display mode of the device.
@@ -1336,7 +1342,7 @@ TEST_F(DisplayManagerTest, UpdateDisplayZoomTest) {
 
   // Set the zoom factor back to |zoom_factor_2| for first display.
   display_manager()->UpdateZoomFactor(info_1.id(), zoom_factor_2);
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
             zoom_factor_2);
   EXPECT_EQ(
       display_manager()->GetDisplayForId(info_1.id()).device_scale_factor(),
@@ -1346,7 +1352,7 @@ TEST_F(DisplayManagerTest, UpdateDisplayZoomTest) {
   float zoom_factor_3 = 1.5f;
   const display::ManagedDisplayInfo& info_2 = GetDisplayInfoAt(1);
   display_manager()->UpdateZoomFactor(info_2.id(), zoom_factor_3);
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_2.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(),
             zoom_factor_3);
   EXPECT_EQ(
       display_manager()->GetDisplayForId(info_2.id()).device_scale_factor(),
@@ -1354,13 +1360,13 @@ TEST_F(DisplayManagerTest, UpdateDisplayZoomTest) {
 
   // Modifying zoom factor for a display should not effect zoom factors of
   // other displays.
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
             zoom_factor_2);
 
   // Update the zoom factor for display to see if it gets reflected.
   display_manager()->UpdateZoomFactor(info_1.id(), zoom_factor_3);
 
-  EXPECT_EQ(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_EQ(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
             zoom_factor_3);
   display::test::SetDisplayResolution(display_manager(), info_1.id(),
                                       modes[0].size());
@@ -1407,17 +1413,17 @@ TEST_F(DisplayManagerTest, ZoomDisplay) {
                                       zoom_factors_1[zoom_factor_idx_1]);
 
   // Make sure the chage was successful.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
               zoom_factors_1[zoom_factor_idx_1], 0.001f);
 
   // Zoom out the display. This should have no effect, since the display is
   // already at the minimum zoom level.
   display_manager()->ZoomDisplay(info_1.id(), true /* up */);
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
               zoom_factors_1[zoom_factor_idx_1], 0.001f);
 
   // Ensure that this call did not modify the zoom value for the other display.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()), 1.f,
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(), 1.f,
               0.001f);
 
   // Zoom in the display.
@@ -1425,14 +1431,14 @@ TEST_F(DisplayManagerTest, ZoomDisplay) {
 
   // The zoom factor for the display should be set to the next zoom factor in
   // list.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
               zoom_factors_1[zoom_factor_idx_1 + 1], 0.001f);
 
   // Zoom out the display.
   display_manager()->ZoomDisplay(info_1.id(), true /* up */);
 
   // The zoom level should decrease from the previous level.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
               zoom_factors_1[zoom_factor_idx_1], 0.001f);
 
   // Enumerate the zoom factors for display.
@@ -1446,37 +1452,37 @@ TEST_F(DisplayManagerTest, ZoomDisplay) {
                                       zoom_factors_2[zoom_factor_idx_2]);
 
   // Make sure the chage was successful.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(),
               zoom_factors_2[zoom_factor_idx_2], 0.001f);
 
   // Zoom in the display. This should have no effect since we are already at
   // maximum zoom.
   display_manager()->ZoomDisplay(info_2.id(), false /* up */);
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(),
               zoom_factors_2[zoom_factor_idx_2], 0.001f);
 
   // Zoom out the display
   display_manager()->ZoomDisplay(info_2.id(), true /* up */);
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(),
               zoom_factors_2[zoom_factor_idx_2 - 1], 0.001f);
 
   // Ensure that this call did not modify the zoom value for the other display.
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(),
               zoom_factors_1[zoom_factor_idx_1], 0.001f);
 
   // Reset the zoom value for displays.
   display_manager()->ResetDisplayZoom(info_1.id());
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()), 1.f,
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(), 1.f,
               0.001f);
   // Resetting the zoom level of one display should not effect the other display
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()),
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(),
               zoom_factors_2[zoom_factor_idx_2 - 1], 0.001f);
 
   // Now reset the zoom value for other display.
   display_manager()->ResetDisplayZoom(info_2.id());
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_2.id()), 1.f,
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_2.id()).zoom_factor(), 1.f,
               0.001f);
-  EXPECT_NEAR(display_manager()->GetZoomFactorForDisplay(info_1.id()), 1.f,
+  EXPECT_NEAR(display_manager()->GetDisplayInfo(info_1.id()).zoom_factor(), 1.f,
               0.001f);
 }
 
@@ -3370,96 +3376,7 @@ class FontTestHelper : public AshTestBase {
   DISALLOW_COPY_AND_ASSIGN(FontTestHelper);
 };
 
-bool IsTextSubpixelPositioningEnabled() {
-  gfx::FontRenderParams params =
-      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr);
-  return params.subpixel_positioning;
-}
-
-gfx::FontRenderParams::Hinting GetFontHintingParams() {
-  gfx::FontRenderParams params =
-      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr);
-  return params.hinting;
-}
-
 }  // namespace
-
-using DisplayManagerFontTest = testing::Test;
-
-TEST_F(DisplayManagerFontTest, TextSubpixelPositioningWithDsf100Internal) {
-  FontTestHelper helper(1.0f, FontTestHelper::INTERNAL);
-  ASSERT_DOUBLE_EQ(
-      1.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_FALSE(IsTextSubpixelPositioningEnabled());
-  EXPECT_NE(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
-
-TEST_F(DisplayManagerFontTest, TextSubpixelPositioningWithDsf200Internal) {
-  FontTestHelper helper(2.0f, FontTestHelper::INTERNAL);
-  ASSERT_DOUBLE_EQ(
-      2.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(IsTextSubpixelPositioningEnabled());
-  EXPECT_EQ(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-
-  display::test::DisplayManagerTestApi(helper.display_manager())
-      .SetDisplayUIScale(display::Screen::GetScreen()->GetPrimaryDisplay().id(),
-                         2.0f);
-
-  ASSERT_DOUBLE_EQ(
-      1.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_FALSE(IsTextSubpixelPositioningEnabled());
-  EXPECT_NE(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
-
-TEST_F(DisplayManagerFontTest, TextSubpixelPositioningWithDsf100External) {
-  FontTestHelper helper(1.0f, FontTestHelper::EXTERNAL);
-  ASSERT_DOUBLE_EQ(
-      1.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_FALSE(IsTextSubpixelPositioningEnabled());
-  EXPECT_NE(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
-
-TEST_F(DisplayManagerFontTest, TextSubpixelPositioningWithDsf125External) {
-  FontTestHelper helper(1.25f, FontTestHelper::EXTERNAL);
-  ASSERT_DOUBLE_EQ(
-      1.25f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(IsTextSubpixelPositioningEnabled());
-  EXPECT_EQ(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
-
-TEST_F(DisplayManagerFontTest, TextSubpixelPositioningWithDsf200External) {
-  FontTestHelper helper(2.0f, FontTestHelper::EXTERNAL);
-  ASSERT_DOUBLE_EQ(
-      2.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(IsTextSubpixelPositioningEnabled());
-  EXPECT_EQ(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
-
-TEST_F(DisplayManagerFontTest,
-       TextSubpixelPositioningWithDsf125InternalWithScaling) {
-  FontTestHelper helper(1.25f, FontTestHelper::INTERNAL);
-  ASSERT_DOUBLE_EQ(
-      1.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_FALSE(IsTextSubpixelPositioningEnabled());
-  EXPECT_NE(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-
-  display::test::DisplayManagerTestApi(helper.display_manager())
-      .SetDisplayUIScale(display::Screen::GetScreen()->GetPrimaryDisplay().id(),
-                         0.8f);
-
-  ASSERT_DOUBLE_EQ(
-      1.25f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(IsTextSubpixelPositioningEnabled());
-  EXPECT_EQ(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
-}
 
 TEST_F(DisplayManagerTest, CheckInitializationOfRotationProperty) {
   int64_t id = display_manager()->GetDisplayAt(0).id();
@@ -3700,7 +3617,7 @@ TEST_F(DisplayManagerTest, ForcedMirrorMode) {
   EXPECT_EQ(display::MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             observer.GetStateForDisplayIds(outputs));
 
-  display_manager()->layout_store()->set_forced_mirror_mode(true);
+  display_manager()->layout_store()->set_forced_mirror_mode_for_tablet(true);
 
   observer.OnDisplayModeChanged(outputs);
 
@@ -3711,7 +3628,7 @@ TEST_F(DisplayManagerTest, ForcedMirrorMode) {
   EXPECT_EQ(display::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR,
             observer.GetStateForDisplayIds(outputs));
 
-  display_manager()->layout_store()->set_forced_mirror_mode(false);
+  display_manager()->layout_store()->set_forced_mirror_mode_for_tablet(false);
 
   EXPECT_EQ(display::MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             observer.GetStateForDisplayIds(outputs));
@@ -3733,12 +3650,16 @@ class DisplayManagerOrientationTest : public DisplayManagerTest {
                           0.f, 0.f);
     portrait_secondary->Set(chromeos::ACCELEROMETER_SOURCE_SCREEN, kMeanGravity,
                             0.f, 0.f);
+    landscape_primary->Set(chromeos::ACCELEROMETER_SOURCE_SCREEN, 0,
+                           -kMeanGravity, 0.f);
   }
 
  protected:
   scoped_refptr<chromeos::AccelerometerUpdate> portrait_primary =
       new chromeos::AccelerometerUpdate();
   scoped_refptr<chromeos::AccelerometerUpdate> portrait_secondary =
+      new chromeos::AccelerometerUpdate();
+  scoped_refptr<chromeos::AccelerometerUpdate> landscape_primary =
       new chromeos::AccelerometerUpdate();
 
  private:
@@ -3780,25 +3701,22 @@ TEST_F(DisplayManagerOrientationTest, SaveRestoreUserRotationLock) {
   {
     window_a->SetProperty(aura::client::kAppType,
                           static_cast<int>(AppType::CHROME_APP));
-    orientation_controller->LockOrientationForWindow(
-        window_a, OrientationLockType::kAny,
-        ScreenOrientationController::LockCompletionBehavior::None);
+    orientation_controller->LockOrientationForWindow(window_a,
+                                                     OrientationLockType::kAny);
   }
   aura::Window* window_p = CreateTestWindowInShellWithId(0);
   {
     window_p->SetProperty(aura::client::kAppType,
                           static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        window_p, OrientationLockType::kPortrait,
-        ScreenOrientationController::LockCompletionBehavior::None);
+        window_p, OrientationLockType::kPortrait);
   }
   aura::Window* window_l = CreateTestWindowInShellWithId(0);
   {
     window_l->SetProperty(aura::client::kAppType,
                           static_cast<int>(AppType::CHROME_APP));
     orientation_controller->LockOrientationForWindow(
-        window_l, OrientationLockType::kLandscape,
-        ScreenOrientationController::LockCompletionBehavior::None);
+        window_l, OrientationLockType::kLandscape);
   }
 
   DisplayConfigurationController* configuration_controller =
@@ -3911,8 +3829,7 @@ TEST_F(DisplayManagerOrientationTest, UserRotationLockReverse) {
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
 
   orientation_controller->LockOrientationForWindow(
-      window, OrientationLockType::kPortrait,
-      ScreenOrientationController::LockCompletionBehavior::None);
+      window, OrientationLockType::kPortrait);
   EXPECT_EQ(display::Display::ROTATE_270,
             screen->GetPrimaryDisplay().rotation());
 
@@ -3950,9 +3867,8 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
   {
     window_a->SetProperty(aura::client::kAppType,
                           static_cast<int>(AppType::CHROME_APP));
-    orientation_controller->LockOrientationForWindow(
-        window_a, OrientationLockType::kAny,
-        ScreenOrientationController::LockCompletionBehavior::None);
+    orientation_controller->LockOrientationForWindow(window_a,
+                                                     OrientationLockType::kAny);
   }
   wm::ActivateWindow(window_a);
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
@@ -3964,15 +3880,24 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
 
   orientation_controller->OnAccelerometerUpdated(portrait_secondary);
 
-  aura::Window* window_ps = CreateTestWindowInShellWithId(1);
-  {
-    window_ps->SetProperty(aura::client::kAppType,
-                           static_cast<int>(AppType::CHROME_APP));
-    orientation_controller->LockOrientationForWindow(
-        window_ps, OrientationLockType::kPortrait,
-        ScreenOrientationController::LockCompletionBehavior::DisableSensor);
-    wm::ActivateWindow(window_ps);
-  }
+  aura::Window* window_lsc = CreateTestWindowInShellWithId(1);
+  window_lsc->SetProperty(aura::client::kAppType,
+                          static_cast<int>(AppType::CHROME_APP));
+
+  aura::Window* window_psc = CreateTestWindowInShellWithId(1);
+  window_psc->SetProperty(aura::client::kAppType,
+                          static_cast<int>(AppType::CHROME_APP));
+
+  orientation_controller->LockOrientationForWindow(
+      window_psc, OrientationLockType::kPortraitSecondary);
+  orientation_controller->LockOrientationForWindow(
+      window_psc, OrientationLockType::kCurrent);
+  wm::ActivateWindow(window_psc);
+
+  orientation_controller->LockOrientationForWindow(
+      window_lsc, OrientationLockType::kLandscapeSecondary);
+  orientation_controller->LockOrientationForWindow(
+      window_lsc, OrientationLockType::kCurrent);
 
   EXPECT_EQ(OrientationLockType::kPortraitSecondary,
             test_api.GetCurrentOrientation());
@@ -3980,6 +3905,15 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
   // The orientation should stay portrait secondary.
   orientation_controller->OnAccelerometerUpdated(portrait_primary);
   EXPECT_EQ(OrientationLockType::kPortraitSecondary,
+            test_api.GetCurrentOrientation());
+  wm::ActivateWindow(window_lsc);
+
+  EXPECT_EQ(OrientationLockType::kLandscapeSecondary,
+            test_api.GetCurrentOrientation());
+
+  // The orientation should stay landscape secondary.
+  orientation_controller->OnAccelerometerUpdated(landscape_primary);
+  EXPECT_EQ(OrientationLockType::kLandscapeSecondary,
             test_api.GetCurrentOrientation());
 
   wm::ActivateWindow(window_a);
@@ -3991,7 +3925,7 @@ TEST_F(DisplayManagerOrientationTest, LockToSpecificOrientation) {
 
   // The orientation has alraedy been locked to secondary once, so
   // it should swtich back to the portrait secondary.
-  wm::ActivateWindow(window_ps);
+  wm::ActivateWindow(window_psc);
   EXPECT_EQ(OrientationLockType::kPortraitSecondary,
             test_api.GetCurrentOrientation());
 }
@@ -4546,6 +4480,133 @@ TEST_F(DisplayManagerTest, MirrorModeRestoreAfterResume) {
   display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
+}
+
+TEST_F(DisplayManagerTest, SoftwareMirrorRotationForTablet) {
+  UpdateDisplay("400x300,800x800");
+  RunAllPendingInMessageLoop();
+
+  // Set the first display as internal display so that the tablet mode can be
+  // enabled.
+  display::test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
+
+  // Simulate turning on mirror mode triggered by tablet mode on.
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 400, 300),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  MirrorWindowTestApi test_api;
+  std::vector<aura::WindowTreeHost*> host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(400, 300), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect1(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect1);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect1);
+  EXPECT_EQ(gfx::RectF(0.0f, 100.0f, 800.0f, 600.0f), transformed_rect1);
+
+  // Rotate the source display by 90 degrees.
+  UpdateDisplay("400x300/r,800x800");
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 300, 400),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(300, 400), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect2(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect2);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect2);
+  EXPECT_EQ(gfx::RectF(100.0f, 0.0f, 600.0f, 800.0f), transformed_rect2);
+
+  // Change the bounds of the source display and rotate the source display by 90
+  // degrees.
+  UpdateDisplay("300x400/r,800x800");
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 400, 300),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(400, 300), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect3(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect3);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect3);
+  EXPECT_EQ(gfx::RectF(0.0f, 100.0f, 800.0f, 600.0f), transformed_rect3);
+}
+
+TEST_F(DisplayManagerTest, SoftwareMirrorRotationForNonTablet) {
+  MirrorWindowTestApi test_api;
+  UpdateDisplay("400x300,800x800");
+
+  // Simulate turning on mirror mode not triggered by tablet mode.
+  SetSoftwareMirrorMode(true);
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 400, 300),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  std::vector<aura::WindowTreeHost*> host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(400, 300), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect1(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect1);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect1);
+  EXPECT_EQ(gfx::RectF(0.0f, 100.0f, 800.0f, 600.0f), transformed_rect1);
+
+  // Rotate the source display by 90 degrees.
+  UpdateDisplay("400x300/r,800x800");
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 300, 400),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(400, 300), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect2(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect2);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect2);
+  EXPECT_EQ(gfx::RectF(0.0f, 100.0f, 800.0f, 600.0f), transformed_rect2);
+
+  // Change the bounds of the source display and rotate the source display by 90
+  // degrees.
+  UpdateDisplay("300x400/r,800x800");
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
+  EXPECT_EQ(gfx::Rect(0, 0, 400, 300),
+            display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  host_list = test_api.GetHosts();
+  ASSERT_EQ(1U, host_list.size());
+  EXPECT_EQ(gfx::Size(800, 800), host_list[0]->GetBoundsInPixels().size());
+  EXPECT_EQ(gfx::Size(300, 400), host_list[0]->window()->bounds().size());
+
+  // Test the target display's bounds after the transforms are applied.
+  gfx::RectF transformed_rect3(
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
+  Shell::Get()->GetPrimaryRootWindow()->transform().TransformRect(
+      &transformed_rect3);
+  host_list[0]->window()->transform().TransformRect(&transformed_rect3);
+  EXPECT_EQ(gfx::RectF(100.0f, 0.0f, 600.0f, 800.0f), transformed_rect3);
 }
 
 }  // namespace ash

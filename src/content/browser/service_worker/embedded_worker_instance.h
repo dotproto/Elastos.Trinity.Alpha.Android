@@ -29,8 +29,8 @@
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -73,7 +73,9 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
 
   using ProviderInfoGetter =
       base::OnceCallback<mojom::ServiceWorkerProviderInfoForStartWorkerPtr(
-          int /* process_id */)>;
+          int /* process_id */,
+          network::mojom::
+              URLLoaderFactoryPtr /* non_network_loader_factory */)>;
 
   class Listener {
    public:
@@ -236,9 +238,15 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
       std::unique_ptr<DevToolsProxy> devtools_proxy,
       bool wait_for_debugger);
 
-  // Sends StartWorker message via Mojo.
+  // Sends the StartWorker message to the renderer.
+  //
+  // S13nServiceWorker:
+  // |non_network_loader_factory| is non-null when the service worker script URL
+  // has a non-http(s) scheme. In that case, it is used to load the script since
+  // the usual network factory can't be used.
   ServiceWorkerStatusCode SendStartWorker(
-      mojom::EmbeddedWorkerStartParamsPtr params);
+      mojom::EmbeddedWorkerStartParamsPtr params,
+      network::mojom::URLLoaderFactoryPtr non_network_loader_factory);
 
   // Called back from StartTask after a start worker message is sent.
   void OnStartWorkerMessageSent(bool is_script_streaming);
@@ -297,8 +305,10 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   std::unique_ptr<EmbeddedWorkerInstance::WorkerProcessHandle> process_handle_;
   int thread_id_;
 
-  // |client_| is used to send messages to the renderer process.
-  mojom::EmbeddedWorkerInstanceClientAssociatedPtr client_;
+  // |client_| is used to send messages to the renderer process. The browser
+  // process should not disconnect the pipe because associated interfaces may be
+  // using it. The renderer process will disconnect the pipe when appropriate.
+  mojom::EmbeddedWorkerInstanceClientPtr client_;
 
   // Binding for EmbeddedWorkerInstanceHost, runs on IO thread.
   mojo::AssociatedBinding<EmbeddedWorkerInstanceHost> instance_host_binding_;

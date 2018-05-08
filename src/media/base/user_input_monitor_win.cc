@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
@@ -41,7 +41,7 @@ std::unique_ptr<RAWINPUTDEVICE> GetRawInputDevices(HWND hwnd, DWORD flags) {
 // UserInputMonitorWin since it needs to be deleted on the UI thread.
 class UserInputMonitorWinCore
     : public base::SupportsWeakPtr<UserInputMonitorWinCore>,
-      public base::MessageLoop::DestructionObserver {
+      public base::MessageLoopCurrent::DestructionObserver {
  public:
   enum EventBitMask {
     MOUSE_EVENT_MASK = 1,
@@ -55,7 +55,7 @@ class UserInputMonitorWinCore
   // DestructionObserver overrides.
   void WillDestroyCurrentMessageLoop() override;
 
-  size_t GetKeyPressCount() const;
+  uint32_t GetKeyPressCount() const;
   void StartMonitor();
   void StopMonitor();
 
@@ -78,14 +78,14 @@ class UserInputMonitorWinCore
   DISALLOW_COPY_AND_ASSIGN(UserInputMonitorWinCore);
 };
 
-class UserInputMonitorWin : public UserInputMonitor {
+class UserInputMonitorWin : public UserInputMonitorBase {
  public:
   explicit UserInputMonitorWin(
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner);
   ~UserInputMonitorWin() override;
 
   // Public UserInputMonitor overrides.
-  size_t GetKeyPressCount() const override;
+  uint32_t GetKeyPressCount() const override;
 
  private:
   // Private UserInputMonitor overrides.
@@ -111,7 +111,7 @@ void UserInputMonitorWinCore::WillDestroyCurrentMessageLoop() {
   StopMonitor();
 }
 
-size_t UserInputMonitorWinCore::GetKeyPressCount() const {
+uint32_t UserInputMonitorWinCore::GetKeyPressCount() const {
   return counter_.GetKeyPressCount();
 }
 
@@ -123,8 +123,8 @@ void UserInputMonitorWinCore::StartMonitor() {
 
   std::unique_ptr<base::win::MessageWindow> window =
       std::make_unique<base::win::MessageWindow>();
-  if (!window->Create(base::Bind(&UserInputMonitorWinCore::HandleMessage,
-                                 base::Unretained(this)))) {
+  if (!window->Create(base::BindRepeating(
+          &UserInputMonitorWinCore::HandleMessage, base::Unretained(this)))) {
     PLOG(ERROR) << "Failed to create the raw input window";
     return;
   }
@@ -140,7 +140,7 @@ void UserInputMonitorWinCore::StartMonitor() {
   window_ = std::move(window);
   // Start observing message loop destruction if we start monitoring the first
   // event.
-  base::MessageLoop::current()->AddDestructionObserver(this);
+  base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
 }
 
 void UserInputMonitorWinCore::StopMonitor() {
@@ -160,7 +160,7 @@ void UserInputMonitorWinCore::StopMonitor() {
   window_ = nullptr;
 
   // Stop observing message loop destruction if no event is being monitored.
-  base::MessageLoop::current()->RemoveDestructionObserver(this);
+  base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
 }
 
 LRESULT UserInputMonitorWinCore::OnInput(HRAWINPUT input_handle) {
@@ -231,27 +231,27 @@ UserInputMonitorWin::~UserInputMonitorWin() {
     delete core_;
 }
 
-size_t UserInputMonitorWin::GetKeyPressCount() const {
+uint32_t UserInputMonitorWin::GetKeyPressCount() const {
   return core_->GetKeyPressCount();
 }
 
 void UserInputMonitorWin::StartKeyboardMonitoring() {
   ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserInputMonitorWinCore::StartMonitor, core_->AsWeakPtr()));
+      FROM_HERE, base::BindOnce(&UserInputMonitorWinCore::StartMonitor,
+                                core_->AsWeakPtr()));
 }
 
 void UserInputMonitorWin::StopKeyboardMonitoring() {
   ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserInputMonitorWinCore::StopMonitor, core_->AsWeakPtr()));
+      FROM_HERE, base::BindOnce(&UserInputMonitorWinCore::StopMonitor,
+                                core_->AsWeakPtr()));
 }
 
 }  // namespace
 
 std::unique_ptr<UserInputMonitor> UserInputMonitor::Create(
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
   return std::make_unique<UserInputMonitorWin>(ui_task_runner);
 }
 

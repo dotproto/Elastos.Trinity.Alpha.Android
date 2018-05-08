@@ -159,9 +159,9 @@ This really does cover all the cases we need. If multiple `set*()` calls are
 made, an implicit `reset()` call will be made to the relevant `Controller` and
 the `C` object associated with the first scope will be `close()`d.
 
-What's better about this? First, notice that we **don't need to have any mutable
-variables**. Both `Controller` objects are `final`, and are never `null`. We
-don't at any point need to know what state the object is in inside any method
+What's better about this? First, notice we **don't need mutable variables**.
+Both `Controller` objects are `final`, and are never `null`. We don't at any
+point need to know what state the object is in inside any method
 implementations; the `Controller`s and the pipeline set up by the `and()` and
 `watch()` calls handle that for you.
 
@@ -200,10 +200,13 @@ To register events that should be invoked on these state transitions, we utilize
 **scopes**. When an `Observable` is activated, an observing scope is created,
 and when the `Observable` is deactivated, that scope is `close()`d.
 
-The only requirement of a scope is that it **implements
-`java.lang.AutoCloseable`**. The side-effects of activation are in the scope's
-constructor, and the side-effects of deactivation are in the scope's `close()`
-method. This pairing of constructors with a `close()` is inspired by
+The only requirement of a scope is that it **implements `Scope`**, which has
+a single `close()` method. (`Scope` extends `java.lang.AutoCloseable`, but does
+not throw checked exceptions. This means it can be used in try-with-resources
+statements.) The side-effects of activation are in the scope's constructor (or a
+`ScopeFactory`'s `create()` method), and the side-effects of deactivation are in
+the scope's `close()` method. This pairing of constructors with a `close()` is
+inspired by
 [RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization) in
 C++, and allows the activation data injected into the scope to be expressed as
 an **immutable** variable.
@@ -212,10 +215,10 @@ an **immutable** variable.
 
 To register scopes to track the state of an `Observable`, we call `watch()` on
 the `Observable`. The `watch()` method takes a single argument, a
-`ScopeFactory`, which has a `create()` method that returns an `AutoCloseable`.
-The `ScopeFactory`'s `create()` method is called when the `Observable`
-activates, and the resulting `AutoCloseable`'s `close()` method is called when
-the `Observable` deactivates.
+`ScopeFactory`, which has a `create()` method that returns a `Scope`. The
+`ScopeFactory`'s `create()` method is called when the `Observable` activates,
+and the resulting `Scope`'s `close()` method is called when the `Observable`
+deactivates.
 
 Lambda syntax can be used to easily construct `ScopeFactory` objects without
 much boilerplate. For instance, if we want to simply log the transitions of an
@@ -236,9 +239,9 @@ This is equivalent to the following, much more verbose version:
 void logStateTransitions(Observable<?> observable) {
     observable.watch(new VoidScopeFactory() {
         @Override
-        public AutoCloseable create() {
+        public Scope create() {
             Log.d(TAG, "activated");
-            return new AutoCloseable() {
+            return new Scope() {
                 @Override
                 public void close() {
                     Log.d(TAG, "deactivated");
@@ -304,8 +307,8 @@ As corollaries, any registered `ScopeFactory` objects will:
 
 *   have their `create()` methods invoked *exactly once* for each non-`null`
     `set()` call
-*   have their resulting `AutoCloseable` scopes `close()`d *exactly once* when
-    `reset()` or `set()` to `null`
+*   have their resulting `Scope`s `close()`d *exactly once* when `reset()` or
+    `set()` to `null`
 *   always clean up scopes from previous activations when new activations occur
 
 This means this:
@@ -380,7 +383,7 @@ Example:
 }
 ```
 
-### Composing Observables with and()
+### Composing Observables with `and()`
 
 In the motivating example, we wanted to invoke a callback once *two* independent
 states have been activated.
@@ -466,7 +469,7 @@ a cost to readability. The compiler can catch you if you mess up the
 that this much work is required to read the compound data. Some methods for
 alleviating this are described below.
 
-### Imposing order dependency
+### Imposing order dependency with `andThen()`
 
 Every composition of states up to this point has been *time-independent*. For
 example, `stateA.and(stateB)` doesn't care if `stateA` or `stateB` was activated
@@ -499,6 +502,151 @@ Calling `stateA.andThen(stateB)` returns an `Observable` representing the
 on the transition between `(just A)` and `(A and then B)`, and will not activate
 on the transition between `(just B)` and `(B and then A)`.
 
+### One-time callbacks with `first()`
+
+Sometimes you want to ensure that an action is only performed once, even if it's
+triggered by something that might happen more than once. With the `first()`
+method, doing so is a breeze:
+
+```java
+    Controller<Unit> windowFocusState = new Controller<>();
+    windowFocusState.first().watch(ScopeFactories.onEnter(this:: createWindow);
+    windowFocusState.set(Unit.unit()); // Will invoke createWindow()
+    windowFocusState.reset();
+    windowFocusState.set(Unit.unit()); // Does not invoke createWindow()
+```
+
+Note that the `Observable` created by `first()` will be deactivated the first
+time that the source `Observable` is deactivated:
+
+```java
+    Controller<String> messageState = new Controller<>();
+    messageState.first().watch(message -> {
+        Log.d(TAG, "first message: " + message);
+        return () -> Log.d(TAG, "first message discarded");
+    });
+    messageState.set("hello"); // Logs "first message: hello"
+    messageState.reset(); // Logs "first message discarded"
+    messageState.set("hello?"); // Nothing gets logged
+```
+
+### Compare old and new activation values with `changes()`
+
+One drawback of the `watch()` method is that it provides only the activation
+data with no other context. This is usually a good thing in that it helps with
+encapsulation, but there are a number of applications where information about
+the *previous activation* is useful. For example, say we want to log the delta
+between volume levels:
+
+```java
+    private final Controller<Integer> mVolumeLevel = new Controller<>();
+
+    private void logVolumeChanges(int oldLevel, int newLevel) {
+        if (newLevel > oldLevel) {
+            Log.d(TAG, "Volume increased by " + (newLevel - oldLevel));
+        } else if (newLevel < oldLevel) {
+            Log.d(TAG, "Volume decreased by " + (oldLevel - newLevel));
+        }
+    }
+
+    {
+        // How do we react to mVolumeLevel with logVolumeChanges()?
+        mVolumeLevel.set(0);
+    }
+
+    public void setVolume(int volume) {
+        mVolumeLevel.set(volume);
+    }
+```
+
+The problem here is that if you `watch()` `mVolumeLevel`, you will know the new
+volume, but not the old volume, so a stateless lambda will not know enough to
+call `logVolumeChanges()`.
+
+If you tried, you'd probably have to end up creating a custom `ScopeFactory`
+implementation that stores some internal state that is changed when activated.
+
+But fortunately, an easier way is provided that doesn't force you to put state
+into your `ScopeFactory`: the `changes()` method.
+
+When you call `changes()` on an `Observable`, the resulting `Observable` will
+be activated with a `Both` object containing the previous and new activation
+data. Here's how you would use it in the above example:
+
+```java
+    {
+        Observable<Both<Integer, Integer>> volumeChanges =
+                mVolumeLevel.changes()
+        volumeChanges.watch(ScopeFactories.onEnter((oldLevel, newLevel) -> {
+            logVolumeChanges(oldLevel, newLevel);
+        }));
+    }
+```
+
+Note: the above is using the `BiConsumer` version of `ScopeFactories.onEnter()`,
+so it creates a `ScopeFactory<Both<Integer, Integer>>`, which is just the type
+that we need. More info is given in the section on `ScopeFactories`.
+
+### Ignore duplicates with `unique()`
+
+Consider this:
+
+```java
+    Controller<Intege> volumeLevel = new Controller<>();
+    volumeLevel.watch(ScopeFactories.onEnter(level -> {
+        Log.d(TAG, "New volume level: " + level);
+    }));
+    volumeLevel.set(3); // Logs "New volume level: 3"
+    volumeLevel.set(3); // Logs "New volume level: 3"... again
+    volumeLevel.set(3); // Logs "New volume level: 3"... yet again
+    volumeLevel.set(4); // Logs "New volume level: 4"... finally something new!
+```
+
+What if we only care about *changes* to the volume? Well, we could modify the
+above section on `changes()` a bit, but it means we'd have to work with
+two-argument functions when we really only care about one.
+
+Fortunately, the `unique()` method is here to help:
+
+```java
+    Controller<Intege> volumeLevel = new Controller<>();
+    Observable<Integer> uniqueVolumeLevel = volumeLevel.unique();
+    uniqueVolumeLevel.watch(ScopeFactories.onEnter(level -> {
+        Log.d(TAG, "New volume level: " + level);
+    }));
+    volumeLevel.set(3); // Logs "New volume level: 3"
+    volumeLevel.set(3); // Does not log.
+    volumeLevel.set(3); // Does not log.
+    volumeLevel.set(4); // Logs "New volume level: 4"
+```
+
+The `unique()` method returns an `Observable` that is only activated when the
+source `Observable` gets *fresh* activation data, and ignores duplicate
+activations.
+
+By default `unique()` filters objects using the `equals()` method, but you can
+optionally supply a custom `BiPredicate<T, T>`, a function that compares two
+instances of `T` and returns `true` if, for your purposes, they should be
+considered "equal".
+
+For example, let's say we want to log *severe* volume changes, such as changes
+by more than 10 steps at a time:
+
+```java
+    Controller<Intege> volumeLevel = new Controller<>();
+    Observable<Integer> similarVolumeLevels = volumeLevel.unique(
+            (oldLevel, newLevel) -> {
+                return Math.abs(oldLevel - newLevel) < 10;
+            });
+    similarVolumeLevels.watch(ScopeFactories.onEnter(level -> {
+        Log.d(TAG, "Radically new volume level: " + level);
+    }));
+    volumeLevel.set(3); // Logs "Radically new volume level: 3"
+    volumeLevel.set(4); // Does not log.
+    volumeLevel.set(5); // Does not log.
+    volumeLevel.set(30); // Logs "Radically new volume level: 30"
+```
+
 ### Increase readability for ScopeFactories with wrapper methods
 
 The `ScopeFactories` class contains several helper methods to increase the
@@ -507,9 +655,9 @@ used for.
 
 #### Use onEnter() and onExit() to observe only one kind of transition
 
-Every `ScopeFactory` returns an `AutoCloseable`, but sometimes clients do not
-care about when the state deactivates, only when it activates. It's possible to
-create a `ScopeFactory` with lambda syntax to do the job like this:
+Every `ScopeFactory` returns a `Scope`, but sometimes clients do not care about
+when the state deactivates, only when it activates. It's possible to create a
+`ScopeFactory` with lambda syntax to do the job like this:
 
 ```java
 {
@@ -558,9 +706,8 @@ recall that the `ScopeFactory` passed to `watch()` must look like this:
 ```
 
 `ScopeFactories` provides a helper method to turn any function that takes two
-arguments and returns an `AutoCloseable` into a `ScopeFactory<Both>`, which
-deconstructs the `Both` object for you and passes the constituent parts into
-the function.
+arguments and returns a `Scope` into a `ScopeFactory<Both>`, which deconstructs
+the `Both` object for you and passes the constituent parts into the function.
 
 Using `ScopeFactories.both()`, we can rewrite the above like this:
 
@@ -593,8 +740,8 @@ and return an appropriate `ScopeFactory<Both>`:
 There are numerous instances where one may want to take the activation data of
 some `Observable` and use it to set the state of a `Controller`, and reset that
 `Controller` when the `Observable` is deactivated. A shortcut to doing this
-without having to instantiate any `Controller` is provided with the
-`transform()` method in the `Observable` interface.
+without having to instantiate any `Controller` is provided with the `map()`
+method in the `Observable` interface.
 
 For example, we might have an `Activity` that overrides `onNewIntent()`, and
 extracts some data from the `Intent` it receives. We might want to register
@@ -606,8 +753,8 @@ public class MyActivity extends Activity {
     private final Controller<Intent> mIntentState = new Controller<>();
 
     {
-        Observable<Uri> uriState = mIntentState.transform(Intent::getData);
-        Observable<String> instanceIdState = uriState.transform(Uri::getPath);
+        Observable<Uri> uriState = mIntentState.map(Intent::getData);
+        Observable<String> instanceIdState = uriState.map(Uri::getPath);
         ...
     }
 
@@ -623,11 +770,10 @@ public class MyActivity extends Activity {
 }
 ```
 
-The `transform()` method takes any function on the `Observable`'s activation
-data and creates a new `Observable` of the result of that function applied to
-the original `Observable`'s activation data. So the activation lifetime of
-`uriState` and `instanceIdState` are the same as `mIntentState` in this
-example.
+The `map()` method takes any function on the `Observable`'s activation data and
+creates a new `Observable` of the result of that function applied to the
+original `Observable`'s activation data. So the activation lifetime of
+`uriState` and `instanceIdState` are the same as `mIntentState` in this example.
 
 The instance initializer can then call `watch()` on `uriState` or
 `instanceIdState` to register callbacks for when we get a new URI or instance
@@ -636,15 +782,15 @@ from the `Uri` is delegated to methods with no side-effects.
 
 ### Handling null
 
-If a function provided to a `transform()` method returns `null`, then the
-resulting `Observable` will be put in a deactivated state, even if the source
-`Observable` is activated. This can be used to **filter** invalid data from
-`Observable`s in the pipeline:
+If a function provided to a `map()` method returns `null`, then the resulting
+`Observable` will be put in a deactivated state, even if the source `Observable`
+is activated. This can be used to **filter** invalid data from `Observable`s in
+the pipeline:
 
 ```java
 {
-    mIntentState.transform(Intent::getExtras)
-            .transform((Bundle bundle) -> bundle.getString(INTENT_EXTRA_FOO))
+    mIntentState.map(Intent::getExtras)
+            .map((Bundle bundle) -> bundle.getString(INTENT_EXTRA_FOO))
             .watch((String foo) -> ...);
 }
 ```
@@ -653,6 +799,76 @@ The `bundle.getString()` call might return `null` if the source `Intent` does
 not have the correct extra data field set. When this happens, the resulting
 `Observable` simply does not activate, so the `ScopeFactory` registered in the
 `watch()` call does not need to worry that `foo` might be `null`.
+
+### Filtering data
+
+One may wish to construct an `Observable` that is only activated if some
+*predicate* on some other `Observable`'s activation data is true. This is easily
+done using the `filter()` method on `Observable`.
+
+This example will only log `"Got FOO intent"` if `mIntentState` was `set()` with
+an `Intent` with action `"org.my.app.action.FOO"`:
+
+```java
+{
+    String ACTION_FOO = "org.my.app.action.FOO";
+    mIntentState.map(Intent::getAction)
+            .filter(ACTION_FOO::equals)
+            .watch(ScopeFactories.onEnter(() -> {
+                Log.d(TAG, "Got FOO intent");
+            }));
+}
+```
+
+Since `Observable<T>#filter()` takes any `Predicate<T>`, which is a functional
+interface whose method takes a `T` and returns a `boolean`, the parameter can be
+an instance of a class that implements `Predicate<T>`:
+
+```java
+    class InRangePredicate implements Predicate<Integer> {
+        private final int mMin;
+        private final int mMax;
+
+        private InRangePredicate(int min, int max) {
+            mMin = min;
+            mMax = max;
+        }
+
+        @Override
+        public boolean test(Integer value) {
+            return mMin <= value && value <= mMax;
+        }
+    }
+
+    InRangePredicate inRange(int min, int max) {
+        return new InRangePredicate(min, max);
+    }
+
+    Controller<Integer> hasIntState = new Controller<>();
+    Observable<Integer> hasValidIntState = hasIntState.filter(inRange(0, 10));
+}
+```
+
+... or a method reference for a method that takes the activation data and
+returns a boolean:
+
+```java
+    class Util {
+        static boolean inRange(int i) {
+            return 0 <= i && i <= 10;
+        }
+    }
+    Controller<Integer> hasIntState = new Controller<>();
+    Observable<Integer> hasValidIntState = hasIntState.filter(Util::inRange);
+```
+
+... or a lambda that takes the activation data and returns a boolean:
+
+```java
+    Controller<Integer> hasIntState = new Controller<>();
+    Observable<Integer> hasValidIntState =
+            hasIntState.filter(i -> 0 <= i && i <= 10);
+```
 
 ## Tips and best practices
 
@@ -676,7 +892,7 @@ Generally, `Observable` methods like `watch()` should be called before any
 `Controller` methods. A couple of things that one can do to help with this:
 
 *   Instantiate `Controller` objects in field initializers, not the constructor.
-*   Set up the pipeline (`watch()`, `and()`, `transform()`, etc.) in an instance
+*   Set up the pipeline (`watch()`, `and()`, `map()`, etc.) in an instance
     initializer. This is run before anything else when creating an instance,
     including the constructor, and is the same regardless of which constructor
     is being used. This also removes the potential of accidentally depending on
@@ -739,6 +955,67 @@ It is good practice to avoid calling `set()` or `reset()` on `Controller`s
 inside `ScopeFactory` event handlers altogether, but there are many safe ways
 that are useful. `and()`-composed `Observable`s, for example, use `Controller`s
 under the hood to know when to notify.
+
+### Testing
+
+One of the most important aspects of using `Observable`s is that they are very
+testable. The `Observable` cleanly separates the concerns of *mutating* program
+state and *responding to* program state. Reactors, or observers, registered in
+`watch()` methods tend to be **functional**, i.e. with no side effects, though
+this isn't a strict requirement (see the above section).
+
+If you write a class that implements `Observable` or returns an `Observable` in
+one of its methods, it's easy to test the events it emits by using the
+`ReactiveRecorder` test utility function. This class, which is only allowed in
+tests, provides a fluent interface for describing the expected output of an
+`Observable`.
+
+To use this in your tests, add `//chromecast/base:cast_base_test_utils_java` to
+your JUnit test target's GN `deps`.
+
+As an example, imagine we want to test a class called `FlipFlop`, which
+implements `Observable` and changes from deactivated to activated every time its
+`flip` method is called. The tests might look like this:
+
+```java
+import org.chromium.chromecast.base.ReactiveRecorder;
+... // other imports
+public class FlipFlopTest {
+    @Test
+    public void testStartsDeactivated() {
+        FlipFlop f = new FlipFlop();
+        ReactiveRecorder recorder = ReactiveRecorder.record(f);
+        // No events should be emitted.
+        recorder.verify().end();
+    }
+
+    @Test
+    public void testFlipOnceActivatesObserver() {
+        FlipFlop f = new FlipFlop();
+        ReactiveRecorder recorder = ReactiveRecorder.record(f);
+        f.flip();
+        // A single activation should have been emitted.
+        recorder.verify().entered().end();
+    }
+
+    @Test
+    public void testFlipTwiceActivatesThenDeactivates() {
+        FlipFlop f = new FlipFlop();
+        ReactiveRecorder recorder = ReactiveRecorder.record(f);
+        f.flip();
+        f.flip();
+        // Expect an activation followed by a deactivation.
+        recorder.verify().entered().exited().end();
+    }
+}
+```
+
+`ReactiveRecorder`'s `entered()` and `exited()` methods can also take arguments
+to perform assertions on the activation data. `ReactiveRecorder.record()` can
+also take arbitrarily many `Observable` arguments and receive the events of all
+of the given `Observable`s. In this case, the `entered()` and `exited()` methods
+have overloads that take an `Observable` as an argument, which can be used to
+assert *which* `Observable` emitted an event.
 
 ## When to use Observables
 

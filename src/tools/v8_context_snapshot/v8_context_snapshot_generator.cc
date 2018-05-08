@@ -6,14 +6,15 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gin/v8_initializer.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/WebThread.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebV8ContextSnapshot.h"
+#include "third_party/blink/public/platform/web_thread.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_v8_context_snapshot.h"
 #include "v8/include/v8.h"
 
 namespace {
@@ -21,7 +22,7 @@ namespace {
 class SnapshotThread : public blink::WebThread {
  public:
   bool IsCurrentThread() const override { return true; }
-  blink::WebScheduler* Scheduler() const override { return nullptr; }
+  blink::ThreadScheduler* Scheduler() const override { return nullptr; }
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override {
     return base::ThreadTaskRunnerHandle::Get();
   }

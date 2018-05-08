@@ -33,7 +33,7 @@
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/file_data_source.h"
 #include "media/formats/mp4/avc.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::AnyNumber;
@@ -77,42 +77,6 @@ MATCHER_P(SkippingUnsupportedStream, stream_type, "") {
                std::string(stream_type) + " track");
 }
 
-namespace {
-void OnStreamStatusChanged(base::WaitableEvent* event,
-                           DemuxerStream* stream,
-                           bool enabled,
-                           base::TimeDelta) {
-  event->Signal();
-}
-
-void CheckStreamStatusNotifications(
-    MediaResource* media_resource,
-    FFmpegDemuxerStream* stream,
-    base::test::ScopedTaskEnvironment* scoped_task_environment) {
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-
-  ASSERT_TRUE(stream->IsEnabled());
-  media_resource->SetStreamStatusChangeCB(
-      base::Bind(&OnStreamStatusChanged, base::Unretained(&event)));
-
-  stream->SetEnabled(false, base::TimeDelta());
-  scoped_task_environment->RunUntilIdle();
-  ASSERT_TRUE(event.IsSignaled());
-
-  event.Reset();
-  stream->SetEnabled(true, base::TimeDelta());
-  scoped_task_environment->RunUntilIdle();
-  ASSERT_TRUE(event.IsSignaled());
-}
-
-void OnReadDone_ExpectEos(DemuxerStream::Status status,
-                          const scoped_refptr<DecoderBuffer>& buffer) {
-  EXPECT_EQ(status, DemuxerStream::kOk);
-  EXPECT_TRUE(buffer->end_of_stream());
-}
-}
-
 const uint8_t kEncryptedMediaInitData[] = {
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
     0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
@@ -120,7 +84,7 @@ const uint8_t kEncryptedMediaInitData[] = {
 
 static void EosOnReadDone(bool* got_eos_buffer,
                           DemuxerStream::Status status,
-                          const scoped_refptr<DecoderBuffer>& buffer) {
+                          scoped_refptr<DecoderBuffer> buffer) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 
@@ -142,7 +106,7 @@ class FFmpegDemuxerTest : public testing::Test {
  protected:
   FFmpegDemuxerTest() = default;
 
-  virtual ~FFmpegDemuxerTest() { Shutdown(); }
+  ~FFmpegDemuxerTest() override { Shutdown(); }
 
   void Shutdown() {
     if (demuxer_)
@@ -230,7 +194,7 @@ class FFmpegDemuxerTest : public testing::Test {
   void OnReadDone(const base::Location& location,
                   const ReadExpectation& read_expectation,
                   DemuxerStream::Status status,
-                  const scoped_refptr<DecoderBuffer>& buffer) {
+                  scoped_refptr<DecoderBuffer> buffer) {
     std::string location_str = location.ToString();
     location_str += "\n";
     SCOPED_TRACE(location_str);
@@ -515,6 +479,15 @@ TEST_F(FFmpegDemuxerTest, Initialize_Encrypted) {
 
   CreateDemuxer("bear-320x240-av_enc-av.webm");
   InitializeDemuxer();
+}
+
+TEST_F(FFmpegDemuxerTest, Initialize_NoConfigChangeSupport) {
+  // Will create one audio, one video, and one text stream.
+  CreateDemuxer("bear-vp8-webvtt.webm");
+  InitializeDemuxer();
+
+  for (auto* stream : demuxer_->GetAllStreams())
+    EXPECT_FALSE(stream->SupportsConfigChanges());
 }
 
 TEST_F(FFmpegDemuxerTest, AbortPendingReads) {
@@ -1373,7 +1346,7 @@ INSTANTIATE_TEST_CASE_P(, Mp3SeekFFmpegDemuxerTest,
 
 static void ValidateAnnexB(DemuxerStream* stream,
                            DemuxerStream::Status status,
-                           const scoped_refptr<DecoderBuffer>& buffer) {
+                           scoped_refptr<DecoderBuffer> buffer) {
   EXPECT_EQ(status, DemuxerStream::kOk);
 
   if (buffer->end_of_stream()) {
@@ -1797,6 +1770,57 @@ TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledAudioStream) {
   EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
 }
 
+namespace {
+void QuitLoop(base::Closure quit_closure,
+              DemuxerStream::Type type,
+              const std::vector<DemuxerStream*>& streams) {
+  quit_closure.Run();
+}
+
+void DisableAndEnableDemuxerTracks(
+    FFmpegDemuxer* demuxer,
+    base::test::ScopedTaskEnvironment* scoped_task_environment) {
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
+  std::vector<MediaTrack::Id> audio_tracks;
+  std::vector<MediaTrack::Id> video_tracks;
+
+  base::RunLoop disable_video;
+  demuxer->OnSelectedVideoTrackChanged(
+      video_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(disable_video.QuitClosure())));
+  disable_video.Run();
+
+  base::RunLoop disable_audio;
+  demuxer->OnEnabledAudioTracksChanged(
+      audio_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(disable_audio.QuitClosure())));
+  disable_audio.Run();
+
+  base::RunLoop enable_video;
+  video_tracks.push_back(MediaTrack::Id("1"));
+  demuxer->OnSelectedVideoTrackChanged(
+      video_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(enable_video.QuitClosure())));
+  enable_video.Run();
+
+  base::RunLoop enable_audio;
+  audio_tracks.push_back(MediaTrack::Id("2"));
+  demuxer->OnEnabledAudioTracksChanged(
+      audio_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(enable_audio.QuitClosure())));
+  enable_audio.Run();
+
+  scoped_task_environment->RunUntilIdle();
+}
+
+void OnReadDoneExpectEos(DemuxerStream::Status status,
+                         const scoped_refptr<DecoderBuffer> buffer) {
+  EXPECT_EQ(status, DemuxerStream::kOk);
+  EXPECT_TRUE(buffer->end_of_stream());
+}
+}  // namespace
+
 TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   CreateDemuxer("bear-320x240.webm");
   InitializeDemuxer();
@@ -1808,23 +1832,19 @@ TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   EXPECT_NE(nullptr, video_stream);
 
   // Verify stream status notifications delivery without pending read first.
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
-                                 &scoped_task_environment_);
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
-                                 &scoped_task_environment_);
+  DisableAndEnableDemuxerTracks(demuxer_.get(), &scoped_task_environment_);
 
   // Verify that stream notifications are delivered properly when stream status
   // changes with a pending read. Call FlushBuffers before reading, to ensure
   // there is no buffers ready to be returned by the Read right away, thus
   // ensuring that status changes occur while an async read is pending.
+
   audio_stream->FlushBuffers();
-  audio_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
-                                 &scoped_task_environment_);
   video_stream->FlushBuffers();
-  video_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
-                                 &scoped_task_environment_);
+  audio_stream->Read(base::Bind(&OnReadDoneExpectEos));
+  video_stream->Read(base::Bind(&OnReadDoneExpectEos));
+
+  DisableAndEnableDemuxerTracks(demuxer_.get(), &scoped_task_environment_);
 }
 
 TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {

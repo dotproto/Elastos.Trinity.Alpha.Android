@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/views/message_view.h"
+#include "ui/views/animation/ink_drop_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -215,6 +216,7 @@ class NotificationInputContainerMD : public views::InkDropHostView,
 // returned by the Create() factory method below.
 class MESSAGE_CENTER_EXPORT NotificationViewMD
     : public MessageView,
+      public views::InkDropObserver,
       public NotificationInputDelegate,
       public views::ButtonListener {
  public:
@@ -223,7 +225,7 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
 
   void Activate();
 
-  void AddBackgroundAnimation(const ui::LocatedEvent& event);
+  void AddBackgroundAnimation(const ui::Event& event);
   void RemoveBackgroundAnimation();
 
   // Overridden from views::View:
@@ -245,16 +247,17 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   // Overridden from MessageView:
   void UpdateWithNotification(const Notification& notification) override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-  bool IsCloseButtonFocused() const override;
-  void RequestFocusOnCloseButton() override;
   void UpdateControlButtonsVisibility() override;
   NotificationControlButtonsView* GetControlButtonsView() const override;
   bool IsExpanded() const override;
   void SetExpanded(bool expanded) override;
   bool IsManuallyExpandedOrCollapsed() const override;
   void SetManuallyExpandedOrCollapsed(bool value) override;
+  void OnSettingsButtonPressed(const ui::Event& event) override;
 
-  void OnSettingsButtonPressed(const ui::LocatedEvent& event) override;
+  // views::InkDropObserver:
+  void InkDropAnimationStarted() override;
+  void InkDropRippleAnimationEnded(views::InkDropState ink_drop_state) override;
 
   // Overridden from NotificationInputDelegate:
   void OnNotificationInputSubmit(size_t index,
@@ -296,7 +299,7 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   bool IsExpandable();
   void ToggleExpanded();
   void UpdateViewForExpandedState(bool expanded);
-  void ToggleInlineSettings(const ui::LocatedEvent& event);
+  void ToggleInlineSettings(const ui::Event& event);
 
   views::InkDropContainerView* const ink_drop_container_;
 

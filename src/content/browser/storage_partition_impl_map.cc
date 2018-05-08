@@ -14,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -38,17 +37,18 @@
 #include "content/browser/streams/stream_registry.h"
 #include "content/browser/streams/stream_url_request_job.h"
 #include "content/browser/webui/url_data_manager_backend.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/origin_trial_policy.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/features.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/browser/fileapi/file_system_url_request_job_factory.h"
@@ -403,19 +403,13 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
       ChromeBlobStorageContext::GetFor(browser_context_);
   StreamContext* stream_context = StreamContext::GetFor(browser_context_);
   ProtocolHandlerMap protocol_handlers;
-  protocol_handlers[url::kBlobScheme] =
-      linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-          new BlobProtocolHandler(blob_storage_context, stream_context));
-  protocol_handlers[url::kFileSystemScheme] =
-      linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-          CreateFileSystemProtocolHandler(partition_domain,
-                                          partition->GetFileSystemContext()));
+  protocol_handlers[url::kBlobScheme] = std::make_unique<BlobProtocolHandler>(
+      blob_storage_context, stream_context);
+  protocol_handlers[url::kFileSystemScheme] = CreateFileSystemProtocolHandler(
+      partition_domain, partition->GetFileSystemContext());
   for (const auto& scheme : URLDataManagerBackend::GetWebUISchemes()) {
-    protocol_handlers[scheme] =
-        linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-            URLDataManagerBackend::CreateProtocolHandler(
-                browser_context_->GetResourceContext(), blob_storage_context)
-                .release());
+    protocol_handlers[scheme] = URLDataManagerBackend::CreateProtocolHandler(
+        browser_context_->GetResourceContext(), blob_storage_context);
   }
 
   URLRequestInterceptorScopedVector request_interceptors;
@@ -441,6 +435,17 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
       browser_context_->CreateMediaRequestContext() :
       browser_context_->CreateMediaRequestContextForStoragePartition(
           partition->GetPath(), in_memory));
+
+  if (ServiceWorkerUtils::IsServicificationEnabled() &&
+      !base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    // This needs to happen after SetURLRequestContext() since we need this
+    // code path only for non-NetworkService case where NetworkContext needs to
+    // be initialized using |url_request_context_|, which is initialized by
+    // SetURLRequestContext().
+    DCHECK(partition->url_loader_factory_getter());
+    DCHECK(partition->url_request_context_);
+    partition->url_loader_factory_getter()->HandleFactoryRequests();
+  }
 
   PostCreateInitialization(partition, in_memory);
 
@@ -546,7 +551,7 @@ void StoragePartitionImplMap::PostCreateInitialization(
   }
 
   // Check first to avoid memory leak in unittests.
-  if (BrowserThread::IsMessageLoopValid(BrowserThread::IO)) {
+  if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(

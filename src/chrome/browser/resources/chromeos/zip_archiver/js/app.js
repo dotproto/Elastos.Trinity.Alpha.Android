@@ -582,8 +582,9 @@ unpacker.app = {
   /**
    * Creates a new compressor and compresses entries.
    * @param {!Object} launchData
+   * @param {boolean} useTemporaryDirectory
    */
-  onLaunchedWithPack: function(launchData) {
+  onLaunchedWithPack: function(launchData, useTemporaryDirectory) {
     unpacker.app.mountProcessCounter++;
 
     // Create a promise to load the NaCL module.
@@ -599,7 +600,7 @@ unpacker.app = {
         .then(function(stringData) {
           var compressor = new unpacker.Compressor(
               /** @type {!Object} */ (unpacker.app.naclModule),
-              launchData.items);
+              launchData.items, useTemporaryDirectory);
 
           var compressorId = compressor.getCompressorId();
           unpacker.app.compressors[compressorId] = compressor;
@@ -876,8 +877,61 @@ unpacker.app = {
     }
 
     if (launchData.id === 'pack')
-      unpacker.app.onLaunchedWithPack(launchData);
+      unpacker.app.onLaunchedWithPack(launchData, false);
+    else if (launchData.id === 'pack_using_tmp')
+      unpacker.app.onLaunchedWithPack(launchData, true);
     else
       unpacker.app.onLaunchedWithUnpack(launchData, opt_onSuccess, opt_onError);
   },
+
+  /**
+   * Clean all temporary files inside the work directory.
+   * Those files are usually moved to the destination directory when finished
+   * or removed when any error happened, but might be left there when the
+   * extension was aborted by runtime errors or system shutdown.
+   */
+  cleanWorkDirectory: function() {
+    return new Promise(
+               webkitRequestFileSystem.bind(null, TEMPORARY, 0 /* size */))
+        .then((fs) => new Promise(function(resolve, reject) {
+                const reader = fs.root.createReader();
+                let allEntries = [];
+                function scanEntries() {
+                  reader.readEntries((entries) => {
+                    if (entries.length == 0) {
+                      resolve(allEntries);
+                      return;
+                    }
+                    Array.prototype.push.apply(allEntries, entries);
+                    scanEntries();
+                  });
+                }
+                scanEntries();
+              }))
+        .then((allEntries) => {
+          allEntries.forEach((entry) => {
+            if (entry.isDirectory) {
+              entry.removeRecursively(
+                  function() {
+                    console.info(
+                        'Found directory. ',
+                        'Perhaps the extension had exited abnormally.', entry);
+                  },
+                  function() {
+                    console.error('Failed to remove a directory:', entry);
+                  });
+            } else {
+              entry.remove(
+                  function() {
+                    console.info(
+                        'Found a temporary file. ',
+                        'Perhaps the extension had exited abnormally.', entry);
+                  },
+                  function() {
+                    console.error('Failed to remove a temporary file:', entry);
+                  });
+            }
+          });
+        });
+  }
 };

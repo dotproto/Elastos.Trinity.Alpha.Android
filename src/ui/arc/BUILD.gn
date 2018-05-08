@@ -28,13 +28,12 @@ static_library("arc") {
   ]
 
   deps = [
-    "//ash",
     "//base",
-    "//components/arc:arc_base",
+    "//components/arc:connection_holder",
+    "//components/arc/common:notifications",
     "//components/exo",
-    "//components/keyed_service/content:content",
     "//components/signin/core/account_id",
-    "//mojo/common:common_base",
+    "//mojo/public/cpp/system",
     "//skia",
     "//ui/accessibility",
     "//ui/aura",
@@ -52,6 +51,19 @@ static_library("arc") {
   ]
 }
 
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "notification/mock_arc_notification_item.cc",
+    "notification/mock_arc_notification_item.h",
+  ]
+
+  deps = [
+    ":arc",
+    "//ui/gl:test_support",
+  ]
+}
+
 test("ui_arc_unittests") {
   testonly = true
   sources = [
@@ -63,6 +75,7 @@ test("ui_arc_unittests") {
 
   deps = [
     ":arc",
+    ":test_support",
     "//ash:test_support_without_content",
     "//base",
     "//base/test:test_support",

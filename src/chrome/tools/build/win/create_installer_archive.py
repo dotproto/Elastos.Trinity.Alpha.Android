@@ -432,7 +432,7 @@ def CopyIfChanged(src, target_dir):
 
 
 # Taken and modified from:
-# third_party\WebKit\Tools\Scripts\webkitpy\layout_tests\port\factory.py
+# third_party\blink\tools\blinkpy\web_tests\port\factory.py
 def _read_configuration_from_gn(build_dir):
   """Return the configuration to used based on args.gn, if possible."""
   path = os.path.join(build_dir, 'args.gn')
@@ -540,15 +540,7 @@ def main(options):
                                 options.last_chrome_installer,
                                 options.output_name)
 
-  # Preferentially copy the files we can find from the output_dir, as
-  # this is where we'll find the Syzygy-optimized executables when
-  # building the optimized mini_installer.
-  if options.build_dir != options.output_dir:
-    CopyAllFilesToStagingDir(config, options.distribution,
-                             staging_dir, options.output_dir,
-                             options.enable_hidpi)
-
-  # Now copy the remainder of the files from the build dir.
+  # Copy the files from the build dir.
   CopyAllFilesToStagingDir(config, options.distribution,
                            staging_dir, options.build_dir,
                            options.enable_hidpi)

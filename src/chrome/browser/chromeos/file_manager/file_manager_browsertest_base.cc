@@ -10,7 +10,6 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -30,6 +29,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/service/fake_drive_service.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/test/test_api.h"
@@ -60,61 +60,7 @@ enum SharedOption {
   SHARED,
 };
 
-// Obtains file manager test data directory.
-base::FilePath GetTestFilePath(const std::string& relative_path) {
-  base::FilePath path;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &path))
-    return base::FilePath();
-  path = path.AppendASCII("chrome")
-             .AppendASCII("test")
-             .AppendASCII("data")
-             .AppendASCII("chromeos")
-             .AppendASCII("file_manager")
-             .Append(base::FilePath::FromUTF8Unsafe(relative_path));
-  return path;
-}
-
-// Maps the given string to EntryType. Returns true on success.
-bool MapStringToEntryType(base::StringPiece value, EntryType* output) {
-  if (value == "file")
-    *output = FILE;
-  else if (value == "directory")
-    *output = DIRECTORY;
-  else
-    return false;
-  return true;
-}
-
-// Maps the given string to SharedOption. Returns true on success.
-bool MapStringToSharedOption(base::StringPiece value, SharedOption* output) {
-  if (value == "shared")
-    *output = SHARED;
-  else if (value == "none")
-    *output = NONE;
-  else
-    return false;
-  return true;
-}
-
-// Maps the given string to TargetVolume. Returns true on success.
-bool MapStringToTargetVolume(base::StringPiece value, TargetVolume* output) {
-  if (value == "drive")
-    *output = DRIVE_VOLUME;
-  else if (value == "local")
-    *output = LOCAL_VOLUME;
-  else if (value == "usb")
-    *output = USB_VOLUME;
-  else
-    return false;
-  return true;
-}
-
-// Maps the given string to base::Time. Returns true on success.
-bool MapStringToTime(base::StringPiece value, base::Time* time) {
-  return base::Time::FromString(value.as_string().c_str(), time);
-}
-
-// Test data of file or directory.
+// Test data file or directory entry info.
 struct TestEntryInfo {
   TestEntryInfo() : type(FILE), shared_option(NONE) {}
 
@@ -125,60 +71,162 @@ struct TestEntryInfo {
                 SharedOption shared_option,
                 const base::Time& last_modified_time)
       : type(type),
+        shared_option(shared_option),
         source_file_name(source_file_name),
         target_path(target_path),
         mime_type(mime_type),
-        shared_option(shared_option),
         last_modified_time(last_modified_time) {}
 
-  EntryType type;
-  std::string source_file_name;  // Source file name to be used as a prototype.
-  std::string target_path;       // Target file or directory path.
-  std::string mime_type;
-  SharedOption shared_option;
-  base::Time last_modified_time;
+  EntryType type;                 // Entry type: file or directory.
+  SharedOption shared_option;     // File entry sharing option.
+  std::string source_file_name;   // Source file name prototype.
+  std::string target_path;        // Target file or directory path.
+  std::string mime_type;          // File entry content mime type.
+  base::Time last_modified_time;  // Entry last modified time.
 
   // Registers the member information to the given converter.
   static void RegisterJSONConverter(
-      base::JSONValueConverter<TestEntryInfo>* converter);
-};
+      base::JSONValueConverter<TestEntryInfo>* converter) {
+    converter->RegisterCustomField("type", &TestEntryInfo::type,
+                                   &MapStringToEntryType);
+    converter->RegisterStringField("sourceFileName",
+                                   &TestEntryInfo::source_file_name);
+    converter->RegisterStringField("targetPath", &TestEntryInfo::target_path);
+    converter->RegisterStringField("mimeType", &TestEntryInfo::mime_type);
+    converter->RegisterCustomField("sharedOption",
+                                   &TestEntryInfo::shared_option,
+                                   &MapStringToSharedOption);
+    converter->RegisterCustomField("lastModifiedTime",
+                                   &TestEntryInfo::last_modified_time,
+                                   &MapStringToTime);
+  }
 
-// static
-void TestEntryInfo::RegisterJSONConverter(
-    base::JSONValueConverter<TestEntryInfo>* converter) {
-  converter->RegisterCustomField("type", &TestEntryInfo::type,
-                                 &MapStringToEntryType);
-  converter->RegisterStringField("sourceFileName",
-                                 &TestEntryInfo::source_file_name);
-  converter->RegisterStringField("targetPath", &TestEntryInfo::target_path);
-  converter->RegisterStringField("mimeType", &TestEntryInfo::mime_type);
-  converter->RegisterCustomField("sharedOption", &TestEntryInfo::shared_option,
-                                 &MapStringToSharedOption);
-  converter->RegisterCustomField(
-      "lastModifiedTime", &TestEntryInfo::last_modified_time, &MapStringToTime);
-}
+  // Maps |value| to an EntryType. Returns true on success.
+  static bool MapStringToEntryType(base::StringPiece value, EntryType* type) {
+    if (value == "file")
+      *type = FILE;
+    else if (value == "directory")
+      *type = DIRECTORY;
+    else
+      return false;
+    return true;
+  }
+
+  // Maps |value| to SharedOption. Returns true on success.
+  static bool MapStringToSharedOption(base::StringPiece value,
+                                      SharedOption* option) {
+    if (value == "shared")
+      *option = SHARED;
+    else if (value == "none")
+      *option = NONE;
+    else
+      return false;
+    return true;
+  }
+
+  // Maps |value| to base::Time. Returns true on success.
+  static bool MapStringToTime(base::StringPiece value, base::Time* time) {
+    return base::Time::FromString(value.as_string().c_str(), time);
+  }
+};
 
 // Message from JavaScript to add entries.
 struct AddEntriesMessage {
-  // Target volume to be added the |entries|.
-  TargetVolume volume;
-
   // Entries to be added.
   std::vector<std::unique_ptr<TestEntryInfo>> entries;
 
+  // Target volume to add |entries| to.
+  TargetVolume volume;
+
   // Registers the member information to the given converter.
   static void RegisterJSONConverter(
-      base::JSONValueConverter<AddEntriesMessage>* converter);
+      base::JSONValueConverter<AddEntriesMessage>* converter) {
+    converter->RegisterCustomField("volume", &AddEntriesMessage::volume,
+                                   &MapStringToTargetVolume);
+    converter->RegisterRepeatedMessage<TestEntryInfo>(
+        "entries", &AddEntriesMessage::entries);
+  }
+
+  // Maps |value| to TargetVolume. Returns true on success.
+  static bool MapStringToTargetVolume(base::StringPiece value,
+                                      TargetVolume* volume) {
+    if (value == "drive")
+      *volume = DRIVE_VOLUME;
+    else if (value == "local")
+      *volume = LOCAL_VOLUME;
+    else if (value == "usb")
+      *volume = USB_VOLUME;
+    else
+      return false;
+    return true;
+  }
 };
 
-// static
-void AddEntriesMessage::RegisterJSONConverter(
-    base::JSONValueConverter<AddEntriesMessage>* converter) {
-  converter->RegisterCustomField("volume", &AddEntriesMessage::volume,
-                                 &MapStringToTargetVolume);
-  converter->RegisterRepeatedMessage<TestEntryInfo>(
-      "entries", &AddEntriesMessage::entries);
-}
+// Listens for chrome.test messages: PASS, FAIL, and SendMessage.
+class FileManagerTestMessageListener : public content::NotificationObserver {
+ public:
+  struct Message {
+    int type;
+    std::string message;
+    scoped_refptr<extensions::TestSendMessageFunction> function;
+  };
+
+  FileManagerTestMessageListener() {
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_PASSED,
+                   content::NotificationService::AllSources());
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_FAILED,
+                   content::NotificationService::AllSources());
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
+                   content::NotificationService::AllSources());
+  }
+
+  Message GetNextMessage() {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (messages_.empty()) {
+      base::RunLoop run_loop;
+      quit_closure_ = run_loop.QuitClosure();
+      run_loop.Run();
+    }
+
+    DCHECK(!messages_.empty());
+    const Message next = messages_.front();
+    messages_.pop_front();
+    return next;
+  }
+
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    Message message{type, std::string(), nullptr};
+    if (type == extensions::NOTIFICATION_EXTENSION_TEST_PASSED) {
+      test_complete_ = true;
+    } else if (type == extensions::NOTIFICATION_EXTENSION_TEST_FAILED) {
+      message.message = *content::Details<std::string>(details).ptr();
+      test_complete_ = true;
+    } else if (type == extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE) {
+      message.message = *content::Details<std::string>(details).ptr();
+      using SendMessage = content::Source<extensions::TestSendMessageFunction>;
+      message.function = SendMessage(source).ptr();
+      using WillReply = content::Details<std::pair<std::string, bool*>>;
+      *WillReply(details).ptr()->second = true;  // http:/crbug.com/668680
+      CHECK(!test_complete_) << "LATE MESSAGE: " << message.message;
+    }
+
+    messages_.push_back(message);
+    if (quit_closure_) {
+      std::move(quit_closure_).Run();
+    }
+  }
+
+ private:
+  bool test_complete_ = false;
+  base::OnceClosure quit_closure_;
+  base::circular_deque<Message> messages_;
+  content::NotificationRegistrar registrar_;
+};
 
 // Test volume.
 class TestVolume {
@@ -189,7 +237,6 @@ class TestVolume {
   bool CreateRootDirectory(const Profile* profile) {
     if (root_initialized_)
       return true;
-
     root_initialized_ = root_.Set(profile->GetPath().Append(name_));
     return root_initialized_;
   }
@@ -197,73 +244,34 @@ class TestVolume {
   const std::string& name() const { return name_; }
   const base::FilePath& root_path() const { return root_.GetPath(); }
 
+  static base::FilePath GetTestDataFilePath(const std::string& file_name) {
+    // Get the path to file manager's test data directory.
+    base::FilePath source_dir;
+    CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &source_dir));
+    auto test_data_dir = source_dir.AppendASCII("chrome")
+                             .AppendASCII("test")
+                             .AppendASCII("data")
+                             .AppendASCII("chromeos")
+                             .AppendASCII("file_manager");
+    // Return full test data path to the given |file_name|.
+    return test_data_dir.Append(base::FilePath::FromUTF8Unsafe(file_name));
+  }
+
  private:
-  std::string name_;
   base::ScopedTempDir root_;
   bool root_initialized_ = false;
-};
-
-// Listener to obtain the test relative messages synchronously.
-class FileManagerTestListener : public content::NotificationObserver {
- public:
-  struct Message {
-    int type;
-    std::string message;
-    scoped_refptr<extensions::TestSendMessageFunction> function;
-  };
-
-  FileManagerTestListener() {
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_PASSED,
-                   content::NotificationService::AllSources());
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_FAILED,
-                   content::NotificationService::AllSources());
-    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
-                   content::NotificationService::AllSources());
-  }
-
-  Message GetNextMessage() {
-    if (messages_.empty())
-      content::RunMessageLoop();
-    const Message entry = messages_.front();
-    messages_.pop_front();
-    return entry;
-  }
-
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    Message entry;
-    entry.type = type;
-    entry.message = type != extensions::NOTIFICATION_EXTENSION_TEST_PASSED
-                        ? *content::Details<std::string>(details).ptr()
-                        : std::string();
-    if (type == extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE) {
-      entry.function =
-          content::Source<extensions::TestSendMessageFunction>(source).ptr();
-      *content::Details<std::pair<std::string, bool*>>(details).ptr()->second =
-          true;
-    }
-    messages_.push_back(entry);
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
-  }
-
- private:
-  base::circular_deque<Message> messages_;
-  content::NotificationRegistrar registrar_;
+  std::string name_;
 };
 
 }  // anonymous namespace
 
-// The local volume class for test.
-// This class provides the operations for a test volume that simulates local
-// drive.
+// LocalTestVolume: test volume for a local drive.
 class LocalTestVolume : public TestVolume {
  public:
   explicit LocalTestVolume(const std::string& name) : TestVolume(name) {}
   ~LocalTestVolume() override {}
 
-  // Adds this volume to the file system as a local volume. Returns true on
-  // success.
+  // Adds this local volume. Returns true on success.
   virtual bool Mount(Profile* profile) = 0;
 
   void CreateEntry(const TestEntryInfo& entry) {
@@ -274,7 +282,7 @@ class LocalTestVolume : public TestVolume {
     switch (entry.type) {
       case FILE: {
         const base::FilePath source_path =
-            GetTestFilePath(entry.source_file_name);
+            TestVolume::GetTestDataFilePath(entry.source_file_name);
         ASSERT_TRUE(base::CopyFile(source_path, target_path))
             << "Copy from " << source_path.value() << " to "
             << target_path.value() << " failed.";
@@ -312,19 +320,21 @@ class LocalTestVolume : public TestVolume {
   std::map<base::FilePath, const TestEntryInfo> entries_;
 };
 
+// DownloadsTestVolume: local test volume for the "Downloads" directory.
 class DownloadsTestVolume : public LocalTestVolume {
  public:
   DownloadsTestVolume() : LocalTestVolume("Downloads") {}
   ~DownloadsTestVolume() override {}
 
   bool Mount(Profile* profile) override {
-    return CreateRootDirectory(profile) &&
-           VolumeManager::Get(profile)
-               ->RegisterDownloadsDirectoryForTesting(root_path());
+    if (!CreateRootDirectory(profile))
+      return false;
+    auto* volume = VolumeManager::Get(profile);
+    return volume->RegisterDownloadsDirectoryForTesting(root_path());
   }
 };
 
-// Test volume for mimicing a specified type of volumes by a local folder.
+// FakeTestVolume: local test volume with a specified volume and device type.
 class FakeTestVolume : public LocalTestVolume {
  public:
   FakeTestVolume(const std::string& name,
@@ -371,12 +381,10 @@ class FakeTestVolume : public LocalTestVolume {
   const chromeos::DeviceType device_type_;
 };
 
-// The drive volume class for test.
-// This class provides the operations for a test volume that simulates Google
-// drive.
+// DriveTestVolume: test volume for Google Drive.
 class DriveTestVolume : public TestVolume {
  public:
-  DriveTestVolume() : TestVolume("drive"), integration_service_(NULL) {}
+  DriveTestVolume() : TestVolume("drive") {}
   ~DriveTestVolume() override {}
 
   void CreateEntry(const TestEntryInfo& entry) {
@@ -443,8 +451,9 @@ class DriveTestVolume : public TestVolume {
 
     std::string content_data;
     if (!source_file_name.empty()) {
-      base::FilePath source_file_path = GetTestFilePath(source_file_name);
-      ASSERT_TRUE(base::ReadFileToString(source_file_path, &content_data));
+      base::FilePath source_path =
+          TestVolume::GetTestDataFilePath(source_file_name);
+      ASSERT_TRUE(base::ReadFileToString(source_path, &content_data));
     }
 
     std::unique_ptr<google_apis::FileResource> entry;
@@ -481,34 +490,62 @@ class DriveTestVolume : public TestVolume {
 
   drive::DriveIntegrationService* CreateDriveIntegrationService(
       Profile* profile) {
+    if (!CreateRootDirectory(profile))
+      return nullptr;
+
+    EXPECT_FALSE(profile_);
     profile_ = profile;
+
+    EXPECT_FALSE(fake_drive_service_);
     fake_drive_service_ = new drive::FakeDriveService;
     fake_drive_service_->LoadAppListForDriveApi("drive/applist.json");
 
-    if (!CreateRootDirectory(profile))
-      return NULL;
+    EXPECT_FALSE(integration_service_);
     integration_service_ = new drive::DriveIntegrationService(
-        profile, NULL, fake_drive_service_, std::string(), root_path(), NULL);
+        profile, nullptr, fake_drive_service_, std::string(), root_path(),
+        nullptr);
+
     return integration_service_;
   }
 
  private:
-  Profile* profile_;
-  drive::FakeDriveService* fake_drive_service_;
-  drive::DriveIntegrationService* integration_service_;
+  // Profile associated with this volume: not owned.
+  Profile* profile_ = nullptr;
+  // Fake drive service used for testing: not owned.
+  drive::FakeDriveService* fake_drive_service_ = nullptr;
+  // Integration service used for testing: not owned.
+  drive::DriveIntegrationService* integration_service_ = nullptr;
 };
 
-FileManagerBrowserTestBase::FileManagerBrowserTestBase() {
+FileManagerBrowserTestBase::FileManagerBrowserTestBase() = default;
+
+FileManagerBrowserTestBase::~FileManagerBrowserTestBase() = default;
+
+void FileManagerBrowserTestBase::SetUp() {
+  net::NetworkChangeNotifier::SetTestNotificationsOnly(true);
+  ExtensionApiTest::SetUp();
 }
 
-FileManagerBrowserTestBase::~FileManagerBrowserTestBase() {
+void FileManagerBrowserTestBase::SetUpCommandLine(
+    base::CommandLine* command_line) {
+  if (GetGuestModeParam() == IN_GUEST_MODE) {
+    command_line->AppendSwitch(chromeos::switches::kGuestSession);
+    command_line->AppendSwitchNative(chromeos::switches::kLoginUser, "");
+    command_line->AppendSwitch(switches::kIncognito);
+  }
+
+  if (GetGuestModeParam() == IN_INCOGNITO) {
+    command_line->AppendSwitch(switches::kIncognito);
+  }
+
+  ExtensionApiTest::SetUpCommandLine(command_line);
 }
 
 void FileManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
   ExtensionApiTest::SetUpInProcessBrowserTestFixture();
-  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
 
   local_volume_.reset(new DownloadsTestVolume);
+
   if (GetGuestModeParam() != IN_GUEST_MODE) {
     create_drive_integration_service_ =
         base::Bind(&FileManagerBrowserTestBase::CreateDriveIntegrationService,
@@ -519,30 +556,15 @@ void FileManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
   }
 }
 
-void FileManagerBrowserTestBase::SetUp() {
-  net::NetworkChangeNotifier::SetTestNotificationsOnly(true);
-  ExtensionApiTest::SetUp();
-}
-
 void FileManagerBrowserTestBase::SetUpOnMainThread() {
   ExtensionApiTest::SetUpOnMainThread();
-  ASSERT_TRUE(local_volume_->Mount(profile()));
+  CHECK(profile());
 
-  // The file manager component app should have been added for loading into the
-  // user profile, but not into the sign-in profile.
-  ASSERT_TRUE(extensions::ExtensionSystem::Get(profile())
-                  ->extension_service()
-                  ->component_loader()
-                  ->Exists(kFileManagerAppId));
-  ASSERT_FALSE(extensions::ExtensionSystem::Get(
-                   chromeos::ProfileHelper::GetSigninProfile())
-                   ->extension_service()
-                   ->component_loader()
-                   ->Exists(kFileManagerAppId));
+  CHECK(local_volume_->Mount(profile()));
 
   if (GetGuestModeParam() != IN_GUEST_MODE) {
-    // Install the web server to serve the mocked share dialog.
-    ASSERT_TRUE(embedded_test_server()->Start());
+    // Start the embedded test server to serve the mocked share dialog.
+    CHECK(embedded_test_server()->Start());
     const GURL share_url_base(embedded_test_server()->GetURL(
         "/chromeos/file_manager/share_dialog_mock/index.html"));
     drive_volume_ = drive_volumes_[profile()->GetOriginalProfile()];
@@ -552,98 +574,105 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
 
   display_service_ =
       std::make_unique<NotificationDisplayServiceTester>(profile());
-}
 
-void FileManagerBrowserTestBase::SetUpCommandLine(
-    base::CommandLine* command_line) {
-  if (GetGuestModeParam() == IN_GUEST_MODE) {
-    command_line->AppendSwitch(chromeos::switches::kGuestSession);
-    command_line->AppendSwitchNative(chromeos::switches::kLoginUser, "");
-    command_line->AppendSwitch(switches::kIncognito);
-  }
-  if (GetGuestModeParam() == IN_INCOGNITO) {
-    command_line->AppendSwitch(switches::kIncognito);
-  }
-  ExtensionApiTest::SetUpCommandLine(command_line);
-}
+  // The test resources are setup: enable and add default ChromeOS component
+  // extensions now and not before: crbug.com/831074, crbug.com/804413
+  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+  ExtensionService* service =
+      extensions::ExtensionSystem::Get(profile())->extension_service();
+  service->component_loader()->AddDefaultComponentExtensions(false);
 
-void FileManagerBrowserTestBase::InstallExtension(const base::FilePath& path,
-                                                  const char* manifest_name) {
-  base::FilePath root_path;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &root_path));
-
-  // Launch the extension.
-  const base::FilePath absolute_path = root_path.Append(path);
-  const extensions::Extension* const extension =
-      LoadExtensionAsComponentWithManifest(absolute_path, manifest_name);
-  ASSERT_TRUE(extension);
+  // The File Manager component extension should have been added for loading
+  // into the user profile, but not into the sign-in profile.
+  CHECK(extensions::ExtensionSystem::Get(profile())
+            ->extension_service()
+            ->component_loader()
+            ->Exists(kFileManagerAppId));
+  CHECK(!extensions::ExtensionSystem::Get(
+             chromeos::ProfileHelper::GetSigninProfile())
+             ->extension_service()
+             ->component_loader()
+             ->Exists(kFileManagerAppId));
 }
 
 void FileManagerBrowserTestBase::StartTest() {
-  InstallExtension(
-      base::FilePath(FILE_PATH_LITERAL("ui/file_manager/integration_tests")),
-      GetTestManifestName());
+  LOG(INFO) << "FileManagerBrowserTest::StartTest " << GetTestCaseNameParam();
+  static const base::FilePath test_extension_dir =
+      base::FilePath(FILE_PATH_LITERAL("ui/file_manager/integration_tests"));
+  LaunchExtension(test_extension_dir, GetTestExtensionManifestName());
   RunTestMessageLoop();
 }
 
+void FileManagerBrowserTestBase::LaunchExtension(const base::FilePath& path,
+                                                 const char* manifest_name) {
+  base::FilePath source_dir;
+  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &source_dir));
+
+  const base::FilePath source_path = source_dir.Append(path);
+  const extensions::Extension* const extension_launched =
+      LoadExtensionAsComponentWithManifest(source_path, manifest_name);
+  CHECK(extension_launched) << "Launching: " << manifest_name;
+}
+
 void FileManagerBrowserTestBase::RunTestMessageLoop() {
-  // Handle the messages from JavaScript.
-  // The while loop is break when the test is passed or failed.
-  FileManagerTestListener listener;
+  FileManagerTestMessageListener listener;
+
   while (true) {
-    FileManagerTestListener::Message entry = listener.GetNextMessage();
-    if (entry.type == extensions::NOTIFICATION_EXTENSION_TEST_PASSED) {
-      // Test succeed.
-      break;
-    } else if (entry.type == extensions::NOTIFICATION_EXTENSION_TEST_FAILED) {
-      // Test failed.
-      ADD_FAILURE() << entry.message;
-      break;
+    auto message = listener.GetNextMessage();
+
+    if (message.type == extensions::NOTIFICATION_EXTENSION_TEST_PASSED)
+      return;  // Test PASSED.
+    if (message.type == extensions::NOTIFICATION_EXTENSION_TEST_FAILED) {
+      ADD_FAILURE() << message.message;
+      return;  // Test FAILED.
     }
 
-    // Parse the message value as JSON.
-    const std::unique_ptr<const base::Value> value =
-        base::JSONReader::Read(entry.message);
-
-    // If the message is not the expected format, just ignore it.
-    const base::DictionaryValue* message_dictionary = NULL;
-    std::string name;
-    if (!value || !value->GetAsDictionary(&message_dictionary) ||
-        !message_dictionary->GetString("name", &name)) {
-      entry.function->Reply(std::string());
+    // If the message in JSON format has no command, just ignore it.
+    const auto json = base::JSONReader::Read(message.message);
+    const base::DictionaryValue* dictionary = nullptr;
+    std::string command;
+    if (!json || !json->GetAsDictionary(&dictionary) ||
+        !dictionary->GetString("name", &command)) {
+      message.function->Reply(std::string());
       continue;
     }
 
-    std::string output;
-    OnMessage(name, *message_dictionary, &output);
-    if (HasFatalFailure())
-      break;
+    // Process the command, reply with the result.
+    std::string result;
+    OnCommand(command, *dictionary, &result);
+    if (!HasFatalFailure()) {
+      message.function->Reply(result);
+      continue;
+    }
 
-    entry.function->Reply(output);
+    // Test FAILED: while processing the command.
+    LOG(INFO) << "[FAILED] " << GetTestCaseNameParam();
+    return;
   }
 }
 
-void FileManagerBrowserTestBase::OnMessage(const std::string& name,
+void FileManagerBrowserTestBase::OnCommand(const std::string& name,
                                            const base::DictionaryValue& value,
                                            std::string* output) {
   base::ScopedAllowBlockingForTesting allow_blocking;
+
   if (name == "getTestName") {
-    // Pass the test case name.
+    // Obtain the test case name.
     *output = GetTestCaseNameParam();
     return;
   }
 
   if (name == "getRootPaths") {
-    // Pass the root paths.
-    base::DictionaryValue res;
-    res.SetString("downloads",
-                  "/" + util::GetDownloadsMountPointName(profile()));
-    res.SetString("drive", "/" +
-                               drive::util::GetDriveMountPointPath(profile())
-                                   .BaseName()
-                                   .AsUTF8Unsafe() +
-                               "/root");
-    base::JSONWriter::Write(res, output);
+    // Obtain the root paths.
+    const auto downloads = util::GetDownloadsMountPointName(profile());
+    const auto drive = drive::util::GetDriveMountPointPath(profile());
+
+    base::DictionaryValue dictionary;
+    auto drive_root = drive.BaseName().AsUTF8Unsafe().append("/root");
+    dictionary.SetString("drive", "/" + drive_root);
+    dictionary.SetString("downloads", "/" + downloads);
+
+    base::JSONWriter::Write(dictionary, output);
     return;
   }
 
@@ -654,19 +683,18 @@ void FileManagerBrowserTestBase::OnMessage(const std::string& name,
   }
 
   if (name == "getCwsWidgetContainerMockUrl") {
-    // Obtain whether the test is in guest mode or not.
+    // Obtain the mock CWS widget container URL and URL.origin.
     const GURL url = embedded_test_server()->GetURL(
         "/chromeos/file_manager/cws_container_mock/index.html");
     std::string origin = url.GetOrigin().spec();
-
-    // Removes trailing a slash.
-    if (*origin.rbegin() == '/')
+    if (*origin.rbegin() == '/')  // Strip origin trailing '/'.
       origin.resize(origin.length() - 1);
 
-    base::DictionaryValue res;
-    res.SetString("url", url.spec());
-    res.SetString("origin", origin);
-    base::JSONWriter::Write(res, output);
+    base::DictionaryValue dictionary;
+    dictionary.SetString("url", url.spec());
+    dictionary.SetString("origin", origin);
+
+    base::JSONWriter::Write(dictionary, output);
     return;
   }
 
@@ -742,12 +770,12 @@ void FileManagerBrowserTestBase::OnMessage(const std::string& name,
     return;
   }
 
-  if (name == "installProviderExtension") {
+  if (name == "launchProviderExtension") {
     std::string manifest;
     ASSERT_TRUE(value.GetString("manifest", &manifest));
-    InstallExtension(base::FilePath(FILE_PATH_LITERAL(
-                         "ui/file_manager/integration_tests/testing_provider")),
-                     manifest.c_str());
+    LaunchExtension(base::FilePath(FILE_PATH_LITERAL(
+                        "ui/file_manager/integration_tests/testing_provider")),
+                    manifest.c_str());
     return;
   }
 

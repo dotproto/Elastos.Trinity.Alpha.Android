@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #import "ui/base/accelerators/platform_accelerator_cocoa.h"
 #import "ui/events/cocoa/cocoa_event_utils.h"
 #import "ui/events/keycodes/keyboard_code_conversion_mac.h"
@@ -73,9 +73,9 @@ const struct AcceleratorMapping {
   {IDC_FOCUS_LOCATION, NSCommandKeyMask, ui::VKEY_L},
   {IDC_CLOSE_WINDOW, NSCommandKeyMask, ui::VKEY_W},
   {IDC_EMAIL_PAGE_LOCATION, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_I},
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   {IDC_BASIC_PRINT, NSCommandKeyMask | NSAlternateKeyMask, ui::VKEY_P},
-#endif  // ENABLE_BASIC_PRINTING
+#endif  // ENABLE_PRINTING
   {IDC_CONTENT_CONTEXT_UNDO, NSCommandKeyMask, ui::VKEY_Z},
   {IDC_CONTENT_CONTEXT_REDO, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_Z},
   {IDC_CONTENT_CONTEXT_CUT, NSCommandKeyMask, ui::VKEY_X},

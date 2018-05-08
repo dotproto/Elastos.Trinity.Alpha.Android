@@ -10,13 +10,13 @@
 
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,6 +32,7 @@
 namespace {
 
 using chromeos::CupsPrintersManager;
+using chromeos::CupsPrintersManagerFactory;
 
 // Store the name used in CUPS, Printer#id in |printer_name|, the description
 // as the system_driverinfo option value, and the Printer#display_name in
@@ -77,7 +78,9 @@ LocalPrinterHandlerChromeos::LocalPrinterHandlerChromeos(
     Profile* profile,
     content::WebContents* preview_web_contents)
     : preview_web_contents_(preview_web_contents),
-      printers_manager_(CupsPrintersManager::Create(profile)),
+      printers_manager_(
+          CupsPrintersManagerFactory::GetInstance()->GetForBrowserContext(
+              profile)),
       printer_configurer_(chromeos::PrinterConfigurer::Create(profile)),
       weak_factory_(this) {
   // Construct the CupsPrintJobManager to listen for printing events.
@@ -185,6 +188,7 @@ void LocalPrinterHandlerChromeos::HandlePrinterSetup(
     case chromeos::PrinterSetupResult::kPpdTooLarge:
     case chromeos::PrinterSetupResult::kInvalidPpd:
     case chromeos::PrinterSetupResult::kFatalError:
+    case chromeos::PrinterSetupResult::kNativePrintersNotAllowed:
       LOG(ERROR) << "Unexpected error in printer setup." << result;
       break;
     case chromeos::PrinterSetupResult::kMaxValue:
@@ -202,7 +206,7 @@ void LocalPrinterHandlerChromeos::StartPrint(
     const base::string16& job_title,
     const std::string& ticket_json,
     const gfx::Size& page_size,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     PrintCallback callback) {
   printing::StartLocalPrint(ticket_json, print_data, preview_web_contents_,
                             std::move(callback));

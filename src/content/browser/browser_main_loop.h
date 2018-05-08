@@ -14,7 +14,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_main_runner.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
 #include "ui/base/ui_features.h"
@@ -172,9 +172,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   }
   midi::MidiService* midi_service() const { return midi_service_.get(); }
 
-  bool is_tracing_startup_for_duration() const {
-    return is_tracing_startup_for_duration_;
-  }
+  base::FilePath GetStartupTraceFileName() const;
 
   const base::FilePath& startup_trace_file() const {
     return startup_trace_file_;
@@ -248,9 +246,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   void InitializeIOThread();
 
   void InitializeMojo();
-  base::FilePath GetStartupTraceFileName(
-      const base::CommandLine& command_line) const;
-  void InitStartupTracingForDuration(const base::CommandLine& command_line);
+  void InitStartupTracingForDuration();
   void EndStartupTracing();
 
   void CreateAudioManager();
@@ -282,7 +278,6 @@ class CONTENT_EXPORT BrowserMainLoop {
   const base::CommandLine& parsed_command_line_;
   int result_code_;
   bool created_threads_;  // True if the non-UI threads were created.
-  bool is_tracing_startup_for_duration_;
 
   // Members initialized in |MainMessageLoopStart()| ---------------------------
   std::unique_ptr<base::MessageLoop> main_message_loop_;

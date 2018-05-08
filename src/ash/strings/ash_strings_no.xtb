@@ -23,14 +23,16 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Appvelger</translation>
 <translation id="1525508553941733066">AVVIS</translation>
+<translation id="1537254971476575106">Lupe for hele skjermen</translation>
 <translation id="15373452373711364">Stor markør</translation>
 <translation id="1550523713251050646">Klikk for å se flere alternativer</translation>
-<translation id="1567387640189251553">Et annet tastatur er koblet til etter at du sist skrev inn passordet ditt. Det prøver kanskje å stjele tastetrykkene dine.</translation>
+<translation id="1567387640189251553">Et annet tastatur er koblet til etter at du sist skrev inn passordet ditt. Det brukes kanskje til å stjele tastetrykkene dine.</translation>
 <translation id="1608626060424371292">Fjern denne brukeren</translation>
 <translation id="1621499497873603021">Gjenværende tid til batteriet er tomt – <ph name="TIME_LEFT" /></translation>
 <translation id="1658406695958299976">Beklager, men passordet ditt kunne fremdeles ikke bekreftes. Merk: Hvis du endret passordet ditt nylig, trer det nye passordet ditt i kraft så snart du logger av. Bruk det gamle passordet ditt her.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> igjen</translation>
 <translation id="1698760176351776263">IPv6-adresse: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Enhetsadministratoren kan muligens overvåke aktiviteten din.</translation>
 <translation id="1734367976349034509">Denne enheten er administrert av en bedrift</translation>
 <translation id="1746730358044914197">Inndatametoder konfigureres av administratoren din.</translation>
 <translation id="1747827819627189109">Skjermtastaturet er aktivert</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Overflyt-knapp</translation>
 <translation id="1951012854035635156">Assistent</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Velg språk</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Slå av</translation>
 <translation id="2012624427112548395">Ctrl + Søk + H</translation>
 <translation id="2049639323467105390">Denne enheten administreres av <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Stående</translation>
 <translation id="2067602449040652523">Lysstyrke på tastaturet</translation>
+<translation id="2081529251031312395">$1 kan likevel logge på senere.</translation>
 <translation id="2122028596993374965">Slutt å caste <ph name="TAB_NAME" /> til <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Lading med lav effekt</translation>
+<translation id="2135456203358955318">Dokket lupe</translation>
 <translation id="2144487987174258011">Start på nytt for å oppdatere Adobe Flash Player</translation>
-<translation id="2191905770366256395">Det avtakbare tastaturet trenger en kritisk oppdatering</translation>
 <translation id="2208323208084708176">Enhetlig skrivebordsmodus</translation>
 <translation id="2220572644011485463">PIN-kode eller passord</translation>
 <translation id="225680501294068881">Leter etter enheter ...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Visningsskala</translation>
 <translation id="2303600792989757991">Vis eller skjul vindusoversikten</translation>
 <translation id="2338501278241028356">Slå på Bluetooth for å finne enheter i nærheten</translation>
+<translation id="2339073806695260576">Trykk på pekepennknappen på hyllen for å ta et notat, ta en skjermdump, bruke laserpekeren eller bruke forstørrelsesglasset.</translation>
 <translation id="2351266942280602854">Språk og inndata</translation>
 <translation id="2352467521400612932">Innstillinger for pekepenn</translation>
 <translation id="2354174487190027830">Aktiverer <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Send</translation>
 <translation id="2675319268637823299">En administrator har deaktivert multipålogging for <ph name="USER_EMAIL" />.
     Alle brukere må logge av for å fortsette.</translation>
+<translation id="2696763960464195425">Informasjonen din fjernes når du logger av. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Velg tastatur</translation>
 <translation id="2718395828230677721">Nattlys</translation>
 <translation id="2727977024730340865">Tilkoblet laveffektslader. Batteriladingen kan være upålitelig.</translation>
 <translation id="2761704814324807722">Statusfelt, klokken <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Håndskrift-inndata</translation>
 <translation id="6528179044667508675">Ikke forstyrr</translation>
 <translation id="6537270692134705506">Ta skjermdump av skjermen</translation>
-<translation id="6580955892089546165">Med denne funksjonen får du rask tilgang til påloggede brukere uten å måtte skrive inn passord.
-
-Du bør bare bruke denne funksjonen med kontoer du stoler på.</translation>
 <translation id="6585808820553845416">Økten slutter om <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Søk + Shift + K</translation>
 <translation id="6650933572246256093">Bluetooth-enheten «<ph name="DEVICE_NAME" />» ber om tillatelse til å koble til. Skriv inn denne tilgangskoden på den aktuelle enheten: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Passord</translation>
 <translation id="6691659475504239918">Søk + Shift + H</translation>
+<translation id="6696025732084565524">Det avtakbare tastaturet trenger en kritisk oppdatering</translation>
 <translation id="6700713906295497288">IME-menyknappen</translation>
 <translation id="6713285437468012787">Nå er Bluetooth-enheten «<ph name="DEVICE_NAME" />» koblet til og tilgjengelig for alle brukere. Du kan oppheve denne tilkoblingen via Innstillinger.</translation>
 <translation id="6715542151869432661">Fant ingen mobilenheter.</translation>
@@ -260,7 +265,6 @@ Du bør bare bruke denne funksjonen med kontoer du stoler på.</translation>
 <translation id="7029814467594812963">Avslutt økten</translation>
 <translation id="7034339000180558234">Caster <ph name="TAB_NAME" /> til <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Angi bakgrunn</translation>
-<translation id="7054808953701320293">Den er grei. Ikke vis meg dette igjen.</translation>
 <translation id="7066646422045619941">Administratoren din har slått av dette nettverket.</translation>
 <translation id="7067196344162293536">Automatisk retning</translation>
 <translation id="7098389117866926363">USB-C-enhet (venstre port på baksiden)</translation>
@@ -299,8 +303,6 @@ Du bør bare bruke denne funksjonen med kontoer du stoler på.</translation>
 <translation id="7994370417837006925">Multipålogging</translation>
 <translation id="8000066093800657092">Ingen nettverk</translation>
 <translation id="8054466585765276473">Beregner batteritid.</translation>
-<translation id="8056430285089645882">Den er grei. Ikke vis meg dette igjen.</translation>
-<translation id="8088137642766812908">Forsiktig, denne funksjonen kan bite</translation>
 <translation id="8098591350844501178">Slutt å caste skjermen til <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Tilkoblet <ph name="NAME" /></translation>
 <translation id="813913629614996137">Initialiserer …</translation>
@@ -326,10 +328,8 @@ Du bør bare bruke denne funksjonen med kontoer du stoler på.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Laveffektslader er tilkoblet</translation>
 <translation id="8734991477317290293">Det brukes kanskje til å stjele tastetrykkene dine.</translation>
+<translation id="8809737090443522491">Skriv inn navnet på en app eller et dokument</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">Flytting av vinduer til et annet skrivebord kan føre til uventet atferd.
-
-Følgende varsler, vinduer og dialogbokser kan bli delt mellom skrivebordene.</translation>
 <translation id="8825534185036233643">Speiling med mer enn to skjermer støttes ikke.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Tilbakeknapp</translation>

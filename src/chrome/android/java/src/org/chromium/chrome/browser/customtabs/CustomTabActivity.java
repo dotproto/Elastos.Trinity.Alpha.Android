@@ -23,7 +23,6 @@ import android.os.Bundle;
 import android.os.StrictMode;
 import android.provider.Browser;
 import android.support.annotation.Nullable;
-import android.support.customtabs.CustomTabsCallback;
 import android.support.customtabs.CustomTabsIntent;
 import android.support.customtabs.CustomTabsSessionToken;
 import android.support.v4.app.ActivityOptionsCompat;
@@ -47,6 +46,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.ExternalAppId;
 import org.chromium.chrome.browser.KeyboardShortcuts;
@@ -66,7 +66,8 @@ import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibil
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.page_info.PageInfoPopup;
+import org.chromium.chrome.browser.page_info.PageInfoController;
+import org.chromium.chrome.browser.payments.ServiceWorkerPaymentAppBridge;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -134,17 +135,17 @@ public class CustomTabActivity extends ChromeActivity {
     // Whether there is any speculative page loading associated with the session.
     private boolean mHasSpeculated;
     private CustomTabObserver mTabObserver;
+    private CustomTabNavigationEventObserver mTabNavigationEventObserver;
 
     private String mSpeculatedUrl;
 
-    private boolean mUsingPrerender;
     private boolean mUsingHiddenTab;
 
     private boolean mIsClosing;
     private boolean mIsKeepAlive;
 
-    // This boolean is used to do a hack in navigation history for
-    // prerender and hidden tab loads with unmatching fragments.
+    // This boolean is used to do a hack in navigation history for hidden tab loads with
+    // unmatching fragments.
     private boolean mIsFirstLoad;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
@@ -258,6 +259,7 @@ public class CustomTabActivity extends ChromeActivity {
             // initializeMainTab().
             PageLoadMetrics.addObserver(mMetricsObserver);
             tab.addObserver(mTabObserver);
+            tab.addObserver(mTabNavigationEventObserver);
         }
 
         @Override
@@ -270,6 +272,7 @@ public class CustomTabActivity extends ChromeActivity {
         @Override
         public void tabRemoved(Tab tab) {
             tab.removeObserver(mTabObserver);
+            tab.removeObserver(mTabNavigationEventObserver);
             PageLoadMetrics.removeObserver(mMetricsObserver);
         }
     };
@@ -400,8 +403,8 @@ public class CustomTabActivity extends ChromeActivity {
     public void finishNativeInitialization() {
         if (!mIntentDataProvider.isInfoPage()) FirstRunSignInProcessor.start(this);
 
-        // If extra headers have been passed, cancel any current prerender, as
-        // prerendering doesn't support extra headers.
+        // If extra headers have been passed, cancel any current speculation, as
+        // speculation doesn't support extra headers.
         if (IntentHandler.getExtraHeadersFromIntent(getIntent()) != null) {
             mConnection.cancelSpeculation(mSession);
         }
@@ -611,40 +614,28 @@ public class CustomTabActivity extends ChromeActivity {
     }
 
     private WebContents takeWebContents() {
-        mUsingPrerender = true;
         int webContentsStateOnLaunch = WEBCONTENTS_STATE_PRERENDERED_WEBCONTENTS;
-        WebContents webContents = takePrerenderedWebContents();
 
-        if (webContents == null) {
-            mUsingPrerender = false;
-            webContents = takeAsyncWebContents();
+        WebContents webContents = takeAsyncWebContents();
+        if (webContents != null) {
+            webContentsStateOnLaunch = WEBCONTENTS_STATE_TRANSFERRED_WEBCONTENTS;
+            webContents.resumeLoadingCreatedWebContents();
+        } else {
+            webContents = WarmupManager.getInstance().takeSpareWebContents(false, false);
             if (webContents != null) {
-                webContentsStateOnLaunch = WEBCONTENTS_STATE_TRANSFERRED_WEBCONTENTS;
-                webContents.resumeLoadingCreatedWebContents();
+                webContentsStateOnLaunch = WEBCONTENTS_STATE_SPARE_WEBCONTENTS;
             } else {
-                webContents = WarmupManager.getInstance().takeSpareWebContents(false, false);
-                if (webContents != null) {
-                    webContentsStateOnLaunch = WEBCONTENTS_STATE_SPARE_WEBCONTENTS;
-                } else {
-                    webContents =
-                            WebContentsFactory.createWebContentsWithWarmRenderer(false, false);
-                    webContentsStateOnLaunch = WEBCONTENTS_STATE_NO_WEBCONTENTS;
-                }
+                webContents = WebContentsFactory.createWebContentsWithWarmRenderer(false, false);
+                webContentsStateOnLaunch = WEBCONTENTS_STATE_NO_WEBCONTENTS;
             }
         }
 
         RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebContentsStateOnLaunch",
                 webContentsStateOnLaunch, WEBCONTENTS_STATE_MAX);
 
-        if (!mUsingPrerender) mConnection.resetPostMessageHandlerForSession(mSession, webContents);
+        mConnection.resetPostMessageHandlerForSession(mSession, webContents);
 
         return webContents;
-    }
-
-    private WebContents takePrerenderedWebContents() {
-        String url = getUrlToLoad();
-        String referrerUrl = mConnection.getReferrer(mSession, getIntent());
-        return mConnection.takePrerenderedUrl(mSession, url, referrerUrl);
     }
 
     private WebContents takeAsyncWebContents() {
@@ -660,12 +651,14 @@ public class CustomTabActivity extends ChromeActivity {
         tab.getView().requestFocus();
         mTabObserver = new CustomTabObserver(
                 getApplication(), mSession, mIntentDataProvider.isOpenedByChrome());
+        mTabNavigationEventObserver = new CustomTabNavigationEventObserver(mSession);
 
         mMetricsObserver = new PageLoadMetricsObserver(mConnection, mSession, tab, mTabObserver);
         // Immediately add the observer to PageLoadMetrics to catch early events that may
         // be generated in the middle of tab initialization.
         PageLoadMetrics.addObserver(mMetricsObserver);
         tab.addObserver(mTabObserver);
+        tab.addObserver(mTabNavigationEventObserver);
 
         prepareTabBackground(tab);
     }
@@ -739,7 +732,6 @@ public class CustomTabActivity extends ChromeActivity {
     @Override
     public void onPauseWithNative() {
         super.onPauseWithNative();
-        mConnection.notifyNavigationEvent(mSession, CustomTabsCallback.TAB_HIDDEN);
         if (mWebappTimeSpentLogger != null) {
             mWebappTimeSpentLogger.onPause();
         }
@@ -773,11 +765,6 @@ public class CustomTabActivity extends ChromeActivity {
         // the wrong fragment. Does an extra pageload and replaces history.
         if (mHasSpeculated && isFirstLoad
                 && UrlUtilities.urlsFragmentsDiffer(mSpeculatedUrl, url)) {
-            if (mUsingPrerender) {
-                LoadUrlParams temporaryParams = new LoadUrlParams(mSpeculatedUrl);
-                IntentHandler.addReferrerAndHeaders(temporaryParams, intent);
-                tab.loadUrl(temporaryParams);
-            }
             params.setShouldReplaceCurrentEntry(true);
         }
 
@@ -787,6 +774,8 @@ public class CustomTabActivity extends ChromeActivity {
         if (mUsingHiddenTab && !tab.isLoading() && !tab.isShowingErrorPage()) {
             mTabObserver.onPageLoadStarted(tab, params.getUrl());
             mTabObserver.onPageLoadFinished(tab);
+            mTabNavigationEventObserver.onPageLoadStarted(tab, params.getUrl());
+            mTabNavigationEventObserver.onPageLoadFinished(tab);
         }
 
         // No actual load to do if tab already has the exact correct url.
@@ -884,6 +873,14 @@ public class CustomTabActivity extends ChromeActivity {
     public final void finishAndClose(boolean reparenting) {
         if (mIsClosing) return;
         mIsClosing = true;
+
+        // Notify the window is closing so as to abort invoking payment app early.
+        if (mIntentDataProvider.isForPaymentRequest()
+                && getActivityTab().getWebContents() != null) {
+            ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(
+                    getActivityTab().getWebContents());
+        }
+
         if (!reparenting) {
             // Closing the activity destroys the renderer as well. Re-create a spare renderer some
             // time after, so that we have one ready for the next tab open. This does not increase
@@ -1044,8 +1041,8 @@ public class CustomTabActivity extends ChromeActivity {
             return true;
         } else if (id == R.id.info_menu_id) {
             if (getTabModelSelector().getCurrentTab() == null) return false;
-            PageInfoPopup.show(this, getTabModelSelector().getCurrentTab(),
-                    getToolbarManager().getContentPublisher(), PageInfoPopup.OPENED_FROM_MENU);
+            PageInfoController.show(this, getTabModelSelector().getCurrentTab(),
+                    getToolbarManager().getContentPublisher(), PageInfoController.OPENED_FROM_MENU);
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);
@@ -1247,5 +1244,16 @@ public class CustomTabActivity extends ChromeActivity {
         }
 
         return super.requiresFirstRunToBeCompleted(intent);
+    }
+
+    @Override
+    public boolean canShowTrustedCdnPublisherUrl() {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SHOW_TRUSTED_PUBLISHER_URL)) {
+            return false;
+        }
+
+        String publisherUrlPackage = mConnection.getTrustedCdnPublisherUrlPackage();
+        return publisherUrlPackage != null
+                && publisherUrlPackage.equals(mConnection.getClientPackageNameForSession(mSession));
     }
 }

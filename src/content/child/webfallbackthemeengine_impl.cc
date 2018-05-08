@@ -6,12 +6,11 @@
 
 #include "base/macros.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "ui/native_theme/native_theme_base.h"
 
 using blink::WebCanvas;
-using blink::WebColor;
 using blink::WebRect;
 using blink::WebFallbackThemeEngine;
 

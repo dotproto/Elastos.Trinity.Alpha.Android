@@ -35,15 +35,18 @@
 #include "components/payments/core/features.h"
 #include "components/search_provider_logos/switches.h"
 #include "components/security_state/core/features.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/ios_chrome_flag_descriptions.h"
+#include "ios/chrome/browser/itunes_links/itunes_links_flag.h"
 #include "ios/chrome/browser/mailto/features.h"
 #include "ios/chrome/browser/ssl/captive_portal_features.h"
 #include "ios/chrome/browser/ui/external_search/features.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/history/history_base_feature.h"
 #include "ios/chrome/browser/ui/main/main_feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_flags.h"
@@ -237,12 +240,13 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMailtoHandlingWithGoogleUIName,
      flag_descriptions::kMailtoHandlingWithGoogleUIDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kMailtoHandledWithGoogleUI)},
-    {"tab-switcher-tab-grid", flag_descriptions::kTabSwitcherTabGridName,
-     flag_descriptions::kTabSwitcherTabGridDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kTabSwitcherTabGrid)},
     {"feedback-kit-v2", flag_descriptions::kFeedbackKitV2Name,
      flag_descriptions::kFeedbackKitV2Description, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kFeedbackKitV2)},
+    {"feedback-kit-v2-sso-service",
+     flag_descriptions::kFeedbackKitV2WithSSOServiceName,
+     flag_descriptions::kFeedbackKitV2WithSSOServiceDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kFeedbackKitV2WithSSOService)},
     {"new-clear-browsing-data-ui",
      flag_descriptions::kNewClearBrowsingDataUIName,
      flag_descriptions::kNewClearBrowsingDataUIDescription, flags_ui::kOsIos,
@@ -250,6 +254,55 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"new-tools_menu", flag_descriptions::kNewToolsMenuName,
      flag_descriptions::kNewToolsMenuDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kNewToolsMenu)},
+    {"itunes-links-store-kit-handling",
+     flag_descriptions::kITunesLinksStoreKitHandlingName,
+     flag_descriptions::kITunesLinksStoreKitHandlingDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kITunesLinksStoreKitHandling)},
+    {"unified-consent", flag_descriptions::kUnifiedConsentName,
+     flag_descriptions::kUnifiedConsentDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(signin::kUnifiedConsent)},
+    {"autofill-dynamic-forms", flag_descriptions::kAutofillDynamicFormsName,
+     flag_descriptions::kAutofillDynamicFormsDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillDynamicForms)},
+    {"autofill-restrict-formless-form-extraction",
+     flag_descriptions::kAutofillRestrictUnownedFieldsToFormlessCheckoutName,
+     flag_descriptions::
+         kAutofillRestrictUnownedFieldsToFormlessCheckoutDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout)},
+    {"ui-refresh-location-bar", flag_descriptions::kUIRefreshLocationBarName,
+     flag_descriptions::kUIRefreshLocationBarDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kUIRefreshLocationBar)},
+    {"fullscreen-viewport-adjustment-experiment",
+     flag_descriptions::kFullscreenViewportAdjustmentExperimentName,
+     flag_descriptions::kFullscreenViewportAdjustmentExperimentDescription,
+     flags_ui::kOsIos,
+     MULTI_VALUE_TYPE(
+         fullscreen::features::kViewportAdjustmentExperimentChoices)},
+    {"autofill-enforce-min-required-fields-for-heuristics",
+     flag_descriptions::kAutofillEnforceMinRequiredFieldsForHeuristicsName,
+     flag_descriptions::
+         kAutofillEnforceMinRequiredFieldsForHeuristicsDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics)},
+    {"autofill-enforce-min-required-fields-for-query",
+     flag_descriptions::kAutofillEnforceMinRequiredFieldsForQueryName,
+     flag_descriptions::kAutofillEnforceMinRequiredFieldsForQueryDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnforceMinRequiredFieldsForQuery)},
+    {"autofill-enforce-min-required-fields-for-upload",
+     flag_descriptions::kAutofillEnforceMinRequiredFieldsForUploadName,
+     flag_descriptions::kAutofillEnforceMinRequiredFieldsForUploadDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnforceMinRequiredFieldsForUpload)},
+    {"browser-container-fullscreen",
+     flag_descriptions::kBrowserContainerFullscreenName,
+     flag_descriptions::kBrowserContainerFullscreenDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kBrowserContainerFullscreen)},
 };
 
 // Add all switches from experimental flags to |command_line|.

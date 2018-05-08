@@ -12,7 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "device/fido/fido_discovery.h"
-#include "device/fido/u2f_transport_protocol.h"
+#include "device/fido/fido_transport_protocol.h"
 
 namespace service_manager {
 class Connector;
@@ -32,9 +32,9 @@ namespace test {
 //   auto* fake_ble_discovery = factory.ForgeNextBleDiscovery();
 //
 //   // Run the production code that will eventually call:
-//   //// FidoDiscovery::Create(U2fTransportProtocol::kUsbHumanInterfaceDevice)
+//   //// FidoDiscovery::Create(FidoTransportProtocol::kUsbHumanInterfaceDevice)
 //   //// hid_instance->Start();
-//   //// FidoDiscovery::Create(U2fTransportProtocol::kBluetoothLowEnergy)
+//   //// FidoDiscovery::Create(FidoTransportProtocol::kBluetoothLowEnergy)
 //   //// ble_instance->Start();
 //
 //   // Wait, i.e. spin the message loop until the fake discoveries are started.
@@ -65,7 +65,7 @@ class FakeFidoDiscovery : public FidoDiscovery,
     kAutomatic
   };
 
-  explicit FakeFidoDiscovery(U2fTransportProtocol transport,
+  explicit FakeFidoDiscovery(FidoTransportProtocol transport,
                              StartMode mode = StartMode::kManual);
   ~FakeFidoDiscovery() override;
 
@@ -110,15 +110,17 @@ class ScopedFakeFidoDiscoveryFactory
   // It is an error not to call the relevant method prior to a call to
   // FidoDiscovery::Create with the respective transport.
   FakeFidoDiscovery* ForgeNextHidDiscovery(StartMode mode = StartMode::kManual);
+  FakeFidoDiscovery* ForgeNextNfcDiscovery(StartMode mode = StartMode::kManual);
   FakeFidoDiscovery* ForgeNextBleDiscovery(StartMode mode = StartMode::kManual);
 
  protected:
   std::unique_ptr<FidoDiscovery> CreateFidoDiscovery(
-      U2fTransportProtocol transport,
+      FidoTransportProtocol transport,
       ::service_manager::Connector* connector) override;
 
  private:
   std::unique_ptr<FakeFidoDiscovery> next_hid_discovery_;
+  std::unique_ptr<FakeFidoDiscovery> next_nfc_discovery_;
   std::unique_ptr<FakeFidoDiscovery> next_ble_discovery_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedFakeFidoDiscoveryFactory);

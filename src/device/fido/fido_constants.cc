@@ -19,6 +19,8 @@ const std::array<uint8_t, 32> kBogusChallenge = {
 const char kResidentKeyMapKey[] = "rk";
 const char kUserVerificationMapKey[] = "uv";
 const char kUserPresenceMapKey[] = "up";
+const char kClientPinMapKey[] = "client_pin";
+const char kPlatformDeviceMapKey[] = "plat";
 
 const size_t kHidPacketSize = 64;
 const uint32_t kHidBroadcastChannel = 0xffffffff;
@@ -41,11 +43,15 @@ const uint8_t kP1IndividualAttestation = 0x80;
 const size_t kMaxKeyHandleLength = 255;
 const size_t kU2fParameterLength = 32;
 
-const std::array<uint8_t, 2> kLegacyVersionSuffix = {0x00, 0x00};
-
-const std::array<uint8_t, 6> kU2fVersionResponse = {'U', '2', 'F',
-                                                    '_', 'V', '2'};
-
 const base::TimeDelta kDeviceTimeout = base::TimeDelta::FromSeconds(3);
+const base::TimeDelta kHidKeepAliveDelay =
+    base::TimeDelta::FromMilliseconds(100);
+
+const char kFormatKey[] = "fmt";
+const char kAttestationStatementKey[] = "attStmt";
+const char kAuthDataKey[] = "authData";
+const char kNoneAttestationValue[] = "none";
+
+const char kPublicKey[] = "public-key";
 
 }  // namespace device

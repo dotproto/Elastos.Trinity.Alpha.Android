@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -80,7 +79,7 @@ class SaveFileManager::SimpleURLLoaderHelper
                                                    annotation_tag);
     // We can use Unretained below as |url_loader_| is owned by |this|, so the
     // callback won't be invoked if |this| gets deleted.
-    url_loader_->SetOnResponseStartedCallback(base::BindRepeating(
+    url_loader_->SetOnResponseStartedCallback(base::BindOnce(
         &SimpleURLLoaderHelper::OnResponseStarted, base::Unretained(this), url,
         render_process_id, render_frame_routing_id));
     url_loader_->DownloadAsStream(url_loader_factory, this);

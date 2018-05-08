@@ -11,7 +11,6 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
@@ -59,7 +58,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "media/audio/audio_thread_impl.h"
-#include "media/mojo/features.h"
+#include "media/mojo/buildflags.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -166,46 +165,6 @@ CastContentBrowserClient::~CastContentBrowserClient() {
                                      url_request_context_factory_.release());
 }
 
-void CastContentBrowserClient::AppendExtraCommandLineSwitches(
-    base::CommandLine* command_line) {
-#if defined(USE_AURA)
-  std::string process_type =
-      command_line->GetSwitchValueNative(switches::kProcessType);
-  if (process_type == switches::kGpuProcess) {
-    static const char* const kForwardSwitches[] = {
-        switches::kCastInitialScreenHeight, switches::kCastInitialScreenWidth,
-        switches::kVSyncInterval,
-    };
-    base::CommandLine* browser_command_line =
-        base::CommandLine::ForCurrentProcess();
-    command_line->CopySwitchesFrom(*browser_command_line, kForwardSwitches,
-                                   arraysize(kForwardSwitches));
-
-    auto display = display::Screen::GetScreen()->GetPrimaryDisplay();
-    gfx::Size res = display.GetSizeInPixel();
-    if (display.rotation() == display::Display::ROTATE_90 ||
-        display.rotation() == display::Display::ROTATE_270) {
-      res = gfx::Size(res.height(), res.width());
-    }
-
-    if (!command_line->HasSwitch(switches::kCastInitialScreenWidth)) {
-      command_line->AppendSwitchASCII(switches::kCastInitialScreenWidth,
-                                      base::IntToString(res.width()));
-    }
-    if (!command_line->HasSwitch(switches::kCastInitialScreenHeight)) {
-      command_line->AppendSwitchASCII(switches::kCastInitialScreenHeight,
-                                      base::IntToString(res.height()));
-    }
-
-    if (base::FeatureList::IsEnabled(kSingleBuffer)) {
-      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "1");
-    } else if (base::FeatureList::IsEnabled(chromecast::kTripleBuffer720)) {
-      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "3");
-    }
-  }
-#endif  // defined(USE_AURA)
-}
-
 std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
     content::BrowserContext* browser_context,
     PrefService* pref_service,
@@ -288,6 +247,14 @@ media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
   DCHECK(cast_browser_main_parts_);
   return cast_browser_main_parts_->media_caps();
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+base::WeakPtr<device::BluetoothAdapterCast>
+CastContentBrowserClient::CreateBluetoothAdapter() {
+  NOTREACHED() << "Bluetooth Adapter is not supported!";
+  return nullptr;
+}
+#endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 void CastContentBrowserClient::SetMetricsClientId(
     const std::string& client_id) {}
@@ -439,26 +406,57 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
   if (process_type == switches::kRendererProcess) {
     // Any browser command-line switches that should be propagated to
     // the renderer go here.
-    if (browser_command_line->HasSwitch(switches::kAllowHiddenMediaPlayback))
-      command_line->AppendSwitch(switches::kAllowHiddenMediaPlayback);
+    static const char* const kForwardSwitches[] = {
+        switches::kAllowHiddenMediaPlayback,
+        switches::kForceMediaResolutionHeight,
+        switches::kForceMediaResolutionWidth};
+    command_line->CopySwitchesFrom(*browser_command_line, kForwardSwitches,
+                                   arraysize(kForwardSwitches));
   } else if (process_type == switches::kUtilityProcess) {
     if (browser_command_line->HasSwitch(switches::kAudioOutputChannels)) {
       command_line->AppendSwitchASCII(switches::kAudioOutputChannels,
                                       browser_command_line->GetSwitchValueASCII(
                                           switches::kAudioOutputChannels));
     }
-  }
-
+  } else if (process_type == switches::kGpuProcess) {
 #if defined(OS_LINUX)
   // Necessary for accelerated 2d canvas.  By default on Linux, Chromium assumes
   // GLES2 contexts can be lost to a power-save mode, which breaks GPU canvas
   // apps.
-  if (process_type == switches::kGpuProcess) {
     command_line->AppendSwitch(switches::kGpuNoContextLost);
-  }
 #endif
 
-  AppendExtraCommandLineSwitches(command_line);
+#if defined(USE_AURA)
+    static const char* const kForwardSwitches[] = {
+        switches::kCastInitialScreenHeight, switches::kCastInitialScreenWidth,
+        switches::kVSyncInterval,
+    };
+    command_line->CopySwitchesFrom(*browser_command_line, kForwardSwitches,
+                                   arraysize(kForwardSwitches));
+
+    auto display = display::Screen::GetScreen()->GetPrimaryDisplay();
+    gfx::Size res = display.GetSizeInPixel();
+    if (display.rotation() == display::Display::ROTATE_90 ||
+        display.rotation() == display::Display::ROTATE_270) {
+      res = gfx::Size(res.height(), res.width());
+    }
+
+    if (!command_line->HasSwitch(switches::kCastInitialScreenWidth)) {
+      command_line->AppendSwitchASCII(switches::kCastInitialScreenWidth,
+                                      base::IntToString(res.width()));
+    }
+    if (!command_line->HasSwitch(switches::kCastInitialScreenHeight)) {
+      command_line->AppendSwitchASCII(switches::kCastInitialScreenHeight,
+                                      base::IntToString(res.height()));
+    }
+
+    if (chromecast::IsFeatureEnabled(kSingleBuffer)) {
+      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "1");
+    } else if (chromecast::IsFeatureEnabled(chromecast::kTripleBuffer720)) {
+      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "3");
+    }
+#endif  // defined(USE_AURA)
+  }
 }
 
 void CastContentBrowserClient::OverrideWebkitPrefs(

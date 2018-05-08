@@ -47,7 +47,6 @@ class WMState;
 namespace ash {
 class AcceleratorHandler;
 class AshTestHelper;
-class WaylandServerController;
 
 enum class Config;
 
@@ -64,8 +63,11 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
                 bool show_primary_host_on_connect);
   ~WindowManager() override;
 
+  // |initial_display_prefs| contains a dictionary of initial display prefs to
+  // pass to Shell::Init for synchronous initial display configuraiton.
   void Init(std::unique_ptr<aura::WindowTreeClient> window_tree_client,
-            std::unique_ptr<ash::ShellDelegate> shell_delegate = nullptr);
+            std::unique_ptr<ash::ShellDelegate> shell_delegate,
+            std::unique_ptr<base::Value> initial_display_prefs);
 
   // Sets the callback that is run once the connection to mus is lost. If not
   // set shutdown occurs when the connection is lost (the Shell is deleted).
@@ -162,8 +164,7 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   ui::mojom::EventResult OnAccelerator(
       uint32_t id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
-      override;
+      base::flat_map<std::string, std::vector<uint8_t>>* properties) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmSetClientArea(
       aura::Window* window,
@@ -203,13 +204,13 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   // ShellDelegateMus is used.
   std::unique_ptr<ShellDelegate> shell_delegate_;
 
+  std::unique_ptr<base::Value> initial_display_prefs_;
+
   // State that is only valid during a drag.
   struct DragState;
   std::unique_ptr<DragState> drag_state_;
 
   std::unique_ptr<ui::InputDeviceClient> input_device_client_;
-
-  std::unique_ptr<WaylandServerController> wayland_server_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

@@ -14,7 +14,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -42,8 +41,8 @@
 #include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 
 namespace content {
 
@@ -393,7 +392,7 @@ class BackgroundSyncManagerTest : public testing::Test {
     EXPECT_TRUE(Register(sync_options));
 
     EXPECT_EQ(sync_events_called + 1, sync_events_called_);
-    EXPECT_TRUE(GetRegistration(sync_options_1_));
+    EXPECT_TRUE(GetRegistration(sync_options));
     EXPECT_TRUE(sync_fired_callback_);
   }
 
@@ -1349,4 +1348,114 @@ TEST_F(BackgroundSyncManagerTest, LastChance) {
   EXPECT_TRUE(test_background_sync_manager_->last_chance());
 }
 
+TEST_F(BackgroundSyncManagerTest, EmulateOfflineSingleClient) {
+  InitSyncEventTest();
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        true);
+  EXPECT_TRUE(Register(sync_options_1_));
+  EXPECT_EQ(0, sync_events_called_);
+  EXPECT_TRUE(GetRegistration(sync_options_1_));
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, sync_events_called_);
+  EXPECT_FALSE(GetRegistration(sync_options_1_));
+
+  EXPECT_TRUE(Register(sync_options_2_));
+  EXPECT_EQ(2, sync_events_called_);
+  EXPECT_FALSE(GetRegistration(sync_options_2_));
+}
+
+TEST_F(BackgroundSyncManagerTest, EmulateOfflineMultipleClients) {
+  InitSyncEventTest();
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        true);
+  EXPECT_TRUE(Register(sync_options_1_));
+  EXPECT_EQ(0, sync_events_called_);
+  EXPECT_TRUE(GetRegistration(sync_options_1_));
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        true);
+
+  EXPECT_TRUE(Register(sync_options_2_));
+  EXPECT_EQ(0, sync_events_called_);
+  EXPECT_TRUE(GetRegistration(sync_options_2_));
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0, sync_events_called_);
+  EXPECT_TRUE(GetRegistration(sync_options_1_));
+  EXPECT_TRUE(GetRegistration(sync_options_2_));
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        false);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(2, sync_events_called_);
+  EXPECT_FALSE(GetRegistration(sync_options_1_));
+  EXPECT_FALSE(GetRegistration(sync_options_2_));
+}
+
+static void EmulateDispatchSyncEventCallback(
+    bool* was_called,
+    ServiceWorkerStatusCode* code,
+    ServiceWorkerStatusCode status_code) {
+  *was_called = true;
+  *code = status_code;
+}
+
+TEST_F(BackgroundSyncManagerTest, EmulateDispatchSyncEvent) {
+  InitSyncEventTest();
+  bool was_called = false;
+  ServiceWorkerStatusCode code = SERVICE_WORKER_ERROR_MAX_VALUE;
+  background_sync_manager_->EmulateDispatchSyncEvent(
+      "emulated_tag", sw_registration_1_->active_version(), false,
+      base::BindOnce(EmulateDispatchSyncEventCallback, &was_called, &code));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(was_called);
+  EXPECT_EQ(SERVICE_WORKER_OK, code);
+
+  EXPECT_EQ(1, sync_events_called_);
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        true);
+
+  was_called = false;
+  code = SERVICE_WORKER_ERROR_MAX_VALUE;
+  background_sync_manager_->EmulateDispatchSyncEvent(
+      "emulated_tag", sw_registration_1_->active_version(), false,
+      base::BindOnce(EmulateDispatchSyncEventCallback, &was_called, &code));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(was_called);
+  EXPECT_EQ(SERVICE_WORKER_ERROR_NETWORK, code);
+
+  background_sync_manager_->EmulateServiceWorkerOffline(sw_registration_id_1_,
+                                                        false);
+
+  SetNetwork(net::NetworkChangeNotifier::CONNECTION_NONE);
+  was_called = false;
+  code = SERVICE_WORKER_ERROR_MAX_VALUE;
+  background_sync_manager_->EmulateDispatchSyncEvent(
+      "emulated_tag", sw_registration_1_->active_version(), false,
+      base::BindOnce(EmulateDispatchSyncEventCallback, &was_called, &code));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(was_called);
+  EXPECT_EQ(SERVICE_WORKER_ERROR_NETWORK, code);
+
+  SetNetwork(net::NetworkChangeNotifier::CONNECTION_WIFI);
+  was_called = false;
+  code = SERVICE_WORKER_ERROR_MAX_VALUE;
+  background_sync_manager_->EmulateDispatchSyncEvent(
+      "emulated_tag", sw_registration_1_->active_version(), false,
+      base::BindOnce(EmulateDispatchSyncEventCallback, &was_called, &code));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(was_called);
+  EXPECT_EQ(SERVICE_WORKER_OK, code);
+
+  EXPECT_EQ(2, sync_events_called_);
+}
 }  // namespace content

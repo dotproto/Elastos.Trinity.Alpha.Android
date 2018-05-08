@@ -136,7 +136,7 @@ class SyncChangeListWriteBatch
 // lifetime of SessionSyncManager.
 SessionsSyncManager::SessionsSyncManager(
     sync_sessions::SyncSessionsClient* sessions_client,
-    syncer::SyncPrefs* sync_prefs,
+    syncer::SessionSyncPrefs* sync_prefs,
     LocalDeviceInfoProvider* local_device,
     const base::RepeatingClosure& sessions_updated_callback)
     : sessions_client_(sessions_client),
@@ -164,6 +164,25 @@ static std::string BuildMachineTag(const std::string& cache_guid) {
   std::string machine_tag = "session_sync";
   machine_tag.append(cache_guid);
   return machine_tag;
+}
+
+void SessionsSyncManager::ScheduleGarbageCollection() {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&SessionsSyncManager::DoGarbageCollection,
+                                base::AsWeakPtr(this)));
+}
+
+void SessionsSyncManager::OnSessionRestoreComplete() {
+  // Do nothing. The very same event is plumbed manually to
+  // SessionDataTypeController by ProfileSyncComponentsFactoryImpl.
+}
+
+syncer::SyncableService* SessionsSyncManager::GetSyncableService() {
+  return this;
+}
+
+syncer::ModelTypeSyncBridge* SessionsSyncManager::GetModelTypeSyncBridge() {
+  return nullptr;
 }
 
 syncer::SyncMergeResult SessionsSyncManager::MergeDataAndStartSyncing(
@@ -277,8 +296,8 @@ void SessionsSyncManager::StopSyncing(syncer::ModelType type) {
 syncer::SyncDataList SessionsSyncManager::GetAllSyncData(
     syncer::ModelType type) const {
   syncer::SyncDataList list;
-  const SyncedSession* session = nullptr;
-  if (!session_tracker_.LookupLocalSession(&session))
+  const SyncedSession* session = session_tracker_.LookupLocalSession();
+  if (!session)
     return syncer::SyncDataList();
 
   // First construct the header node.
@@ -403,7 +422,7 @@ bool SessionsSyncManager::InitFromSyncModel(
   // and id generation happens outside of Sync, all ids from a previous local
   // session must be rewritten in order to be valid.
   // Key: previous session id. Value: new session id.
-  std::map<SessionID::id_type, SessionID::id_type> session_id_map;
+  std::map<int32_t, SessionID> session_id_map;
 
   bool found_current_header = false;
   int bad_foreign_hash_count = 0;
@@ -445,8 +464,6 @@ bool SessionsSyncManager::InitFromSyncModel(
       if (specifics.has_header() && !found_current_header) {
         // This is our previous header node, reuse it.
         found_current_header = true;
-        if (specifics.header().has_client_name())
-          current_session_name_ = specifics.header().client_name();
 
         // The specifics from the SyncData are immutable. Create a mutable copy
         // to hold the rewritten ids.
@@ -456,8 +473,8 @@ bool SessionsSyncManager::InitFromSyncModel(
         // the specifics in place.
         for (auto& window :
              *rewritten_specifics.mutable_header()->mutable_window()) {
-          session_id_map[window.window_id()] = SessionID().id();
-          window.set_window_id(session_id_map[window.window_id()]);
+          session_id_map.emplace(window.window_id(), SessionID::NewUnique());
+          window.set_window_id(session_id_map.at(window.window_id()).id());
 
           google::protobuf::RepeatedField<int>* tab_ids = window.mutable_tab();
           for (int i = 0; i < tab_ids->size(); i++) {
@@ -465,9 +482,9 @@ bool SessionsSyncManager::InitFromSyncModel(
             if (tab_iter == session_id_map.end()) {
               // SessionID::SessionID() automatically increments a static
               // variable, forcing a new id to be generated each time.
-              session_id_map[tab_ids->Get(i)] = SessionID().id();
+              session_id_map.emplace(tab_ids->Get(i), SessionID::NewUnique());
             }
-            *(tab_ids->Mutable(i)) = session_id_map[tab_ids->Get(i)];
+            *(tab_ids->Mutable(i)) = session_id_map.at(tab_ids->Get(i)).id();
             // Note: the tab id of the SessionTab will be updated when the tab
             // node itself is processed.
           }
@@ -486,7 +503,7 @@ bool SessionsSyncManager::InitFromSyncModel(
           syncer::SyncChange tombstone(TombstoneTab(specifics));
           if (tombstone.IsValid())
             new_changes->push_back(tombstone);
-        } else if (specifics.tab().tab_id() == kInvalidTabID) {
+        } else if (specifics.tab().tab_id() <= 0) {
           LOG(WARNING) << "Found tab node with invalid tab id.";
           syncer::SyncChange tombstone(TombstoneTab(specifics));
           if (tombstone.IsValid())
@@ -498,13 +515,13 @@ bool SessionsSyncManager::InitFromSyncModel(
                    << " with node " << specifics.tab_node_id();
 
           // Now file the tab under the new tab id.
-          SessionID::id_type new_tab_id = kInvalidTabID;
+          SessionID new_tab_id = SessionID::InvalidValue();
           auto iter = session_id_map.find(specifics.tab().tab_id());
           if (iter != session_id_map.end()) {
             new_tab_id = iter->second;
           } else {
-            session_id_map[specifics.tab().tab_id()] = SessionID().id();
-            new_tab_id = session_id_map[specifics.tab().tab_id()];
+            new_tab_id = SessionID::NewUnique();
+            session_id_map.emplace(specifics.tab().tab_id(), new_tab_id);
           }
           DVLOG(1) << "Remapping tab " << specifics.tab().tab_id() << " to "
                    << new_tab_id;
@@ -512,7 +529,7 @@ bool SessionsSyncManager::InitFromSyncModel(
           // The specifics from the SyncData are immutable. Create a mutable
           // copy to hold the rewritten ids.
           sync_pb::SessionSpecifics rewritten_specifics(specifics);
-          rewritten_specifics.mutable_tab()->set_tab_id(new_tab_id);
+          rewritten_specifics.mutable_tab()->set_tab_id(new_tab_id.id());
           session_tracker_.ReassociateLocalTab(
               rewritten_specifics.tab_node_id(), new_tab_id);
           UpdateTrackerWithSpecifics(
@@ -524,10 +541,8 @@ bool SessionsSyncManager::InitFromSyncModel(
 
   // Cleanup all foreign sessions, since orphaned tabs may have been added after
   // the header.
-  std::vector<const SyncedSession*> sessions;
-  session_tracker_.LookupAllForeignSessions(&sessions,
-                                            SyncedSessionTracker::RAW);
-  for (const auto* session : sessions) {
+  for (const auto* session :
+       session_tracker_.LookupAllForeignSessions(SyncedSessionTracker::RAW)) {
     session_tracker_.CleanupSession(session->session_tag);
   }
 
@@ -562,8 +577,8 @@ void SessionsSyncManager::DeleteForeignSessionInternal(
     return;
   }
 
-  std::set<int> tab_node_ids_to_delete;
-  session_tracker_.LookupForeignTabNodeIds(tag, &tab_node_ids_to_delete);
+  const std::set<int> tab_node_ids_to_delete =
+      session_tracker_.LookupTabNodeIds(tag);
   if (DisassociateForeignSession(tag)) {
     // Only tell sync to delete the header if there was one.
     change_output->push_back(
@@ -624,15 +639,11 @@ OpenTabsUIDelegate* SessionsSyncManager::GetOpenTabsUIDelegate() {
 }
 
 void SessionsSyncManager::DoGarbageCollection() {
-  std::vector<const SyncedSession*> sessions;
-  if (!session_tracker_.LookupAllForeignSessions(&sessions,
-                                                 SyncedSessionTracker::RAW))
-    return;  // No foreign sessions.
-
   // Iterate through all the sessions and delete any with age older than
   // |stale_session_threshold_days_|.
   syncer::SyncChangeList changes;
-  for (const auto* session : sessions) {
+  for (const auto* session :
+       session_tracker_.LookupAllForeignSessions(SyncedSessionTracker::RAW)) {
     int session_age_in_days =
         (base::Time::Now() - session->modified_time).InDays();
     if (session_age_in_days > stale_session_threshold_days_) {

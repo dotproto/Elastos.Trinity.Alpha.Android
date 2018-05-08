@@ -56,7 +56,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                     bool is_favicon,
                     uint32_t max_bitmap_size,
                     bool bypass_cache,
-                    const ImageDownloadCallback& callback) override;
+                    ImageDownloadCallback callback) override;
   const GURL& GetLastCommittedURL() const override;
 
   // WebContentsTester implementation.
@@ -97,7 +97,11 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void SetMainFrameMimeType(const std::string& mime_type) override;
   void SetWasRecentlyAudible(bool audible) override;
   void SetIsCurrentlyAudible(bool audible) override;
-  void TestOnUserInteraction(blink::WebInputEvent::Type type) override;
+  void TestDidReceiveInputEvent(blink::WebInputEvent::Type type) override;
+  void TestDidFailLoadWithError(
+      const GURL& url,
+      int error_code,
+      const base::string16& error_description) override;
 
   // True if a cross-site navigation is pending.
   bool CrossProcessNavigationPending();
@@ -122,7 +126,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   }
 
   // Allows us to simulate that a contents was created via CreateNewWindow.
-  void AddPendingContents(TestWebContents* contents);
+  void AddPendingContents(std::unique_ptr<WebContents> contents);
 
   // Establish expected arguments for |SetHistoryOffsetAndLength()|. When
   // |SetHistoryOffsetAndLength()| is called, the arguments are compared
@@ -136,9 +140,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                                  int history_length) override;
 
   void TestDidFinishLoad(const GURL& url);
-  void TestDidFailLoadWithError(const GURL& url,
-                                int error_code,
-                                const base::string16& error_description);
 
  protected:
   // The deprecated WebContentsTester still needs to subclass this.

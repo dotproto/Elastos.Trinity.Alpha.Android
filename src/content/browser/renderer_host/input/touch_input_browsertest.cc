@@ -23,7 +23,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/latency/latency_info.h"
 
 using blink::WebInputEvent;
@@ -116,7 +116,7 @@ class TouchInputBrowserTest : public ContentBrowserTest {
     host->GetView()->SetSize(gfx::Size(400, 400));
 
     // The page is loaded in the renderer, wait for a new frame to arrive.
-    while (!host->ScheduleComposite())
+    while (!host->RequestRepaintForTesting())
       GiveItSomeTime();
   }
 

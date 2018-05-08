@@ -11,7 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "content/browser/appcache/appcache_service_impl.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 using blink::mojom::StorageType;
 using storage::QuotaClient;
@@ -87,7 +87,7 @@ void AppCacheQuotaClient::GetOriginUsage(const url::Origin& origin,
   }
 
   const AppCacheStorage::UsageMap* map = GetUsageMap();
-  AppCacheStorage::UsageMap::const_iterator found = map->find(origin.GetURL());
+  auto found = map->find(origin);
   if (found == map->end()) {
     std::move(callback).Run(0);
     return;
@@ -134,7 +134,7 @@ void AppCacheQuotaClient::DeleteOriginData(const url::Origin& origin,
     return;
   }
 
-  service_->DeleteAppCachesForOrigin(origin.GetURL(),
+  service_->DeleteAppCachesForOrigin(origin,
                                      GetServiceDeleteCallback()->callback());
 }
 
@@ -182,8 +182,8 @@ void AppCacheQuotaClient::GetOriginsHelper(StorageType type,
 
   std::set<url::Origin> origins;
   for (const auto& pair : *GetUsageMap()) {
-    if (opt_host.empty() || pair.first.host_piece() == opt_host)
-      origins.insert(url::Origin::Create(pair.first));
+    if (opt_host.empty() || pair.first.host() == opt_host)
+      origins.insert(pair.first);
   }
   std::move(callback).Run(origins);
 }

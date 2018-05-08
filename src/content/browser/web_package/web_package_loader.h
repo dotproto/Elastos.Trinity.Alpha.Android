@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_WEB_PACKAGE_WEB_PACKAGE_LOADER_H_
 #define CONTENT_BROWSER_WEB_PACKAGE_WEB_PACKAGE_LOADER_H_
 
+#include "base/callback_forward.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -48,6 +49,7 @@ class WebPackageLoader final : public network::mojom::URLLoaderClient,
       network::mojom::URLLoaderClientEndpointsPtr endpoints,
       url::Origin request_initiator,
       uint32_t url_loader_options,
+      base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       URLLoaderThrottlesGetter url_loader_throttles_getter,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter);
@@ -57,7 +59,6 @@ class WebPackageLoader final : public network::mojom::URLLoaderClient,
   // Only OnStartLoadingResponseBody() and OnComplete() are called.
   void OnReceiveResponse(
       const network::ResourceResponseHead& response_head,
-      const base::Optional<net::SSLInfo>& ssl_info,
       network::mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
@@ -96,8 +97,7 @@ class WebPackageLoader final : public network::mojom::URLLoaderClient,
       const GURL& request_url,
       const std::string& request_method,
       const network::ResourceResponseHead& resource_response,
-      std::unique_ptr<net::SourceStream> payload_stream,
-      base::Optional<net::SSLInfo> ssl_info);
+      std::unique_ptr<net::SourceStream> payload_stream);
 
   void FinishReadingBody(int result);
 
@@ -127,6 +127,7 @@ class WebPackageLoader final : public network::mojom::URLLoaderClient,
 
   url::Origin request_initiator_;
   const uint32_t url_loader_options_;
+  base::RepeatingCallback<int(void)> frame_tree_node_id_getter_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   URLLoaderThrottlesGetter url_loader_throttles_getter_;
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;

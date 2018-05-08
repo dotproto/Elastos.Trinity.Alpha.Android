@@ -18,6 +18,10 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+declare_args() {
+  cast_test_extra_flags = ""
+}
+
 config("playready_config") {
   if (use_playready) {
     defines = [ "PLAYREADY_CDM_AVAILABLE" ]
@@ -62,6 +66,7 @@ cast_test_group("cast_tests") {
     "//chromecast/base:cast_base_unittests",
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
+    "//chromecast/device/bluetooth:cast_bluetooth_unittests",
     "//chromecast/media:cast_media_unittests",
     "//chromecast/net:cast_net_unittests",
     "//chromecast/system/reboot:cast_reboot_unittests",
@@ -92,7 +97,10 @@ cast_test_group("cast_tests") {
   }
 
   if (is_linux || is_fuchsia) {
-    tests += [ "//chromecast/media/cma/backend:cast_audio_backend_unittests" ]
+    tests += [
+      "//chromecast/media/cma/backend:cast_audio_backend_unittests",
+      "//chromecast/media/cma/backend:cast_av_sync_backend_unittests",
+    ]
   }
 
   if (!is_android) {
@@ -197,8 +205,9 @@ cast_test_group("cast_tests") {
     gtest_excludes = []
     if (target_os == "linux") {
       if (is_cast_desktop_build) {
-        # Disable PartitionAllocTest.RepeatedReturnNullDirect (b/67975693)
-        gtest_excludes += [ "PartitionAllocTest.RepeatedReturnNullDirect" ]
+        # Disable PartitionAllocReturnNullTest.RepeatedReturnNullDirect (b/67975693)
+        gtest_excludes +=
+            [ "PartitionAllocReturnNullTest.RepeatedReturnNullDirect" ]
       } else {
         # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
         # Disable ProcessUtilTest.* (need to define OS_ANDROID)
@@ -360,7 +369,9 @@ cast_test_group_list("cast_test_lists") {
   runtime_deps_path = "$root_out_dir/tests/runtime_deps.json"
   run_list_path = "$root_out_dir/tests/run_test_list.txt"
 
-  additional_options = [ "--ozone-platform=headless --test-launcher-bot-mode" ]
+  additional_options = [
+    "--ozone-platform=headless --test-launcher-bot-mode $cast_test_extra_flags",
+  ]
 
   test_groups = [ ":cast_tests" ]
 
@@ -462,8 +473,6 @@ if (is_fuchsia) {
 
 repack("cast_shell_pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_resources.pak",
-    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/chromecast/app/shell_resources.pak",
     "$root_gen_dir/chromecast/browser/cast_browser_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
@@ -471,6 +480,8 @@ repack("cast_shell_pak") {
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
@@ -487,8 +498,8 @@ repack("cast_shell_pak") {
     "//content/app/strings",
     "//mojo/public/js:resources",
     "//net:net_resources",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:scaled_resources_100_percent",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -563,6 +574,7 @@ buildflag_header("chromecast_buildflags") {
     "ENABLE_HEADLESS_MUSIC_MODE=$enable_headless_music_mode",
     "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
     "ENABLE_CAST_FRAGMENT=$enable_cast_fragment",
+    "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
   ]
 }
 

@@ -16,7 +16,6 @@
 #include "base/command_line.h"
 #include "base/containers/queue.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
@@ -42,7 +41,7 @@
 #include "media/gpu/android/device_info.h"
 #include "media/gpu/android/promotion_hint_aggregator_impl.h"
 #include "media/gpu/shared_memory_region.h"
-#include "media/mojo/features.h"
+#include "media/mojo/buildflags.h"
 #include "media/video/picture.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 #include "ui/gl/android/scoped_java_surface.h"
@@ -1456,7 +1455,12 @@ void AndroidVideoDecodeAccelerator::InitializeCdm() {
   // Store the CDM to hold a reference to it.
   cdm_for_reference_holding_only_ =
       CdmManager::GetInstance()->GetCdm(config_.cdm_id);
-  DCHECK(cdm_for_reference_holding_only_);
+  if (!cdm_for_reference_holding_only_) {
+    // This could happen during the destruction of the media element and the CDM
+    // and due to IPC CDM could be destroyed before the decoder.
+    NOTIFY_ERROR(PLATFORM_FAILURE, "CDM not available.");
+    return;
+  }
 
   auto* cdm_context = cdm_for_reference_holding_only_->GetCdmContext();
   media_crypto_context_ =

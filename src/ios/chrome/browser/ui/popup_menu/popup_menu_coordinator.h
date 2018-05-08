@@ -10,12 +10,21 @@
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 @class CommandDispatcher;
+@protocol PopupMenuUIUpdating;
+class WebStateList;
 
 // Coordinator for the popup menu, handling the commands.
 @interface PopupMenuCoordinator : ChromeCoordinator
 
 // Dispatcher used by this coordinator to receive the PopupMenuCommands.
 @property(nonatomic, weak) CommandDispatcher* dispatcher;
+// The WebStateList this coordinator is handling.
+@property(nonatomic, assign) WebStateList* webStateList;
+// UI updater.
+@property(nonatomic, weak) id<PopupMenuUIUpdating> UIUpdater;
+
+// Returns whether this coordinator is showing a popup menu.
+- (BOOL)isShowingPopupMenu;
 
 @end
 

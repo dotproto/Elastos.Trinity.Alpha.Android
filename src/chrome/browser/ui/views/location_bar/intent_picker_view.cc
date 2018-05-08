@@ -4,13 +4,20 @@
 
 #include "chrome/browser/ui/views/location_bar/intent_picker_view.h"
 
+#include "chrome/browser/chromeos/apps/intent_helper/apps_navigation_throttle.h"
 #include "chrome/browser/chromeos/arc/intent_helper/intent_picker_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/toolbar/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
+
+namespace content {
+class WebContents;
+}
 
 IntentPickerView::IntentPickerView(Browser* browser)
     : BubbleIconView(nullptr, 0), browser_(browser) {
@@ -36,10 +43,11 @@ void IntentPickerView::OnExecuting(
   if (browser_ && !browser_->profile()->IsGuestSession() &&
       !IsIncognitoMode()) {
     SetVisible(true);
-    const GURL url = chrome::GetURLToBookmark(
-        browser_->tab_strip_model()->GetActiveWebContents());
+    content::WebContents* web_contents =
+        browser_->tab_strip_model()->GetActiveWebContents();
+    const GURL& url = chrome::GetURLToBookmark(web_contents);
 
-    arc::ArcNavigationThrottle::AsyncShowIntentPickerBubble(browser_, url);
+    chromeos::AppsNavigationThrottle::ShowIntentPickerBubble(web_contents, url);
   } else {
     SetVisible(false);
   }
@@ -57,4 +65,8 @@ bool IntentPickerView::IsIncognitoMode() {
 
 const gfx::VectorIcon& IntentPickerView::GetVectorIcon() const {
   return toolbar::kOpenInNewIcon;
+}
+
+base::string16 IntentPickerView::GetTextForTooltipAndAccessibleName() const {
+  return l10n_util::GetStringUTF16(IDS_TOOLTIP_INTENT_PICKER_ICON);
 }

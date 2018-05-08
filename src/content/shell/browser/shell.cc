@@ -42,8 +42,8 @@
 #include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/web/WebPresentationReceiverFlags.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/web/web_presentation_receiver_flags.h"
 
 namespace content {
 
@@ -73,9 +73,9 @@ class Shell::DevToolsWebContentsObserver : public WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(DevToolsWebContentsObserver);
 };
 
-Shell::Shell(WebContents* web_contents)
-    : WebContentsObserver(web_contents),
-      web_contents_(web_contents),
+Shell::Shell(std::unique_ptr<WebContents> web_contents)
+    : WebContentsObserver(web_contents.get()),
+      web_contents_(std::move(web_contents)),
       devtools_frontend_(nullptr),
       is_fullscreen_(false),
       window_(nullptr),
@@ -86,8 +86,14 @@ Shell::Shell(WebContents* web_contents)
       hide_toolbar_(false) {
   web_contents_->SetDelegate(this);
 
-  if (switches::IsRunLayoutTestSwitchPresent())
+  if (switches::IsRunLayoutTestSwitchPresent()) {
     headless_ = true;
+    // In a headless shell, disable occlusion tracking. Otherwise, WebContents
+    // would always behave as if they were occluded, i.e. would not render
+    // frames and would not receive input events.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableBackgroundingOccludedWindowsForTesting);
+  }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentShellHideToolbar))
@@ -125,9 +131,10 @@ Shell::~Shell() {
   web_contents_->SetDelegate(nullptr);
 }
 
-Shell* Shell::CreateShell(WebContents* web_contents,
+Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
                           const gfx::Size& initial_size) {
-  Shell* shell = new Shell(web_contents);
+  WebContents* raw_web_contents = web_contents.get();
+  Shell* shell = new Shell(std::move(web_contents));
   shell->PlatformCreateWindow(initial_size.width(), initial_size.height());
 
   shell->PlatformSetContents();
@@ -138,14 +145,14 @@ Shell* Shell::CreateShell(WebContents* web_contents,
   // here, because they will be forgotten after a cross-process navigation. Use
   // RenderFrameCreated or RenderViewCreated instead.
   if (switches::IsRunLayoutTestSwitchPresent()) {
-    web_contents->GetMutableRendererPrefs()->use_custom_colors = false;
-    web_contents->GetRenderViewHost()->SyncRendererPrefs();
+    raw_web_contents->GetMutableRendererPrefs()->use_custom_colors = false;
+    raw_web_contents->GetRenderViewHost()->SyncRendererPrefs();
   }
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kForceWebRtcIPHandlingPolicy)) {
-    web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
+    raw_web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
         command_line->GetSwitchValueASCII(
             switches::kForceWebRtcIPHandlingPolicy);
   }
@@ -202,8 +209,10 @@ Shell* Shell::CreateNewWindow(BrowserContext* browser_context,
         blink::kPresentationReceiverSandboxFlags;
   }
   create_params.initial_size = AdjustWindowSize(initial_size);
-  WebContents* web_contents = WebContents::Create(create_params);
-  Shell* shell = CreateShell(web_contents, create_params.initial_size);
+  std::unique_ptr<WebContents> web_contents =
+      WebContents::Create(create_params);
+  Shell* shell =
+      CreateShell(std::move(web_contents), create_params.initial_size);
   if (!url.is_empty())
     shell->LoadURL(url);
   return shell;
@@ -271,14 +280,15 @@ void Shell::LoadDataWithBaseURLInternal(const GURL& url,
 }
 
 void Shell::AddNewContents(WebContents* source,
-                           WebContents* new_contents,
+                           std::unique_ptr<WebContents> new_contents,
                            WindowOpenDisposition disposition,
                            const gfx::Rect& initial_rect,
                            bool user_gesture,
                            bool* was_blocked) {
-  CreateShell(new_contents, AdjustWindowSize(initial_rect.size()));
+  WebContents* raw_new_contents = new_contents.get();
+  CreateShell(std::move(new_contents), AdjustWindowSize(initial_rect.size()));
   if (switches::IsRunLayoutTestSwitchPresent())
-    SecondaryTestWindowObserver::CreateForWebContents(new_contents);
+    SecondaryTestWindowObserver::CreateForWebContents(raw_new_contents);
 }
 
 void Shell::GoBackOrForward(int offset) {
@@ -409,8 +419,10 @@ void Shell::LoadingStateChanged(WebContents* source,
   PlatformSetIsLoading(source->IsLoading());
 }
 
-void Shell::EnterFullscreenModeForTab(WebContents* web_contents,
-                                      const GURL& origin) {
+void Shell::EnterFullscreenModeForTab(
+    WebContents* web_contents,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   ToggleFullscreenModeForTab(web_contents, true);
 }
 
@@ -427,7 +439,9 @@ void Shell::ToggleFullscreenModeForTab(WebContents* web_contents,
     return;
   if (is_fullscreen_ != enter_fullscreen) {
     is_fullscreen_ = enter_fullscreen;
-    web_contents->GetRenderViewHost()->GetWidget()->WasResized();
+    web_contents->GetRenderViewHost()
+        ->GetWidget()
+        ->SynchronizeVisualProperties();
   }
 }
 

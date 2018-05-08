@@ -116,7 +116,8 @@ if (is_mac || is_ios || is_linux) {
       # (crbug.com/762629). Enabling frame pointers grows the code size slightly
       # but overall shrinks binaries considerably by avoiding huge unwind
       # tables.
-      (current_cpu == "x86" && !exclude_unwind_tables && optimize_for_size)
+      (current_cpu == "x86" && !exclude_unwind_tables && optimize_for_size) ||
+      using_sanitizer
 } else {
   # Explicitly ask for frame pointers, otherwise:
   # * Stacks may be missing for sanitizer and profiling builds.
@@ -140,6 +141,11 @@ if (current_cpu == "arm" && arm_use_thumb) {
 }
 
 assert(!can_unwind_with_frame_pointers || enable_frame_pointers)
+
+# Unwinding with CFI table is only possible on static library builds and
+# requried only when frame pointers are not enabled.
+can_unwind_with_cfi_table = is_android && !is_component_build &&
+                            !enable_frame_pointers && current_cpu == "arm"
 
 declare_args() {
   # Whether or not the official builds should be built with full WPO. Enabled by
@@ -219,7 +225,9 @@ if (symbol_level == -1) {
 }
 
 # Assert that the configuration isn't going to hit https://crbug.com/648948.
-assert(ignore_elf32_limitations || !is_android ||
+# An exception is made when target_os == "chromeos" as we only use the Android
+# toolchain there to build relatively small binaries.
+assert(ignore_elf32_limitations || !is_android || target_os == "chromeos" ||
            (android_64bit_target_cpu && !build_apk_secondary_abi) ||
            is_component_build || symbol_level < 2,
        "Android 32-bit non-component builds cannot have symbol_level=2 " +

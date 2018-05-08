@@ -29,6 +29,7 @@ class View;
 namespace ash {
 class HoverHighlightView;
 class SystemTrayItem;
+class TrayAccessibilityLoginScreenTest;
 class TrayAccessibilityTest;
 
 namespace tray {
@@ -42,6 +43,7 @@ class AccessibilityDetailedView : public TrayDetailsView {
   void OnAccessibilityStatusChanged();
 
  private:
+  friend class ::ash::TrayAccessibilityLoginScreenTest;
   friend class ::ash::TrayAccessibilityTest;
   friend class chromeos::TrayAccessibilityTest;
 
@@ -73,7 +75,6 @@ class AccessibilityDetailedView : public TrayDetailsView {
   HoverHighlightView* highlight_mouse_cursor_view_ = nullptr;
   HoverHighlightView* highlight_keyboard_focus_view_ = nullptr;
   HoverHighlightView* sticky_keys_view_ = nullptr;
-  HoverHighlightView* tap_dragging_view_ = nullptr;
   views::Button* help_view_ = nullptr;
   views::Button* settings_view_ = nullptr;
 
@@ -91,7 +92,6 @@ class AccessibilityDetailedView : public TrayDetailsView {
   bool highlight_mouse_cursor_enabled_ = false;
   bool highlight_keyboard_focus_enabled_ = false;
   bool sticky_keys_enabled_ = false;
-  bool tap_dragging_enabled_ = false;
 
   LoginStatus login_;
 
@@ -106,6 +106,7 @@ class TrayAccessibility : public TrayImageItem, public AccessibilityObserver {
   ~TrayAccessibility() override;
 
  private:
+  friend class TrayAccessibilityLoginScreenTest;
   friend class TrayAccessibilityTest;
   friend class chromeos::TrayAccessibilityTest;
 
@@ -121,17 +122,13 @@ class TrayAccessibility : public TrayImageItem, public AccessibilityObserver {
   void UpdateAfterLoginStatusChange(LoginStatus status) override;
 
   // Overridden from AccessibilityObserver.
-  void OnAccessibilityStatusChanged(
-      AccessibilityNotificationVisibility notify) override;
+  void OnAccessibilityStatusChanged() override;
 
   views::View* default_;
   tray::AccessibilityDetailedView* detailed_menu_;
 
   bool tray_icon_visible_;
   LoginStatus login_;
-
-  // Bitmap of values from AccessibilityState enum.
-  uint32_t previous_accessibility_state_;
 
   // A11y feature status on just entering the lock screen.
   bool show_a11y_menu_on_lock_screen_;

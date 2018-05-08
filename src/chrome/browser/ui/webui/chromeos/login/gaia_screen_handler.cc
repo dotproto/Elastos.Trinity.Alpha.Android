@@ -8,8 +8,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
@@ -177,17 +179,7 @@ void UpdateAuthParams(base::DictionaryValue* params,
   if (!allow_new_user || is_restrictive_proxy)
     params->SetString("flow", "nosignup");
 
-  // Allow supervised user creation only if:
-  // 1. Enterprise managed device > is allowed by policy.
-  // 2. Consumer device > owner exists.
-  // 3. New users are allowed by owner.
-  // 4. Supervised users are allowed by owner.
-  ChromeUserManager* user_manager = ChromeUserManager::Get();
-  bool supervised_users_can_create =
-      base::FeatureList::IsEnabled(features::kSupervisedUserCreation) &&
-      user_manager->AreSupervisedUsersAllowed() && allow_new_user &&
-      !user_manager->GetUsersAllowedForSupervisedUsersCreation().empty();
-  params->SetBoolean("supervisedUsersCanCreate", supervised_users_can_create);
+  params->SetBoolean("supervisedUsersCanCreate", false);
 
   // Now check whether we're in multi-profiles user adding scenario and
   // disable GAIA right panel features if that's the case.
@@ -229,6 +221,26 @@ void GetVersionAndConsent(std::string* out_version, bool* out_consent) {
   *out_consent = GoogleUpdateSettings::GetCollectStatsConsent();
 }
 
+user_manager::UserType GetUsertypeFromServicesString(
+    const ::login::StringList& services) {
+  bool is_child = false;
+  const bool support_usm =
+      base::FeatureList::IsEnabled(features::kCrOSEnableUSMUserService);
+  using KnownFlags = base::flat_set<std::string>;
+  const KnownFlags known_flags =
+      support_usm ? KnownFlags({"uca", "usm"}) : KnownFlags({"uca"});
+
+  size_t i = 0;
+  for (const std::string& item : services) {
+    if (known_flags.find(item) != known_flags.end()) {
+      is_child = true;
+    }
+    ++i;
+  }
+
+  return is_child ? user_manager::USER_TYPE_CHILD
+                  : user_manager::USER_TYPE_REGULAR;
+}
 }  // namespace
 
 // A class that's used to specify the way how Gaia should be loaded.
@@ -285,8 +297,7 @@ void GaiaScreenHandler::MaybePreloadAuthExtension() {
   if (!network_portal_detector_) {
     NetworkPortalDetectorImpl* detector = new NetworkPortalDetectorImpl(
         g_browser_process->system_network_context_manager()
-            ->GetURLLoaderFactory(),
-        false);
+            ->GetURLLoaderFactory());
     detector->set_portal_test_url(GURL(kRestrictiveProxyURL));
     network_portal_detector_.reset(detector);
     network_portal_detector_->AddObserver(this);
@@ -397,7 +408,7 @@ void GaiaScreenHandler::LoadGaiaWithPartitionAndVersionAndConsent(
   params.SetString("clientVersion", version_info::GetVersionNumber());
   if (!platform_version->empty())
     params.SetString("platformVersion", *platform_version);
-  params.SetString("releaseChannel", chrome::GetChannelString());
+  params.SetString("releaseChannel", chrome::GetChannelName());
   params.SetString("endpointGen", kEndpointGen);
 
   std::string email_domain;
@@ -708,7 +719,8 @@ void GaiaScreenHandler::HandleCompleteAuthentication(
     const std::string& password,
     const std::string& auth_code,
     bool using_saml,
-    const std::string& gaps_cookie) {
+    const std::string& gaps_cookie,
+    const ::login::StringList& services) {
   if (!LoginDisplayHost::default_host())
     return;
 
@@ -717,7 +729,11 @@ void GaiaScreenHandler::HandleCompleteAuthentication(
   const std::string sanitized_email = gaia::SanitizeEmail(email);
   LoginDisplayHost::default_host()->SetDisplayEmail(sanitized_email);
 
-  UserContext user_context(GetAccountId(email, gaia_id, AccountType::GOOGLE));
+  const user_manager::UserType user_type =
+      GetUsertypeFromServicesString(services);
+
+  UserContext user_context(user_type,
+                           GetAccountId(email, gaia_id, AccountType::GOOGLE));
   user_context.SetKey(Key(password));
   // Only save the password for enterprise users. See https://crbug.com/386606.
   const bool is_enterprise_managed = g_browser_process->platform_part()
@@ -787,8 +803,10 @@ void GaiaScreenHandler::HandleUpdateGaiaDialogSize(int width, int height) {
 }
 
 void GaiaScreenHandler::HandleUpdateGaiaDialogVisibility(bool visible) {
-  if (LoginDisplayHost::default_host())
-    LoginDisplayHost::default_host()->UpdateGaiaDialogVisibility(visible);
+  if (LoginDisplayHost::default_host()) {
+    LoginDisplayHost::default_host()->UpdateGaiaDialogVisibility(visible,
+                                                                 base::nullopt);
+  }
 }
 
 void GaiaScreenHandler::HandleShowAddUser(const base::ListValue* args) {
@@ -810,7 +828,7 @@ void GaiaScreenHandler::HandleShowAddUser(const base::ListValue* args) {
 void GaiaScreenHandler::OnShowAddUser() {
   signin_screen_handler_->is_account_picker_showing_first_time_ = false;
   lock_screen_utils::EnforcePolicyInputMethods(std::string());
-  ShowGaiaAsync();
+  ShowGaiaAsync(base::nullopt);
 }
 
 void GaiaScreenHandler::DoCompleteLogin(const std::string& gaia_id,
@@ -929,7 +947,10 @@ void GaiaScreenHandler::SetSAMLPrincipalsAPIUsed(bool api_used) {
   UMA_HISTOGRAM_BOOLEAN("ChromeOS.SAML.APIUsed", api_used);
 }
 
-void GaiaScreenHandler::ShowGaiaAsync() {
+void GaiaScreenHandler::ShowGaiaAsync(
+    const base::Optional<AccountId>& account_id) {
+  if (account_id)
+    populated_email_ = account_id->GetUserEmail();
   show_when_dns_and_cookies_cleared_ = true;
   if (gaia_silent_load_ && populated_email_.empty()) {
     dns_cleared_ = true;

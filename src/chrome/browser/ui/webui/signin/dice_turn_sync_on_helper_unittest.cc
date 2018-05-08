@@ -30,6 +30,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/scoped_account_consistency.h"
@@ -53,6 +54,8 @@ const char kEnterpriseGaiaID[] = "enterprise_gaia_id";
 
 const signin_metrics::AccessPoint kAccessPoint =
     signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER;
+const signin_metrics::PromoAction kSigninPromoAction =
+    signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT;
 const signin_metrics::Reason kSigninReason =
     signin_metrics::Reason::REASON_REAUTHENTICATION;
 
@@ -148,7 +151,7 @@ class FakeUserPolicySigninService : public policy::UserPolicySigninService {
 
   // policy::UserPolicySigninServiceBase:
   void FetchPolicyForSignedInUser(
-      const std::string& username,
+      const AccountId& account_id,
       const std::string& dm_token,
       const std::string& client_id,
       scoped_refptr<net::URLRequestContextGetter> profile_request_context,
@@ -224,8 +227,8 @@ class DiceTurnSyncOnHelperTest : public testing::Test {
   DiceTurnSyncOnHelper* CreateDiceTurnOnSyncHelper(
       DiceTurnSyncOnHelper::SigninAbortedMode mode) {
     return new DiceTurnSyncOnHelper(
-        profile(), kAccessPoint, kSigninReason, account_id_, mode,
-        std::make_unique<TestDiceTurnSyncOnHelperDelegate>(this));
+        profile(), kAccessPoint, kSigninPromoAction, kSigninReason, account_id_,
+        mode, std::make_unique<TestDiceTurnSyncOnHelperDelegate>(this));
   }
 
   void UseEnterpriseAccount() {

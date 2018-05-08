@@ -4,14 +4,13 @@
 
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_handle.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "net/http/http_util.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -43,8 +42,7 @@ ServiceWorkerRegistrationObjectHost::CreateObjectInfo() {
       registration_->pattern(), registration_->update_via_cache());
   info->registration_id = registration_->id();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
-  if (!remote_registration_)
-    info->request = mojo::MakeRequest(&remote_registration_);
+  info->request = mojo::MakeRequest(&remote_registration_);
 
   info->installing = provider_host_->GetOrCreateServiceWorkerHandle(
       registration_->installing_version());

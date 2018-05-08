@@ -4,7 +4,6 @@
 
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/input/input_event_dispatch_type.h"
@@ -96,7 +95,7 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
        scrolling_device_ == blink::kWebGestureDeviceTouchpad)) {
     WebGestureEvent scroll_update(
         WebInputEvent::kGestureScrollUpdate, WebInputEvent::kNoModifiers,
-        event_sent_for_gesture_ack_->event.TimeStampSeconds(),
+        event_sent_for_gesture_ack_->event.TimeStamp(),
         blink::kWebGestureDeviceTouchpad);
 
     scroll_update.SetPositionInWidget(
@@ -267,12 +266,13 @@ void MouseWheelEventQueue::OnGestureScrollEvent(
       blink::WebInputEvent::kGestureScrollBegin) {
     scrolling_device_ = gesture_event.event.SourceDevice();
   } else if (scrolling_device_ == gesture_event.event.SourceDevice() &&
-             (gesture_event.event.GetType() ==
-                  blink::WebInputEvent::kGestureScrollEnd ||
-              (gesture_event.event.GetType() ==
-                   blink::WebInputEvent::kGestureFlingStart &&
-               scrolling_device_ != blink::kWebGestureDeviceTouchpad))) {
+             gesture_event.event.GetType() ==
+                 blink::WebInputEvent::kGestureScrollEnd) {
     scrolling_device_ = blink::kWebGestureDeviceUninitialized;
+  } else if (gesture_event.event.GetType() ==
+             blink::WebInputEvent::kGestureFlingStart) {
+    // With browser side fling we shouldn't reset scrolling_device_ on GFS since
+    // the fling_controller processes the GFS to generate and send GSU events.
   }
 }
 
@@ -312,8 +312,7 @@ void MouseWheelEventQueue::SendScrollEnd(WebGestureEvent update_event,
   scroll_in_progress_ = false;
 
   WebGestureEvent scroll_end(update_event);
-  scroll_end.SetTimeStampSeconds(
-      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  scroll_end.SetTimeStamp(ui::EventTimeForNow());
   scroll_end.SetType(WebInputEvent::kGestureScrollEnd);
   scroll_end.resending_plugin_id = -1;
   scroll_end.data.scroll_end.synthetic = synthetic;

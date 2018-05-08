@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/net/adb_client_socket.h"
+#include "net/base/net_errors.h"
 
 namespace {
 
@@ -48,9 +49,20 @@ class ResponseBuffer : public base::RefCountedThreadSafe<ResponseBuffer> {
             static_cast<int>(timeout.InSeconds())));
       ready_.TimedWait(timeout);
     }
-    if (result_ < 0)
+    if (result_ < 0) {
       return Status(kUnknownError,
-          "Failed to run adb command, is the adb server running?");
+                    "Failed to run adb command with networking error: " +
+                        net::ErrorToString(result_) +
+                        ". Is the adb server running? Extra response: <" +
+                        response_ + ">.");
+    }
+    if (result_ > 0) {
+      return Status(
+          // TODO(crouleau): Use an error code that can differentiate this from
+          // the above networking error.
+          kUnknownError,
+          "The adb command failed. Extra response: <" + response_ + ">.");
+    }
     *response = response_;
     return Status(kOk);
   }
@@ -115,15 +127,13 @@ Status AdbImpl::ForwardPort(
     const std::string& device_serial, int local_port,
     const std::string& remote_abstract) {
   std::string response;
-  Status status = ExecuteHostCommand(
-      device_serial,
-      "forward:tcp:" + base::IntToString(local_port) + ";localabstract:" +
-          remote_abstract,
-      &response);
-  if (!status.IsOk())
+  Status status =
+      ExecuteHostCommand(device_serial,
+                         "forward:tcp:" + base::IntToString(local_port) +
+                             ";localabstract:" + remote_abstract,
+                         &response);
+  if (status.IsOk())
     return status;
-  if (response == "OKAY")
-    return Status(kOk);
   return Status(kUnknownError, "Failed to forward ports to device " +
                 device_serial + ": " + response);
 }
@@ -207,8 +217,8 @@ Status AdbImpl::GetPidByName(const std::string& device_serial,
                              int* pid) {
   std::string response;
   // on Android O `ps` returns only user processes, so also try with `-A` flag.
-  Status status = ExecuteHostShellCommand(device_serial, "ps && ps -A",
-      &response);
+  Status status =
+      ExecuteHostShellCommand(device_serial, "ps && ps -A", &response);
 
   if (!status.IsOk())
     return status;

@@ -4,26 +4,19 @@
 
 #include "chrome/browser/notifications/notification_platform_bridge_win.h"
 
-#include <NotificationActivationCallback.h>
-#include <activation.h>
-#include <wrl.h>
+#include <memory>
+
 #include <wrl/client.h>
 #include <wrl/event.h>
-#include <wrl/wrappers/corewrappers.h>
-#include <memory>
-#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/hash.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
@@ -38,6 +31,8 @@
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/notifications/notification_image_retainer.h"
 #include "chrome/browser/notifications/notification_launch_id.h"
+#include "chrome/browser/notifications/notification_platform_bridge_win_metrics.h"
+#include "chrome/browser/notifications/notification_platform_bridge_win_util.h"
 #include "chrome/browser/notifications/notification_template_builder.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
@@ -45,25 +40,35 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/shell_util.h"
-#include "components/version_info/channel.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/message_center/public/cpp/notification.h"
 
 namespace mswr = Microsoft::WRL;
-namespace mswrw = Microsoft::WRL::Wrappers;
-
 namespace winfoundtn = ABI::Windows::Foundation;
 namespace winui = ABI::Windows::UI;
 namespace winxml = ABI::Windows::Data::Xml;
 
 using base::win::ScopedHString;
 using message_center::RichNotificationData;
+using notifications_uma::ActivationStatus;
+using notifications_uma::CloseStatus;
+using notifications_uma::DisplayStatus;
+using notifications_uma::GetDisplayedLaunchIdStatus;
+using notifications_uma::GetDisplayedStatus;
+using notifications_uma::GetNotificationLaunchIdStatus;
+using notifications_uma::GetSettingPolicy;
+using notifications_uma::GetSettingStatus;
+using notifications_uma::HandleEventStatus;
+using notifications_uma::HistoryStatus;
+using notifications_uma::OnDismissedStatus;
+using notifications_uma::OnFailedStatus;
+using notifications_uma::SetReadyCallbackStatus;
 
 namespace {
 
 // This string needs to be max 16 characters to work on Windows 10 prior to
 // applying Creators Update (build 15063).
-const wchar_t kGroup[] = L"Notifications";
+constexpr wchar_t kGroup[] = L"Notifications";
 
 typedef winfoundtn::ITypedEventHandler<
     winui::Notifications::ToastNotification*,
@@ -134,7 +139,9 @@ class NotificationPlatformBridgeWinImpl
   }
 
   // Obtain an IToastNotification interface from a given XML (provided by the
-  // NotificationTemplateBuilder).
+  // NotificationTemplateBuilder). This function is only used when displaying
+  // notification in production code, which explains why the UMA metrics record
+  // within are classified with the display path.
   HRESULT GetToastNotification(
       const message_center::Notification& notification,
       const NotificationTemplateBuilder& notification_template_builder,
@@ -149,14 +156,18 @@ class NotificationPlatformBridgeWinImpl
     HRESULT hr =
         base::win::RoActivateInstance(ref_class_name.get(), &inspectable);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to activate the XML Document";
+      LogDisplayHistogram(DisplayStatus::RO_ACTIVATE_FAILED);
+      DLOG(ERROR) << "Unable to activate the XML Document " << std::hex << hr;
       return hr;
     }
 
     mswr::ComPtr<winxml::Dom::IXmlDocumentIO> document_io;
     hr = inspectable.As<winxml::Dom::IXmlDocumentIO>(&document_io);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get XmlDocument as IXmlDocumentIO";
+      LogDisplayHistogram(
+          DisplayStatus::CONVERSION_FAILED_INSPECTABLE_TO_XML_IO);
+      DLOG(ERROR) << "Failed to get XmlDocument as IXmlDocumentIO " << std::hex
+                  << hr;
       return hr;
     }
 
@@ -165,14 +176,17 @@ class NotificationPlatformBridgeWinImpl
     ScopedHString ref_template = ScopedHString::Create(notification_template);
     hr = document_io->LoadXml(ref_template.get());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to load the template's XML into the document";
+      LogDisplayHistogram(DisplayStatus::LOAD_XML_FAILED);
+      DLOG(ERROR) << "Unable to load the template's XML into the document "
+                  << std::hex << hr;
       return hr;
     }
 
     mswr::ComPtr<winxml::Dom::IXmlDocument> document;
     hr = document_io.As<winxml::Dom::IXmlDocument>(&document);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to get as XMLDocument";
+      LogDisplayHistogram(DisplayStatus::CONVERSION_FAILED_XML_IO_TO_XML);
+      DLOG(ERROR) << "Unable to get as XMLDocument " << std::hex << hr;
       return hr;
     }
 
@@ -182,21 +196,27 @@ class NotificationPlatformBridgeWinImpl
         RuntimeClass_Windows_UI_Notifications_ToastNotification,
         toast_notification_factory.GetAddressOf());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to create the IToastNotificationFactory";
+      LogDisplayHistogram(DisplayStatus::CREATE_FACTORY_FAILED);
+      DLOG(ERROR) << "Unable to create the IToastNotificationFactory "
+                  << std::hex << hr;
       return hr;
     }
 
     hr = toast_notification_factory->CreateToastNotification(
         document.Get(), toast_notification);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to create the IToastNotification";
+      LogDisplayHistogram(DisplayStatus::CREATE_TOAST_NOTIFICATION_FAILED);
+      DLOG(ERROR) << "Unable to create the IToastNotification " << std::hex
+                  << hr;
       return hr;
     }
 
     winui::Notifications::IToastNotification2* toast2ptr = nullptr;
     hr = (*toast_notification)->QueryInterface(&toast2ptr);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get IToastNotification2 object";
+      LogDisplayHistogram(DisplayStatus::CREATE_TOAST_NOTIFICATION2_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotification2 object " << std::hex
+                  << hr;
       return hr;
     }
 
@@ -209,19 +229,23 @@ class NotificationPlatformBridgeWinImpl
     // control and Tag can contain just about anything. Therefore we use a hash
     // of the Tag value to produce uniqueness that fits within the specified
     // limits. Although Group is hard-coded, uniqueness is guaranteed through
-    // features providing a sufficiently distinct notification.id().
+    // features providing a sufficiently distinct notification id, profile id,
+    // and incognito status combinations.
     ScopedHString group = ScopedHString::Create(kGroup);
-    ScopedHString tag = ScopedHString::Create(GetTag(notification.id()));
+    ScopedHString tag =
+        ScopedHString::Create(GetTag(notification.id(), profile_id, incognito));
 
     hr = toast2->put_Group(group.get());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to set Group";
+      LogDisplayHistogram(DisplayStatus::SETTING_GROUP_FAILED);
+      DLOG(ERROR) << "Failed to set Group " << std::hex << hr;
       return hr;
     }
 
     hr = toast2->put_Tag(tag.get());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to set Tag";
+      LogDisplayHistogram(DisplayStatus::SETTING_TAG_FAILED);
+      DLOG(ERROR) << "Failed to set Tag " << std::hex << hr;
       return hr;
     }
 
@@ -243,7 +267,8 @@ class NotificationPlatformBridgeWinImpl
         HSTRING hstring_group;
         hr = t2->get_Group(&hstring_group);
         if (FAILED(hr)) {
-          LOG(ERROR) << "Failed to get group value";
+          LogDisplayHistogram(DisplayStatus::GET_GROUP_FAILED);
+          DLOG(ERROR) << "Failed to get group value " << std::hex << hr;
           return hr;
         }
         ScopedHString scoped_group(hstring_group);
@@ -251,7 +276,8 @@ class NotificationPlatformBridgeWinImpl
         HSTRING hstring_tag;
         hr = t2->get_Tag(&hstring_tag);
         if (FAILED(hr)) {
-          LOG(ERROR) << "Failed to get tag value";
+          LogDisplayHistogram(DisplayStatus::GET_TAG_FAILED);
+          DLOG(ERROR) << "Failed to get tag value " << std::hex << hr;
           return hr;
         }
         ScopedHString scoped_tag(hstring_tag);
@@ -261,7 +287,8 @@ class NotificationPlatformBridgeWinImpl
 
         hr = toast2->put_SuppressPopup(true);
         if (FAILED(hr)) {
-          LOG(ERROR) << "Failed to set suppress value";
+          LogDisplayHistogram(DisplayStatus::SUPPRESS_POPUP_FAILED);
+          DLOG(ERROR) << "Failed to set suppress value " << std::hex << hr;
           return hr;
         }
       }
@@ -279,9 +306,43 @@ class NotificationPlatformBridgeWinImpl
     // crbug.com/761039.
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-    if (!notifier_.Get() && FAILED(InitializeToastNotifier())) {
-      LOG(ERROR) << "Unable to initialize toast notifier";
+    if (!notifier_for_testing_ && !notifier_.Get() &&
+        FAILED(InitializeToastNotifier())) {
+      // A histogram should have already been logged for this failure.
+      DLOG(ERROR) << "Unable to initialize toast notifier";
       return;
+    }
+
+    winui::Notifications::IToastNotifier* notifier =
+        notifier_for_testing_ ? notifier_for_testing_ : notifier_.Get();
+
+    winui::Notifications::NotificationSetting setting;
+    HRESULT hr = notifier->get_Setting(&setting);
+    if (SUCCEEDED(hr)) {
+      LogGetSettingStatus(GetSettingStatus::SUCCESS);
+      switch (setting) {
+        case winui::Notifications::NotificationSetting_Enabled:
+          LogGetSettingPolicy(GetSettingPolicy::ENABLED);
+          break;
+        case winui::Notifications::NotificationSetting_DisabledForApplication:
+          LogGetSettingPolicy(GetSettingPolicy::DISABLED_FOR_APPLICATION);
+          DLOG(ERROR) << "Notifications disabled for application";
+          break;
+        case winui::Notifications::NotificationSetting_DisabledForUser:
+          LogGetSettingPolicy(GetSettingPolicy::DISABLED_FOR_USER);
+          DLOG(ERROR) << "Notifications disabled for user";
+          break;
+        case winui::Notifications::NotificationSetting_DisabledByGroupPolicy:
+          LogGetSettingPolicy(GetSettingPolicy::DISABLED_BY_GROUP_POLICY);
+          DLOG(ERROR) << "Notifications disabled by group policy";
+          break;
+        case winui::Notifications::NotificationSetting_DisabledByManifest:
+          LogGetSettingPolicy(GetSettingPolicy::DISABLED_BY_MANIFEST);
+          DLOG(ERROR) << "Notifications disabled by manifest";
+          break;
+      }
+    } else {
+      LogGetSettingStatus(GetSettingStatus::UNKNOWN_FAILURE);
     }
 
     NotificationLaunchId launch_id(notification_type, notification->id(),
@@ -291,10 +352,11 @@ class NotificationPlatformBridgeWinImpl
         NotificationTemplateBuilder::Build(image_retainer_.get(), launch_id,
                                            profile_id, *notification);
     mswr::ComPtr<winui::Notifications::IToastNotification> toast;
-    HRESULT hr = GetToastNotification(*notification, *notification_template,
-                                      profile_id, incognito, &toast);
+    hr = GetToastNotification(*notification, *notification_template, profile_id,
+                              incognito, &toast);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to get a toast notification";
+      // A histogram should have already been logged for this failure.
+      DLOG(ERROR) << "Unable to get a toast notification " << std::hex << hr;
       return;
     }
 
@@ -306,7 +368,9 @@ class NotificationPlatformBridgeWinImpl
     EventRegistrationToken dismissed_token;
     hr = toast->add_Dismissed(dismissed_handler.Get(), &dismissed_token);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to add toast dismissed event handler";
+      LogDisplayHistogram(DisplayStatus::ADD_TOAST_DISMISS_HANDLER_FAILED);
+      DLOG(ERROR) << "Unable to add toast dismissed event handler " << std::hex
+                  << hr;
       return;
     }
 
@@ -315,34 +379,46 @@ class NotificationPlatformBridgeWinImpl
     EventRegistrationToken failed_token;
     hr = toast->add_Failed(failed_handler.Get(), &failed_token);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to add toast failed event handler";
+      LogDisplayHistogram(DisplayStatus::ADD_TOAST_ERROR_HANDLER_FAILED);
+      DLOG(ERROR) << "Unable to add toast failed event handler " << std::hex
+                  << hr;
       return;
     }
 
-    hr = notifier_->Show(toast.Get());
-    if (FAILED(hr))
-      LOG(ERROR) << "Unable to display the notification";
+    hr = notifier->Show(toast.Get());
+    if (FAILED(hr)) {
+      LogDisplayHistogram(DisplayStatus::SHOWING_TOAST_FAILED);
+      DLOG(ERROR) << "Unable to display the notification " << std::hex << hr;
+    } else {
+      LogDisplayHistogram(DisplayStatus::SUCCESS);
+    }
   }
 
   void Close(const std::string& profile_id,
+             bool incognito,
              const std::string& notification_id) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
     mswr::ComPtr<winui::Notifications::IToastNotificationHistory> history;
     if (!GetIToastNotificationHistory(&history)) {
-      LOG(ERROR) << "Failed to get IToastNotificationHistory";
+      LogCloseHistogram(CloseStatus::GET_TOAST_HISTORY_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotificationHistory";
       return;
     }
 
     ScopedHString application_id = ScopedHString::Create(GetAppId());
     ScopedHString group = ScopedHString::Create(kGroup);
-    ScopedHString tag = ScopedHString::Create(GetTag(notification_id));
+    ScopedHString tag =
+        ScopedHString::Create(GetTag(notification_id, profile_id, incognito));
 
     HRESULT hr = history->RemoveGroupedTagWithId(tag.get(), group.get(),
                                                  application_id.get());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to remove notification with id "
-                 << notification_id.c_str();
+      LogCloseHistogram(CloseStatus::REMOVING_TOAST_FAILED);
+      DLOG(ERROR) << "Failed to remove notification with id "
+                  << notification_id.c_str() << " " << std::hex << hr;
+    } else {
+      LogCloseHistogram(CloseStatus::SUCCESS);
     }
   }
 
@@ -355,7 +431,10 @@ class NotificationPlatformBridgeWinImpl
         RuntimeClass_Windows_UI_Notifications_ToastNotificationManager,
         toast_manager.GetAddressOf());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to create the ToastNotificationManager";
+      LogHistoryHistogram(
+          HistoryStatus::CREATE_TOAST_NOTIFICATION_MANAGER_FAILED);
+      DLOG(ERROR) << "Unable to create the ToastNotificationManager "
+                  << std::hex << hr;
       return false;
     }
 
@@ -365,16 +444,22 @@ class NotificationPlatformBridgeWinImpl
              .As<winui::Notifications::IToastNotificationManagerStatics2>(
                  &toast_manager2);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get IToastNotificationManagerStatics2";
+      LogHistoryHistogram(
+          HistoryStatus::QUERY_TOAST_MANAGER_STATISTICS2_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotificationManagerStatics2 "
+                  << std::hex << hr;
       return false;
     }
 
     hr = toast_manager2->get_History(notification_history);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get IToastNotificationHistory";
+      LogHistoryHistogram(HistoryStatus::GET_TOAST_HISTORY_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotificationHistory " << std::hex
+                  << hr;
       return false;
     }
 
+    LogHistoryHistogram(HistoryStatus::SUCCESS);
     return true;
   }
 
@@ -385,7 +470,8 @@ class NotificationPlatformBridgeWinImpl
       const {
     mswr::ComPtr<winui::Notifications::IToastNotificationHistory> history;
     if (!GetIToastNotificationHistory(&history)) {
-      LOG(ERROR) << "Failed to get IToastNotificationHistory";
+      LogGetDisplayedStatus(GetDisplayedStatus::GET_TOAST_HISTORY_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotificationHistory";
       return;
     }
 
@@ -393,7 +479,10 @@ class NotificationPlatformBridgeWinImpl
     HRESULT hr =
         history.As<winui::Notifications::IToastNotificationHistory2>(&history2);
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get IToastNotificationHistory2";
+      LogGetDisplayedStatus(
+          GetDisplayedStatus::QUERY_TOAST_NOTIFICATION_HISTORY2_FAILED);
+      DLOG(ERROR) << "Failed to get IToastNotificationHistory2 " << std::hex
+                  << hr;
       return;
     }
 
@@ -404,26 +493,33 @@ class NotificationPlatformBridgeWinImpl
         list;
     hr = history2->GetHistoryWithId(application_id.get(), &list);
     if (FAILED(hr)) {
-      LOG(ERROR) << "GetHistoryWithId failed";
+      LogGetDisplayedStatus(GetDisplayedStatus::GET_HISTORY_WITH_ID_FAILED);
+      DLOG(ERROR) << "GetHistoryWithId failed " << std::hex << hr;
       return;
     }
 
     uint32_t size;
     hr = list->get_Size(&size);
     if (FAILED(hr)) {
-      LOG(ERROR) << "History get_Size call failed";
+      LogGetDisplayedStatus(GetDisplayedStatus::GET_SIZE_FAILED);
+      DLOG(ERROR) << "History get_Size call failed " << std::hex << hr;
       return;
     }
 
+    GetDisplayedStatus status = GetDisplayedStatus::SUCCESS;
     winui::Notifications::IToastNotification* tn;
     for (uint32_t index = 0; index < size; ++index) {
       hr = list->GetAt(0U, &tn);
       if (FAILED(hr)) {
-        LOG(ERROR) << "Failed to get notification " << index << " of " << size;
+        status = GetDisplayedStatus::SUCCESS_WITH_GET_AT_FAILURE;
+        DLOG(ERROR) << "Failed to get notification " << index << " of " << size
+                    << " " << std::hex << hr;
         continue;
       }
       notifications->push_back(tn);
     }
+
+    LogGetDisplayedStatus(status);
   }
 
   void GetNotifications(const std::string& profile_id,
@@ -453,12 +549,16 @@ class NotificationPlatformBridgeWinImpl
          notifications) {
       NotificationLaunchId launch_id(GetNotificationLaunchId(notification));
       if (!launch_id.is_valid()) {
-        LOG(ERROR) << "Failed to decode notification ID";
+        LogGetDisplayedLaunchIdStatus(
+            GetDisplayedLaunchIdStatus::DECODE_LAUNCH_ID_FAILED);
+        DLOG(ERROR) << "Failed to decode notification ID";
         continue;
       }
       if (launch_id.profile_id() != profile_id ||
-          launch_id.incognito() != incognito)
+          launch_id.incognito() != incognito) {
         continue;
+      }
+      LogGetDisplayedLaunchIdStatus(GetDisplayedLaunchIdStatus::SUCCESS);
       displayed_notifications->insert(launch_id.notification_id());
     }
 
@@ -482,8 +582,26 @@ class NotificationPlatformBridgeWinImpl
   void SetReadyCallback(
       NotificationPlatformBridge::NotificationBridgeReadyCallback callback) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    bool enabled = com_functions_initialized_ && IsToastActivatorRegistered() &&
-                   InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled();
+
+    bool activator_registered = IsToastActivatorRegistered();
+    bool shortcut_installed =
+        InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled();
+
+    if (!shortcut_installed) {
+      LogSetReadyCallbackStatus(
+          SetReadyCallbackStatus::SHORTCUT_MISCONFIGURATION);
+    } else if (!activator_registered) {
+      LogSetReadyCallbackStatus(
+          SetReadyCallbackStatus::COM_SERVER_MISCONFIGURATION);
+    } else if (!com_functions_initialized_) {
+      LogSetReadyCallbackStatus(SetReadyCallbackStatus::COM_NOT_INITIALIZED);
+    } else {
+      LogSetReadyCallbackStatus(SetReadyCallbackStatus::SUCCESS);
+    }
+
+    bool enabled = com_functions_initialized_ && activator_registered &&
+                   shortcut_installed;
+
     bool success = content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
         base::BindOnce(std::move(callback), enabled));
@@ -496,7 +614,8 @@ class NotificationPlatformBridgeWinImpl
                    const base::Optional<bool>& by_user) {
     NotificationLaunchId launch_id(GetNotificationLaunchId(notification));
     if (!launch_id.is_valid()) {
-      LOG(ERROR) << "Failed to decode launch ID for operation " << operation;
+      LogHandleEventStatus(HandleEventStatus::HANDLE_EVENT_LAUNCH_ID_INVALID);
+      DLOG(ERROR) << "Failed to decode launch ID for operation " << operation;
       return;
     }
 
@@ -507,6 +626,7 @@ class NotificationPlatformBridgeWinImpl
                        launch_id.notification_id(), launch_id.profile_id(),
                        launch_id.incognito(), action_index,
                        /*reply=*/base::nullopt, by_user));
+    LogHandleEventStatus(HandleEventStatus::SUCCESS);
   }
 
   base::Optional<int> ParseActionIndex(
@@ -518,9 +638,9 @@ class NotificationPlatformBridgeWinImpl
 
     ScopedHString arguments_scoped(arguments);
     NotificationLaunchId launch_id(arguments_scoped.GetAsUTF8());
-    if (!launch_id.is_valid() || launch_id.button_index() < 0)
-      return base::nullopt;
-    return launch_id.button_index();
+    return (launch_id.is_valid() && launch_id.button_index() >= 0)
+               ? base::Optional<int>(launch_id.button_index())
+               : base::nullopt;
   }
 
   void ForwardHandleEventForTesting(
@@ -534,6 +654,7 @@ class NotificationPlatformBridgeWinImpl
 
  private:
   friend class base::RefCountedThreadSafe<NotificationPlatformBridgeWinImpl>;
+  friend class MockIToastNotifier;
   friend class NotificationPlatformBridgeWin;
 
   ~NotificationPlatformBridgeWinImpl() = default;
@@ -542,108 +663,50 @@ class NotificationPlatformBridgeWinImpl
     return ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall());
   }
 
-  base::string16 GetTag(const std::string& notification_id) {
-    return base::UintToString16(base::Hash(notification_id));
-  }
-
-  NotificationLaunchId GetNotificationLaunchId(
-      winui::Notifications::IToastNotification* notification) const {
-    mswr::ComPtr<winxml::Dom::IXmlDocument> document;
-    HRESULT hr = notification->get_Content(&document);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get XML document";
-      return NotificationLaunchId();
-    }
-
-    ScopedHString tag = ScopedHString::Create(kNotificationToastElement);
-    mswr::ComPtr<winxml::Dom::IXmlNodeList> elements;
-    hr = document->GetElementsByTagName(tag.get(), &elements);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get <toast> elements from document";
-      return NotificationLaunchId();
-    }
-
-    UINT32 length;
-    hr = elements->get_Length(&length);
-    if (length == 0) {
-      LOG(ERROR) << "No <toast> elements in document.";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<winxml::Dom::IXmlNode> node;
-    hr = elements->Item(0, &node);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get first <toast> element";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<winxml::Dom::IXmlNamedNodeMap> attributes;
-    hr = node->get_Attributes(&attributes);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get attributes of <toast>";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<winxml::Dom::IXmlNode> leaf;
-    ScopedHString id = ScopedHString::Create(kNotificationLaunchAttribute);
-    hr = attributes->GetNamedItem(id.get(), &leaf);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get launch attribute of <toast>";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<winxml::Dom::IXmlNode> child;
-    hr = leaf->get_FirstChild(&child);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get content of launch attribute";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<IInspectable> inspectable;
-    hr = child->get_NodeValue(&inspectable);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get node value of launch attribute";
-      return NotificationLaunchId();
-    }
-
-    mswr::ComPtr<winfoundtn::IPropertyValue> property_value;
-    hr = inspectable.As<winfoundtn::IPropertyValue>(&property_value);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to convert node value of launch attribute";
-      return NotificationLaunchId();
-    }
-
-    HSTRING value_hstring;
-    hr = property_value->GetString(&value_hstring);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "Failed to get string for launch attribute";
-      return NotificationLaunchId();
-    }
-
-    ScopedHString value(value_hstring);
-    return NotificationLaunchId(value.GetAsUTF8());
+  base::string16 GetTag(const std::string& notification_id,
+                        const std::string& profile_id,
+                        bool incognito) {
+    std::string payload = base::StringPrintf(
+        "%s|%s|%d", notification_id.c_str(), profile_id.c_str(), incognito);
+    return base::UintToString16(base::Hash(payload));
   }
 
   HRESULT OnDismissed(
       winui::Notifications::IToastNotification* notification,
       winui::Notifications::IToastDismissedEventArgs* arguments) {
+    base::Optional<bool> by_user = base::nullopt;
+
     winui::Notifications::ToastDismissalReason reason;
     HRESULT hr = arguments->get_Reason(&reason);
-    bool by_user = false;
-    if (SUCCEEDED(hr) &&
-        reason == winui::Notifications::ToastDismissalReason_UserCanceled) {
-      by_user = true;
+    if (SUCCEEDED(hr)) {
+      LogOnDismissedStatus(OnDismissedStatus::SUCCESS);
+      by_user = base::Optional<bool>(
+          reason == winui::Notifications::ToastDismissalReason_UserCanceled);
+    } else {
+      LogOnDismissedStatus(OnDismissedStatus::GET_DISMISSAL_REASON_FAILED);
+      DLOG(ERROR) << "Failed to get toast dismissal reason: " << std::hex << hr;
     }
+
     HandleEvent(notification, NotificationCommon::CLOSE,
                 /*action_index=*/base::nullopt, by_user);
     return S_OK;
   }
 
-  HRESULT OnFailed(
-      winui::Notifications::IToastNotification* notification,
-      winui::Notifications::IToastFailedEventArgs* /* arguments */) {
-    // TODO(chengx): Investigate what the correct behavior should be here and
-    // implement it.
+  HRESULT OnFailed(winui::Notifications::IToastNotification* notification,
+                   winui::Notifications::IToastFailedEventArgs* arguments) {
+    HRESULT error_code;
+    HRESULT hr = arguments->get_ErrorCode(&error_code);
+    if (SUCCEEDED(hr)) {
+      LogOnFailedStatus(OnFailedStatus::SUCCESS);
+      DLOG(WARNING) << "Failed to raise the toast notification, error code: "
+                    << std::hex << error_code;
+    } else {
+      LogOnFailedStatus(OnFailedStatus::GET_ERROR_CODE_FAILED);
+      DLOG(ERROR) << "Failed to raise the toast notification; failed to get "
+                     "error code: "
+                  << std::hex << hr;
+    }
+
     return S_OK;
   }
 
@@ -654,20 +717,27 @@ class NotificationPlatformBridgeWinImpl
         RuntimeClass_Windows_UI_Notifications_ToastNotificationManager,
         toast_manager.GetAddressOf());
     if (FAILED(hr)) {
-      LOG(ERROR) << "Unable to create the ToastNotificationManager";
+      LogDisplayHistogram(
+          DisplayStatus::CREATE_TOAST_NOTIFICATION_MANAGER_FAILED);
+      DLOG(ERROR) << "Unable to create the ToastNotificationManager "
+                  << std::hex << hr;
       return hr;
     }
 
     ScopedHString application_id = ScopedHString::Create(GetAppId());
     hr = toast_manager->CreateToastNotifierWithId(application_id.get(),
                                                   &notifier_);
-    if (FAILED(hr))
-      LOG(ERROR) << "Unable to create the ToastNotifier";
+    if (FAILED(hr)) {
+      LogDisplayHistogram(DisplayStatus::CREATE_TOAST_NOTIFIER_WITH_ID_FAILED);
+      DLOG(ERROR) << "Unable to create the ToastNotifier " << std::hex << hr;
+    }
     return hr;
   }
 
   static std::vector<ABI::Windows::UI::Notifications::IToastNotification*>*
       notifications_for_testing_;
+
+  static ABI::Windows::UI::Notifications::IToastNotifier* notifier_for_testing_;
 
   // Whether the required functions from combase.dll have been loaded.
   bool com_functions_initialized_;
@@ -687,6 +757,9 @@ class NotificationPlatformBridgeWinImpl
 std::vector<ABI::Windows::UI::Notifications::IToastNotification*>*
     NotificationPlatformBridgeWinImpl::notifications_for_testing_ = nullptr;
 
+ABI::Windows::UI::Notifications::IToastNotifier*
+    NotificationPlatformBridgeWinImpl::notifier_for_testing_ = nullptr;
+
 NotificationPlatformBridgeWin::NotificationPlatformBridgeWin() {
   task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
@@ -697,8 +770,7 @@ NotificationPlatformBridgeWin::~NotificationPlatformBridgeWin() = default;
 
 void NotificationPlatformBridgeWin::Display(
     NotificationHandler::Type notification_type,
-    const std::string& profile_id,
-    bool is_incognito,
+    Profile* profile,
     const message_center::Notification& notification,
     std::unique_ptr<NotificationCommon::Metadata> metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -712,26 +784,28 @@ void NotificationPlatformBridgeWin::Display(
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&NotificationPlatformBridgeWinImpl::Display, impl_,
-                     notification_type, profile_id, is_incognito,
-                     std::move(notification_copy), std::move(metadata)));
+                     notification_type, GetProfileId(profile),
+                     profile->IsOffTheRecord(), std::move(notification_copy),
+                     std::move(metadata)));
 }
 
-void NotificationPlatformBridgeWin::Close(const std::string& profile_id,
+void NotificationPlatformBridgeWin::Close(Profile* profile,
                                           const std::string& notification_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&NotificationPlatformBridgeWinImpl::Close,
-                                impl_, notification_id, profile_id));
+                                impl_, GetProfileId(profile),
+                                profile->IsOffTheRecord(), notification_id));
 }
 
 void NotificationPlatformBridgeWin::GetDisplayed(
-    const std::string& profile_id,
-    bool incognito,
+    Profile* profile,
     GetDisplayedNotificationsCallback callback) const {
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&NotificationPlatformBridgeWinImpl::GetDisplayed, impl_,
-                     profile_id, incognito, std::move(callback)));
+                     GetProfileId(profile), profile->IsOffTheRecord(),
+                     std::move(callback)));
 }
 
 void NotificationPlatformBridgeWin::SetReadyCallback(
@@ -750,8 +824,10 @@ bool NotificationPlatformBridgeWin::HandleActivation(
 
   NotificationLaunchId launch_id(base::UTF16ToUTF8(
       command_line.GetSwitchValueNative(switches::kNotificationLaunchId)));
-  if (!launch_id.is_valid())
+  if (!launch_id.is_valid()) {
+    LogActivationStatus(ActivationStatus::ACTIVATION_INVALID_LAUNCH_ID);
     return false;
+  }
 
   base::Optional<base::string16> reply;
   base::string16 inline_reply =
@@ -768,6 +844,7 @@ bool NotificationPlatformBridgeWin::HandleActivation(
       launch_id.notification_id(), launch_id.profile_id(),
       launch_id.incognito(), launch_id.button_index(), reply, /*by_user=*/true);
 
+  LogActivationStatus(ActivationStatus::SUCCESS);
   return true;
 }
 
@@ -775,7 +852,11 @@ bool NotificationPlatformBridgeWin::HandleActivation(
 std::string NotificationPlatformBridgeWin::GetProfileIdFromLaunchId(
     const base::string16& launch_id_str) {
   NotificationLaunchId launch_id(base::UTF16ToUTF8(launch_id_str));
-  return launch_id.is_valid() ? launch_id.profile_id() : std::string();
+  if (!launch_id.is_valid()) {
+    LogActivationStatus(ActivationStatus::GET_PROFILE_ID_INVALID_LAUNCH_ID);
+    return std::string();
+  }
+  return launch_id.profile_id();
 }
 
 // static
@@ -804,11 +885,18 @@ void NotificationPlatformBridgeWin::SetDisplayedNotificationsForTesting(
   NotificationPlatformBridgeWinImpl::notifications_for_testing_ = notifications;
 }
 
+void NotificationPlatformBridgeWin::SetNotifierForTesting(
+    ABI::Windows::UI::Notifications::IToastNotifier* notifier) {
+  NotificationPlatformBridgeWinImpl::notifier_for_testing_ = notifier;
+}
+
 HRESULT NotificationPlatformBridgeWin::GetToastNotificationForTesting(
     const message_center::Notification& notification,
     const NotificationTemplateBuilder& notification_template_builder,
+    const std::string& profile_id,
+    bool incognito,
     winui::Notifications::IToastNotification** toast_notification) {
-  return impl_->GetToastNotification(
-      notification, notification_template_builder, "UnusedValue",
-      /*incognito=*/false, toast_notification);
+  return impl_->GetToastNotification(notification,
+                                     notification_template_builder, profile_id,
+                                     incognito, toast_notification);
 }

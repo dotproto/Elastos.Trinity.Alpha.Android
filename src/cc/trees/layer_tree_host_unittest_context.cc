@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer_impl.h"
@@ -888,7 +887,7 @@ class LayerTreeHostContextTestDontUseLostResources
     shared_bitmap_manager_ = std::make_unique<viz::TestSharedBitmapManager>();
     child_resource_provider_ =
         FakeResourceProvider::CreateLayerTreeResourceProvider(
-            child_context_provider_.get(), shared_bitmap_manager_.get());
+            child_context_provider_.get());
   }
 
   static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
@@ -1043,7 +1042,7 @@ class LayerTreeHostContextTestDontUseLostResources
 
   scoped_refptr<viz::TestContextProvider> child_context_provider_;
   std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
-  std::unique_ptr<ResourceProvider> child_resource_provider_;
+  std::unique_ptr<LayerTreeResourceProvider> child_resource_provider_;
 
   scoped_refptr<VideoFrame> color_video_frame_;
   scoped_refptr<VideoFrame> hw_video_frame_;
@@ -1346,8 +1345,9 @@ class UIResourceLostBeforeCommit : public UIResourceLostTestSimple {
   UIResourceId test_id1_;
 };
 
-// http://crbug.com/803532 : Flaky on Win 7 (dbg).
-#if defined(NDEBUG) || !defined(OS_WIN)
+// http://crbug.com/803532 : Flaky on Win 7 (dbg) and linux tsan
+#if (defined(NDEBUG) || !defined(OS_WIN)) && \
+    (!defined(THREAD_SANITIZER) || !defined(OS_LINUX))
 SINGLE_THREAD_TEST_F(UIResourceLostBeforeCommit);
 #endif
 MULTI_THREAD_TEST_F(UIResourceLostBeforeCommit);

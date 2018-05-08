@@ -46,6 +46,11 @@ gfx::Vector3dF GetEffectiveUpVector(const gfx::Vector3dF& forward,
 Repositioner::Repositioner() = default;
 Repositioner::~Repositioner() = default;
 
+bool Repositioner::ShouldUpdateWorldSpaceTransform(
+    bool parent_transform_changed) const {
+  return true;
+}
+
 gfx::Transform Repositioner::LocalTransform() const {
   return transform_;
 }
@@ -65,9 +70,12 @@ void Repositioner::SetEnabled(bool enabled) {
 
 void Repositioner::Reset() {
   transform_.MakeIdentity();
+  set_world_space_transform_dirty();
 }
 
 void Repositioner::UpdateTransform(const gfx::Transform& head_pose) {
+  set_world_space_transform_dirty();
+
   gfx::Vector3dF head_up = vr::GetUpVector(head_pose);
   gfx::Vector3dF head_forward = vr::GetForwardVector(head_pose);
 
@@ -118,8 +126,7 @@ void Repositioner::UpdateTransform(const gfx::Transform& head_pose) {
   }
 }
 
-bool Repositioner::OnBeginFrame(const base::TimeTicks& time,
-                                const gfx::Transform& head_pose) {
+bool Repositioner::OnBeginFrame(const gfx::Transform& head_pose) {
   if (enabled_) {
     UpdateTransform(head_pose);
     return true;

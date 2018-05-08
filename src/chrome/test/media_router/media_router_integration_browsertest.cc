@@ -18,11 +18,11 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/media_router/media_cast_mode.h"
+#include "chrome/browser/ui/media_router/media_router_file_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/webui/media_router/media_cast_mode.h"
-#include "chrome/browser/ui/webui/media_router/media_router_dialog_controller_impl.h"
-#include "chrome/browser/ui/webui/media_router/media_router_file_dialog.h"
+#include "chrome/browser/ui/webui/media_router/media_router_dialog_controller_webui_impl.h"
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 #include "chrome/common/media_router/issue.h"
 #include "chrome/common/url_constants.h"
@@ -363,8 +363,9 @@ void MediaRouterIntegrationBrowserTest::ClickHeader(
 
 WebContents* MediaRouterIntegrationBrowserTest::GetMRDialog(
     WebContents* web_contents) {
-  MediaRouterDialogControllerImpl* controller =
-      MediaRouterDialogControllerImpl::GetOrCreateForWebContents(web_contents);
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
   WebContents* dialog_contents = controller->GetMediaRouterDialog();
   CHECK(dialog_contents);
   WaitUntilDialogFullyLoaded(dialog_contents);
@@ -373,8 +374,9 @@ WebContents* MediaRouterIntegrationBrowserTest::GetMRDialog(
 
 bool MediaRouterIntegrationBrowserTest::IsDialogClosed(
     WebContents* web_contents) {
-  MediaRouterDialogControllerImpl* controller =
-      MediaRouterDialogControllerImpl::GetOrCreateForWebContents(web_contents);
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
   return !controller->GetMediaRouterDialog();
 }
 
@@ -417,8 +419,9 @@ void MediaRouterIntegrationBrowserTest::SetTestData(
 
 WebContents* MediaRouterIntegrationBrowserTest::OpenMRDialog(
     WebContents* web_contents) {
-  MediaRouterDialogControllerImpl* controller =
-      MediaRouterDialogControllerImpl::GetOrCreateForWebContents(web_contents);
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
   test_navigation_observer_.reset(
         new content::TestNavigationObserver(web_contents, 1));
   test_navigation_observer_->StartWatchingNewWebContents();
@@ -436,7 +439,7 @@ base::FilePath MediaRouterIntegrationBrowserTest::GetResourceFile(
   base::FilePath base_dir;
   // ASSERT_TRUE can only be used in void returning functions.
   // Use CHECK instead in non-void returning functions.
-  CHECK(PathService::Get(base::DIR_MODULE, &base_dir));
+  CHECK(base::PathService::Get(base::DIR_MODULE, &base_dir));
   base::FilePath full_path =
       base_dir.Append(kResourcePath).Append(relative_path);
   {
@@ -530,8 +533,9 @@ bool MediaRouterIntegrationBrowserTest::IsRouteClosedOnUI() {
   // after 3s. But sometimes it takes more than 3s to close the route, so
   // we need to re-open the dialog if it is closed.
   WebContents* web_contents = GetActiveWebContents();
-  MediaRouterDialogControllerImpl* controller =
-      MediaRouterDialogControllerImpl::GetOrCreateForWebContents(web_contents);
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
   WebContents* dialog_contents = controller->GetMediaRouterDialog();
   if (!dialog_contents) {
     VLOG(0) << "Media router dialog was closed, reopen it again.";
@@ -598,11 +602,12 @@ void MediaRouterIntegrationBrowserTest::CheckSessionValidity(
   EXPECT_EQ(session_id, default_request_session_id);
 }
 
-MediaRouterDialogControllerImpl*
+MediaRouterDialogControllerWebUIImpl*
 MediaRouterIntegrationBrowserTest::GetControllerForShownDialog(
     WebContents* web_contents) {
-  MediaRouterDialogControllerImpl* controller =
-      MediaRouterDialogControllerImpl::GetOrCreateForWebContents(web_contents);
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
   EXPECT_TRUE(controller->IsShowingMediaRouterDialog());
   return controller;
 }
@@ -699,7 +704,8 @@ void MediaRouterIntegrationBrowserTest::RunReconnectSessionSameTabTest() {
   ASSERT_EQ(session_id, reconnected_session_id);
 }
 
-IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest, Basic) {
+// TODO(crbug.com/822337): Flaky on Linux_CFI bot.
+IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest, MANUAL_Basic) {
   RunBasicTest();
 }
 

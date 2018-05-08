@@ -14,6 +14,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Environment;
 import android.os.Handler;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
@@ -36,10 +37,14 @@ import org.chromium.chrome.browser.download.ui.DownloadHistoryAdapter;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.download.DownloadState;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.offline_items_collection.ContentId;
+import org.chromium.components.offline_items_collection.FailState;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.PendingState;
 import org.chromium.content.browser.BrowserStartupController;
@@ -369,7 +374,6 @@ public class DownloadManagerService
      * will not be called.
      */
     public void onActivityLaunched() {
-        // TODO(jming): Remove this after M-62.
         DownloadNotificationService.clearResumptionAttemptLeft();
 
         DownloadManagerService.getDownloadManagerService().checkForExternallyRemovedDownloads(
@@ -448,7 +452,8 @@ public class DownloadManagerService
                 removeFromDownloadProgressMap = notificationUpdateScheduled;
                 break;
             case DOWNLOAD_STATUS_FAILED:
-                mDownloadNotifier.notifyDownloadFailed(info);
+                // TODO(cmsy): Use correct FailState.
+                mDownloadNotifier.notifyDownloadFailed(info, FailState.CANNOT_DOWNLOAD);
                 Log.w(TAG, "Download failed: " + info.getFilePath());
                 onDownloadFailed(info.getFileName(), DownloadManager.ERROR_UNKNOWN);
                 break;
@@ -508,7 +513,8 @@ public class DownloadManagerService
                             info, result.first, result.second, isSupportedMimeType);
                     broadcastDownloadSuccessful(info);
                 } else {
-                    mDownloadNotifier.notifyDownloadFailed(info);
+                    // TODO(cmsy): Use correct FailState.
+                    mDownloadNotifier.notifyDownloadFailed(info, FailState.CANNOT_DOWNLOAD);
                     // TODO(qinmin): get the failure message from native.
                     onDownloadFailed(info.getFileName(), DownloadManager.ERROR_UNKNOWN);
                 }
@@ -1062,8 +1068,10 @@ public class DownloadManagerService
 
     @CalledByNative
     void onResumptionFailed(String downloadGuid) {
+        // TODO(cmsy): Use correct FailState.
         mDownloadNotifier.notifyDownloadFailed(
-                new DownloadInfo.Builder().setDownloadGuid(downloadGuid).build());
+                new DownloadInfo.Builder().setDownloadGuid(downloadGuid).build(),
+                FailState.CANNOT_DOWNLOAD);
         removeDownloadProgress(downloadGuid);
         recordDownloadResumption(UMA_DOWNLOAD_RESUMPTION_FAILED);
         recordDownloadFinishedUMA(DOWNLOAD_STATUS_FAILED, downloadGuid, 0);
@@ -1487,6 +1495,61 @@ public class DownloadManagerService
         for (DownloadHistoryAdapter adapter : mHistoryAdapters) {
             adapter.onAllDownloadsRetrieved(list, isOffTheRecord);
         }
+        maybeShowMissingSdCardError(list);
+    }
+
+    /**
+     * Shows a snackbar that tells the user that files may be missing because no SD card was found
+     * in the case that the error was not shown before and at least one of the items was
+     * externally removed and has a path that points to a missing external drive.
+     *
+     * @param list  List of DownloadItems to check.
+     */
+    private void maybeShowMissingSdCardError(List<DownloadItem> list) {
+        PrefServiceBridge prefServiceBridge = PrefServiceBridge.getInstance();
+        if (!prefServiceBridge.getBoolean(Pref.SHOW_MISSING_SD_CARD_ERROR_ANDROID)) return;
+        for (DownloadItem item : list) {
+            if (!isUnresumableOrCancelled(item) && item.hasBeenExternallyRemoved()
+                    && isFilePathOnMissingExternalDrive(item.getDownloadInfo().getFilePath())) {
+                mHandler.post(() -> mDownloadSnackbarController.onDownloadDirectoryNotFound());
+                prefServiceBridge.setBoolean(Pref.SHOW_MISSING_SD_CARD_ERROR_ANDROID, false);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Checks to see if the item is either unresumable or cancelled.
+     *
+     * @param downloadItem  Item to check.
+     * @return              Whether the item is unresumable or cancelled.
+     */
+    private boolean isUnresumableOrCancelled(DownloadItem downloadItem) {
+        @DownloadState
+        int state = downloadItem.getDownloadInfo().state();
+        return (state == DownloadState.INTERRUPTED && !downloadItem.getDownloadInfo().isResumable())
+                || state == DownloadState.CANCELLED;
+    }
+
+    /**
+     * Returns whether a given file path is in a directory that is no longer available, most likely
+     * because it is on an SD card that was removed.
+     *
+     * @param filePath  The file path to check.
+     * @return          Whether this file path is in a directory that is no longer available.
+     */
+    private boolean isFilePathOnMissingExternalDrive(String filePath) {
+        if (filePath.contains(Environment.getExternalStorageDirectory().getAbsolutePath())) {
+            return false;
+        }
+
+        File[] externalDirs = DownloadUtils.getAllDownloadDirectories(mContext);
+        for (File dir : externalDirs) {
+            if (dir == null) continue;
+            if (filePath.contains(dir.getAbsolutePath())) return false;
+        }
+
+        return true;
     }
 
     @CalledByNative

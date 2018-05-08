@@ -74,8 +74,8 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
       }
     }
     if (!drm_->PageFlip(flip.crtc_id, flip.framebuffer,
-                        base::Bind(&CrtcController::OnPageFlipEvent,
-                                   flip.crtc->AsWeakPtr()))) {
+                        base::BindOnce(&CrtcController::OnPageFlipEvent,
+                                       flip.crtc->AsWeakPtr()))) {
       // 1) Permission Denied is a legitimate error.
       // 2) Device or resource busy is possible if we're page flipping a
       // disconnected CRTC. Pretend we're fine since a hotplug event is supposed
@@ -131,6 +131,14 @@ bool HardwareDisplayPlaneManagerLegacy::DisableOverlayPlanes(
   return true;
 }
 
+bool HardwareDisplayPlaneManagerLegacy::SetColorCorrectionOnAllCrtcPlanes(
+    uint32_t crtc_id,
+    ScopedDrmColorCtmPtr ctm_blob_data) {
+  NOTREACHED()
+      << "HardwareDisplayPlaneManagerLegacy doesn't support per plane CTM";
+  return false;
+}
+
 bool HardwareDisplayPlaneManagerLegacy::ValidatePrimarySize(
     const OverlayPlane& primary,
     const drmModeModeInfo& mode) {
@@ -167,10 +175,23 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
   } else {
     plane_list->legacy_page_flips.back().planes.push_back(
         HardwareDisplayPlaneList::PageFlipInfo::Plane(
-            hw_plane->plane_id(), overlay.buffer->GetFramebufferId(),
+            hw_plane->plane_id(), overlay.buffer->GetOpaqueFramebufferId(),
             overlay.display_bounds, src_rect));
   }
   return true;
+}
+
+bool HardwareDisplayPlaneManagerLegacy::IsCompatible(
+    HardwareDisplayPlane* plane,
+    const OverlayPlane& overlay,
+    uint32_t crtc_index) const {
+  if (!plane->CanUseForCrtc(crtc_index))
+    return false;
+
+  // When using legacy kms we always scanout only one plane (the primary),
+  // and we always use the opaque fb. Refer to SetPlaneData above.
+  const uint32_t format = overlay.buffer->GetOpaqueFramebufferPixelFormat();
+  return plane->IsSupportedFormat(format);
 }
 
 }  // namespace ui

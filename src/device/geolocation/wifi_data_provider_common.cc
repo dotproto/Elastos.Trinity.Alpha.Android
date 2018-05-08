@@ -39,7 +39,7 @@ void WifiDataProviderCommon::StartDataProvider() {
     WifiPollingPolicy::Initialize(CreatePollingPolicy());
   DCHECK(WifiPollingPolicy::IsInitialized());
 
-  ScheduleNextScan(WifiPollingPolicy::Get()->PollingInterval());
+  ScheduleNextScan(WifiPollingPolicy::Get()->InitialInterval());
 }
 
 void WifiDataProviderCommon::StopDataProvider() {

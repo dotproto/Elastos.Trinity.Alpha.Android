@@ -426,6 +426,10 @@ void BlobRegistryImpl::BlobUnderConstruction::TransportComplete(
     return;
   }
 
+  // The calls below could delete |this|, so make sure we detect that and don't
+  // try to delete |this| again afterwards.
+  auto weak_this = weak_ptr_factory_.GetWeakPtr();
+
   // The blob might no longer have any references, in which case it may no
   // longer exist. If that happens just skip calling Complete.
   // TODO(mek): Stop building sooner if a blob is no longer referenced.
@@ -442,7 +446,8 @@ void BlobRegistryImpl::BlobUnderConstruction::TransportComplete(
     std::move(bad_message_callback_)
         .Run("Received invalid data while transporting blob");
   }
-  MarkAsFinishedAndDeleteSelf();
+  if (weak_this)
+    MarkAsFinishedAndDeleteSelf();
 }
 
 #if DCHECK_IS_ON()
@@ -545,6 +550,7 @@ void BlobRegistryImpl::RegisterFromStream(
     const std::string& content_disposition,
     uint64_t expected_length,
     mojo::ScopedDataPipeConsumerHandle data,
+    blink::mojom::ProgressClientAssociatedPtrInfo progress_client,
     RegisterFromStreamCallback callback) {
   if (!context_) {
     std::move(callback).Run(nullptr);
@@ -553,7 +559,7 @@ void BlobRegistryImpl::RegisterFromStream(
 
   blobs_being_streamed_.insert(std::make_unique<BlobBuilderFromStream>(
       context_, content_type, content_disposition, expected_length,
-      std::move(data),
+      std::move(data), std::move(progress_client),
       base::BindOnce(&BlobRegistryImpl::StreamingBlobDone,
                      base::Unretained(this), std::move(callback))));
 }

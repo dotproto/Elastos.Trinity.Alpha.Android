@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -16,16 +15,16 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/command_buffer/common/swap_buffers_flags.h"
 #include "ui/gl/gl_utils.h"
 
 namespace viz {
 
 GLOutputSurface::GLOutputSurface(
-    scoped_refptr<InProcessContextProvider> context_provider,
+    scoped_refptr<VizProcessContextProvider> context_provider,
     SyntheticBeginFrameSource* synthetic_begin_frame_source)
     : OutputSurface(context_provider),
       synthetic_begin_frame_source_(synthetic_begin_frame_source),
-      latency_tracker_(true),
       latency_info_cache_(this),
       weak_ptr_factory_(this) {
   capabilities_.flipped_output_surface =
@@ -87,21 +86,27 @@ void GLOutputSurface::Reshape(const gfx::Size& size,
 void GLOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   DCHECK(context_provider_);
 
+  uint32_t flags = 0;
+  if (frame.need_presentation_feedback)
+    flags |= gpu::SwapBuffersFlags::kPresentationFeedback;
+  if (synthetic_begin_frame_source_)
+    flags |= gpu::SwapBuffersFlags::kVSyncParams;
+
   if (latency_info_cache_.WillSwap(std::move(frame.latency_info)))
     context_provider_->ContextSupport()->SetSnapshotRequested();
 
   set_draw_rectangle_for_frame_ = false;
   if (frame.sub_buffer_rect) {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        *frame.sub_buffer_rect);
+        *frame.sub_buffer_rect, flags);
   } else {
-    context_provider_->ContextSupport()->Swap();
+    context_provider_->ContextSupport()->Swap(flags);
   }
 }
 
 uint32_t GLOutputSurface::GetFramebufferCopyTextureFormat() {
   // TODO(danakj): What attributes are used for the default framebuffer here?
-  // Can it have alpha? InProcessContextProvider doesn't take any
+  // Can it have alpha? VizProcessContextProvider doesn't take any
   // attributes.
   return GL_RGB;
 }
@@ -121,10 +126,6 @@ unsigned GLOutputSurface::GetOverlayTextureId() const {
 
 gfx::BufferFormat GLOutputSurface::GetOverlayBufferFormat() const {
   return gfx::BufferFormat::RGBX_8888;
-}
-
-bool GLOutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
 }
 
 bool GLOutputSurface::HasExternalStencilTest() const {
@@ -151,9 +152,8 @@ void GLOutputSurface::OnGpuSwapBuffersCompleted(
 
 void GLOutputSurface::LatencyInfoCompleted(
     const std::vector<ui::LatencyInfo>& latency_info) {
-  for (const auto& latency : latency_info) {
-    latency_tracker_.OnGpuSwapBuffersCompleted(latency);
-  }
+  latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
+  client_->DidFinishLatencyInfo(latency_info);
 }
 
 void GLOutputSurface::OnVSyncParametersUpdated(base::TimeTicks timebase,

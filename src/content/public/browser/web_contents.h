@@ -29,7 +29,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/stop_find_action.h"
-#include "third_party/WebKit/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_modes.h"
 #include "ui/accessibility/ax_tree_update.h"
@@ -178,7 +178,8 @@ class WebContents : public PageNavigator,
   };
 
   // Creates a new WebContents.
-  CONTENT_EXPORT static WebContents* Create(const CreateParams& params);
+  CONTENT_EXPORT static std::unique_ptr<WebContents> Create(
+      const CreateParams& params);
 
   // Similar to Create() above but should be used when you need to prepopulate
   // the SessionStorageNamespaceMap of the WebContents. This can happen if
@@ -190,7 +191,7 @@ class WebContents : public PageNavigator,
   // understand when SessionStorageNamespace objects should be cloned, why
   // they should not be shared by multiple WebContents, and what bad things
   // can happen if you share the object.
-  CONTENT_EXPORT static WebContents* CreateWithSessionStorage(
+  CONTENT_EXPORT static std::unique_ptr<WebContents> CreateWithSessionStorage(
       const CreateParams& params,
       const SessionStorageNamespaceMap& session_storage_namespace_map);
 
@@ -446,11 +447,10 @@ class WebContents : public PageNavigator,
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
 
-  // Invoked when the WebContents becomes occluded/unoccluded. An occluded
-  // WebContents isn't painted on the screen, except in a window switching
-  // feature (e.g. Alt-Tab).
+  // Invoked when the WebContents becomes occluded. An occluded WebContents
+  // isn't painted on the screen, except in a window switching feature (e.g.
+  // Alt-Tab).
   virtual void WasOccluded() = 0;
-  virtual void WasUnOccluded() = 0;
 
   // Returns the visibility of the WebContents' view.
   virtual Visibility GetVisibility() const = 0;
@@ -474,8 +474,16 @@ class WebContents : public PageNavigator,
       WebContents* outer_web_contents,
       RenderFrameHost* outer_contents_frame) = 0;
 
+  // Returns the outer WebContents of this WebContents if any.
+  // Otherwise, return nullptr.
+  virtual WebContents* GetOuterWebContents() = 0;
+
   // Invoked when visible security state changes.
   virtual void DidChangeVisibleSecurityState() = 0;
+
+  // Notify this WebContents that the preferences have changed. This will send
+  // an IPC to all the renderer processes associated with this WebContents.
+  virtual void NotifyPreferencesChanged() = 0;
 
   // Commands ------------------------------------------------------------------
 
@@ -624,7 +632,7 @@ class WebContents : public PageNavigator,
   // not the recommended encoding for shareable content.
   virtual void GenerateMHTML(
       const MHTMLGenerationParams& params,
-      const base::Callback<void(int64_t /* size of the file */)>& callback) = 0;
+      base::OnceCallback<void(int64_t /* size of the file */)> callback) = 0;
 
   // Returns the contents MIME type after a navigation.
   virtual const std::string& GetContentsMimeType() const = 0;
@@ -643,10 +651,11 @@ class WebContents : public PageNavigator,
   // WebContentsDelegate.
   virtual void SystemDragEnded(RenderWidgetHost* source_rwh) = 0;
 
-  // Notification the user has made a gesture while focus was on the
-  // page. This is used to avoid uninitiated user downloads (aka carpet
-  // bombing), see DownloadRequestLimiter for details.
-  virtual void UserGestureDone() = 0;
+  // The user initiated navigation to this page (as opposed to a navigation that
+  // could have been triggered without user interaction). Used to avoid
+  // uninitiated user downloads (aka carpet bombing), see DownloadRequestLimiter
+  // for details.
+  virtual void NavigatedByUser() = 0;
 
   // Indicates if this tab was explicitly closed by the user (control-w, close
   // tab menu item...). This is false for actions that indirectly close the tab,
@@ -669,6 +678,10 @@ class WebContents : public PageNavigator,
   // Returns true if |allowed| is true and the mouse has been successfully
   // locked.
   virtual bool GotResponseToLockMouseRequest(bool allowed) = 0;
+
+  // Called when the response to a keyboard mouse lock request has arrived.
+  // Returns false if the request is no longer valid, otherwise true.
+  virtual bool GotResponseToKeyboardLockRequest(bool allowed) = 0;
 
   // Called when the user has selected a color in the color chooser.
   virtual void DidChooseColorInColorChooser(SkColor color) = 0;
@@ -703,17 +716,16 @@ class WebContents : public PageNavigator,
   // Returns the WakeLockContext accociated with this WebContents.
   virtual device::mojom::WakeLockContext* GetWakeLockContext() = 0;
 
-  typedef base::Callback<void(
-      int, /* id */
-      int, /* HTTP status code */
-      const GURL&, /* image_url */
+  using ImageDownloadCallback = base::OnceCallback<void(
+      int,                          /* id */
+      int,                          /* HTTP status code */
+      const GURL&,                  /* image_url */
       const std::vector<SkBitmap>&, /* bitmaps */
       /* The sizes in pixel of the bitmaps before they were resized due to the
          max bitmap size passed to DownloadImage(). Each entry in the bitmaps
          vector corresponds to an entry in the sizes vector. If a bitmap was
          resized, there should be a single returned bitmap. */
-      const std::vector<gfx::Size>&)>
-          ImageDownloadCallback;
+      const std::vector<gfx::Size>&)>;
 
   // Sends a request to download the given image |url| and returns the unique
   // id of the download request. When the download is finished, |callback| will
@@ -730,7 +742,7 @@ class WebContents : public PageNavigator,
                             bool is_favicon,
                             uint32_t max_bitmap_size,
                             bool bypass_cache,
-                            const ImageDownloadCallback& callback) = 0;
+                            ImageDownloadCallback callback) = 0;
 
   // Returns true if the WebContents is responsible for displaying a subframe
   // in a different process from its parent page.
@@ -758,11 +770,11 @@ class WebContents : public PageNavigator,
   // The callback invoked when the renderer responds to a request for the main
   // frame document's manifest. The url will be empty if the document specifies
   // no manifest, and the manifest will be empty if any other failures occurred.
-  typedef base::Callback<void(const GURL&, const Manifest&)>
-      GetManifestCallback;
+  using GetManifestCallback =
+      base::OnceCallback<void(const GURL&, const Manifest&)>;
 
   // Requests the manifest URL and the Manifest of the main frame's document.
-  virtual void GetManifest(const GetManifestCallback& callback) = 0;
+  virtual void GetManifest(GetManifestCallback callback) = 0;
 
   // Returns whether the renderer is in fullscreen mode.
   virtual bool IsFullscreenForCurrentTab() const = 0;
@@ -802,6 +814,20 @@ class WebContents : public PageNavigator,
 
   // Tells the WebContents whether the context menu is showing.
   virtual void SetShowingContextMenu(bool showing) = 0;
+
+  // Pause and unpause scheduled tasks in the page of blink. This function will
+  // suspend page loadings and all background processing like active javascript,
+  // and timers through |blink::Page::SetPaused|. If you want to resume the
+  // paused state, you have to call this function with |false| argument again.
+  // The function with |false| should be called after calling it with |true|. If
+  // not, assertion will happen.
+  //
+  // WARNING: This only pauses the activities in the particular page in the
+  // renderer process, but may indirectly block or break other pages when they
+  // wait for the common backend (e.g. storage) in the browser process.
+  // TODO(gyuyoung): https://crbug.com/822564 - Make this feature safer and fix
+  // bugs.
+  virtual void PausePageScheduledTasks(bool paused) = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(

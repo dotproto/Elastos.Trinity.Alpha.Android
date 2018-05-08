@@ -24,7 +24,7 @@
 #include "content/public/common/screen_info.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "gpu/ipc/common/gpu_messages.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/gfx/geometry/dip_util.h"
@@ -52,7 +52,8 @@ bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
 
   IPC_BEGIN_MESSAGE_MAP(CrossProcessFrameConnector, msg)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateResizeParams, OnUpdateResizeParams)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_SynchronizeVisualProperties,
+                        OnSynchronizeVisualProperties)
     IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateViewportIntersection,
                         OnUpdateViewportIntersection)
     IPC_MESSAGE_HANDLER(FrameHostMsg_VisibilityChanged, OnVisibilityChanged)
@@ -211,13 +212,14 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
 
   auto* event_router = parent_view->host()->delegate()->GetInputEventRouter();
 
-  gfx::Vector2d offset_from_parent =
-      screen_space_rect_in_dip_.OffsetFromOrigin();
+  // We will only convert the coordinates back to the root here. The
+  // RenderWidgetHostInputEventRouter will determine which ancestor view will
+  // receive a resent gesture event, so it will be responsible for converting to
+  // the coordinates of the target view.
   blink::WebGestureEvent resent_gesture_event(event);
-  // TODO(kenrb, wjmaclean): Do we need to account for transforms here?
-  // See https://crbug.com/626020.
-  resent_gesture_event.SetPositionInWidget(
-      resent_gesture_event.PositionInWidget() + offset_from_parent);
+  const gfx::PointF root_point =
+      view_->TransformPointToRootCoordSpaceF(event.PositionInWidget());
+  resent_gesture_event.SetPositionInWidget(root_point);
 
   if (view_->wheel_scroll_latching_enabled()) {
     if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
@@ -269,16 +271,15 @@ void CrossProcessFrameConnector::UnlockMouse() {
     root_view->UnlockMouse();
 }
 
-void CrossProcessFrameConnector::OnUpdateResizeParams(
-    const gfx::Rect& screen_space_rect,
-    const gfx::Size& local_frame_size,
-    const ScreenInfo& screen_info,
-    uint64_t sequence_number,
-    const viz::SurfaceId& surface_id) {
+void CrossProcessFrameConnector::OnSynchronizeVisualProperties(
+    const viz::SurfaceId& surface_id,
+    const FrameVisualProperties& visual_properties) {
   // If the |screen_space_rect| or |screen_info| of the frame has changed, then
   // the viz::LocalSurfaceId must also change.
-  if ((last_received_local_frame_size_ != local_frame_size ||
-       screen_info_ != screen_info) &&
+  if ((last_received_local_frame_size_ != visual_properties.local_frame_size ||
+       screen_info_ != visual_properties.screen_info ||
+       capture_sequence_number() !=
+           visual_properties.capture_sequence_number) &&
       local_surface_id_ == surface_id.local_surface_id()) {
     bad_message::ReceivedBadMessage(
         frame_proxy_in_parent_renderer_->GetProcess(),
@@ -286,9 +287,8 @@ void CrossProcessFrameConnector::OnUpdateResizeParams(
     return;
   }
 
-  last_received_local_frame_size_ = local_frame_size;
-  UpdateResizeParams(screen_space_rect, local_frame_size, screen_info,
-                     sequence_number, surface_id);
+  last_received_local_frame_size_ = visual_properties.local_frame_size;
+  SynchronizeVisualProperties(surface_id, visual_properties);
 }
 
 void CrossProcessFrameConnector::OnUpdateViewportIntersection(
@@ -372,6 +372,17 @@ CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
   return nullptr;
 }
 
+void CrossProcessFrameConnector::EnableAutoResize(const gfx::Size& min_size,
+                                                  const gfx::Size& max_size) {
+  frame_proxy_in_parent_renderer_->Send(new FrameMsg_EnableAutoResize(
+      frame_proxy_in_parent_renderer_->GetRoutingID(), min_size, max_size));
+}
+
+void CrossProcessFrameConnector::DisableAutoResize() {
+  frame_proxy_in_parent_renderer_->Send(new FrameMsg_DisableAutoResize(
+      frame_proxy_in_parent_renderer_->GetRoutingID()));
+}
+
 bool CrossProcessFrameConnector::IsInert() const {
   return is_inert_;
 }
@@ -397,10 +408,10 @@ void CrossProcessFrameConnector::EmbedRendererWindowTreeClientInParent(
 #endif
 
 void CrossProcessFrameConnector::ResizeDueToAutoResize(
-    const gfx::Size& new_size,
-    uint64_t sequence_number) {
+    const viz::LocalSurfaceId& child_allocated_surface_id) {
   frame_proxy_in_parent_renderer_->Send(new FrameMsg_ResizeDueToAutoResize(
-      frame_proxy_in_parent_renderer_->GetRoutingID(), sequence_number));
+      frame_proxy_in_parent_renderer_->GetRoutingID(),
+      child_allocated_surface_id));
 }
 
 void CrossProcessFrameConnector::SetVisibilityForChildViews(

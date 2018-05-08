@@ -32,6 +32,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using content::BrowserContext;
@@ -153,14 +154,8 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
   }
 
   void InitializeDownloadSettings() {
-    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(browser());
-    ASSERT_TRUE(downloads_dir_.CreateUniqueTempDir());
 
-    // Setup default downloads directory to the scoped tmp directory created for
-    // the test.
-    browser()->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory, downloads_dir_.GetPath());
     // Ensure there are no prompts for download during the test.
     browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
@@ -237,13 +232,15 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
   std::string test_extension_id_;
   // The HTTP server used in the tests.
   std::unique_ptr<net::EmbeddedTestServer> test_server_;
-  base::ScopedTempDir downloads_dir_;
 };
 
 // Tests that navigating to a resource with a MIME type handleable by an
 // installed, white-listed extension invokes the extension's
 // onExecuteContentHandler event (and does not start a download).
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Navigate) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -268,6 +265,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Navigate) {
 // Tests that navigating to a file URL also intercepts despite there being no
 // HTTP headers. This is a regression test for https://crbug.com/416433.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, FileURL) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -292,6 +292,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, FileURL) {
 // onExecuteContentHandler event (and does not start a download).
 // Regression test for http://crbug.com/342999.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateCrossSite) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -393,7 +396,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
 
   // The download's target file path.
   base::FilePath target_path =
-      downloads_dir_.GetPath().Append(FILE_PATH_LITERAL("download_target.txt"));
+      DownloadPrefs(browser()->profile())
+          .DownloadPath()
+          .Append(FILE_PATH_LITERAL("download_target.txt"));
 
   // Set the downloads parameters.
   content::WebContents* web_contents =
@@ -402,6 +407,7 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
   std::unique_ptr<DownloadUrlParameters> params(
       content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
           web_contents, url, TRAFFIC_ANNOTATION_FOR_TESTS));
+
   params->set_file_path(target_path);
 
   // Start download of the URL with a path "/text_path.txt" on the test server.
@@ -430,6 +436,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
 // Tests that response headers are correctly passed to the API and that multiple
 // repsonse headers with the same name are merged correctly.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Headers) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -453,6 +462,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Headers) {
 
 // Tests that chrome.streamsPrivate.abort() works correctly.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Abort) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;

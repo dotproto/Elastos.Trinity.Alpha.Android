@@ -7,11 +7,16 @@
 #include <algorithm>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros_local.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
-#include "mojo/edk/embedder/embedder_internal.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/memory_dump_provider.h"
+#include "base/trace_event/trace_event.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/node_channel.h"
 #include "mojo/edk/system/node_controller.h"
@@ -28,7 +33,7 @@ namespace {
 // The minimum amount of memory to allocate for a new serialized message buffer.
 // This should be sufficiently large such that most seiralized messages do not
 // incur any reallocations as they're expanded to full size.
-const uint32_t kMinimumPayloadBufferSize = 4096;
+const uint32_t kMinimumPayloadBufferSize = 128;
 
 // Indicates whether handle serialization failure should be emulated in testing.
 bool g_always_fail_handle_serialization = false;
@@ -254,6 +259,47 @@ MojoResult CreateOrExtendSerializedEventMessage(
   return MOJO_RESULT_OK;
 }
 
+base::subtle::Atomic32 g_message_count = 0;
+
+void IncrementMessageCount() {
+  base::subtle::NoBarrier_AtomicIncrement(&g_message_count, 1);
+}
+
+void DecrementMessageCount() {
+  base::subtle::NoBarrier_AtomicIncrement(&g_message_count, -1);
+}
+
+class MessageMemoryDumpProvider : public base::trace_event::MemoryDumpProvider {
+ public:
+  MessageMemoryDumpProvider() {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "MojoMessages", nullptr);
+  }
+
+  ~MessageMemoryDumpProvider() override {
+    base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+        this);
+  }
+
+ private:
+  // base::trace_event::MemoryDumpProvider:
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override {
+    auto* dump = pmd->CreateAllocatorDump("mojo/messages");
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                    base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                    base::subtle::NoBarrier_Load(&g_message_count));
+    return true;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(MessageMemoryDumpProvider);
+};
+
+void EnsureMemoryDumpProviderExists() {
+  static base::NoDestructor<MessageMemoryDumpProvider> provider;
+  ALLOW_UNUSED_LOCAL(provider);
+}
+
 }  // namespace
 
 // static
@@ -273,17 +319,19 @@ UserMessageImpl::~UserMessageImpl() {
     if (result == MOJO_RESULT_OK) {
       for (auto handle : handles) {
         if (handle != MOJO_HANDLE_INVALID)
-          internal::g_core->Close(handle);
+          Core::Get()->Close(handle);
       }
     }
 
     if (!pending_handle_attachments_.empty()) {
-      internal::g_core->ReleaseDispatchersForTransit(
-          pending_handle_attachments_, false);
+      Core::Get()->ReleaseDispatchersForTransit(pending_handle_attachments_,
+                                                false);
       for (const auto& dispatcher : pending_handle_attachments_)
-        internal::g_core->Close(dispatcher.local_handle);
+        Core::Get()->Close(dispatcher.local_handle);
     }
   }
+
+  DecrementMessageCount();
 }
 
 // static
@@ -405,7 +453,7 @@ MojoResult UserMessageImpl::AppendData(uint32_t additional_payload_size,
 
   std::vector<Dispatcher::DispatcherInTransit> dispatchers;
   if (num_handles > 0) {
-    MojoResult acquire_result = internal::g_core->AcquireDispatchersForTransit(
+    MojoResult acquire_result = Core::Get()->AcquireDispatchersForTransit(
         handles, num_handles, &dispatchers);
     if (acquire_result != MOJO_RESULT_OK)
       return acquire_result;
@@ -420,8 +468,8 @@ MojoResult UserMessageImpl::AppendData(uint32_t additional_payload_size,
         dispatchers.data(), num_handles, &channel_message, &header_,
         &header_size_, &user_payload_);
     if (num_handles > 0) {
-      internal::g_core->ReleaseDispatchersForTransit(dispatchers,
-                                                     rv == MOJO_RESULT_OK);
+      Core::Get()->ReleaseDispatchersForTransit(dispatchers,
+                                                rv == MOJO_RESULT_OK);
     }
     if (rv != MOJO_RESULT_OK)
       return MOJO_RESULT_ABORTED;
@@ -471,8 +519,8 @@ MojoResult UserMessageImpl::CommitSize() {
         message_event_, user_payload_size_, user_payload_size_,
         pending_handle_attachments_.data(), pending_handle_attachments_.size(),
         &channel_message_, &header_, &header_size_, &user_payload_);
-    internal::g_core->ReleaseDispatchersForTransit(pending_handle_attachments_,
-                                                   true);
+    Core::Get()->ReleaseDispatchersForTransit(pending_handle_attachments_,
+                                              true);
     pending_handle_attachments_.clear();
   }
 
@@ -580,7 +628,7 @@ MojoResult UserMessageImpl::ExtractSerializedHandles(
     platform_handle_index = next_platform_handle_index.ValueOrDie();
   }
 
-  if (!internal::g_core->AddDispatchersFromTransit(dispatchers, handles))
+  if (!Core::Get()->AddDispatchersFromTransit(dispatchers, handles))
     return MOJO_RESULT_ABORTED;
 
   return MOJO_RESULT_OK;
@@ -592,8 +640,10 @@ void UserMessageImpl::FailHandleSerializationForTesting(bool fail) {
 }
 
 UserMessageImpl::UserMessageImpl(ports::UserMessageEvent* message_event)
-    : ports::UserMessage(&kUserMessageTypeInfo),
-      message_event_(message_event) {}
+    : ports::UserMessage(&kUserMessageTypeInfo), message_event_(message_event) {
+  EnsureMemoryDumpProviderExists();
+  IncrementMessageCount();
+}
 
 UserMessageImpl::UserMessageImpl(ports::UserMessageEvent* message_event,
                                  Channel::MessagePtr channel_message,
@@ -609,7 +659,10 @@ UserMessageImpl::UserMessageImpl(ports::UserMessageEvent* message_event,
       header_(header),
       header_size_(header_size),
       user_payload_(user_payload),
-      user_payload_size_(user_payload_size) {}
+      user_payload_size_(user_payload_size) {
+  EnsureMemoryDumpProviderExists();
+  IncrementMessageCount();
+}
 
 bool UserMessageImpl::WillBeRoutedExternally() {
   MojoResult result = SerializeIfNecessary();

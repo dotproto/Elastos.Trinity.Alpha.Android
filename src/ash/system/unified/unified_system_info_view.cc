@@ -9,16 +9,20 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/date/clock_observer.h"
 #include "ash/system/enterprise/enterprise_domain_observer.h"
+#include "ash/system/model/clock_model.h"
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/power/power_status.h"
+#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
@@ -70,11 +74,11 @@ DateView::DateView() : label_(new views::Label) {
   label_->SetEnabledColor(kUnifiedMenuTextColor);
   Update();
 
-  Shell::Get()->system_tray_notifier()->AddClockObserver(this);
+  Shell::Get()->system_tray_model()->clock()->AddObserver(this);
 }
 
 DateView::~DateView() {
-  Shell::Get()->system_tray_notifier()->RemoveClockObserver(this);
+  Shell::Get()->system_tray_model()->clock()->RemoveObserver(this);
 }
 
 void DateView::Update() {
@@ -181,11 +185,15 @@ void BatteryView::ConfigureLabel(views::Label* label) {
 
 // A view that shows whether the device is enterprise managed or not. It updates
 // by observing EnterpriseDomainModel.
-class EnterpriseManagedView : public views::View,
+class EnterpriseManagedView : public views::Button,
+                              public views::ButtonListener,
                               public EnterpriseDomainObserver {
  public:
   EnterpriseManagedView();
   ~EnterpriseManagedView() override;
+
+  // views::ButtonListener:
+  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // EnterpriseDomainObserver:
   void OnEnterpriseDomainChanged() override;
@@ -200,7 +208,7 @@ class EnterpriseManagedView : public views::View,
   DISALLOW_COPY_AND_ASSIGN(EnterpriseManagedView);
 };
 
-EnterpriseManagedView::EnterpriseManagedView() {
+EnterpriseManagedView::EnterpriseManagedView() : Button(this) {
   DCHECK(Shell::Get());
   Shell::Get()->system_tray_model()->enterprise_domain()->AddObserver(this);
 
@@ -221,6 +229,8 @@ EnterpriseManagedView::EnterpriseManagedView() {
   image->SetPreferredSize(
       gfx::Size(kUnifiedSystemInfoHeight, kUnifiedSystemInfoHeight));
   AddChildView(image);
+
+  TrayPopupUtils::ConfigureTrayPopupButton(this);
 
   Update();
 }
@@ -244,6 +254,11 @@ bool EnterpriseManagedView::GetTooltipText(const gfx::Point& p,
   } else {
     return false;
   }
+}
+
+void EnterpriseManagedView::ButtonPressed(views::Button* sender,
+                                          const ui::Event& event) {
+  Shell::Get()->system_tray_controller()->ShowEnterpriseInfo();
 }
 
 void EnterpriseManagedView::OnEnterpriseDomainChanged() {

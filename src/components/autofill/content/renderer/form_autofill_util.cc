@@ -9,12 +9,12 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,20 +28,20 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebElementCollection.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLabelElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebOptionElement.h"
-#include "third_party/WebKit/public/web/WebSelectElement.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_element_collection.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_label_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_option_element.h"
+#include "third_party/blink/public/web/web_select_element.h"
 
 using autofill::FormFieldData;
 using blink::WebDocument;
@@ -834,17 +834,6 @@ void ForEachMatchingFormFieldCommon(
   // are appended to the end of the form and are not visible.
   for (size_t i = 0; i < control_elements->size(); ++i) {
     WebFormControlElement* element = &(*control_elements)[i];
-
-    if (element->NameForAutofill().Utf16() != data.fields[i].name) {
-      // This case should be reachable only for pathological websites, which
-      // rename form fields while the user is interacting with the Autofill
-      // popup.  I (isherman) am not aware of any such websites, and so am
-      // optimistically including a NOTREACHED().  If you ever trip this check,
-      // please file a bug against me.
-      NOTREACHED();
-      continue;
-    }
-
     bool is_initiating_element = (*element == initiating_element);
 
     // Only autofill empty fields (or those with the field's default value
@@ -1022,12 +1011,12 @@ bool ExtractFieldsFromControlElements(
       continue;
 
     // Create a new FormFieldData, fill it out and map it to the field's name.
-    FormFieldData* form_field = new FormFieldData;
+    auto form_field = std::make_unique<FormFieldData>();
     WebFormControlElementToFormField(control_element,
                                      field_value_and_properties_map,
-                                     extract_mask, form_field);
-    form_fields->push_back(base::WrapUnique(form_field));
-    (*element_map)[control_element] = form_field;
+                                     extract_mask, form_field.get());
+    (*element_map)[control_element] = form_field.get();
+    form_fields->push_back(std::move(form_field));
     (*fields_extracted)[i] = true;
 
     // To avoid overly expensive computation, we impose a maximum number of
@@ -1226,6 +1215,46 @@ bool UnownedFormElementsAndFieldSetsToFormData(
       field_value_and_properties_map, extract_mask, form, field);
 }
 
+// Check if a script modified username is suitable for Password Manager to
+// remember.
+bool ScriptModifiedUsernameAcceptable(
+    const base::string16& value,
+    const base::string16& typed_value,
+    const FieldValueAndPropertiesMaskMap& field_value_and_properties_map) {
+  // The minimal size of a field value that will be substring-matched.
+  constexpr size_t kMinMatchSize = 3u;
+  const auto lowercase = base::i18n::ToLower(value);
+  const auto typed_lowercase = base::i18n::ToLower(typed_value);
+  // If the page-generated value is just a completion of the typed value, that's
+  // likely acceptable.
+  if (base::StartsWith(lowercase, typed_lowercase,
+                       base::CompareCase::SENSITIVE)) {
+    return true;
+  }
+  if (typed_lowercase.size() >= kMinMatchSize &&
+      lowercase.find(typed_lowercase) != base::string16::npos) {
+    return true;
+  }
+
+  // If the page-generated value comes from user typed or autofilled values in
+  // other fields, that's also likely OK.
+  for (const auto& map_key : field_value_and_properties_map) {
+    const base::string16* typed_from_key = map_key.second.first.get();
+    if (!typed_from_key)
+      continue;
+    const WebInputElement* input_element = ToWebInputElement(&map_key.first);
+    if (input_element && input_element->IsTextField() &&
+        !input_element->IsPasswordFieldForAutofill() &&
+        typed_from_key->size() >= kMinMatchSize &&
+        lowercase.find(base::i18n::ToLower(*typed_from_key)) !=
+            base::string16::npos) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 ScopedLayoutPreventer::ScopedLayoutPreventer() {
@@ -1392,12 +1421,12 @@ const base::string16 GetFormIdentifier(const WebFormElement& form) {
 }
 
 bool IsWebElementVisible(const blink::WebElement& element) {
-  // hasNonEmptyLayoutSize might trigger layout, but it didn't cause problems so
-  // far. If the layout is prohibited, hasNonEmptyLayoutSize is still used. See
-  // details in crbug.com/595078.
-  bool res = g_prevent_layout ? element.HasNonEmptyLayoutSize()
-                              : element.IsFocusable();
-  return res;
+  // Testing anything related to visibility is likely to trigger layout. If that
+  // should not happen, all elements are suspected of being visible. This is
+  // consistent with the default value of FormFieldData::is_focusable.
+  if (g_prevent_layout)
+    return true;
+  return element.IsFocusable();
 }
 
 std::vector<blink::WebFormControlElement> ExtractAutofillableElementsFromSet(
@@ -1472,8 +1501,7 @@ void WebFormControlElementToFormField(
       IsTextAreaElement(element) ||
       IsSelectElement(element)) {
     field->is_autofilled = element.IsAutofilled();
-    if (!g_prevent_layout)
-      field->is_focusable = element.IsFocusable();
+    field->is_focusable = IsWebElementVisible(element);
     field->should_autocomplete = element.AutoComplete();
 
     // Use 'text-align: left|right' if set or 'direction' otherwise.
@@ -1485,6 +1513,9 @@ void WebFormControlElementToFormField(
       field->text_direction = base::i18n::LEFT_TO_RIGHT;
     else if (element.AlignmentForFormData() == "right")
       field->text_direction = base::i18n::RIGHT_TO_LEFT;
+    field->is_enabled = element.IsEnabled();
+    field->is_readonly = element.IsReadOnly();
+    field->is_default = element.GetAttribute("value") == element.Value();
   }
 
   if (IsAutofillableInputElement(input_element)) {
@@ -1530,6 +1561,24 @@ void WebFormControlElementToFormField(
   TruncateString(&value, kMaxDataLength);
 
   field->value = value;
+
+  // If the field was autofilled or the user typed into it, check the value
+  // stored in |field_value_and_properties_map| against the value property of
+  // the DOM element. If they differ, then the scripts on the website modified
+  // the value afterwards. Store the original value as the |typed_value|, unless
+  // this is one of recognised situations when the site-modified value is more
+  // useful for filling.
+  if (field_value_and_properties_map &&
+      field->properties_mask & (FieldPropertiesFlags::USER_TYPED |
+                                FieldPropertiesFlags::AUTOFILLED)) {
+    const base::string16 typed_value =
+        *field_value_and_properties_map->at(element).first;
+
+    if (!ScriptModifiedUsernameAcceptable(value, typed_value,
+                                          *field_value_and_properties_map)) {
+      field->typed_value = typed_value;
+    }
+  }
 }
 
 bool WebFormElementToFormData(

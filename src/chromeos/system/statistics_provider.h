@@ -19,6 +19,15 @@ CHROMEOS_EXPORT extern const char kActivateDateKey[];
 // The key that will be present in VPD if the device ever was enrolled.
 CHROMEOS_EXPORT extern const char kCheckEnrollmentKey[];
 
+// The key and values present in VPD to indicate if RLZ ping should be sent.
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingKey[];
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingValueFalse[];
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingValueTrue[];
+
+// The key present in VPD that indicates the date after which the RLZ ping is
+// allowed to be sent. It is in the format of "yyyy-mm-dd".
+CHROMEOS_EXPORT extern const char kRlzEmbargoEndDateKey[];
+
 // Customization ID key.
 CHROMEOS_EXPORT extern const char kCustomizationIdKey[];
 
@@ -85,13 +94,21 @@ class CHROMEOS_EXPORT StatisticsProvider {
   // Starts loading the machine statistics.
   virtual void StartLoadingMachineStatistics(bool load_oem_manifest) = 0;
 
+  // Schedules |callback| on the current sequence when machine statistics are
+  // loaded. That can be immediately if machine statistics are already loaded.
+  virtual void ScheduleOnMachineStatisticsLoaded(
+      base::OnceClosure callback) = 0;
+
+  // GetMachineStatistic(), GetMachineFlag() and GetEnterpriseMachineId() will
+  // block if called before statistics have been loaded. To avoid this, call
+  // from a callback passed to ScheduleOnMachineStatisticsLoaded(). These
+  // methods are safe to call on any sequence. StartLoadingMachineStatistics()
+  // must be called before these methods.
+
   // Returns true if the named machine statistic (e.g. "hardware_class") is
   // found and stores it in |result| (if provided). Probing for the existence of
   // a statistic by setting |result| to nullptr supresses the usual warning in
-  // case the statistic is not found. Safe to call from any thread except the
-  // task runner passed to Initialize() (e.g. FILE). This may block if called
-  // early before the statistics are loaded from disk.
-  // StartLoadingMachineStatistics() must be called before this.
+  // case the statistic is not found.
   virtual bool GetMachineStatistic(const std::string& name,
                                    std::string* result) = 0;
 

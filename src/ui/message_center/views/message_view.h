@@ -58,9 +58,10 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   // Creates a shadow around the notification and changes slide-out behavior.
   void SetIsNested();
 
+  bool IsCloseButtonFocused() const;
+  void RequestFocusOnCloseButton();
+
   virtual NotificationControlButtonsView* GetControlButtonsView() const = 0;
-  virtual bool IsCloseButtonFocused() const = 0;
-  virtual void RequestFocusOnCloseButton() = 0;
   virtual void UpdateControlButtonsVisibility() = 0;
 
   virtual void SetExpanded(bool expanded);
@@ -77,10 +78,12 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   virtual void OnContainerAnimationEnded();
 
   void OnCloseButtonPressed();
-  virtual void OnSettingsButtonPressed(const ui::LocatedEvent& event);
+  virtual void OnSettingsButtonPressed(const ui::Event& event);
 
   // views::View
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
@@ -88,8 +91,8 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   void OnFocus() override;
   void OnBlur() override;
   void Layout() override;
-  const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  const char* GetClassName() const final;
 
   // message_center::SlideOutController::Delegate
   ui::Layer* GetSlideOutLayer() override;

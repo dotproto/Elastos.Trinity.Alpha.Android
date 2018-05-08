@@ -16,6 +16,38 @@ const char kAutofillIOSDelayBetweenFieldsDescription[] =
     "Delay between the different fields of a form being autofilled. In "
     "milliseconds.";
 
+const char kAutofillDynamicFormsName[] = "Autofill dynamic forms";
+const char kAutofillDynamicFormsDescription[] =
+    "Refills forms that dynamically change after an initial fill";
+
+const char kAutofillEnforceMinRequiredFieldsForHeuristicsName[] =
+    "Autofill Enforce Min Required Fields For Heuristics";
+const char kAutofillEnforceMinRequiredFieldsForHeuristicsDescription[] =
+    "When enabled, autofill will generally require a form to have at least 3 "
+    "fields before allowing heuristic field-type prediction to occur.";
+
+const char kAutofillEnforceMinRequiredFieldsForQueryName[] =
+    "Autofill Enforce Min Required Fields For Query";
+const char kAutofillEnforceMinRequiredFieldsForQueryDescription[] =
+    "When enabled, autofill will generally require a form to have at least 3 "
+    "fields before querying the autofill server for field-type predictions.";
+
+const char kAutofillEnforceMinRequiredFieldsForUploadName[] =
+    "Autofill Enforce Min Required Fields For Upload";
+const char kAutofillEnforceMinRequiredFieldsForUploadDescription[] =
+    "When enabled, autofill will generally require a form to have at least 3 "
+    "fillable fields before uploading field-type votes for that form.";
+
+const char kAutofillRestrictUnownedFieldsToFormlessCheckoutName[] =
+    "Restrict formless form extraction";
+const char kAutofillRestrictUnownedFieldsToFormlessCheckoutDescription[] =
+    "Restrict extraction of formless forms to checkout flows";
+
+const char kBrowserContainerFullscreenName[] = "Browser Container Fullscreen";
+const char kBrowserContainerFullscreenDescription[] =
+    "When enabled, the BrowserContainer is fullscreen. No UI change should be "
+    "visible.";
+
 const char kBrowserTaskScheduler[] = "Task Scheduler";
 const char kBrowserTaskSchedulerDescription[] =
     "Enables redirection of some task posting APIs to the task scheduler.";
@@ -53,6 +85,16 @@ const char kExternalSearchDescription[] = "Enable support for External Search.";
 
 const char kFeedbackKitV2Name[] = "FeedbackKit V2";
 const char kFeedbackKitV2Description[] = "Enable use of FeedbackKit V2.";
+const char kFeedbackKitV2WithSSOServiceName[] =
+    "FeedbackKit V2 with SSOService configured for FeedbackKit";
+const char kFeedbackKitV2WithSSOServiceDescription[] =
+    "Send SSOService with configuration for FeedbackKit V2.";
+
+const char kFullscreenViewportAdjustmentExperimentName[] =
+    "Fullscreen Viewport Adjustment Mode";
+const char kFullscreenViewportAdjustmentExperimentDescription[] =
+    "The different ways in which the web view's viewport is updated for scroll "
+    "events.  The default option updates the web view's frame.";
 
 const char kHistoryBatchUpdatesFilterName[] = "History Single Batch Filtering";
 const char kHistoryBatchUpdatesFilterDescription[] =
@@ -65,6 +107,11 @@ const char kInProductHelpDemoModeDescription[] =
     "start. Enabled causes all in-product help promotions to occur. Enabling "
     "an individual promotion causes that promotion but no other promotions to "
     "occur.";
+
+const char kITunesLinksStoreKitHandlingName[] = "Store kit for ITunes links";
+const char kITunesLinksStoreKitHandlingDescription[] =
+    "When enabled, opening itunes product links will be handled using the "
+    "store kit.";
 
 const char kMailtoHandlingWithGoogleUIName[] = "Mailto Handling with Google UI";
 const char kMailtoHandlingWithGoogleUIDescription[] =
@@ -126,14 +173,20 @@ const char kTabSwitcherPresentsBVCDescription[] =
     "BVC is visible, the tab switcher will remain in the VC hierarchy "
     "underneath it.";
 
-const char kTabSwitcherTabGridName[] = "TabSwitcher Tab Grid";
-const char kTabSwitcherTabGridDescription[] =
-    "When enabled, the tab grid will be used as the tab switcher for both "
-    "phone and tablet.";
+const char kUIRefreshLocationBarName[] = "UI Refresh Location Bar";
+const char kUIRefreshLocationBarDescription[] =
+    "When enabled, the UI Refresh location bar with a custom steady-state will "
+    "be displayed.";
 
 const char kUIRefreshPhase1Name[] = "UI Refresh Phase 1";
 const char kUIRefreshPhase1Description[] =
     "When enabled, the first phase of the iOS UI refresh will be displayed.";
+
+const char kUnifiedConsentName[] = "Unified Consent";
+const char kUnifiedConsentDescription[] =
+    "Enables a unified management of user consent for privacy-related "
+    "features. This includes new confirmation screens and improved settings "
+    "pages.";
 
 const char kUseDdljsonApiName[] = "Use new ddljson API for Doodles";
 const char kUseDdljsonApiDescription[] =

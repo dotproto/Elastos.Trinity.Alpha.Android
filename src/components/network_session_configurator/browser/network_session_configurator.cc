@@ -25,7 +25,7 @@
 #include "net/http/http_stream_factory.h"
 #include "net/quic/chromium/quic_utils_chromium.h"
 #include "net/quic/core/quic_packets.h"
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 
 namespace {
 
@@ -155,10 +155,10 @@ bool ShouldMarkQuicBrokenWhenNetworkBlackholes(
 
 bool ShouldRetryWithoutAltSvcOnQuicErrors(
     const VariationParameters& quic_trial_params) {
-  return base::LowerCaseEqualsASCII(
+  return !base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params,
                         "retry_without_alt_svc_on_quic_errors"),
-      "true");
+      "false");
 }
 
 bool ShouldSupportIetfFormatQuicAltSvc(
@@ -584,6 +584,8 @@ void ParseCommandLineAndFieldTrials(const base::CommandLine& command_line,
 
   params->enable_token_binding =
       base::FeatureList::IsEnabled(features::kTokenBinding);
+  params->enable_channel_id =
+      base::FeatureList::IsEnabled(features::kChannelID);
 }
 
 net::URLRequestContextBuilder::HttpCacheParams::Type ChooseCacheType(

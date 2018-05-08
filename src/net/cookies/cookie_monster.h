@@ -57,9 +57,6 @@ class CookieChangeDispatcher;
 // latter case, the cookie callback will be queued in tasks_pending_for_key_
 // while PermanentCookieStore loads cookies for the specified domain key on DB
 // thread.
-//
-// TODO(deanm) Implement CookieMonster, the cookie database.
-//  - Verify that our domain enforcement and non-dotted handling is correct
 class NET_EXPORT CookieMonster : public CookieStore {
  public:
   class PersistentCookieStore;
@@ -174,14 +171,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
                          base::OnceClosure callback) override;
   void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                   DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
-                                    const base::Time& delete_end,
-                                    DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenWithPredicateAsync(
-      const base::Time& delete_begin,
-      const base::Time& delete_end,
-      const base::Callback<bool(const CanonicalCookie&)>& predicate,
+  void DeleteAllCreatedInTimeRangeAsync(
+      const CookieDeletionInfo::TimeRange& creation_range,
       DeleteCallback callback) override;
+  void DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
+                                  DeleteCallback callback) override;
   void DeleteSessionCookiesAsync(DeleteCallback) override;
   void FlushStore(base::OnceClosure callback) override;
   void SetForceKeepSessionState() override;
@@ -206,6 +200,9 @@ class NET_EXPORT CookieMonster : public CookieStore {
   static const int kDefaultCookieableSchemesCount;
 
   bool IsEphemeral() override;
+
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_absolute_name) const override;
 
   // Find a key based on the given domain, which will be used to find all
   // cookies potentially relevant to it. This is used for lookup in cookies_ as
@@ -377,16 +374,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                 const CookieOptions& options,
                                 GetCookieListCallback callback);
 
-  void DeleteAllCreatedBetween(const base::Time& delete_begin,
-                               const base::Time& delete_end,
-                               DeleteCallback callback);
-
-  // Predicate will be called with the calling thread.
-  void DeleteAllCreatedBetweenWithPredicate(
-      const base::Time& delete_begin,
-      const base::Time& delete_end,
-      const base::Callback<bool(const CanonicalCookie&)>& predicate,
+  void DeleteAllCreatedInTimeRange(
+      const CookieDeletionInfo::TimeRange& creation_range,
       DeleteCallback callback);
+
+  void DeleteAllMatchingInfo(net::CookieDeletionInfo delete_info,
+                             DeleteCallback callback);
 
   void SetCookieWithOptions(const GURL& url,
                             const std::string& cookie_line,
@@ -642,12 +635,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // create a value that compares earlier than any other time value, which is
   // wanted.  Thus this value is not initialized.
   base::Time earliest_access_time_;
-
-  // During loading, holds the set of all loaded cookie creation times. Used to
-  // avoid ever letting cookies with duplicate creation times into the store;
-  // that way we don't have to worry about what sections of code are safe
-  // to call while it's in that state.
-  std::set<int64_t> creation_times_;
 
   std::vector<std::string> cookieable_schemes_;
 

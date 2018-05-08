@@ -32,6 +32,7 @@ class AutofillHandlerProxy : public AutofillHandler {
   void OnHidePopup() override;
   void OnSetDataList(const std::vector<base::string16>& values,
                      const std::vector<base::string16>& labels) override;
+  void SelectFieldOptionsDidChange(const FormData& form) override;
 
   void Reset() override;
 
@@ -40,7 +41,7 @@ class AutofillHandlerProxy : public AutofillHandler {
   }
 
  protected:
-  bool OnFormSubmittedImpl(const FormData& form,
+  void OnFormSubmittedImpl(const FormData& form,
                            bool known_success,
                            SubmissionSource source,
                            base::TimeTicks timestamp) override;

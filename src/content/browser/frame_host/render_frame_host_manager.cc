@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/debug_urls.h"
@@ -35,7 +36,6 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/site_isolation_policy.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -46,10 +46,15 @@
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
+
+#if defined(OS_MACOSX)
+#include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
+#endif  // defined(OS_MACOSX)
 
 namespace content {
 
@@ -420,7 +425,7 @@ void RenderFrameHostManager::DiscardUnusedFrame(
   // deleted below.  See https://crbug.com/627400.
   if (frame_tree_node_->IsMainFrame()) {
     rvh->set_main_frame_routing_id(MSG_ROUTING_NONE);
-    rvh->set_is_active(false);
+    rvh->SetIsActive(false);
     rvh->set_is_swapped_out(true);
   }
 
@@ -1033,9 +1038,10 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
     CHECK_NE(new_instance, current_instance);
 
   if (new_instance == current_instance) {
-    // If we're navigating to the same site instance, we won't need to use any
-    // spare RenderProcessHost.
-    RenderProcessHostImpl::CleanupSpareRenderProcessHost();
+    // If we're navigating to the same site instance, we won't need to use the
+    // current spare RenderProcessHost.
+    RenderProcessHostImpl::NotifySpareManagerAboutRecentlyUsedBrowserContext(
+        browser_context);
   }
 
   // Double-check that the new SiteInstance is associated with the right
@@ -1256,10 +1262,9 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
   // redirect arbitary requests to those URLs using webRequest or
   // declarativeWebRequest API.  For these cases, the content isn't controlled
   // by the source SiteInstance, so it need not use it.
-  GURL about_blank(url::kAboutBlankURL);
   GURL about_srcdoc(content::kAboutSrcDocURL);
   bool dest_is_data_or_about = dest_url == about_srcdoc ||
-                               dest_url == about_blank ||
+                               dest_url.IsAboutBlank() ||
                                dest_url.scheme() == url::kDataScheme;
   if (source_instance && dest_is_data_or_about && !was_server_redirect)
     return SiteInstanceDescriptor(source_instance);
@@ -1493,13 +1498,22 @@ bool RenderFrameHostManager::IsCurrentlySameSite(RenderFrameHostImpl* candidate,
                                                  const GURL& dest_url) {
   BrowserContext* browser_context =
       delegate_->GetControllerForRenderManager().GetBrowserContext();
-
-  // Don't compare effective URLs for subframe navigations, since we don't want
-  // to create OOPIFs based on that mechanism (e.g., for hosted apps).
-  // See https://crbug.com/718516.
-  // TODO(creis): This should eventually call out to embedder to help decide,
-  // if we can find a way to make decisions about popups based on their opener.
-  bool should_compare_effective_urls = frame_tree_node_->IsMainFrame();
+  // Don't compare effective URLs for all subframe navigations, since we don't
+  // want to create OOPIFs based on that mechanism (e.g., for hosted apps). For
+  // main frames, don't compare effective URLs when transitioning from app to
+  // non-app URLs if there exists another app WebContents that might script
+  // this one.  These navigations should stay in the app process to not break
+  // scripting when a hosted app opens a same-site popup. See
+  // https://crbug.com/718516 and https://crbug.com/828720.
+  bool src_has_effective_url = SiteInstanceImpl::HasEffectiveURL(
+      browser_context, candidate->GetSiteInstance()->original_url());
+  bool dest_has_effective_url =
+      SiteInstanceImpl::HasEffectiveURL(browser_context, dest_url);
+  bool should_compare_effective_urls = true;
+  if (!frame_tree_node_->IsMainFrame() ||
+      (src_has_effective_url && !dest_has_effective_url &&
+       candidate->GetSiteInstance()->GetRelatedActiveContentsCount() > 1u))
+    should_compare_effective_urls = false;
 
   // If the process type is incorrect, reject the candidate even if |dest_url|
   // is same-site.  (The URL may have been installed as an app since
@@ -1509,12 +1523,9 @@ bool RenderFrameHostManager::IsCurrentlySameSite(RenderFrameHostImpl* candidate,
   // hosted app to non-hosted app, and vice versa, in the same process.
   // Otherwise, this would return false due to a process privilege level
   // mismatch.
-  bool src_or_dest_has_effective_url =
-      (SiteInstanceImpl::HasEffectiveURL(browser_context, dest_url) ||
-       SiteInstanceImpl::HasEffectiveURL(
-           browser_context, candidate->GetSiteInstance()->original_url()));
   bool should_check_for_wrong_process =
-      should_compare_effective_urls || !src_or_dest_has_effective_url;
+      should_compare_effective_urls ||
+      (!src_has_effective_url && !dest_has_effective_url);
   if (should_check_for_wrong_process &&
       candidate->GetSiteInstance()->HasWrongProcessForURL(dest_url))
     return false;
@@ -2071,6 +2082,17 @@ void RenderFrameHostManager::CommitPending() {
                "FrameTreeNode id", frame_tree_node_->frame_tree_node_id());
   DCHECK(speculative_render_frame_host_);
 
+#if defined(OS_MACOSX)
+  // The old RenderWidgetHostView will be hidden before the new
+  // RenderWidgetHostView takes its contents. Ensure that Cocoa sees this as
+  // a single transaction.
+  // https://crbug.com/829523
+  // TODO(ccameron): This can be removed when the RenderWidgetHostViewMac uses
+  // the same ui::Compositor as MacViews.
+  // https://crbug.com/331669
+  gfx::ScopedCocoaDisableScreenUpdates disabler;
+#endif  // defined(OS_MACOSX)
+
   bool is_main_frame = frame_tree_node_->IsMainFrame();
 
   // First check whether we're going to want to focus the location bar after
@@ -2097,15 +2119,6 @@ void RenderFrameHostManager::CommitPending() {
   DCHECK(speculative_render_frame_host_);
   old_render_frame_host =
       SetRenderFrameHost(std::move(speculative_render_frame_host_));
-
-  // Save off the old background color before possibly deleting the
-  // old RenderWidgetHostView.
-  SkColor old_background_color = SK_ColorWHITE;
-  bool has_old_background_color = false;
-  if (old_render_frame_host->GetView()) {
-    has_old_background_color = true;
-    old_background_color = old_render_frame_host->GetView()->background_color();
-  }
 
   // For top-level frames, also hide the old RenderViewHost's view.
   // TODO(creis): As long as show/hide are on RVH, we don't want to hide on
@@ -2148,8 +2161,13 @@ void RenderFrameHostManager::CommitPending() {
   delegate_->NotifySwappedFromRenderManager(
       old_render_frame_host.get(), render_frame_host_.get(), is_main_frame);
 
-  if (has_old_background_color && render_frame_host_->GetView())
-    render_frame_host_->GetView()->SetBackgroundColor(old_background_color);
+  // Make the new view show the contents of old view until it has something
+  // useful to show.
+  if (is_main_frame && old_render_frame_host->GetView() &&
+      render_frame_host_->GetView()) {
+    render_frame_host_->GetView()->TakeFallbackContentFrom(
+        old_render_frame_host->GetView());
+  }
 
   // The RenderViewHost keeps track of the main RenderFrameHost routing id.
   // If this is committing a main frame navigation, update it and set the
@@ -2169,7 +2187,7 @@ void RenderFrameHostManager::CommitPending() {
     if (!rvh->is_active())
       rvh->PostRenderViewReady();
 
-    rvh->set_is_active(true);
+    rvh->SetIsActive(true);
     rvh->set_is_swapped_out(false);
     old_render_frame_host->render_view_host()->set_main_frame_routing_id(
         MSG_ROUTING_NONE);

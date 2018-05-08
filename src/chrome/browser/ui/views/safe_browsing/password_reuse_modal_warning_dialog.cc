@@ -45,8 +45,6 @@ PasswordReuseModalWarningDialog::PasswordReuseModalWarningDialog(
     ChromePasswordProtectionService* service,
     OnWarningDone done_callback)
     : content::WebContentsObserver(web_contents),
-      show_softer_warning_(
-          PasswordProtectionService::ShouldShowSofterWarning()),
       done_callback_(std::move(done_callback)),
       service_(service),
       url_(web_contents->GetLastCommittedURL()) {
@@ -60,7 +58,9 @@ PasswordReuseModalWarningDialog::PasswordReuseModalWarningDialog(
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   views::Label* message_body_label = new views::Label(
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS));
+      service_
+          ? service_->GetWarningDetailText()
+          : l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS));
   message_body_label->SetMultiLine(true);
   message_body_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message_body_label->SetHandlesTooltips(false);
@@ -93,9 +93,7 @@ ui::ModalType PasswordReuseModalWarningDialog::GetModalType() const {
 }
 
 base::string16 PasswordReuseModalWarningDialog::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(
-      show_softer_warning_ ? IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY_SOFTER
-                           : IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY);
+  return l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY);
 }
 
 bool PasswordReuseModalWarningDialog::ShouldShowCloseButton() const {
@@ -103,11 +101,7 @@ bool PasswordReuseModalWarningDialog::ShouldShowCloseButton() const {
 }
 
 gfx::ImageSkia PasswordReuseModalWarningDialog::GetWindowIcon() {
-  return show_softer_warning_
-             ? gfx::CreateVectorIcon(kSecurityIcon, kIconSize,
-                                     gfx::kChromeIconGrey)
-             : gfx::CreateVectorIcon(vector_icons::kWarningIcon, kIconSize,
-                                     gfx::kGoogleRed700);
+  return gfx::CreateVectorIcon(kSecurityIcon, kIconSize, gfx::kChromeIconGrey);
 }
 
 bool PasswordReuseModalWarningDialog::ShouldShowWindowIcon() const {

@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.vr_shell;
 import static org.chromium.chrome.browser.vr_shell.VrTestFramework.NATIVE_URLS_OF_INTEREST;
 import static org.chromium.chrome.browser.vr_shell.VrTestFramework.PAGE_LOAD_TIMEOUT_S;
 import static org.chromium.chrome.browser.vr_shell.VrTestFramework.POLL_TIMEOUT_LONG_MS;
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DEVICE_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
 
 import android.support.test.filters.MediumTest;
 
@@ -31,7 +31,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-webvr"})
-@Restriction(RESTRICTION_TYPE_DEVICE_DAYDREAM)
+@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
 public class VrShellNativeUiTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
     // only ever runs in ChromeTabbedActivity.
@@ -39,7 +39,7 @@ public class VrShellNativeUiTest {
     public ChromeTabbedActivityVrTestRule mVrTestRule = new ChromeTabbedActivityVrTestRule();
 
     private static final String TEST_PAGE_2D_URL =
-            VrTestFramework.getHtmlTestFile("test_navigation_2d_page");
+            VrTestFramework.getFileUrlForHtmlTestFile("test_navigation_2d_page");
 
     @Before
     public void setUp() throws Exception {

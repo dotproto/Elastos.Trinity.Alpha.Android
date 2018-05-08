@@ -9,8 +9,12 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/search/search_model.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/shell.h"
+#include "ash/shell_port.h"
 #include "ash/wallpaper/wallpaper_controller.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 
 namespace ash {
 
@@ -29,11 +33,34 @@ app_list::SearchModel* AppListViewDelegateMash::GetSearchModel() {
 }
 
 void AppListViewDelegateMash::StartSearch(const base::string16& raw_query) {
+  last_raw_query_ = raw_query;
   owner_->StartSearch(raw_query);
 }
 
 void AppListViewDelegateMash::OpenSearchResult(const std::string& result_id,
                                                int event_flags) {
+  app_list::SearchResult* result =
+      owner_->search_model()->FindSearchResult(result_id);
+  if (!result)
+    return;
+
+  UMA_HISTOGRAM_ENUMERATION(app_list::kSearchResultOpenDisplayTypeHistogram,
+                            result->display_type(),
+                            ash::SearchResultDisplayType::kLast);
+
+  // Record the search metric if the SearchResult is not a suggested app.
+  if (result->display_type() != ash::SearchResultDisplayType::kRecommendation) {
+    // Count AppList.Search here because it is composed of search + action.
+    base::RecordAction(base::UserMetricsAction("AppList_OpenSearchResult"));
+
+    UMA_HISTOGRAM_COUNTS_100(app_list::kSearchQueryLength,
+                             last_raw_query_.size());
+
+    if (result->distance_from_origin() >= 0) {
+      UMA_HISTOGRAM_COUNTS_100(app_list::kSearchResultDistanceFromOrigin,
+                               result->distance_from_origin());
+    }
+  }
   owner_->OpenSearchResult(result_id, event_flags);
 }
 
@@ -42,6 +69,12 @@ void AppListViewDelegateMash::InvokeSearchResultAction(
     int action_index,
     int event_flags) {
   owner_->InvokeSearchResultAction(result_id, action_index, event_flags);
+}
+
+void AppListViewDelegateMash::GetSearchResultContextMenuModel(
+    const std::string& result_id,
+    GetContextMenuModelCallback callback) {
+  owner_->GetSearchResultContextMenuModel(result_id, std::move(callback));
 }
 
 void AppListViewDelegateMash::ViewShown(int64_t display_id) {
@@ -86,6 +119,12 @@ void AppListViewDelegateMash::AddObserver(
 void AppListViewDelegateMash::RemoveObserver(
     app_list::AppListViewDelegateObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void AppListViewDelegateMash::ShowWallpaperContextMenu(
+    const gfx::Point& onscreen_location,
+    ui::MenuSourceType source_type) {
+  ShellPort::Get()->ShowContextMenu(onscreen_location, source_type);
 }
 
 }  // namespace ash

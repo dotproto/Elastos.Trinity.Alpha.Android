@@ -54,6 +54,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_display_chooser.h"
+#include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/supervised_user_creation_screen_handler.h"
@@ -114,7 +115,9 @@ const char kCustomElementsUserPodHTMLPath[] = "custom_elements_user_pod.html";
 const char kEnrollmentHTMLPath[] = "enrollment.html";
 const char kEnrollmentCSSPath[] = "enrollment.css";
 const char kEnrollmentJSPath[] = "enrollment.js";
+const char kArcAssistantLogoPath[] = "assistant_logo.png";
 const char kArcPlaystoreCSSPath[] = "playstore.css";
+const char kArcOverlayCSSPath[] = "overlay.css";
 const char kArcPlaystoreJSPath[] = "playstore.js";
 const char kArcPlaystoreLogoPath[] = "playstore.svg";
 const char kProductLogoPath[] = "product-logo.png";
@@ -168,11 +171,15 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   // No #else section here as Sync Settings screen is Chrome-specific.
 #endif
 
-  // Required for postprocessing of Goolge PlayStore Terms.
+  // Required for postprocessing of Goolge PlayStore Terms and Overlay help.
+  source->AddResourcePath(kArcOverlayCSSPath, IDR_ARC_SUPPORT_OVERLAY_CSS);
   source->AddResourcePath(kArcPlaystoreCSSPath, IDR_ARC_SUPPORT_PLAYSTORE_CSS);
   source->AddResourcePath(kArcPlaystoreJSPath, IDR_ARC_SUPPORT_PLAYSTORE_JS);
   source->AddResourcePath(kArcPlaystoreLogoPath,
       IDR_ARC_SUPPORT_PLAYSTORE_LOGO);
+
+  // Required for Assistant OOBE.
+  source->AddResourcePath(kArcAssistantLogoPath, IDR_ASSISTANT_LOGO_PNG);
 
   // Required in encryption migration screen.
   source->AddResourcePath(kProductLogoPath, IDR_PRODUCT_LOGO_64);
@@ -287,6 +294,8 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   AddScreenHandler(std::make_unique<SyncConsentScreenHandler>());
 
   AddScreenHandler(std::make_unique<ArcTermsOfServiceScreenHandler>());
+
+  AddScreenHandler(std::make_unique<RecommendAppsScreenHandler>());
 
   AddScreenHandler(std::make_unique<UserImageScreenHandler>());
 
@@ -434,6 +443,10 @@ ArcTermsOfServiceScreenView* OobeUI::GetArcTermsOfServiceScreenView() {
   return GetView<ArcTermsOfServiceScreenHandler>();
 }
 
+RecommendAppsScreenView* OobeUI::GetRecommendAppsScreenView() {
+  return GetView<RecommendAppsScreenHandler>();
+}
+
 WrongHWIDScreenView* OobeUI::GetWrongHWIDScreenView() {
   return GetView<WrongHWIDScreenHandler>();
 }
@@ -531,11 +544,6 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
   oobe_ui_md_mode_ =
       g_browser_process->local_state()->GetBoolean(prefs::kOobeMdMode);
   localized_strings->SetString("newOobeUI", oobe_ui_md_mode_ ? "on" : "off");
-  localized_strings->SetString(
-      "errorScreenMDMode", base::CommandLine::ForCurrentProcess()->HasSwitch(
-                               chromeos::switches::kDisableMdErrorScreen)
-                               ? "off"
-                               : "on");
   localized_strings->SetString(
       "showViewsLock", ash::switches::IsUsingViewsLock() ? "on" : "off");
   localized_strings->SetString(

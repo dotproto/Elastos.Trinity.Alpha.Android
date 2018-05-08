@@ -31,7 +31,7 @@ cr.define('extension_options_dialog_tests', function() {
     });
 
     function isDialogVisible() {
-      var dialogElement = optionsDialog.$$('dialog');
+      var dialogElement = optionsDialog.$.dialog.getNative();
       var rect = dialogElement.getBoundingClientRect();
       return rect.width * rect.height > 0;
     }
@@ -40,9 +40,14 @@ cr.define('extension_options_dialog_tests', function() {
       // Try showing the dialog.
       assertFalse(isDialogVisible());
       optionsDialog.show(data);
+      const dialogElement = optionsDialog.$.dialog.getNative();
       return test_util.whenAttributeIs(
-          optionsDialog.$.dialog, 'open', '').then(function() {
+          dialogElement, 'open', '').then(function() {
         assertTrue(isDialogVisible());
+
+        const rect = dialogElement.getBoundingClientRect();
+        assertGE(rect.width, extensions.OptionsDialogMinWidth);
+        assertLE(rect.height, extensions.OptionsDialogMaxHeight);
 
         assertEquals(
             data.name,

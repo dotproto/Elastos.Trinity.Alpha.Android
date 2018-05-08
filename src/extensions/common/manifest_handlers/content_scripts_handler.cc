@@ -11,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -363,9 +362,9 @@ ContentScriptsHandler::ContentScriptsHandler() {}
 
 ContentScriptsHandler::~ContentScriptsHandler() {}
 
-const std::vector<std::string> ContentScriptsHandler::Keys() const {
-  static const char* const keys[] = {keys::kContentScripts};
-  return std::vector<std::string>(keys, keys + arraysize(keys));
+base::span<const char* const> ContentScriptsHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kContentScripts};
+  return kKeys;
 }
 
 bool ContentScriptsHandler::Parse(Extension* extension, base::string16* error) {

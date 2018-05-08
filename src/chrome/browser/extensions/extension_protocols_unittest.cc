@@ -22,6 +22,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/test/mock_resource_context.h"
@@ -40,6 +41,7 @@
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/common/file_util.h"
+#include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -97,40 +99,36 @@ scoped_refptr<Extension> CreateTestExtension(const std::string& name,
 }
 
 scoped_refptr<Extension> CreateWebStoreExtension() {
-  base::DictionaryValue manifest;
-  manifest.SetString("name", "WebStore");
-  manifest.SetString("version", "1");
-  manifest.SetString("icons.16", "webstore_icon_16.png");
+  std::unique_ptr<base::DictionaryValue> manifest =
+      DictionaryBuilder()
+          .Set("name", "WebStore")
+          .Set("version", "1")
+          .Set("manifest_version", 2)
+          .Set("icons",
+               DictionaryBuilder().Set("16", "webstore_icon_16.png").Build())
+          .Set("web_accessible_resources",
+               ListBuilder().Append("webstore_icon_16.png").Build())
+          .Build();
 
   base::FilePath path;
   EXPECT_TRUE(PathService::Get(chrome::DIR_RESOURCES, &path));
   path = path.AppendASCII("web_store");
 
   std::string error;
-  scoped_refptr<Extension> extension(
-      Extension::Create(path, Manifest::COMPONENT, manifest,
-                        Extension::NO_FLAGS, &error));
+  scoped_refptr<Extension> extension(Extension::Create(
+      path, Manifest::COMPONENT, *manifest, Extension::NO_FLAGS, &error));
   EXPECT_TRUE(extension.get()) << error;
   return extension;
 }
 
 scoped_refptr<Extension> CreateTestResponseHeaderExtension() {
-  base::DictionaryValue manifest;
-  manifest.SetString("name", "An extension with web-accessible resources");
-  manifest.SetString("version", "2");
-
-  auto web_accessible_list = std::make_unique<base::ListValue>();
-  web_accessible_list->AppendString("test.dat");
-  manifest.Set("web_accessible_resources", std::move(web_accessible_list));
-
-  base::FilePath path = GetTestPath("response_headers");
-
-  std::string error;
-  scoped_refptr<Extension> extension(
-      Extension::Create(path, Manifest::UNPACKED, manifest,
-                        Extension::NO_FLAGS, &error));
-  EXPECT_TRUE(extension.get()) << error;
-  return extension;
+  DictionaryBuilder web_accessible_resources;
+  web_accessible_resources.Set("web_accessible_resources",
+                               ListBuilder().Append("test.dat").Build());
+  return ExtensionBuilder("An extension with web-accessible resources")
+      .MergeManifest(web_accessible_resources.Build())
+      .SetPath(GetTestPath("response_headers"))
+      .Build();
 }
 
 // Helper function to create a |ResourceRequest| for testing purposes.
@@ -224,7 +222,8 @@ class ExtensionProtocolsTest
     switch (request_handler()) {
       case RequestHandlerType::kURLLoader:
         loader_factory_ = extensions::CreateExtensionNavigationURLLoaderFactory(
-            main_rfh(), extension_info_map_.get());
+            main_rfh()->GetProcess()->GetID(), main_rfh()->GetRoutingID(),
+            extension_info_map_.get());
         break;
       case RequestHandlerType::kURLRequest:
         job_factory_.SetProtocolHandler(
@@ -657,6 +656,56 @@ TEST_P(ExtensionProtocolsTest, VerificationSeenForZeroByteFile) {
     EXPECT_EQ(net::ERR_FILE_NOT_FOUND,
               DoRequestOrLoad(extension, kEmptyJs).result());
     EXPECT_EQ(ContentVerifyJob::NONE, observer.WaitForJobFinished());
+  }
+}
+
+TEST_P(ExtensionProtocolsTest, VerifyScriptListedAsIcon) {
+  SetProtocolHandler(false);
+
+  const std::string kBackgroundJs("background.js");
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath unzipped_path = temp_dir.GetPath();
+
+  base::FilePath path;
+  EXPECT_TRUE(PathService::Get(extensions::DIR_TEST_DATA, &path));
+
+  scoped_refptr<Extension> extension =
+      content_verifier_test_utils::UnzipToDirAndLoadExtension(
+          path.AppendASCII("content_hash_fetcher")
+              .AppendASCII("manifest_mislabeled_script")
+              .AppendASCII("source.zip"),
+          unzipped_path);
+  ASSERT_TRUE(extension.get());
+
+  base::FilePath kRelativePath(FILE_PATH_LITERAL("background.js"));
+  ExtensionId extension_id = extension->id();
+
+  // Request background.js.
+  {
+    TestContentVerifySingleJobObserver observer(extension_id, kRelativePath);
+
+    content_verifier_->OnExtensionLoaded(browser_context(), extension.get());
+    // Wait for PostTask to ContentVerifierIOData::AddData() to finish.
+    base::RunLoop().RunUntilIdle();
+
+    EXPECT_EQ(net::OK, DoRequestOrLoad(extension, kBackgroundJs).result());
+    EXPECT_EQ(ContentVerifyJob::NONE, observer.WaitForJobFinished());
+  }
+
+  // Modify background.js and request it.
+  {
+    base::FilePath file_path = unzipped_path.AppendASCII("background.js");
+    const std::string content = "new content";
+    EXPECT_NE(base::WriteFile(file_path, content.c_str(), content.size()), -1);
+    TestContentVerifySingleJobObserver observer(extension_id, kRelativePath);
+
+    content_verifier_->OnExtensionLoaded(browser_context(), extension.get());
+    // Wait for PostTask to ContentVerifierIOData::AddData() to finish.
+    base::RunLoop().RunUntilIdle();
+
+    EXPECT_EQ(net::OK, DoRequestOrLoad(extension, kBackgroundJs).result());
+    EXPECT_EQ(ContentVerifyJob::HASH_MISMATCH, observer.WaitForJobFinished());
   }
 }
 

@@ -5,9 +5,8 @@
 #include "cc/blink/web_layer_impl_fixed_bounds.h"
 
 #include "cc/layers/layer.h"
-#include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/skia/include/core/SkMatrix44.h"
+#include "third_party/blink/public/platform/web_float_point.h"
+#include "third_party/blink/public/platform/web_size.h"
 
 using cc::Layer;
 
@@ -21,42 +20,40 @@ WebLayerImplFixedBounds::WebLayerImplFixedBounds(scoped_refptr<Layer> layer)
 
 WebLayerImplFixedBounds::~WebLayerImplFixedBounds() = default;
 
-void WebLayerImplFixedBounds::InvalidateRect(const blink::WebRect& rect) {
+void WebLayerImplFixedBounds::InvalidateRect(const gfx::Rect& rect) {
   // Partial invalidations seldom occur for such layers.
   // Simply invalidate the whole layer to avoid transformation of coordinates.
   Invalidate();
 }
 
 void WebLayerImplFixedBounds::SetTransformOrigin(
-    const blink::WebFloatPoint3D& transform_origin) {
+    const gfx::Point3F& transform_origin) {
   if (transform_origin != this->TransformOrigin()) {
     layer_->SetTransformOrigin(transform_origin);
     UpdateLayerBoundsAndTransform();
   }
 }
 
-void WebLayerImplFixedBounds::SetBounds(const blink::WebSize& bounds) {
+void WebLayerImplFixedBounds::SetBounds(const gfx::Size& bounds) {
   if (original_bounds_ != gfx::Size(bounds)) {
     original_bounds_ = bounds;
     UpdateLayerBoundsAndTransform();
   }
 }
 
-blink::WebSize WebLayerImplFixedBounds::Bounds() const {
+const gfx::Size& WebLayerImplFixedBounds::Bounds() const {
   return original_bounds_;
 }
 
-void WebLayerImplFixedBounds::SetTransform(const SkMatrix44& matrix) {
-  gfx::Transform transform;
-  transform.matrix() = matrix;
+void WebLayerImplFixedBounds::SetTransform(const gfx::Transform& transform) {
   SetTransformInternal(transform);
 }
 
-SkMatrix44 WebLayerImplFixedBounds::Transform() const {
-  return original_transform_.matrix();
+const gfx::Transform& WebLayerImplFixedBounds::Transform() const {
+  return original_transform_;
 }
 
-void WebLayerImplFixedBounds::SetFixedBounds(gfx::Size fixed_bounds) {
+void WebLayerImplFixedBounds::SetFixedBounds(const gfx::Size& fixed_bounds) {
   if (fixed_bounds_ != fixed_bounds) {
     fixed_bounds_ = fixed_bounds;
     UpdateLayerBoundsAndTransform();
@@ -76,7 +73,7 @@ void WebLayerImplFixedBounds::UpdateLayerBoundsAndTransform() {
       fixed_bounds_ == original_bounds_ ||
       // For now fall back to non-fixed bounds for non-zero transform origin.
       // TODO(wangxianzhu): Support non-zero anchor point for fixed bounds.
-      TransformOrigin().x || TransformOrigin().y) {
+      TransformOrigin().x() || TransformOrigin().y()) {
     layer_->SetBounds(original_bounds_);
     layer_->SetTransform(original_transform_);
     return;

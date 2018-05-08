@@ -10,7 +10,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -399,7 +398,7 @@ std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
     const {
   return ShouldUseFloodFillInkDrop()
              ? std::make_unique<views::InkDropHighlight>(
-                   size(), kInkDropSmallCornerRadius,
+                   size(), ink_drop_small_corner_radius(),
                    gfx::RectF(GetLocalBounds()).CenterPoint(),
                    GetInkDropBaseColor())
              : CreateDefaultInkDropHighlight(

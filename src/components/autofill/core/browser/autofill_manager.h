@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -160,11 +161,12 @@ class AutofillManager : public AutofillHandler,
 
   // Will send an upload based on the |form_structure| data and the local
   // Autofill profile data. |observed_submission| is specified if the upload
-  // follows an observed submission event.
-  // return false if the upload couldn't start.
-  virtual bool StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
-                                  const base::TimeTicks& timestamp,
-                                  bool observed_submission);
+  // follows an observed submission event. Returns false if the upload couldn't
+  // start.
+  virtual bool MaybeStartVoteUploadProcess(
+      std::unique_ptr<FormStructure> form_structure,
+      const base::TimeTicks& timestamp,
+      bool observed_submission);
 
   // Update the pending form with |form|, possibly processing the current
   // pending form for upload.
@@ -184,6 +186,7 @@ class AutofillManager : public AutofillHandler,
   void OnHidePopup() override;
   void OnSetDataList(const std::vector<base::string16>& values,
                      const std::vector<base::string16>& labels) override;
+  void SelectFieldOptionsDidChange(const FormData& form) override;
   void Reset() override;
 
   // Returns true if the value of the AutofillEnabled pref is true and the
@@ -238,7 +241,7 @@ class AutofillManager : public AutofillHandler,
                        std::string* profile_backend_id) const;
 
   // AutofillHandler:
-  bool OnFormSubmittedImpl(const FormData& form,
+  void OnFormSubmittedImpl(const FormData& form,
                            bool known_success,
                            SubmissionSource source,
                            base::TimeTicks timestamp) override;
@@ -287,6 +290,25 @@ class AutofillManager : public AutofillHandler,
   }
 
  private:
+  // Keeps track of the filling context for a form, used to make refill attemps.
+  struct FillingContext {
+    FillingContext();
+    ~FillingContext();
+
+    // Whether a refill attempt was made.
+    bool attempted_refill = false;
+    // The profile that was used for the initial fill.
+    AutofillProfile temp_data_model;
+    // The name of the field that was initially filled.
+    base::string16 filled_field_name;
+    // The time at which the initial fill occured.
+    base::TimeTicks original_fill_time;
+    // The timer used to trigger a refill.
+    base::OneShotTimer on_refill_timer;
+    // The field type groups that were initially filled.
+    std::set<FieldTypeGroup> type_groups_originally_filled;
+  };
+
   // AutofillDownloadManager::Observer:
   void OnLoadedServerPredictions(
       std::string response,
@@ -344,17 +366,7 @@ class AutofillManager : public AutofillHandler,
                                 const FormFieldData& field,
                                 const AutofillProfile& profile);
 
-  // TODO(rogerm) here to see if these can be merged. FormData should be a
-  // subset of the data in FormStructure and FormFieldData a subset of that in
-  // AutofillField.
   // Fills or previews |data_model| in the |form|.
-  void FillOrPreviewDataModelForm(AutofillDriver::RendererFormDataAction action,
-                                  int query_id,
-                                  const FormData& form,
-                                  const FormFieldData& field,
-                                  const AutofillDataModel& data_model,
-                                  bool is_credit_card,
-                                  const base::string16& cvc);
   void FillOrPreviewDataModelForm(AutofillDriver::RendererFormDataAction action,
                                   int query_id,
                                   const FormData& form,
@@ -363,7 +375,8 @@ class AutofillManager : public AutofillHandler,
                                   bool is_credit_card,
                                   const base::string16& cvc,
                                   FormStructure* form_structure,
-                                  AutofillField* autofill_field);
+                                  AutofillField* autofill_field,
+                                  bool is_refill = false);
 
   // Creates a FormStructure using the FormData received from the renderer. Will
   // return an empty scoped_ptr if the data should not be processed for upload
@@ -418,8 +431,13 @@ class AutofillManager : public AutofillHandler,
   // Parses the forms using heuristic matching and querying the Autofill server.
   void ParseForms(const std::vector<FormData>& forms);
 
-  // Parses the form and adds it to |form_structures_|.
-  bool ParseForm(const FormData& form, FormStructure** parsed_form_structure);
+  // Parses the |form| with the server data retrieved from the |cached_form|
+  // (if any), and writes it to the |parse_form_structure|. Adds the
+  // |parse_form_structure| to the |form_structures_|. Returns true if the form
+  // is parsed.
+  bool ParseForm(const FormData& form,
+                 const FormStructure* cached_form,
+                 FormStructure** parsed_form_structure);
 
   // If |initial_interaction_timestamp_| is unset or is set to a later time than
   // |interaction_timestamp|, updates the cached timestamp.  The latter check is
@@ -468,6 +486,18 @@ class AutofillManager : public AutofillHandler,
 
   AutofillMetrics::CardNumberStatus GetCardNumberStatus(
       CreditCard& credit_card);
+
+  // Whether there should be an attemps to refill the form. Returns true if all
+  // the following are satisfied:
+  //  There have been no refill on that page yet.
+  //  A non empty form name was recorded in a previous fill
+  //  That form name matched the currently parsed form name
+  //  It's been less than kLimitBeforeRefillMs since the original fill.
+  bool ShouldTriggerRefill(const FormStructure& form_structure);
+
+  // Attempts to refill the form that was changed dynamically. Should only be
+  // called if ShouldTriggerRefill returns true.
+  void TriggerRefill(const FormData& form, FormStructure* form_structure);
 
   AutofillClient* const client_;
 
@@ -565,6 +595,11 @@ class AutofillManager : public AutofillHandler,
   AutofillAssistant autofill_assistant_;
 #endif
 
+  // A map of form names to FillingContext instances used to make refill
+  // attempts for dynamic forms.
+  std::map<base::string16, std::unique_ptr<FillingContext>>
+      filling_contexts_map_;
+
   base::WeakPtrFactory<AutofillManager> weak_ptr_factory_;
 
   friend class AutofillManagerTest;
@@ -577,6 +612,8 @@ class AutofillManager : public AutofillHandler,
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, DisambiguateUploadTypes);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            DisabledAutofillDispatchesError);
+  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
+                           DetermineHeuristicsWithOverallPrediction);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressFilledFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressSubmittedFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressWillSubmitFormEvents);

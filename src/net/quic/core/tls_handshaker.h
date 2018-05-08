@@ -36,6 +36,8 @@ class QUIC_EXPORT_PRIVATE TlsHandshaker : public QuicTlsAdapter::Visitor {
   void OnDataReceivedFromBIO(const QuicStringPiece& data) override;
 
   // From QuicCryptoStream
+  virtual QuicLongHeaderType GetLongHeaderType(
+      QuicStreamOffset offset) const = 0;
   virtual bool encryption_established() const = 0;
   virtual bool handshake_confirmed() const = 0;
   virtual const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
@@ -65,8 +67,10 @@ class QUIC_EXPORT_PRIVATE TlsHandshaker : public QuicTlsAdapter::Visitor {
   bool DeriveSecrets(std::vector<uint8_t>* client_secret_out,
                      std::vector<uint8_t>* server_secret_out);
 
-  QuicEncrypter* CreateEncrypter(const std::vector<uint8_t>& pp_secret);
-  QuicDecrypter* CreateDecrypter(const std::vector<uint8_t>& pp_secret);
+  std::unique_ptr<QuicEncrypter> CreateEncrypter(
+      const std::vector<uint8_t>& pp_secret);
+  std::unique_ptr<QuicDecrypter> CreateDecrypter(
+      const std::vector<uint8_t>& pp_secret);
 
   SSL* ssl() { return ssl_.get(); }
   QuicCryptoStream* stream() { return stream_; }

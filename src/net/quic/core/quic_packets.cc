@@ -27,6 +27,16 @@ size_t GetPacketHeaderSize(QuicTransportVersion version,
                            bool include_version,
                            bool include_diversification_nonce,
                            QuicPacketNumberLength packet_number_length) {
+  if (version == QUIC_VERSION_99) {
+    if (include_version) {
+      // Long header.
+      return kPacketHeaderTypeSize + PACKET_8BYTE_CONNECTION_ID +
+             PACKET_4BYTE_PACKET_NUMBER + kQuicVersionSize +
+             (include_diversification_nonce ? kDiversificationNonceSize : 0);
+    }
+    // Short header.
+    return kPacketHeaderTypeSize + connection_id_length + packet_number_length;
+  }
   return kPublicFlagsSize + connection_id_length +
          (include_version ? kQuicVersionSize : 0) + packet_number_length +
          (include_diversification_nonce ? kDiversificationNonceSize : 0);
@@ -53,11 +63,14 @@ QuicPacketHeader::QuicPacketHeader()
       connection_id_length(PACKET_8BYTE_CONNECTION_ID),
       reset_flag(false),
       version_flag(false),
-      packet_number_length(PACKET_6BYTE_PACKET_NUMBER),
+      packet_number_length(PACKET_4BYTE_PACKET_NUMBER),
       version(
           ParsedQuicVersion(PROTOCOL_UNSUPPORTED, QUIC_VERSION_UNSUPPORTED)),
       nonce(nullptr),
-      packet_number(0) {}
+      packet_number(0),
+      form(LONG_HEADER),
+      long_packet_type(INITIAL),
+      possible_stateless_reset_token(0) {}
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketHeader& other) = default;
 
@@ -80,6 +93,19 @@ QuicVersionNegotiationPacket::QuicVersionNegotiationPacket(
     const QuicVersionNegotiationPacket& other) = default;
 
 QuicVersionNegotiationPacket::~QuicVersionNegotiationPacket() {}
+
+QuicIetfStatelessResetPacket::QuicIetfStatelessResetPacket()
+    : stateless_reset_token(0) {}
+
+QuicIetfStatelessResetPacket::QuicIetfStatelessResetPacket(
+    const QuicPacketHeader& header,
+    QuicUint128 token)
+    : header(header), stateless_reset_token(token) {}
+
+QuicIetfStatelessResetPacket::QuicIetfStatelessResetPacket(
+    const QuicIetfStatelessResetPacket& other) = default;
+
+QuicIetfStatelessResetPacket::~QuicIetfStatelessResetPacket() {}
 
 std::ostream& operator<<(std::ostream& os, const QuicPacketHeader& header) {
   os << "{ connection_id: " << header.connection_id

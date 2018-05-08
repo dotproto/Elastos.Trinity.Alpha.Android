@@ -15,11 +15,12 @@
 #include "content/public/common/drop_data.h"
 #include "ui/android/overscroll_refresh.h"
 #include "ui/android/view_android.h"
-#include "ui/android/view_client.h"
+#include "ui/android/view_android_observer.h"
+#include "ui/events/android/event_handler_android.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
-class ContentViewCore;
+class ContentUiEventHandler;
 class RenderWidgetHostViewAndroid;
 class SelectPopup;
 class SelectionPopupController;
@@ -29,14 +30,13 @@ class WebContentsImpl;
 // Android-specific implementation of the WebContentsView.
 class WebContentsViewAndroid : public WebContentsView,
                                public RenderViewHostDelegateView,
-                               public ui::ViewClient {
+                               public ui::EventHandlerAndroid {
  public:
   WebContentsViewAndroid(WebContentsImpl* web_contents,
                          WebContentsViewDelegate* delegate);
   ~WebContentsViewAndroid() override;
 
-  // Sets the interface to the view system.
-  void SetContentViewCore(ContentViewCore* content_view_core);
+  void SetContentUiEventHandler(std::unique_ptr<ContentUiEventHandler> handler);
 
   // Sets the object that show/hide popup view for <select> tag.
   void SetSelectPopup(std::unique_ptr<SelectPopup> select_popup);
@@ -110,10 +110,12 @@ class WebContentsViewAndroid : public WebContentsView,
   int GetBottomControlsHeight() const override;
   bool DoBrowserControlsShrinkBlinkSize() const override;
 
-  // ui::ViewClient implementation.
+  // ui::EventHandlerAndroid implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& event) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& event) override;
   bool OnDragEvent(const ui::DragEventAndroid& event) override;
+  bool OnKeyUp(const ui::KeyEventAndroid& event) override;
+  bool DispatchKeyEvent(const ui::KeyEventAndroid& event) override;
   void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged() override;
 
@@ -133,8 +135,8 @@ class WebContentsViewAndroid : public WebContentsView,
   // The WebContents whose contents we display.
   WebContentsImpl* web_contents_;
 
-  // ContentViewCore is our interface to the view system.
-  std::unique_ptr<ContentViewCore> content_view_core_;
+  // Handles UI events in Java layer when necessary.
+  std::unique_ptr<ContentUiEventHandler> content_ui_event_handler_;
 
   // Handles "overscroll to refresh" events
   std::unique_ptr<ui::OverscrollRefreshHandler> overscroll_refresh_handler_;

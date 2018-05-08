@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 
+#include <utility>
+
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
@@ -16,6 +18,14 @@
 namespace {
 
 AppListControllerDelegate* g_controller_for_test = nullptr;
+
+ash::mojom::AppListItemMetadataPtr CreateDefaultMetadata(
+    const std::string& app_id) {
+  return ash::mojom::AppListItemMetadata::New(
+      app_id, std::string() /* name */, std::string() /* short_name */,
+      std::string() /* folder_id */, syncer::StringOrdinal(),
+      false /* is_folder */, gfx::ImageSkia() /* icon */);
+}
 
 }  // namespace
 
@@ -47,15 +57,14 @@ void ChromeAppListItem::TestApi::SetPosition(
 // ChromeAppListItem
 ChromeAppListItem::ChromeAppListItem(Profile* profile,
                                      const std::string& app_id)
-    : metadata_(
-          ash::mojom::AppListItemMetadata::New(app_id,
-                                               std::string() /* name */,
-                                               std::string() /* short_name */,
-                                               std::string() /* folder_id */,
-                                               syncer::StringOrdinal(),
-                                               false /* is_folder */,
-                                               gfx::ImageSkia() /* icon */)),
-      profile_(profile) {}
+    : metadata_(CreateDefaultMetadata(app_id)), profile_(profile) {}
+
+ChromeAppListItem::ChromeAppListItem(Profile* profile,
+                                     const std::string& app_id,
+                                     AppListModelUpdater* model_updater)
+    : metadata_(CreateDefaultMetadata(app_id)),
+      profile_(profile),
+      model_updater_(model_updater) {}
 
 ChromeAppListItem::~ChromeAppListItem() {
 }
@@ -87,8 +96,8 @@ const char* ChromeAppListItem::GetItemType() const {
   return "";
 }
 
-ui::MenuModel* ChromeAppListItem::GetContextMenuModel() {
-  return nullptr;
+void ChromeAppListItem::GetContextMenuModel(GetMenuModelCallback callback) {
+  std::move(callback).Run(nullptr);
 }
 
 bool ChromeAppListItem::IsBadged() const {

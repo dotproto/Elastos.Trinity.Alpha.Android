@@ -274,6 +274,10 @@ struct I18nContentToMessage {
     {"keyboardOverlayDisableCapsLock", IDS_KEYBOARD_OVERLAY_DISABLE_CAPS_LOCK},
     {"keyboardOverlayToggleChromevoxSpokenFeedback",
      IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK},
+    {"keyboardOverlayToggleDockedMagnifier",
+     IDS_KEYBOARD_OVERLAY_TOGGLE_DOCKED_MAGNIFIER},
+    {"keyboardOverlayToggleFullscreenMagnifier",
+     IDS_KEYBOARD_OVERLAY_TOGGLE_FULLSCREEN_MAGNIFIER},
     {"keyboardOverlayToggleHighContrastMode",
      IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE},
     {"keyboardOverlayToggleProjectionTouchHud",
@@ -393,15 +397,17 @@ KeyboardOverlayHandler::~KeyboardOverlayHandler() {
 }
 
 void KeyboardOverlayHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("getInputMethodId",
-      base::Bind(&KeyboardOverlayHandler::GetInputMethodId,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("getLabelMap",
-      base::Bind(&KeyboardOverlayHandler::GetLabelMap,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("openLearnMorePage",
-      base::Bind(&KeyboardOverlayHandler::OpenLearnMorePage,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getInputMethodId",
+      base::BindRepeating(&KeyboardOverlayHandler::GetInputMethodId,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getLabelMap", base::BindRepeating(&KeyboardOverlayHandler::GetLabelMap,
+                                         base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "openLearnMorePage",
+      base::BindRepeating(&KeyboardOverlayHandler::OpenLearnMorePage,
+                          base::Unretained(this)));
 }
 
 void KeyboardOverlayHandler::GetInputMethodId(const base::ListValue* args) {

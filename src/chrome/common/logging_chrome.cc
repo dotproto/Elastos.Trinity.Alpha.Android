@@ -8,7 +8,7 @@
 // IPC_MESSAGE_LOG_ENABLED. We need to use it to define
 // IPC_MESSAGE_MACROS_LOG_ENABLED so render_messages.h will generate the
 // ViewMsgLog et al. functions.
-#include "ipc/ipc_features.h"
+#include "ipc/ipc_buildflags.h"
 
 // On Windows, the about:ipc dialog shows IPCs; on POSIX, we hook up a
 // logger in this file.  (We implement about:ipc on Mac but implement
@@ -237,7 +237,7 @@ base::FilePath GetSessionLogDir(const base::CommandLine& command_line) {
       !log_dir_str.empty()) {
     log_dir = base::FilePath(log_dir_str);
   } else if (command_line.HasSwitch(chromeos::switches::kLoginProfile)) {
-    PathService::Get(chrome::DIR_USER_DATA, &log_dir);
+    base::PathService::Get(chrome::DIR_USER_DATA, &log_dir);
     base::FilePath profile_dir;
     std::string login_profile_value =
         command_line.GetSwitchValueASCII(chromeos::switches::kLoginProfile);
@@ -403,7 +403,7 @@ base::FilePath GetLogFileName(const base::CommandLine& command_line) {
   const base::FilePath log_filename(FILE_PATH_LITERAL("chrome_debug.log"));
   base::FilePath log_path;
 
-  if (PathService::Get(chrome::DIR_LOGS, &log_path)) {
+  if (base::PathService::Get(chrome::DIR_LOGS, &log_path)) {
     log_path = log_path.Append(log_filename);
     return log_path;
   } else {

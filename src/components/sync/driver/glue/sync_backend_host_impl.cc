@@ -11,10 +11,10 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
-#include "components/signin/core/browser/signin_client.h"
 #include "components/sync/base/experiments.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/sync_prefs.h"
@@ -89,6 +89,12 @@ void SyncBackendHostImpl::UpdateCredentials(
                             credentials));
 }
 
+void SyncBackendHostImpl::InvalidateCredentials() {
+  sync_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SyncBackendHostCore::DoInvalidateCredentials, core_));
+}
+
 void SyncBackendHostImpl::StartConfiguration() {
   sync_task_runner_->PostTask(
       FROM_HERE, base::Bind(&SyncBackendHostCore::DoStartConfiguration, core_));
@@ -96,10 +102,16 @@ void SyncBackendHostImpl::StartConfiguration() {
 
 void SyncBackendHostImpl::StartSyncingWithServer() {
   SDVLOG(1) << "SyncBackendHostImpl::StartSyncingWithServer called.";
-
+  base::Time last_poll_time = sync_prefs_->GetLastPollTime();
+  // If there's no known last poll time (e.g. on initial start-up), we treat
+  // this as if a poll just happened.
+  if (last_poll_time.is_null()) {
+    last_poll_time = base::Time::Now();
+    sync_prefs_->SetLastPollTime(last_poll_time);
+  }
   sync_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&SyncBackendHostCore::DoStartSyncing, core_,
-                            sync_prefs_->GetLastPollTime()));
+      FROM_HERE, base::BindOnce(&SyncBackendHostCore::DoStartSyncing, core_,
+                                last_poll_time));
 }
 
 void SyncBackendHostImpl::SetEncryptionPassphrase(const std::string& passphrase,
@@ -215,9 +227,13 @@ SyncBackendHostImpl::Status SyncBackendHostImpl::GetDetailedStatus() {
   return core_->sync_manager()->GetDetailedStatus();
 }
 
-bool SyncBackendHostImpl::HasUnsyncedItems() const {
+void SyncBackendHostImpl::HasUnsyncedItemsForTest(
+    base::OnceCallback<void(bool)> cb) const {
   DCHECK(initialized());
-  return core_->sync_manager()->HasUnsyncedItems();
+  base::PostTaskAndReplyWithResult(
+      sync_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&SyncBackendHostCore::HasUnsyncedItemsForTest, core_),
+      std::move(cb));
 }
 
 bool SyncBackendHostImpl::IsCryptographerReady(

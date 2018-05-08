@@ -74,6 +74,9 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
   // Synchronously waits for a tab to finish loading.
   bool WaitForLoad(HeadlessWebContents* web_contents);
 
+  // Synchronously waits for a tab to finish gaining focus.
+  void WaitForFocus(HeadlessWebContents* web_contents);
+
   // Synchronously evaluates a script and returns the result.
   std::unique_ptr<runtime::EvaluateResult> EvaluateScript(
       HeadlessWebContents* web_contents,
@@ -150,6 +153,10 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   // Allows the HeadlessBrowserContext used in testing to be customized.
   virtual void CustomizeHeadlessBrowserContext(
       HeadlessBrowserContext::Builder& builder);
+
+  // Allows the HeadlessWebContents used in testing to be customized.
+  virtual void CustomizeHeadlessWebContents(
+      HeadlessWebContents::Builder& builder);
 
  protected:
   void RunTest();

@@ -42,6 +42,10 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // unfullscreened.
   virtual void OnFullscreenStateChanged();
 
+  // Returns whether the caption buttons are drawn at the leading edge (i.e. the
+  // left in LTR mode, or the right in RTL mode).
+  virtual bool CaptionButtonsOnLeadingEdge() const;
+
   // Retrieves the bounds, in non-client view coordinates within which the
   // TabStrip should be laid out.
   virtual gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const = 0;
@@ -69,7 +73,7 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
 
   // Returns the profile switcher button, if this frame has any, nullptr if it
   // doesn't.
-  views::View* GetProfileSwitcherView() const;
+  views::Button* GetProfileSwitcherButton() const;
 
   // Provided for mus. Updates the client-area of the WindowTreeHostMus.
   virtual void UpdateClientArea();
@@ -141,6 +145,9 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
 
   // Draws a taskbar icon if avatars are enabled, erases it otherwise.
   void UpdateTaskbarDecoration();
+
+  // Returns true if |profile_indicator_icon_| should be shown.
+  bool ShouldShowProfileIndicatorIcon() const;
 
   // The frame that hosts this view.
   BrowserFrame* frame_;

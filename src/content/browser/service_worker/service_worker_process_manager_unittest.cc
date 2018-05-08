@@ -4,8 +4,9 @@
 
 #include "content/browser/service_worker/service_worker_process_manager.h"
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -36,7 +37,11 @@ class SiteInstanceRenderProcessHostFactory : public RenderProcessHostFactory {
       SiteInstance* site_instance) const override {
     processes_.push_back(
         std::make_unique<MockRenderProcessHost>(browser_context));
-    last_site_instance_used_ = site_instance;
+
+    // A spare RenderProcessHost is created with a null SiteInstance.
+    if (site_instance)
+      last_site_instance_used_ = site_instance;
+
     return processes_.back().get();
   }
 
@@ -65,14 +70,14 @@ class ServiceWorkerProcessManagerTest : public testing::Test {
     script_url_ = GURL("http://www.example.com/sw.js");
     render_process_host_factory_.reset(
         new SiteInstanceRenderProcessHostFactory());
-    RenderProcessHostImpl::set_render_process_host_factory(
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(
         render_process_host_factory_.get());
   }
 
   void TearDown() override {
     process_manager_->Shutdown();
     process_manager_.reset();
-    RenderProcessHostImpl::set_render_process_host_factory(nullptr);
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(nullptr);
     render_process_host_factory_.reset();
   }
 

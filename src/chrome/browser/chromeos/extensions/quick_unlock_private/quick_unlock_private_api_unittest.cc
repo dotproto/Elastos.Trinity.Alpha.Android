@@ -8,15 +8,19 @@
 
 #include <memory>
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service_factory.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service_regular.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/login/auth/fake_extended_authenticator.h"
@@ -109,7 +113,9 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
   void SetUp() override {
     ExtensionApiUnittest::SetUp();
 
-    quick_unlock::EnableForTesting(quick_unlock::PinStorageType::kPrefs);
+    quick_unlock::EnableForTesting();
+
+    run_loop_ = std::make_unique<base::RunLoop>();
 
     // Setup a primary user.
     auto test_account =
@@ -117,15 +123,34 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     fake_user_manager_->AddUser(test_account);
     fake_user_manager_->UserLoggedIn(test_account, kTestUserEmailHash, false,
                                      false);
+    ProfileHelper::Get()->SetUserToProfileMappingForTesting(
+        fake_user_manager_->GetPrimaryUser(), GetProfile());
 
     // Generate an auth token.
     token_ = quick_unlock::QuickUnlockFactory::GetForProfile(profile())
-                 ->CreateAuthToken();
+                 ->CreateAuthToken(auth_token_user_context_);
 
     // Ensure that quick unlock is turned off.
     RunSetModes(QuickUnlockModeList{}, CredentialList{});
 
     modes_changed_handler_ = base::DoNothing();
+  }
+
+  void TearDown() override {
+    quick_unlock::DisablePinByPolicyForTesting(false);
+
+    PumpRunLoop();
+    run_loop_.reset();
+
+    ExtensionApiUnittest::TearDown();
+  }
+
+  // Executes all pending tasks.
+  void PumpRunLoop() {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, run_loop_->QuitWhenIdleClosure());
+    run_loop_->Run();
+    run_loop_ = std::make_unique<base::RunLoop>();
   }
 
   TestingProfile::TestingFactories GetTestingFactories() override {
@@ -359,26 +384,68 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
 
   std::string token() { return token_; }
 
+  // Returns if the pin is set in the backend.
+  bool IsPinSetInBackend() {
+    const AccountId account_id = AccountId::FromUserEmail(kTestUserEmail);
+
+    bool called = false;
+    bool is_set = false;
+    quick_unlock::PinBackend::GetInstance()->IsSet(
+        account_id, base::BindOnce(
+                        [](bool* out_called, bool* out_is_set, bool is_set) {
+                          *out_called = true;
+                          *out_is_set = is_set;
+                        },
+                        &called, &is_set));
+    PumpRunLoop();
+    CHECK(called);
+    return is_set;
+  }
+
+  // Run an authentication attempt with the plain-text |password|.
+  bool TryAuthenticate(const std::string& password) {
+    const AccountId account_id = AccountId::FromUserEmail(kTestUserEmail);
+    bool called = false;
+    bool success = false;
+    quick_unlock::PinBackend::GetInstance()->TryAuthenticate(
+        account_id, password, Key::KEY_TYPE_PASSWORD_PLAIN,
+        base::BindOnce(
+            [](bool* out_called, bool* out_success, bool success) {
+              *out_called = true;
+              *out_success = success;
+            },
+            &called, &success));
+    PumpRunLoop();
+    CHECK(called);
+    return success;
+  }
+
  private:
   // Runs the given |func| with the given |params|.
   std::unique_ptr<base::Value> RunFunction(
       scoped_refptr<UIThreadExtensionFunction> func,
       std::unique_ptr<base::ListValue> params) {
-    return api_test_utils::RunFunctionWithDelegateAndReturnSingleResult(
-        func, std::move(params), profile(),
-        std::make_unique<ExtensionFunctionDispatcher>(profile()),
-        api_test_utils::NONE);
+    PumpRunLoop();
+    std::unique_ptr<base::Value> result =
+        api_test_utils::RunFunctionWithDelegateAndReturnSingleResult(
+            func, std::move(params), profile(),
+            std::make_unique<ExtensionFunctionDispatcher>(profile()),
+            api_test_utils::NONE);
+    PumpRunLoop();
+    return result;
   }
 
   // Runs |func| with |params|. Expects and returns an error result.
   std::string RunFunctionAndReturnError(
       scoped_refptr<UIThreadExtensionFunction> func,
       std::unique_ptr<base::ListValue> params) {
+    PumpRunLoop();
     std::unique_ptr<ExtensionFunctionDispatcher> dispatcher(
         new ExtensionFunctionDispatcher(profile()));
     api_test_utils::RunFunction(func.get(), std::move(params), profile(),
                                 std::move(dispatcher), api_test_utils::NONE);
     EXPECT_TRUE(func->GetResultList()->empty());
+    PumpRunLoop();
     return func->GetError();
   }
 
@@ -390,11 +457,14 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     expect_modes_changed_ = false;
   }
 
+  // Run loop that collects all pending tasks. Use |PumpRunLoop| to run them.
+  std::unique_ptr<base::RunLoop> run_loop_;
   FakeChromeUserManager* fake_user_manager_;
   user_manager::ScopedUserManager scoped_user_manager_;
   QuickUnlockPrivateSetModesFunction::ModesChangedEventHandler
       modes_changed_handler_;
   bool expect_modes_changed_ = false;
+  chromeos::UserContext auth_token_user_context_;
   std::string token_;
 
   DISALLOW_COPY_AND_ASSIGN(QuickUnlockPrivateUnitTest);
@@ -409,7 +479,7 @@ TEST_F(QuickUnlockPrivateUnitTest, GetAuthTokenValid) {
       quick_unlock::QuickUnlockFactory::GetForProfile(profile());
   EXPECT_EQ(token_info->token, quick_unlock_storage->GetAuthToken());
   EXPECT_EQ(token_info->lifetime_seconds,
-            quick_unlock::QuickUnlockStorage::kTokenExpirationSeconds);
+            quick_unlock::AuthToken::kTokenExpirationSeconds);
 }
 
 // Verifies that GetAuthTokenValid fails when an invalid password is provided.
@@ -422,12 +492,12 @@ TEST_F(QuickUnlockPrivateUnitTest, GetAuthTokenInvalid) {
 TEST_F(QuickUnlockPrivateUnitTest, SetLockScreenEnabled) {
   PrefService* pref_service = profile()->GetPrefs();
   bool lock_screen_enabled =
-      pref_service->GetBoolean(prefs::kEnableAutoScreenLock);
+      pref_service->GetBoolean(ash::prefs::kEnableAutoScreenLock);
 
   SetLockScreenEnabled(token(), !lock_screen_enabled);
 
   EXPECT_EQ(!lock_screen_enabled,
-            pref_service->GetBoolean(prefs::kEnableAutoScreenLock));
+            pref_service->GetBoolean(ash::prefs::kEnableAutoScreenLock));
 }
 
 // Verifies that setting lock screen enabled fails to modify the setting with
@@ -435,20 +505,31 @@ TEST_F(QuickUnlockPrivateUnitTest, SetLockScreenEnabled) {
 TEST_F(QuickUnlockPrivateUnitTest, SetLockScreenEnabledFailsWithInvalidToken) {
   PrefService* pref_service = profile()->GetPrefs();
   bool lock_screen_enabled =
-      pref_service->GetBoolean(prefs::kEnableAutoScreenLock);
+      pref_service->GetBoolean(ash::prefs::kEnableAutoScreenLock);
 
   std::string error =
       SetLockScreenEnabledWithInvalidToken(!lock_screen_enabled);
   EXPECT_FALSE(error.empty());
 
   EXPECT_EQ(lock_screen_enabled,
-            pref_service->GetBoolean(prefs::kEnableAutoScreenLock));
+            pref_service->GetBoolean(ash::prefs::kEnableAutoScreenLock));
 }
 
-// Verifies that this returns PIN for GetAvailableModes.
+// Verifies that this returns PIN for GetAvailableModes, unless it is blocked by
+// policy.
 TEST_F(QuickUnlockPrivateUnitTest, GetAvailableModes) {
   EXPECT_EQ(GetAvailableModes(),
             QuickUnlockModeList{QuickUnlockMode::QUICK_UNLOCK_MODE_PIN});
+
+  quick_unlock::DisablePinByPolicyForTesting(true);
+  EXPECT_TRUE(GetAvailableModes().empty());
+}
+
+// Verfies that trying to set modes with a valid PIN failes when PIN is blocked
+// by policy.
+TEST_F(QuickUnlockPrivateUnitTest, SetModesForPinFailsWhenPinDisabledByPolicy) {
+  quick_unlock::DisablePinByPolicyForTesting(true);
+  EXPECT_FALSE(SetModesWithError("[\"valid\", [\"PIN\"], [\"111\"]]").empty());
 }
 
 // Verifies that SetModes succeeds with a valid token.
@@ -510,11 +591,8 @@ TEST_F(QuickUnlockPrivateUnitTest, ModeChangeEventOnlyRaisedWhenModesChange) {
 }
 
 // Ensures that quick unlock can be enabled and disabled by checking the result
-// of quickUnlockPrivate.GetActiveModes and PinStorage::IsPinSet.
+// of quickUnlockPrivate.GetActiveModes and PinStoragePrefs::IsPinSet.
 TEST_F(QuickUnlockPrivateUnitTest, SetModesAndGetActiveModes) {
-  quick_unlock::QuickUnlockStorage* quick_unlock_storage =
-      quick_unlock::QuickUnlockFactory::GetForProfile(profile());
-
   // Update mode to PIN raises an event and updates GetActiveModes.
   ExpectModesChanged(
       QuickUnlockModeList{QuickUnlockMode::QUICK_UNLOCK_MODE_PIN});
@@ -522,33 +600,27 @@ TEST_F(QuickUnlockPrivateUnitTest, SetModesAndGetActiveModes) {
               {"111111"});
   EXPECT_EQ(GetActiveModes(),
             QuickUnlockModeList{QuickUnlockMode::QUICK_UNLOCK_MODE_PIN});
-  EXPECT_TRUE(quick_unlock_storage->pin_storage()->IsPinSet());
+  EXPECT_TRUE(IsPinSetInBackend());
 
   // SetModes can be used to turn off a quick unlock mode.
   ExpectModesChanged(QuickUnlockModeList{});
   RunSetModes(QuickUnlockModeList{}, CredentialList{});
   EXPECT_EQ(GetActiveModes(), QuickUnlockModeList{});
-  EXPECT_FALSE(quick_unlock_storage->pin_storage()->IsPinSet());
+  EXPECT_FALSE(IsPinSetInBackend());
 }
 
 // Verifies that enabling PIN quick unlock actually talks to the PIN subsystem.
 TEST_F(QuickUnlockPrivateUnitTest, VerifyAuthenticationAgainstPIN) {
-  quick_unlock::QuickUnlockStorage* quick_unlock_storage =
-      quick_unlock::QuickUnlockFactory::GetForProfile(profile());
-
   RunSetModes(QuickUnlockModeList{}, CredentialList{});
-  EXPECT_FALSE(quick_unlock_storage->pin_storage()->IsPinSet());
+  EXPECT_FALSE(IsPinSetInBackend());
 
   RunSetModes(QuickUnlockModeList{QuickUnlockMode::QUICK_UNLOCK_MODE_PIN},
               {"111111"});
-  EXPECT_TRUE(quick_unlock_storage->pin_storage()->IsPinSet());
+  EXPECT_TRUE(IsPinSetInBackend());
 
-  quick_unlock_storage->MarkStrongAuth();
-  quick_unlock_storage->pin_storage()->ResetUnlockAttemptCount();
-  EXPECT_TRUE(quick_unlock_storage->TryAuthenticatePin(
-      "111111", Key::KEY_TYPE_PASSWORD_PLAIN));
-  EXPECT_FALSE(quick_unlock_storage->TryAuthenticatePin(
-      "000000", Key::KEY_TYPE_PASSWORD_PLAIN));
+  EXPECT_FALSE(TryAuthenticate("000000"));
+  EXPECT_TRUE(TryAuthenticate("111111"));
+  EXPECT_FALSE(TryAuthenticate("000000"));
 }
 
 // Verifies that the number of modes and the number of passwords given must be

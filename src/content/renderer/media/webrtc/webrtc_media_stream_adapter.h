@@ -13,10 +13,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 
 namespace content {

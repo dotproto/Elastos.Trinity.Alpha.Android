@@ -79,8 +79,8 @@ chrome.automation.EventType = {
  */
 chrome.automation.RoleType = {
   ABBR: 'abbr',
-  ALERT_DIALOG: 'alertDialog',
   ALERT: 'alert',
+  ALERT_DIALOG: 'alertDialog',
   ANCHOR: 'anchor',
   ANNOTATION: 'annotation',
   APPLICATION: 'application',
@@ -96,8 +96,8 @@ chrome.automation.RoleType = {
   CHECK_BOX: 'checkBox',
   CLIENT: 'client',
   COLOR_WELL: 'colorWell',
-  COLUMN_HEADER: 'columnHeader',
   COLUMN: 'column',
+  COLUMN_HEADER: 'columnHeader',
   COMBO_BOX_GROUPING: 'comboBoxGrouping',
   COMBO_BOX_MENU_BUTTON: 'comboBoxMenuButton',
   COMPLEMENTARY: 'complementary',
@@ -105,8 +105,8 @@ chrome.automation.RoleType = {
   DATE: 'date',
   DATE_TIME: 'dateTime',
   DEFINITION: 'definition',
-  DESCRIPTION_LIST_DETAIL: 'descriptionListDetail',
   DESCRIPTION_LIST: 'descriptionList',
+  DESCRIPTION_LIST_DETAIL: 'descriptionListDetail',
   DESCRIPTION_LIST_TERM: 'descriptionListTerm',
   DESKTOP: 'desktop',
   DETAILS: 'details',
@@ -127,8 +127,8 @@ chrome.automation.RoleType = {
   IFRAME: 'iframe',
   IFRAME_PRESENTATIONAL: 'iframePresentational',
   IGNORED: 'ignored',
-  IMAGE_MAP: 'imageMap',
   IMAGE: 'image',
+  IMAGE_MAP: 'imageMap',
   INLINE_TEXT_BOX: 'inlineTextBox',
   INPUT_TIME: 'inputTime',
   LABEL_TEXT: 'labelText',
@@ -139,17 +139,18 @@ chrome.automation.RoleType = {
   LEGEND: 'legend',
   LINE_BREAK: 'lineBreak',
   LINK: 'link',
-  LIST_BOX_OPTION: 'listBoxOption',
+  LIST: 'list',
   LIST_BOX: 'listBox',
+  LIST_BOX_OPTION: 'listBoxOption',
   LIST_ITEM: 'listItem',
   LIST_MARKER: 'listMarker',
-  LIST: 'list',
   LOCATION_BAR: 'locationBar',
   LOG: 'log',
   MAIN: 'main',
   MARK: 'mark',
   MARQUEE: 'marquee',
   MATH: 'math',
+  MENU: 'menu',
   MENU_BAR: 'menuBar',
   MENU_BUTTON: 'menuButton',
   MENU_ITEM: 'menuItem',
@@ -157,7 +158,6 @@ chrome.automation.RoleType = {
   MENU_ITEM_RADIO: 'menuItemRadio',
   MENU_LIST_OPTION: 'menuListOption',
   MENU_LIST_POPUP: 'menuListPopup',
-  MENU: 'menu',
   METER: 'meter',
   NAVIGATION: 'navigation',
   NOTE: 'note',
@@ -171,26 +171,27 @@ chrome.automation.RoleType = {
   RADIO_GROUP: 'radioGroup',
   REGION: 'region',
   ROOT_WEB_AREA: 'rootWebArea',
-  ROW_HEADER: 'rowHeader',
   ROW: 'row',
+  ROW_HEADER: 'rowHeader',
   RUBY: 'ruby',
-  SVG_ROOT: 'svgRoot',
   SCROLL_BAR: 'scrollBar',
+  SCROLL_VIEW: 'scrollView',
   SEARCH: 'search',
   SEARCH_BOX: 'searchBox',
   SLIDER: 'slider',
   SLIDER_THUMB: 'sliderThumb',
-  SPIN_BUTTON_PART: 'spinButtonPart',
   SPIN_BUTTON: 'spinButton',
+  SPIN_BUTTON_PART: 'spinButtonPart',
   SPLITTER: 'splitter',
   STATIC_TEXT: 'staticText',
   STATUS: 'status',
+  SVG_ROOT: 'svgRoot',
   SWITCH: 'switch',
+  TAB: 'tab',
   TAB_LIST: 'tabList',
   TAB_PANEL: 'tabPanel',
-  TAB: 'tab',
-  TABLE_HEADER_CONTAINER: 'tableHeaderContainer',
   TABLE: 'table',
+  TABLE_HEADER_CONTAINER: 'tableHeaderContainer',
   TERM: 'term',
   TEXT_FIELD: 'textField',
   TEXT_FIELD_WITH_COMBO_BOX: 'textFieldWithComboBox',
@@ -199,11 +200,11 @@ chrome.automation.RoleType = {
   TITLE_BAR: 'titleBar',
   TOGGLE_BUTTON: 'toggleButton',
   TOOLBAR: 'toolbar',
+  TOOLTIP: 'tooltip',
+  TREE: 'tree',
   TREE_GRID: 'treeGrid',
   TREE_ITEM: 'treeItem',
-  TREE: 'tree',
   UNKNOWN: 'unknown',
-  TOOLTIP: 'tooltip',
   VIDEO: 'video',
   WEB_AREA: 'webArea',
   WEB_VIEW: 'webView',
@@ -233,10 +234,38 @@ chrome.automation.StateType = {
   PROTECTED: 'protected',
   REQUIRED: 'required',
   RICHLY_EDITABLE: 'richlyEditable',
-  SELECTABLE: 'selectable',
-  SELECTED: 'selected',
   VERTICAL: 'vertical',
   VISITED: 'visited',
+};
+
+/**
+ * @enum {string}
+ * @see https://developer.chrome.com/extensions/automation#type-ActionType
+ */
+chrome.automation.ActionType = {
+  BLUR: 'blur',
+  CUSTOM_ACTION: 'customAction',
+  DECREMENT: 'decrement',
+  DO_DEFAULT: 'doDefault',
+  FOCUS: 'focus',
+  GET_IMAGE_DATA: 'getImageData',
+  HIT_TEST: 'hitTest',
+  INCREMENT: 'increment',
+  LOAD_INLINE_TEXT_BOXES: 'loadInlineTextBoxes',
+  REPLACE_SELECTED_TEXT: 'replaceSelectedText',
+  SCROLL_BACKWARD: 'scrollBackward',
+  SCROLL_DOWN: 'scrollDown',
+  SCROLL_FORWARD: 'scrollForward',
+  SCROLL_LEFT: 'scrollLeft',
+  SCROLL_RIGHT: 'scrollRight',
+  SCROLL_TO_MAKE_VISIBLE: 'scrollToMakeVisible',
+  SCROLL_TO_POINT: 'scrollToPoint',
+  SCROLL_UP: 'scrollUp',
+  SET_SCROLL_OFFSET: 'setScrollOffset',
+  SET_SELECTION: 'setSelection',
+  SET_SEQUENTIAL_FOCUS_NAVIGATION_STARTING_POINT: 'setSequentialFocusNavigationStartingPoint',
+  SET_VALUE: 'setValue',
+  SHOW_CONTEXT_MENU: 'showContextMenu',
 };
 
 /**
@@ -249,6 +278,7 @@ chrome.automation.TreeChangeType = {
   NODE_CHANGED: 'nodeChanged',
   TEXT_CHANGED: 'textChanged',
   NODE_REMOVED: 'nodeRemoved',
+  SUBTREE_UPDATE_END: 'subtreeUpdateEnd',
 };
 
 /**
@@ -626,6 +656,13 @@ chrome.automation.AutomationNode.prototype.flowFrom;
  * @see https://developer.chrome.com/extensions/automation#type-labelFor
  */
 chrome.automation.AutomationNode.prototype.labelFor;
+
+/**
+ * An array of standard actions available on this node.
+ * @type {(!Array<!chrome.automation.ActionType>|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-standardActions
+ */
+chrome.automation.AutomationNode.prototype.standardActions;
 
 /**
  * An array of custom actions.
@@ -1127,6 +1164,13 @@ chrome.automation.AutomationNode.prototype.underline;
 chrome.automation.AutomationNode.prototype.lineThrough;
 
 /**
+ * Indicates whether this node is selected, unselected, or neither.
+ * @type {(boolean|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-selected
+ */
+chrome.automation.AutomationNode.prototype.selected;
+
+/**
  * Walking the tree.
  * @type {!Array<!chrome.automation.AutomationNode>}
  * @see https://developer.chrome.com/extensions/automation#type-children
@@ -1251,6 +1295,22 @@ chrome.automation.AutomationNode.prototype.makeVisible = function() {};
 chrome.automation.AutomationNode.prototype.performCustomAction = function(customActionId) {};
 
 /**
+ * Convenience method to perform a standard action supported by this node. For
+ * actions requiring additional arguments, call the specific binding e.g.
+ * <code>setSelection</code>.
+ * @param {!chrome.automation.ActionType} actionType
+ * @see https://developer.chrome.com/extensions/automation#method-performStandardAction
+ */
+chrome.automation.AutomationNode.prototype.performStandardAction = function(actionType) {};
+
+/**
+ * Replaces the selected text within a text field.
+ * @param {string} value
+ * @see https://developer.chrome.com/extensions/automation#method-replaceSelectedText
+ */
+chrome.automation.AutomationNode.prototype.replaceSelectedText = function(value) {};
+
+/**
  * Sets selection within a text field.
  * @param {number} startIndex
  * @param {number} endIndex
@@ -1264,6 +1324,13 @@ chrome.automation.AutomationNode.prototype.setSelection = function(startIndex, e
  * @see https://developer.chrome.com/extensions/automation#method-setSequentialFocusNavigationStartingPoint
  */
 chrome.automation.AutomationNode.prototype.setSequentialFocusNavigationStartingPoint = function() {};
+
+/**
+ * Sets the value of a text field.
+ * @param {string} value
+ * @see https://developer.chrome.com/extensions/automation#method-setValue
+ */
+chrome.automation.AutomationNode.prototype.setValue = function(value) {};
 
 /**
  * Show the context menu for this element, as if the user right-clicked.

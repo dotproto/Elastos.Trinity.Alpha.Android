@@ -11,6 +11,8 @@
  *   ACCESSIBILITY: (undefined|!settings.Route),
  *   ACCOUNTS: (undefined|!settings.Route),
  *   ADVANCED: (undefined|!settings.Route),
+ *   CROSTINI: (undefined|!settings.Route),
+ *   CROSTINI_DETAILS: (undefined|!settings.Route),
  *   ANDROID_APPS: (undefined|!settings.Route),
  *   ANDROID_APPS_DETAILS: (undefined|!settings.Route),
  *   APPEARANCE: (undefined|!settings.Route),
@@ -47,6 +49,7 @@
  *   MANAGE_ACCESSIBILITY: (undefined|!settings.Route),
  *   MANAGE_PASSWORDS: (undefined|!settings.Route),
  *   MANAGE_PROFILE: (undefined|!settings.Route),
+ *   MANAGE_TTS_SETTINGS: (undefined|!settings.Route),
  *   MULTIDEVICE: (undefined|!settings.Route),
  *   NETWORK_DETAIL: (undefined|!settings.Route),
  *   ON_STARTUP: (undefined|!settings.Route),
@@ -89,6 +92,7 @@
  *   SITE_SETTINGS_UNSANDBOXED_PLUGINS: (undefined|!settings.Route),
  *   SITE_SETTINGS_USB_DEVICES: (undefined|!settings.Route),
  *   SITE_SETTINGS_ZOOM_LEVELS: (undefined|!settings.Route),
+ *   SMB_SHARES: (undefined|!settings.Route),
  *   STORAGE: (undefined|!settings.Route),
  *   STYLUS: (undefined|!settings.Route),
  *   SYNC: (undefined|!settings.Route),
@@ -241,9 +245,13 @@ cr.define('settings', function() {
     r.SEARCH_ENGINES = r.SEARCH.createChild('/searchEngines');
     // <if expr="chromeos">
     r.GOOGLE_ASSISTANT = r.SEARCH.createChild('/googleAssistant');
-    // </if>
 
-    // <if expr="chromeos">
+    if (loadTimeData.valueExists('showCrostini') &&
+        loadTimeData.getBoolean('showCrostini')) {
+      r.CROSTINI = r.BASIC.createSection('/crostini', 'crostini');
+      r.CROSTINI_DETAILS = r.CROSTINI.createChild('/crostini/details');
+    }
+
     r.ANDROID_APPS = r.BASIC.createSection('/androidApps', 'androidApps');
     r.ANDROID_APPS_DETAILS = r.ANDROID_APPS.createChild('/androidApps/details');
     // </if>
@@ -366,6 +374,9 @@ cr.define('settings', function() {
 
       if (pageVisibility.downloads !== false) {
         r.DOWNLOADS = r.ADVANCED.createSection('/downloads', 'downloads');
+        // <if expr="chromeos">
+        r.SMB_SHARES = r.DOWNLOADS.createChild('/smbShares');
+        // </if>
       }
 
       r.PRINTING = r.ADVANCED.createSection('/printing', 'printing');
@@ -380,6 +391,8 @@ cr.define('settings', function() {
       // <if expr="chromeos">
       r.MANAGE_ACCESSIBILITY =
           r.ACCESSIBILITY.createChild('/manageAccessibility');
+      r.MANAGE_TTS_SETTINGS =
+          r.MANAGE_ACCESSIBILITY.createChild('/manageAccessibility/tts');
       // </if>
 
       r.SYSTEM = r.ADVANCED.createSection('/system', 'system');
@@ -392,10 +405,7 @@ cr.define('settings', function() {
             r.ADVANCED.createChild('/triggeredResetProfileSettings');
         r.TRIGGERED_RESET_DIALOG.isNavigableDialog = true;
         // <if expr="_google_chrome and is_win">
-        // This should only be added if the feature is enabled.
-        if (loadTimeData.getBoolean('userInitiatedCleanupsEnabled')) {
-          r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
-        }
+        r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
         if (loadTimeData.getBoolean('showIncompatibleApplications')) {
           r.INCOMPATIBLE_APPLICATIONS =
               r.RESET.createChild('/incompatibleApplications');

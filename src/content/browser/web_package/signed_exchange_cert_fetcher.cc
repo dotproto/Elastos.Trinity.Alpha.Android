@@ -4,9 +4,14 @@
 
 #include "content/browser/web_package/signed_exchange_cert_fetcher.h"
 
+#include "base/format_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
+#include "content/browser/loader/resource_dispatcher_host_impl.h"
+#include "content/browser/web_package/signed_exchange_consts.h"
+#include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/common/throttling_url_loader.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_loader_throttle.h"
@@ -54,33 +59,6 @@ const net::NetworkTrafficAnnotationTag kCertFetcherTrafficAnnotation =
       "type of request."
     )");
 
-bool ConsumeByte(base::StringPiece* data, uint8_t* out) {
-  if (data->empty())
-    return false;
-  *out = (*data)[0];
-  data->remove_prefix(1);
-  return true;
-}
-
-bool Consume2Bytes(base::StringPiece* data, uint16_t* out) {
-  if (data->size() < 2)
-    return false;
-  *out = (static_cast<uint8_t>((*data)[0]) << 8) |
-         static_cast<uint8_t>((*data)[1]);
-  data->remove_prefix(2);
-  return true;
-}
-
-bool Consume3Bytes(base::StringPiece* data, uint32_t* out) {
-  if (data->size() < 3)
-    return false;
-  *out = (static_cast<uint8_t>((*data)[0]) << 16) |
-         (static_cast<uint8_t>((*data)[1]) << 8) |
-         static_cast<uint8_t>((*data)[2]);
-  data->remove_prefix(3);
-  return true;
-}
-
 }  // namespace
 
 // static
@@ -91,70 +69,17 @@ SignedExchangeCertFetcher::CreateAndStart(
     const GURL& cert_url,
     url::Origin request_initiator,
     bool force_fetch,
-    CertificateCallback callback) {
+    CertificateCallback callback,
+    SignedExchangeDevToolsProxy* devtools_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "SignedExchangeCertFetcher::CreateAndStart");
   std::unique_ptr<SignedExchangeCertFetcher> cert_fetcher(
-      new SignedExchangeCertFetcher(
-          std::move(shared_url_loader_factory), std::move(throttles), cert_url,
-          std::move(request_initiator), force_fetch, std::move(callback)));
+      new SignedExchangeCertFetcher(std::move(shared_url_loader_factory),
+                                    std::move(throttles), cert_url,
+                                    std::move(request_initiator), force_fetch,
+                                    std::move(callback), devtools_proxy));
   cert_fetcher->Start();
   return cert_fetcher;
-}
-
-// static
-base::Optional<std::vector<base::StringPiece>>
-SignedExchangeCertFetcher::GetCertChainFromMessage(base::StringPiece message) {
-  uint8_t cert_request_context_size = 0;
-  if (!ConsumeByte(&message, &cert_request_context_size)) {
-    DVLOG(1) << "Can't read certificate request request context size.";
-    return base::nullopt;
-  }
-  if (cert_request_context_size != 0) {
-    DVLOG(1) << "Invalid certificate request context size: "
-             << static_cast<int>(cert_request_context_size);
-    return base::nullopt;
-  }
-  uint32_t cert_list_size = 0;
-  if (!Consume3Bytes(&message, &cert_list_size)) {
-    DVLOG(1) << "Can't read certificate list size.";
-    return base::nullopt;
-  }
-
-  if (cert_list_size != message.length()) {
-    DVLOG(1) << "Certificate list size error: cert_list_size=" << cert_list_size
-             << " remaining=" << message.length();
-    return base::nullopt;
-  }
-
-  std::vector<base::StringPiece> certs;
-  while (!message.empty()) {
-    uint32_t cert_data_size = 0;
-    if (!Consume3Bytes(&message, &cert_data_size)) {
-      DVLOG(1) << "Can't read certificate data size.";
-      return base::nullopt;
-    }
-    if (message.length() < cert_data_size) {
-      DVLOG(1) << "Certificate data size error: cert_data_size="
-               << cert_data_size << " remaining=" << message.length();
-      return base::nullopt;
-    }
-    certs.emplace_back(message.substr(0, cert_data_size));
-    message.remove_prefix(cert_data_size);
-
-    uint16_t extensions_size = 0;
-    if (!Consume2Bytes(&message, &extensions_size)) {
-      DVLOG(1) << "Can't read extensions size.";
-      return base::nullopt;
-    }
-    if (message.length() < extensions_size) {
-      DVLOG(1) << "Extensions size error: extensions_size=" << extensions_size
-               << " remaining=" << message.length();
-      return base::nullopt;
-    }
-    message.remove_prefix(extensions_size);
-  }
-  return certs;
 }
 
 SignedExchangeCertFetcher::SignedExchangeCertFetcher(
@@ -163,11 +88,13 @@ SignedExchangeCertFetcher::SignedExchangeCertFetcher(
     const GURL& cert_url,
     url::Origin request_initiator,
     bool force_fetch,
-    CertificateCallback callback)
+    CertificateCallback callback,
+    SignedExchangeDevToolsProxy* devtools_proxy)
     : shared_url_loader_factory_(std::move(shared_url_loader_factory)),
       throttles_(std::move(throttles)),
       resource_request_(std::make_unique<network::ResourceRequest>()),
-      callback_(std::move(callback)) {
+      callback_(std::move(callback)),
+      devtools_proxy_(devtools_proxy) {
   // TODO(https://crbug.com/803774): Revisit more ResourceRequest flags.
   resource_request_->url = cert_url;
   resource_request_->request_initiator = std::move(request_initiator);
@@ -189,7 +116,8 @@ SignedExchangeCertFetcher::~SignedExchangeCertFetcher() = default;
 void SignedExchangeCertFetcher::Start() {
   url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
       std::move(shared_url_loader_factory_), std::move(throttles_),
-      0 /* routing_id */, 0 /* request_id */,
+      0 /* routing_id */,
+      ResourceDispatcherHostImpl::Get()->MakeRequestID() /* request_id */,
       network::mojom::kURLLoadOptionNone, resource_request_.get(), this,
       kCertFetcherTrafficAnnotation, base::ThreadTaskRunnerHandle::Get());
 }
@@ -202,7 +130,8 @@ void SignedExchangeCertFetcher::Abort() {
   body_.reset();
   handle_watcher_ = nullptr;
   body_string_.clear();
-  std::move(callback_).Run(scoped_refptr<net::X509Certificate>());
+  devtools_proxy_ = nullptr;
+  std::move(callback_).Run(nullptr);
 }
 
 void SignedExchangeCertFetcher::OnHandleReady(MojoResult result) {
@@ -215,10 +144,10 @@ void SignedExchangeCertFetcher::OnHandleReady(MojoResult result) {
   if (rv == MOJO_RESULT_OK) {
     if (body_string_.size() + num_bytes > g_max_cert_size_for_signed_exchange) {
       body_->EndReadData(num_bytes);
+      signed_exchange_utils::ReportErrorAndEndTraceEvent(
+          devtools_proxy_, "SignedExchangeCertFetcher::OnHandleReady",
+          "The response body size of certificate message exceeds the limit.");
       Abort();
-      TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                       "SignedExchangeCertFetcher::OnHandleReady", "error",
-                       "The response body size exceeds the limit.");
       return;
     }
     body_string_.append(static_cast<const char*>(buffer), num_bytes);
@@ -239,20 +168,18 @@ void SignedExchangeCertFetcher::OnDataComplete() {
   url_loader_ = nullptr;
   body_.reset();
   handle_watcher_ = nullptr;
-  base::Optional<std::vector<base::StringPiece>> der_certs =
-      GetCertChainFromMessage(body_string_);
-  if (!der_certs) {
-    body_string_.clear();
-    std::move(callback_).Run(scoped_refptr<net::X509Certificate>());
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeCertFetcher::OnDataComplete", "error",
-                     "Failed to get certificate chain from message.");
+
+  std::unique_ptr<SignedExchangeCertificateChain> cert_chain =
+      SignedExchangeCertificateChain::Parse(body_string_);
+  body_string_.clear();
+  if (!cert_chain) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_, "SignedExchangeCertFetcher::OnDataComplete",
+        "Failed to get certificate chain from message.");
+    std::move(callback_).Run(nullptr);
     return;
   }
-  scoped_refptr<net::X509Certificate> cert =
-      net::X509Certificate::CreateFromDERCertChain(*der_certs);
-  body_string_.clear();
-  std::move(callback_).Run(std::move(cert));
+  std::move(callback_).Run(std::move(cert_chain));
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
                    "SignedExchangeCertFetcher::OnDataComplete");
 }
@@ -260,26 +187,25 @@ void SignedExchangeCertFetcher::OnDataComplete() {
 // network::mojom::URLLoaderClient
 void SignedExchangeCertFetcher::OnReceiveResponse(
     const network::ResourceResponseHead& head,
-    const base::Optional<net::SSLInfo>& ssl_info,
     network::mojom::DownloadedTempFilePtr downloaded_file) {
   TRACE_EVENT_BEGIN0(TRACE_DISABLED_BY_DEFAULT("loading"),
                      "SignedExchangeCertFetcher::OnReceiveResponse");
   if (head.headers->response_code() != net::HTTP_OK) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_, "SignedExchangeCertFetcher::OnReceiveResponse",
+        base::StringPrintf("Invalid reponse code: %d",
+                           head.headers->response_code()));
     Abort();
-    TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeCertFetcher::OnReceiveResponse", "error",
-                     "Invalid reponse code.", "code",
-                     head.headers->response_code());
     return;
   }
   if (head.content_length > 0) {
     if (base::checked_cast<size_t>(head.content_length) >
         g_max_cert_size_for_signed_exchange) {
+      signed_exchange_utils::ReportErrorAndEndTraceEvent(
+          devtools_proxy_, "SignedExchangeCertFetcher::OnReceiveResponse",
+          base::StringPrintf("Invalid content length: %" PRIu64,
+                             head.content_length));
       Abort();
-      TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                       "SignedExchangeCertFetcher::OnReceiveResponse", "error",
-                       "Invalid content length.", "content_length",
-                       head.content_length);
       return;
     }
     body_string_.reserve(head.content_length);

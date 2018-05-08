@@ -16,6 +16,8 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_factory.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_generic_coordinator.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_positioner.h"
@@ -24,6 +26,7 @@
 #import "ios/chrome/browser/ui/toolbar/adaptive/primary_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive/primary_toolbar_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -42,7 +45,8 @@
 // Redefined as PrimaryToolbarViewController.
 @property(nonatomic, strong) PrimaryToolbarViewController* viewController;
 // The coordinator for the location bar in the toolbar.
-@property(nonatomic, strong) LocationBarCoordinator* locationBarCoordinator;
+@property(nonatomic, strong) id<LocationBarGenericCoordinator>
+    locationBarCoordinator;
 // Orchestrator for the expansion animation.
 @property(nonatomic, strong) OmniboxFocusOrchestrator* orchestrator;
 
@@ -76,6 +80,11 @@
   FullscreenControllerFactory::GetInstance()
       ->GetForBrowserState(self.browserState)
       ->AddObserver(_fullscreenObserver.get());
+}
+
+- (void)stop {
+  [super stop];
+  [self.locationBarCoordinator stop];
 }
 
 #pragma mark - PrimaryToolbarCoordinator
@@ -131,26 +140,19 @@
 #pragma mark - FakeboxFocuser
 
 - (void)focusFakebox {
-  if (IsIPadIdiom()) {
-    // On iPhone there is no visible omnibox, so there's no need to indicate
-    // interaction was initiated from the fakebox.
-    [self.locationBarCoordinator focusOmniboxFromFakebox];
-  } else {
-    [self.locationBarCoordinator focusOmnibox];
-  }
+  [self.locationBarCoordinator focusOmnibox];
 }
 
 - (void)onFakeboxBlur {
-  DCHECK(!IsIPadIdiom());
   // Hide the toolbar if the NTP is currently displayed.
   web::WebState* webState = self.webStateList->GetActiveWebState();
   if (webState && IsVisibleUrlNewTabPage(webState)) {
-    self.viewController.view.hidden = YES;
+    self.viewController.view.hidden =
+        !IsRegularXRegularSizeClass(self.viewController);
   }
 }
 
 - (void)onFakeboxAnimationComplete {
-  DCHECK(!IsIPadIdiom());
   self.viewController.view.hidden = NO;
 }
 
@@ -188,7 +190,13 @@
 
 // Sets the location bar up.
 - (void)setUpLocationBar {
-  self.locationBarCoordinator = [[LocationBarCoordinator alloc] init];
+  if (IsRefreshLocationBarEnabled()) {
+    self.locationBarCoordinator = [[LocationBarCoordinator alloc] init];
+  } else {
+    self.locationBarCoordinator = [[LocationBarLegacyCoordinator alloc] init];
+  }
+  DCHECK(self.locationBarCoordinator);
+
   self.locationBarCoordinator.browserState = self.browserState;
   self.locationBarCoordinator.dispatcher =
       base::mac::ObjCCastStrict<CommandDispatcher>(self.dispatcher);

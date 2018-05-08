@@ -44,6 +44,7 @@
 #include "components/viz/common/resources/resource_fence.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_id.h"
+#include "components/viz/common/skia_helper.h"
 #include "components/viz/service/display/draw_polygon.h"
 #include "components/viz/service/display/dynamic_geometry_binding.h"
 #include "components/viz/service/display/layer_quad.h"
@@ -57,7 +58,6 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "media/base/media_switches.h"
-#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -176,8 +176,14 @@ BlendMode BlendModeFromSkXfermode(SkBlendMode mode) {
 const float kAntiAliasingEpsilon = 1.0f / 1024.0f;
 }  // anonymous namespace
 
+static GLint GetActiveTextureUnit(GLES2Interface* gl) {
+  GLint active_unit = 0;
+  gl->GetIntegerv(GL_ACTIVE_TEXTURE, &active_unit);
+  return active_unit;
+}
+
 // Parameters needed to draw a RenderPassDrawQuad.
-struct DrawRenderPassDrawQuadParams {
+struct GLRenderer::DrawRenderPassDrawQuadParams {
   DrawRenderPassDrawQuadParams() {}
   ~DrawRenderPassDrawQuadParams() {
     // Don't leak the texture.
@@ -260,12 +266,6 @@ struct DrawRenderPassDrawQuadParams {
   // bypass_quad_resource_lock, depending on the path taken).
   gfx::ColorSpace contents_and_bypass_color_space;
 };
-
-static GLint GetActiveTextureUnit(GLES2Interface* gl) {
-  GLint active_unit = 0;
-  gl->GetIntegerv(GL_ACTIVE_TEXTURE, &active_unit);
-  return active_unit;
-}
 
 class GLRenderer::ScopedUseGrContext {
  public:
@@ -564,58 +564,6 @@ static sk_sp<SkImage> WrapTexture(uint32_t texture_id,
   return SkImage::MakeFromTexture(context, backend_texture, origin,
                                   kN32_SkColorType, kPremul_SkAlphaType,
                                   nullptr);
-}
-
-static sk_sp<SkImage> ApplyImageFilter(
-    std::unique_ptr<GLRenderer::ScopedUseGrContext> use_gr_context,
-    const gfx::RectF& src_rect,
-    const gfx::RectF& dst_rect,
-    const gfx::Vector2dF& scale,
-    sk_sp<SkImageFilter> filter,
-    GLuint texture_id,
-    GLenum target,
-    const gfx::Size& size,
-    SkIPoint* offset,
-    SkIRect* subset,
-    bool flip_texture,
-    const gfx::PointF& origin) {
-  if (!filter || !use_gr_context)
-    return nullptr;
-
-  sk_sp<SkImage> src_image = WrapTexture(
-      texture_id, target, size, use_gr_context->context(), flip_texture);
-
-  if (!src_image) {
-    TRACE_EVENT_INSTANT0("cc",
-                         "ApplyImageFilter wrap background texture failed",
-                         TRACE_EVENT_SCOPE_THREAD);
-    return nullptr;
-  }
-
-  // Big filters can sometimes fallback to CPU. Therefore, we need
-  // to disable subnormal floats for performance and security reasons.
-  cc::ScopedSubnormalFloatDisabler disabler;
-  SkMatrix local_matrix;
-  local_matrix.setTranslate(origin.x(), origin.y());
-  local_matrix.postScale(scale.x(), scale.y());
-  local_matrix.postTranslate(-src_rect.x(), -src_rect.y());
-
-  SkIRect clip_bounds = gfx::RectFToSkRect(dst_rect).roundOut();
-  clip_bounds.offset(-src_rect.x(), -src_rect.y());
-  filter = filter->makeWithLocalMatrix(local_matrix);
-  SkIRect in_subset = SkIRect::MakeWH(src_rect.width(), src_rect.height());
-  sk_sp<SkImage> image = src_image->makeWithFilter(filter.get(), in_subset,
-                                                   clip_bounds, subset, offset);
-
-  if (!image || !image->isTextureBacked()) {
-    return nullptr;
-  }
-
-  // Force a flush of the Skia pipeline before we switch back to the compositor
-  // context.
-  image->getTextureHandle(true);
-  CHECK(image->isTextureBacked());
-  return image;
 }
 
 static gfx::RectF CenteredRect(const gfx::Rect& tile_rect) {
@@ -918,24 +866,6 @@ sk_sp<SkImage> GLRenderer::ApplyBackgroundFilters(
   return image;
 }
 
-// Map device space quad to local space. Device_transform has no 3d
-// component since it was flattened, so we don't need to project.  We should
-// have already checked that the transform was uninvertible before this call.
-gfx::QuadF MapQuadToLocalSpace(const gfx::Transform& device_transform,
-                               const gfx::QuadF& device_quad) {
-  gfx::Transform inverse_device_transform(gfx::Transform::kSkipInitialization);
-  DCHECK(device_transform.IsInvertible());
-  bool did_invert = device_transform.GetInverse(&inverse_device_transform);
-  DCHECK(did_invert);
-  bool clipped = false;
-  gfx::QuadF local_quad =
-      cc::MathUtil::MapQuad(inverse_device_transform, device_quad, &clipped);
-  // We should not DCHECK(!clipped) here, because anti-aliasing inflation may
-  // cause device_quad to become clipped. To our knowledge this scenario does
-  // not need to be handled differently than the unclipped case.
-  return local_quad;
-}
-
 const TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
 #if defined(OS_MACOSX)
   // On Macs, this path can sometimes lead to all black output.
@@ -1097,6 +1027,19 @@ bool GLRenderer::InitializeRPDQParameters(
   return true;
 }
 
+// Get a GL texture id from an SkImage. An optional origin pointer can be
+// passed in which will be filled out with the origin for the texture
+// backing the SkImage.
+static GLuint GetGLTextureIDFromSkImage(const SkImage* image,
+                                        GrSurfaceOrigin* origin = nullptr) {
+  GrBackendTexture backend_texture = image->getBackendTexture(true, origin);
+  DCHECK(backend_texture.isValid());
+  GrGLTextureInfo info;
+  bool result = backend_texture.getGLTextureInfo(&info);
+  DCHECK(result);
+  return info.fID;
+}
+
 void GLRenderer::UpdateRPDQShadersForBlending(
     DrawRenderPassDrawQuadParams* params) {
   const RenderPassDrawQuad* quad = params->quad;
@@ -1136,9 +1079,7 @@ void GLRenderer::UpdateRPDQShadersForBlending(
             params->background_rect, unclipped_rect);
         if (params->background_image) {
           params->background_image_id =
-              skia::GrBackendObjectToGrGLTextureInfo(
-                  params->background_image->getTextureHandle(true))
-                  ->fID;
+              GetGLTextureIDFromSkImage(params->background_image.get());
           DCHECK(params->background_image_id);
         }
       }
@@ -1208,8 +1149,12 @@ bool GLRenderer::UpdateRPDQWithSkiaFilters(
           clip_rect = current_draw_rect_;
         }
         gfx::Transform transform = params->quad_to_target_transform;
+        if (!transform.IsInvertible()) {
+          return false;
+        }
         gfx::QuadF clip_quad = gfx::QuadF(gfx::RectF(clip_rect));
-        gfx::QuadF local_clip = MapQuadToLocalSpace(transform, clip_quad);
+        gfx::QuadF local_clip =
+            cc::MathUtil::InverseMapQuadToLocalSpace(transform, clip_quad);
         params->dst_rect.Intersect(local_clip.BoundingBox());
         // If we've been fully clipped out (by crop rect or clipping), there's
         // nothing to draw.
@@ -1219,28 +1164,34 @@ bool GLRenderer::UpdateRPDQWithSkiaFilters(
         SkIPoint offset;
         SkIRect subset;
         gfx::RectF src_rect(quad->rect);
+        auto use_gr_context = ScopedUseGrContext::Create(this);
+        if (!use_gr_context)
+          return false;
+
         if (params->contents_texture) {
           params->contents_and_bypass_color_space =
               params->contents_texture->color_space();
-          params->filter_image = ApplyImageFilter(
-              ScopedUseGrContext::Create(this), src_rect, params->dst_rect,
-              quad->filters_scale, std::move(filter),
-              params->contents_texture->id(), GL_TEXTURE_2D,
-              params->contents_texture->size(), &offset, &subset,
-              params->flip_texture, quad->filters_origin);
+          sk_sp<SkImage> src_image =
+              WrapTexture(params->contents_texture->id(), GL_TEXTURE_2D,
+                          params->contents_texture->size(),
+                          use_gr_context->context(), params->flip_texture);
+          params->filter_image = SkiaHelper::ApplyImageFilter(
+              src_image, src_rect, params->dst_rect, quad->filters_scale,
+              std::move(filter), &offset, &subset, quad->filters_origin);
         } else {
           cc::DisplayResourceProvider::ScopedReadLockGL
               prefilter_bypass_quad_texture_lock(
                   resource_provider_, params->bypass_quad_texture.resource_id);
           params->contents_and_bypass_color_space =
               prefilter_bypass_quad_texture_lock.color_space();
-          params->filter_image = ApplyImageFilter(
-              ScopedUseGrContext::Create(this), src_rect, params->dst_rect,
-              quad->filters_scale, std::move(filter),
-              prefilter_bypass_quad_texture_lock.texture_id(),
-              prefilter_bypass_quad_texture_lock.target(),
-              prefilter_bypass_quad_texture_lock.size(), &offset, &subset,
-              params->flip_texture, quad->filters_origin);
+          sk_sp<SkImage> src_image =
+              WrapTexture(prefilter_bypass_quad_texture_lock.texture_id(),
+                          prefilter_bypass_quad_texture_lock.target(),
+                          prefilter_bypass_quad_texture_lock.size(),
+                          use_gr_context->context(), params->flip_texture);
+          params->filter_image = SkiaHelper::ApplyImageFilter(
+              src_image, src_rect, params->dst_rect, quad->filters_scale,
+              std::move(filter), &offset, &subset, quad->filters_origin);
         }
 
         if (!params->filter_image)
@@ -1270,9 +1221,7 @@ void GLRenderer::UpdateRPDQTexturesForSampling(
   if (params->filter_image) {
     GrSurfaceOrigin origin;
     GLuint filter_image_id =
-        skia::GrBackendObjectToGrGLTextureInfo(
-            params->filter_image->getTextureHandle(true, &origin))
-            ->fID;
+        GetGLTextureIDFromSkImage(params->filter_image.get(), &origin);
     DCHECK(filter_image_id);
     DCHECK_EQ(GL_TEXTURE0, GetActiveTextureUnit(gl_));
     gl_->BindTexture(GL_TEXTURE_2D, filter_image_id);
@@ -1705,7 +1654,8 @@ void GLRenderer::SetupQuadForClippingAndAntialiasing(
         quad);
   }
 
-  *local_quad = MapQuadToLocalSpace(device_transform, device_quad);
+  *local_quad =
+      cc::MathUtil::InverseMapQuadToLocalSpace(device_transform, device_quad);
 }
 
 // static
@@ -1745,7 +1695,8 @@ void GLRenderer::SetupRenderPassQuadForClippingAndAntialiasing(
     device_quad = device_layer_edges.ToQuadF();
   }
 
-  *local_quad = MapQuadToLocalSpace(device_transform, device_quad);
+  *local_quad =
+      cc::MathUtil::InverseMapQuadToLocalSpace(device_transform, device_quad);
 }
 
 void GLRenderer::DrawSolidColorQuad(const SolidColorDrawQuad* quad,
@@ -2716,7 +2667,8 @@ void GLRenderer::DrawQuadGeometryWithAA(const DrawQuad* quad,
                    CenteredRect(tile_rect));
 }
 
-void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
+void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                             bool need_presentation_feedback) {
   DCHECK(visible_);
 
   TRACE_EVENT0("viz", "GLRenderer::SwapBuffers");
@@ -2727,6 +2679,7 @@ void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   OutputSurfaceFrame output_frame;
   output_frame.latency_info = std::move(latency_info);
   output_frame.size = surface_size;
+  output_frame.need_presentation_feedback = need_presentation_feedback;
   if (use_swap_with_bounds_) {
     output_frame.content_bounds = std::move(swap_content_bounds_);
   } else if (use_partial_swap_) {
@@ -3259,7 +3212,7 @@ void GLRenderer::ScheduleOverlays() {
     context_support_->ScheduleOverlayPlane(
         overlay_candidate.plane_z_order, overlay_candidate.transform,
         texture_id, ToNearestRect(overlay_candidate.display_rect),
-        overlay_candidate.uv_rect);
+        overlay_candidate.uv_rect, !overlay_candidate.is_opaque);
   }
 }
 
@@ -3671,8 +3624,7 @@ ResourceFormat GLRenderer::BackbufferFormat() const {
     DCHECK(caps.color_buffer_half_float_rgba);
     return RGBA_F16;
   }
-  return PlatformColor::BestSupportedTextureFormat(
-      caps.texture_format_bgra8888);
+  return PlatformColor::BestSupportedTextureFormat(caps);
 }
 
 void GLRenderer::AllocateRenderPassResourceIfNeeded(

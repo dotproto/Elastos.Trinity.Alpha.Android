@@ -21,7 +21,7 @@
 #include "net/http/http_stream_factory.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/quic_packets.h"
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -86,7 +86,7 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
 
   EXPECT_TRUE(params_.enable_quic);
   EXPECT_FALSE(params_.mark_quic_broken_when_network_blackholes);
-  EXPECT_FALSE(params_.retry_without_alt_svc_on_quic_errors);
+  EXPECT_TRUE(params_.retry_without_alt_svc_on_quic_errors);
   EXPECT_FALSE(params_.support_ietf_format_quic_altsvc);
   EXPECT_EQ(1350u, params_.quic_max_packet_length);
   EXPECT_EQ(net::QuicTagVector(), params_.quic_connection_options);
@@ -148,15 +148,15 @@ TEST_F(NetworkSessionConfiguratorTest,
   EXPECT_TRUE(params_.mark_quic_broken_when_network_blackholes);
 }
 
-TEST_F(NetworkSessionConfiguratorTest, RetryWithoutAltSvcOnQuicErrors) {
+TEST_F(NetworkSessionConfiguratorTest, DisableRetryWithoutAltSvcOnQuicErrors) {
   std::map<std::string, std::string> field_trial_params;
-  field_trial_params["retry_without_alt_svc_on_quic_errors"] = "true";
+  field_trial_params["retry_without_alt_svc_on_quic_errors"] = "false";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(params_.retry_without_alt_svc_on_quic_errors);
+  EXPECT_FALSE(params_.retry_without_alt_svc_on_quic_errors);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, SupportIetfFormatQuicAltSvc) {
@@ -710,6 +710,26 @@ TEST_F(NetworkSessionConfiguratorTest, TokenBindingEnabled) {
   ParseCommandLineAndFieldTrials(command_line);
 
   EXPECT_TRUE(params_.enable_token_binding);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, ChannelIDEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kChannelID);
+
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  ParseCommandLineAndFieldTrials(command_line);
+
+  EXPECT_TRUE(params_.enable_channel_id);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, ChannelIDDisabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kChannelID);
+
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  ParseCommandLineAndFieldTrials(command_line);
+
+  EXPECT_FALSE(params_.enable_channel_id);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, DefaultCacheBackend) {

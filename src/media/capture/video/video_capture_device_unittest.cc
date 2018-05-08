@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -51,7 +50,7 @@
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
-#include "media/capture/video/chromeos/video_capture_device_arc_chromeos.h"
+#include "media/capture/video/chromeos/video_capture_device_chromeos_halv3.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
 #endif
 
@@ -72,6 +71,13 @@
 #define MAYBE_CaptureMjpeg CaptureMjpeg
 #define MAYBE_TakePhoto TakePhoto
 #define MAYBE_GetPhotoState GetPhotoState
+#define MAYBE_CaptureWithSize CaptureWithSize
+#elif defined(OS_CHROMEOS)
+#define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
+#define MAYBE_CaptureMjpeg CaptureMjpeg
+#define MAYBE_TakePhoto TakePhoto
+#define MAYBE_GetPhotoState GetPhotoState
+#define MAYBE_CaptureWithSize CaptureWithSize
 #elif defined(OS_LINUX)
 // AllocateBadSize will hang when a real camera is attached and if more than one
 // test is trying to use the camera (even across processes). Do NOT renable
@@ -169,10 +175,20 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
     main_thread_->PostTask(FROM_HERE, base::BindOnce(frame_cb_, format));
   }
 
+  void OnIncomingCapturedGfxBuffer(gfx::GpuMemoryBuffer* buffer,
+                                   const VideoCaptureFormat& frame_format,
+                                   int clockwise_rotation,
+                                   base::TimeTicks reference_time,
+                                   base::TimeDelta timestamp,
+                                   int frame_feedback_id = 0) override {
+    ASSERT_TRUE(buffer);
+    ASSERT_GT(buffer->GetSize().width() * buffer->GetSize().height(), 0);
+    main_thread_->PostTask(FROM_HERE, base::BindOnce(frame_cb_, frame_format));
+  }
+
   // Trampoline methods to workaround GMOCK problems with std::unique_ptr<>.
   Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
                              VideoPixelFormat format,
-                             VideoPixelStorage storage,
                              int frame_feedback_id) override {
     DoReserveOutputBuffer();
     NOTREACHED() << "This should never be called";
@@ -195,8 +211,7 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
   }
   Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
                                    VideoPixelFormat format,
-                                   VideoPixelStorage storage,
-                                   int frame_feedback_id) {
+                                   int frame_feedback_id) override {
     DoResurrectLastOutputBuffer();
     NOTREACHED() << "This should never be called";
     return Buffer();

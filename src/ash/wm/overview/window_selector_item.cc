@@ -37,6 +37,7 @@
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/compositor_extra/shadow.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -53,7 +54,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/window/non_client_view.h"
 #include "ui/wm/core/coordinate_conversion.h"
-#include "ui/wm/core/shadow.h"
 #include "ui/wm/core/shadow_types.h"
 
 namespace ash {
@@ -118,10 +118,6 @@ constexpr int kDragAnimationMs = 167;
 // this fraction of size.
 constexpr float kPreCloseScale = 0.02f;
 
-// Before dragging an overview window, the window will scale up |kPreDragScale|
-// to indicate its selection.
-constexpr float kDragWindowScale = 0.04f;
-
 // The size in dp of the window icon shown on the overview window next to the
 // title.
 constexpr gfx::Size kIconSize = gfx::Size(24, 24);
@@ -139,9 +135,9 @@ constexpr int kCloseButtonOffsetDp = 8;
 
 // The colors of the close button ripple.
 constexpr SkColor kCloseButtonInkDropRippleColor =
-    SkColorSetARGBMacro(0x0F, 0xFF, 0xFF, 0xFF);
+    SkColorSetARGB(0x0F, 0xFF, 0xFF, 0xFF);
 constexpr SkColor kCloseButtonInkDropRippleHighlightColor =
-    SkColorSetARGBMacro(0x14, 0xFF, 0xFF, 0xFF);
+    SkColorSetARGB(0x14, 0xFF, 0xFF, 0xFF);
 
 // The font delta of the overview window title.
 constexpr int kLabelFontDelta = 2;
@@ -150,7 +146,7 @@ constexpr int kShadowElevation = 16;
 
 // Values of the backdrop.
 constexpr int kBackdropRoundingDp = 4;
-constexpr SkColor kBackdropColor = SkColorSetARGBMacro(0x24, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kBackdropColor = SkColorSetARGB(0x24, 0xFF, 0xFF, 0xFF);
 
 // Windows in tablet have different animations. Overview headers do not
 // translate when entering or exiting overview mode. Title bars also do not
@@ -252,11 +248,18 @@ class ShieldButton : public views::Button {
           listener()->HandleDragEvent(location);
           break;
         case ui::ET_SCROLL_FLING_START:
+          listener()->HandleFlingStartEvent(location,
+                                            event->details().velocity_x(),
+                                            event->details().velocity_y());
+          break;
         case ui::ET_GESTURE_SCROLL_END:
           listener()->HandleReleaseEvent(location);
           break;
+        case ui::ET_GESTURE_LONG_PRESS:
+          listener()->HandleLongPressEvent(location);
+          break;
         case ui::ET_GESTURE_TAP:
-          listener()->ActivateDraggedWindow(location);
+          listener()->ActivateDraggedWindow();
           break;
         case ui::ET_GESTURE_END:
           listener()->ResetDraggedWindowGesture();
@@ -299,9 +302,20 @@ WindowSelectorItem::OverviewCloseButton::OverviewCloseButton(
   const int length = IsNewOverviewUi() ? kHeaderHeightDp : kOldHeaderHeightDp;
   SetMinimumImageSize(gfx::Size(length, length));
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
+  SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
 }
 
 WindowSelectorItem::OverviewCloseButton::~OverviewCloseButton() = default;
+
+std::unique_ptr<views::InkDrop>
+WindowSelectorItem::OverviewCloseButton::CreateInkDrop() {
+  std::unique_ptr<views::InkDropImpl> ink_drop =
+      std::make_unique<views::InkDropImpl>(this, size());
+  ink_drop->SetAutoHighlightMode(
+      views::InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE);
+  ink_drop->SetShowHighlightOnHover(true);
+  return ink_drop;
+}
 
 std::unique_ptr<views::InkDropRipple>
 WindowSelectorItem::OverviewCloseButton::CreateInkDropRipple() const {
@@ -770,6 +784,14 @@ void WindowSelectorItem::SetBounds(const gfx::Rect& target_bounds,
                                    OverviewAnimationType animation_type) {
   if (in_bounds_update_)
     return;
+
+  // Do not animate if the resulting bounds does not change. The original window
+  // may change bounds so we still need to call SetItemBounds to update the
+  // window transform.
+  OverviewAnimationType new_animation_type = animation_type;
+  if (target_bounds == target_bounds_)
+    new_animation_type = OVERVIEW_ANIMATION_NONE;
+
   base::AutoReset<bool> auto_reset_in_bounds_update(&in_bounds_update_, true);
   // If |target_bounds_| is empty, this is the first update. For tablet mode,
   // let UpdateHeaderLayout know, as we do not want |item_widget_| to be
@@ -782,18 +804,28 @@ void WindowSelectorItem::SetBounds(const gfx::Rect& target_bounds,
 
   gfx::Rect inset_bounds(target_bounds);
   inset_bounds.Inset(kWindowMargin, kWindowMargin);
-  SetItemBounds(inset_bounds, animation_type);
+  SetItemBounds(inset_bounds, new_animation_type);
 
   // SetItemBounds is called before UpdateHeaderLayout so the header can
   // properly use the updated windows bounds.
-  UpdateHeaderLayout(mode, animation_type);
+  UpdateHeaderLayout(mode, new_animation_type);
+
+  // Shadow is normally set after an animation is finished. In the case of no
+  // animations, manually set the shadow. Shadow relies on both the window
+  // transform and |item_widget_|'s new bounds so set it after SetItemBounds
+  // and UpdateHeaderLayout.
+  if (new_animation_type == OVERVIEW_ANIMATION_NONE) {
+    SetShadowBounds(
+        base::make_optional(transform_window_.GetTransformedBounds()));
+  }
 
   UpdateBackdropBounds();
 }
 
 void WindowSelectorItem::SetSelected(bool selected) {
   selected_ = selected;
-  background_view_->AnimateBackgroundOpacity(selected ? 0.f : kHeaderOpacity);
+  if (!IsNewOverviewUi())
+    background_view_->AnimateBackgroundOpacity(selected ? 0.f : kHeaderOpacity);
 }
 
 void WindowSelectorItem::SendAccessibleSelectionEvent() {
@@ -952,12 +984,9 @@ float WindowSelectorItem::GetItemScale(const gfx::Size& size) {
 
 void WindowSelectorItem::HandlePressEvent(
     const gfx::Point& location_in_screen) {
-  // Check the y position instead of using GetBoundsInScreen().Contains() so
-  // that it includes the image, close button and invisible margins.
-  tap_down_event_on_title_ = base::nullopt;
-  if (IsNewOverviewUi() &&
-      location_in_screen.y() < background_view_->GetBoundsInScreen().bottom()) {
-    tap_down_event_on_title_ = base::make_optional(location_in_screen);
+  // We allow switching finger while dragging, but do not allow dragging two or more items.
+  if (window_selector_->window_drag_controller() &&
+      window_selector_->window_drag_controller()->item()) {
     return;
   }
 
@@ -967,41 +996,94 @@ void WindowSelectorItem::HandlePressEvent(
 
 void WindowSelectorItem::HandleReleaseEvent(
     const gfx::Point& location_in_screen) {
-  if (tap_down_event_on_title_) {
-    SelectWindowIfBelowDistanceThreshold(location_in_screen);
+  if (!IsDragItem())
     return;
-  }
-
-  EndDrag();
+  window_grid_->SetSelectionWidgetVisibility(true);
   window_selector_->CompleteDrag(this, location_in_screen);
 }
 
 void WindowSelectorItem::HandleDragEvent(const gfx::Point& location_in_screen) {
-  if (tap_down_event_on_title_)
+  if (!IsDragItem())
     return;
 
   window_selector_->Drag(this, location_in_screen);
 }
 
-void WindowSelectorItem::ActivateDraggedWindow(
+void WindowSelectorItem::HandleLongPressEvent(
     const gfx::Point& location_in_screen) {
-  if (tap_down_event_on_title_) {
-    SelectWindowIfBelowDistanceThreshold(location_in_screen);
-    return;
-  }
+  window_selector_->StartSplitViewDragMode(location_in_screen);
+}
 
-  DCHECK_EQ(this, window_selector_->window_drag_controller()->item());
+void WindowSelectorItem::HandleFlingStartEvent(
+    const gfx::Point& location_in_screen,
+    float velocity_x,
+    float velocity_y) {
+  window_selector_->Fling(this, location_in_screen, velocity_x, velocity_y);
+}
+
+void WindowSelectorItem::ActivateDraggedWindow() {
+  if (!IsDragItem())
+    return;
+
   window_selector_->ActivateDraggedWindow();
 }
 
 void WindowSelectorItem::ResetDraggedWindowGesture() {
   OnSelectorItemDragEnded();
-
-  if (tap_down_event_on_title_)
+  if (!IsDragItem())
     return;
 
-  DCHECK_EQ(this, window_selector_->window_drag_controller()->item());
   window_selector_->ResetDraggedWindowGesture();
+}
+
+bool WindowSelectorItem::IsDragItem() {
+  return window_selector_->window_drag_controller() &&
+         window_selector_->window_drag_controller()->item() == this;
+}
+
+void WindowSelectorItem::OnDragAnimationCompleted() {
+  // This is function is called whenever the grid repositions its windows, but
+  // we only need to restack the windows if an item was being dragged around
+  // and then released.
+  if (!should_restack_on_animation_end_)
+    return;
+
+  should_restack_on_animation_end_ = false;
+
+  // First stack this item's window below the snapped window if split view mode
+  // is active.
+  aura::Window* dragged_window = GetWindowForStacking();
+  aura::Window* dragged_widget_window = item_widget_->GetNativeWindow();
+  aura::Window* parent_window = dragged_widget_window->parent();
+  if (Shell::Get()->IsSplitViewModeActive()) {
+    aura::Window* snapped_window =
+        Shell::Get()->split_view_controller()->GetDefaultSnappedWindow();
+    if (snapped_window->parent() == parent_window &&
+        dragged_window->parent() == parent_window) {
+      parent_window->StackChildBelow(dragged_widget_window, snapped_window);
+      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
+    }
+  }
+
+  // Then find the window which was stacked right above this selector item's
+  // window before dragging and stack this selector item's window below it.
+  const std::vector<std::unique_ptr<WindowSelectorItem>>& selector_items =
+      window_grid_->window_list();
+  aura::Window* stacking_target = nullptr;
+  for (size_t index = 0; index < selector_items.size(); index++) {
+    if (index > 0) {
+      aura::Window* window = selector_items[index - 1].get()->GetWindow();
+      if (window->parent() == parent_window &&
+          dragged_window->parent() == parent_window) {
+        stacking_target = window;
+      }
+    }
+    if (selector_items[index].get() == this && stacking_target) {
+      parent_window->StackChildBelow(dragged_widget_window, stacking_target);
+      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
+      break;
+    }
+  }
 }
 
 void WindowSelectorItem::SetShadowBounds(
@@ -1009,7 +1091,12 @@ void WindowSelectorItem::SetShadowBounds(
   if (!IsNewOverviewUi())
     return;
 
-  DCHECK(shadow_);
+  // Shadow is normally turned off during animations and reapplied when they
+  // are finished. On destruction, |shadow_| is cleaned up before
+  // |transform_window_|, which may call this function, so early exit if
+  // |shadow_| is nullptr.
+  if (!shadow_)
+    return;
 
   if (bounds_in_screen == base::nullopt) {
     shadow_->layer()->SetVisible(false);
@@ -1017,11 +1104,26 @@ void WindowSelectorItem::SetShadowBounds(
   }
 
   shadow_->layer()->SetVisible(true);
-  gfx::Rect bounds_in_item = caption_container_view_->GetLocalBounds();
+  gfx::Rect bounds_in_item =
+      gfx::Rect(item_widget_->GetNativeWindow()->GetTargetBounds().size());
   bounds_in_item.Inset(kWindowSelectorMargin, kWindowSelectorMargin);
   bounds_in_item.Inset(0, close_button_->GetPreferredSize().height(), 0, 0);
   bounds_in_item.ClampToCenteredSize(bounds_in_screen.value().size());
+
   shadow_->SetContentBounds(bounds_in_item);
+}
+
+void WindowSelectorItem::SetOpacity(float opacity) {
+  item_widget_->SetOpacity(opacity);
+  if (background_view_ && !IsNewOverviewUi()) {
+    background_view_->AnimateBackgroundOpacity(
+        selected_ ? 0.f : kHeaderOpacity * opacity);
+  }
+  transform_window_.SetOpacity(opacity);
+}
+
+float WindowSelectorItem::GetOpacity() {
+  return item_widget_->GetNativeWindow()->layer()->opacity();
 }
 
 bool WindowSelectorItem::ShouldAnimateWhenEntering() const {
@@ -1068,6 +1170,13 @@ float WindowSelectorItem::GetTitlebarOpacityForTesting() {
   return background_view_->layer()->opacity();
 }
 
+gfx::Rect WindowSelectorItem::GetShadowBoundsForTesting() {
+  if (!shadow_ || !shadow_->layer()->visible())
+    return gfx::Rect();
+
+  return shadow_->content_bounds();
+}
+
 gfx::Rect WindowSelectorItem::GetTargetBoundsInScreen() const {
   return transform_window_.GetTargetBoundsInScreen();
 }
@@ -1092,15 +1201,6 @@ void WindowSelectorItem::SetItemBounds(const gfx::Rect& target_bounds,
   ScopedTransformOverviewWindow::ScopedAnimationSettings animation_settings;
   transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
   transform_window_.SetTransform(root_window_, transform);
-}
-
-void WindowSelectorItem::SetOpacity(float opacity) {
-  item_widget_->SetOpacity(opacity);
-  if (background_view_) {
-    background_view_->AnimateBackgroundOpacity(
-        selected_ ? 0.f : kHeaderOpacity * opacity);
-  }
-  transform_window_.SetOpacity(opacity);
 }
 
 void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
@@ -1167,7 +1267,7 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
     label_view_->SetFontList(gfx::FontList().Derive(
         kLabelFontDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
 
-    shadow_ = std::make_unique<::wm::Shadow>();
+    shadow_ = std::make_unique<ui::Shadow>();
     shadow_->Init(kShadowElevation);
     item_widget_->GetLayer()->Add(shadow_->layer());
   }
@@ -1304,16 +1404,6 @@ void WindowSelectorItem::FadeOut(std::unique_ptr<views::Widget> widget) {
   widget_ptr->SetOpacity(0.f);
 }
 
-void WindowSelectorItem::SelectWindowIfBelowDistanceThreshold(
-    const gfx::Point& event_location) {
-  DCHECK(tap_down_event_on_title_.has_value());
-
-  const gfx::Vector2d distance =
-      event_location - tap_down_event_on_title_.value();
-  if (distance.Length() < OverviewWindowDragController::kMinimumDragOffset)
-    window_selector_->SelectWindow(this);
-}
-
 gfx::SlideAnimation* WindowSelectorItem::GetBackgroundViewAnimation() {
   return background_view_ ? background_view_->animation() : nullptr;
 }
@@ -1330,13 +1420,6 @@ void WindowSelectorItem::StartDrag() {
   // and rounded edges mask from showing up after dragging in the case the
   // window is pressed while still animating.
   transform_window_.CancelAnimationsListener();
-
-  gfx::Rect scaled_bounds(target_bounds_);
-  scaled_bounds.Inset(-target_bounds_.width() * kDragWindowScale,
-                      -target_bounds_.height() * kDragWindowScale);
-  OverviewAnimationType animation_type =
-      OverviewAnimationType::OVERVIEW_ANIMATION_DRAGGING_SELECTOR_ITEM;
-  SetBounds(scaled_bounds, animation_type);
 
   aura::Window* widget_window = item_widget_->GetNativeWindow();
   aura::Window* window = GetWindowForStacking();
@@ -1357,45 +1440,6 @@ void WindowSelectorItem::StartDrag() {
         widget_window->parent() == snapped_window->parent()) {
       widget_window->parent()->StackChildBelow(widget_window, snapped_window);
       widget_window->parent()->StackChildBelow(window, widget_window);
-    }
-  }
-}
-
-void WindowSelectorItem::EndDrag() {
-  window_grid_->SetSelectionWidgetVisibility(true);
-
-  // First stack this item's window below the snapped window if split view mode
-  // is active.
-  aura::Window* dragged_window = GetWindowForStacking();
-  aura::Window* dragged_widget_window = item_widget_->GetNativeWindow();
-  aura::Window* parent_window = dragged_widget_window->parent();
-  if (Shell::Get()->IsSplitViewModeActive()) {
-    aura::Window* snapped_window =
-        Shell::Get()->split_view_controller()->GetDefaultSnappedWindow();
-    if (snapped_window->parent() == parent_window &&
-        dragged_window->parent() == parent_window) {
-      parent_window->StackChildBelow(dragged_widget_window, snapped_window);
-      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
-    }
-  }
-
-  // Then find the window which was stacked right above this selector item's
-  // window before dragging and stack this selector item's window below it.
-  const std::vector<std::unique_ptr<WindowSelectorItem>>& selector_items =
-      window_grid_->window_list();
-  aura::Window* stacking_target = nullptr;
-  for (size_t index = 0; index < selector_items.size(); index++) {
-    if (index > 0) {
-      aura::Window* window = selector_items[index - 1].get()->GetWindow();
-      if (window->parent() == parent_window &&
-          dragged_window->parent() == parent_window) {
-        stacking_target = window;
-      }
-    }
-    if (selector_items[index].get() == this && stacking_target) {
-      parent_window->StackChildBelow(dragged_widget_window, stacking_target);
-      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
-      break;
     }
   }
 }

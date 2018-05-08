@@ -30,10 +30,6 @@ const base::Feature kAdSamplerTriggerFeature{"SafeBrowsingAdSamplerTrigger",
 
 // If enabled in pre-network-service world, SafeBrowsing URL checks are done by
 // applying SafeBrowsing's URLLoaderThrottle subclasses to ThrottlingURLLoader.
-// It affects:
-//   - subresource loading from renderers;
-//   - frame resource loading from the browser, if
-//     content::IsNavigationMojoResponseEnabled() is true.
 //
 // This flag has no effect if network service is enabled. With network service,
 // SafeBrowsing URL checks are always done by SafeBrowsing's URLLoaderThrottle
@@ -47,7 +43,7 @@ const base::Feature kGaiaPasswordReuseReporting{
 
 const base::Feature kGoogleBrandedPhishingWarning{
     "PasswordProtectionGoogleBrandedPhishingWarning",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kThreatDomDetailsTagAndAttributeFeature{
     "ThreatDomDetailsTagAttributes", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -68,6 +64,9 @@ const base::Feature kInspectDownloadedRarFiles{
 const base::Feature kEnterprisePasswordProtectionV1{
     "EnterprisePasswordProtectionV1", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kForceEnableResetPasswordWebUI{
+    "ForceEnableResetPasswordWebUI", base::FEATURE_DISABLED_BY_DEFAULT};
+
 namespace {
 // List of experimental features. Boolean value for each list member should be
 // set to true if the experiment is currently running at a probability other
@@ -83,8 +82,9 @@ constexpr struct {
     {&kCheckByURLLoaderThrottle, true},
     {&kDispatchSafetyNetCheckOffThread, false},
     {&kEnterprisePasswordProtectionV1, true},
+    {&kForceEnableResetPasswordWebUI, false},
     {&kGaiaPasswordReuseReporting, true},
-    {&kGoogleBrandedPhishingWarning, true},
+    {&kGoogleBrandedPhishingWarning, false},
     {&kInspectDownloadedRarFiles, true},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
     {&kTriggerThrottlerDailyQuotaFeature, false},

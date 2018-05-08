@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_web_graphics_context_3d.h"
@@ -156,6 +155,17 @@ scoped_refptr<TestContextProvider> TestContextProvider::Create(
       std::move(support),
       std::make_unique<TestGLES2InterfaceForContextProvider>(),
       std::move(context), support_locking);
+}
+
+// static
+scoped_refptr<TestContextProvider> TestContextProvider::Create(
+    std::unique_ptr<TestContextSupport> support) {
+  DCHECK(support);
+  constexpr bool support_locking = false;
+  return new TestContextProvider(
+      std::move(support),
+      std::make_unique<TestGLES2InterfaceForContextProvider>(),
+      TestWebGraphicsContext3D::Create(), support_locking);
 }
 
 // static

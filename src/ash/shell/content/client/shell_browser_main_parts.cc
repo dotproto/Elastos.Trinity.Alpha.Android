@@ -21,13 +21,13 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "components/exo/file_helper.h"
 #include "content/public/browser/context_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/shell/browser/shell_browser_context.h"
@@ -101,6 +101,8 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
       ShellContentState::GetInstance()->GetActiveBrowserContext(), nullptr));
 
   ash::Shell::GetPrimaryRootWindow()->GetHost()->Show();
+
+  ash::Shell::Get()->InitWaylandServer(nullptr);
 }
 
 void ShellBrowserMainParts::PostMainMessageLoopRun() {

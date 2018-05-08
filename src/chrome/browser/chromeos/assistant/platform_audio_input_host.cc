@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 #include "media/audio/audio_input_controller.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_bus.h"
@@ -19,11 +20,29 @@
 namespace chromeos {
 namespace assistant {
 
+namespace {
+
+void NotifyDataAvailable(const base::WeakPtr<PlatformAudioInputHost>& host,
+                         const std::vector<int32_t>& data,
+                         int32_t frames,
+                         base::TimeTicks capture_time) {
+  if (host)
+    host->NotifyDataAvailable(std::move(data), frames, capture_time);
+}
+
+void NotifyAudioClosed(const base::WeakPtr<PlatformAudioInputHost>& host) {
+  if (host)
+    host->NotifyAudioClosed();
+}
+
+}  // namespace
+
 class PlatformAudioInputHost::Writer
     : public media::AudioInputController::SyncWriter {
  public:
-  explicit Writer(base::WeakPtr<PlatformAudioInputHost> host)
-      : host_(std::move(host)) {}
+  Writer(base::WeakPtr<PlatformAudioInputHost> host,
+         scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : host_(std::move(host)), task_runner_(task_runner) {}
   ~Writer() override = default;
 
   // media::AudioInputController::SyncWriter overrides:
@@ -31,22 +50,27 @@ class PlatformAudioInputHost::Writer
              double volume,
              bool key_pressed,
              base::TimeTicks capture_time) override {
-    if (!host_)
-      return;
     // 2 channels * # of frames.
     std::vector<int32_t> buffer(2 * data->frames());
     data->ToInterleaved<media::SignedInt32SampleTypeTraits>(data->frames(),
                                                             buffer.data());
-    host_->NotifyDataAvailable(std::move(buffer), data->frames(), capture_time);
+
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&::chromeos::assistant::NotifyDataAvailable, host_,
+                       std::move(buffer), data->frames(), capture_time));
   }
 
   void Close() override {
-    if (host_)
-      host_->NotifyAudioClosed();
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&::chromeos::assistant::NotifyAudioClosed, host_));
   }
 
  private:
   base::WeakPtr<PlatformAudioInputHost> host_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(Writer);
 };
@@ -68,7 +92,8 @@ class PlatformAudioInputHost::EventHandler
 };
 
 PlatformAudioInputHost::PlatformAudioInputHost() : weak_factory_(this) {
-  sync_writer_ = std::make_unique<Writer>(weak_factory_.GetWeakPtr());
+  sync_writer_ = std::make_unique<Writer>(weak_factory_.GetWeakPtr(),
+                                          base::ThreadTaskRunnerHandle::Get());
   event_handler_ = std::make_unique<EventHandler>();
   audio_input_controller_ = media::AudioInputController::Create(
       media::AudioManager::Get(), event_handler_.get(), sync_writer_.get(),
@@ -90,6 +115,15 @@ PlatformAudioInputHost::~PlatformAudioInputHost() {
                      std::move(event_handler_), std::move(sync_writer_)));
 }
 
+void PlatformAudioInputHost::AddObserver(
+    mojom::AudioInputObserverPtr observer) {
+  observers_.AddPtr(std::move(observer));
+  if (!recording_) {
+    audio_input_controller_->Record();
+    recording_ = true;
+  }
+}
+
 void PlatformAudioInputHost::NotifyDataAvailable(
     const std::vector<int32_t>& data,
     int32_t frames,
@@ -108,15 +142,6 @@ void PlatformAudioInputHost::NotifyAudioClosed() {
   recording_ = false;
   observers_.ForAllPtrs([](auto* observer) { observer->OnAudioInputClosed(); });
   observers_.CloseAll();
-}
-
-void PlatformAudioInputHost::AddObserver(
-    mojom::AudioInputObserverPtr observer) {
-  observers_.AddPtr(std::move(observer));
-  if (!recording_) {
-    audio_input_controller_->Record();
-    recording_ = true;
-  }
 }
 
 }  // namespace assistant

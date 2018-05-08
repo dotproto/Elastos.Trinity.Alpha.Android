@@ -80,6 +80,7 @@ editing.TextEditHandler.prototype = {
   onEvent: function(evt) {
     if (evt.type !== EventType.TEXT_CHANGED &&
         evt.type !== EventType.TEXT_SELECTION_CHANGED &&
+        evt.type !== EventType.DOCUMENT_SELECTION_CHANGED &&
         evt.type !== EventType.VALUE_CHANGED && evt.type !== EventType.FOCUS)
       return;
     if (!evt.target.state.focused || !evt.target.state.editable ||
@@ -537,12 +538,17 @@ AutomationRichEditableText.prototype = {
     for (var i = 0, cur; cur = lineNodes[i]; i++) {
       if (cur.children.length)
         continue;
-      new Output()
-          .withRichSpeech(
-              Range.fromNode(cur), prev ? Range.fromNode(prev) : null,
-              Output.EventType.NAVIGATE)
-          .withQueueMode(queueMode)
-          .go();
+
+      var o = new Output()
+                  .withRichSpeech(
+                      Range.fromNode(cur), prev ? Range.fromNode(prev) : null,
+                      Output.EventType.NAVIGATE)
+                  .withQueueMode(queueMode);
+
+      // Ignore whitespace only output except if it is leading content on the
+      // line.
+      if (!o.isOnlyWhitespace || i == 0)
+        o.go();
       prev = cur;
       queueMode = cvox.QueueMode.QUEUE;
     }

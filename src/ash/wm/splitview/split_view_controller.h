@@ -6,11 +6,12 @@
 #define ASH_WM_SPLITSVIEW_SPLIT_VIEW_CONTROLLER_H_
 
 #include "ash/ash_export.h"
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/public/interfaces/split_view.mojom.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "ash/wm/window_state_observer.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -31,6 +32,7 @@ namespace ash {
 class SplitViewControllerTest;
 class SplitViewDivider;
 class SplitViewWindowSelectorTest;
+class OverviewWindowAnimationObserver;
 
 // The controller for the split view. It snaps a window to left/right side of
 // the screen. It also observes the two snapped windows and decides when to exit
@@ -90,7 +92,9 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   // primary orientation.
   bool IsCurrentScreenOrientationPrimary() const;
 
-  // Snaps window to left/right.
+  // Snaps window to left/right. It will try to remove |window| from the
+  // overview window grid first before snapping it if |window| is currently
+  // showing in the overview window grid.
   void SnapWindow(aura::Window* window, SnapPosition snap_position);
 
   // Swaps the left and right windows. This will do nothing if one of the
@@ -139,6 +143,9 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
 
   // ash::wm::WindowStateObserver:
   void OnPostWindowStateTypeChange(
@@ -168,17 +175,23 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   SnapPosition default_snap_position() const { return default_snap_position_; }
   SplitViewDivider* split_view_divider() { return split_view_divider_.get(); }
   bool is_resizing() const { return is_resizing_; }
+  base::WeakPtr<OverviewWindowAnimationObserver>
+  snapped_window_animation_observer() {
+    return snapped_window_animation_observer_;
+  }
 
  private:
   friend class SplitViewControllerTest;
   friend class SplitViewWindowSelectorTest;
 
-  // Starts/Stops observing |window|.
+  // Start observing |window|.
   void StartObserving(aura::Window* window);
-  void StopObserving(aura::Window* window);
+  // Stop observing the window at associated with |snap_position|. Also updates
+  // shadows and sets |left_window_| or |right_window_| to nullptr.
+  void StopObserving(SnapPosition snap_position);
 
-  // Notifies observers that the split view state has been changed.
-  void NotifySplitViewStateChanged(State previous_state, State state);
+  // Update split view state and notify its observer about the change.
+  void UpdateSplitViewStateAndNotifyObservers();
 
   // Notifies observers that the split view divider position has been changed.
   void NotifyDividerPositionChanged();
@@ -234,6 +247,11 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   // the length of the longer side of the current display's work area bounds.
   int GetDividerEndPosition();
 
+  // Called after a to-be-snapped window |window| got snapped. It updates the
+  // split view states and notifies observers about the change. It also restore
+  // the snapped window's transform if it's not identity and activate it.
+  void OnWindowSnapped(aura::Window* window);
+
   // If there are two snapped windows, closing/minimizing one of them will open
   // overview window grid on the closed/minimized window side of the screen. If
   // there is only one snapped windows, closing/minimizing the sanpped window
@@ -257,11 +275,6 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   // on the minimum size of current snapped windows.
   void GetDividerOptionalPositionRatios(std::vector<float>* positionRatios);
 
-  // Selects the window that needs the quick/smooth resize. It's needed as
-  // Android only supports smooth resize for one app window at a time. If there
-  // are two snapped Arc app windows, always return the one who stacked above
-  // the other.
-  aura::Window* GetWindowForSmoothResize();
   // Gets the expected window component depending on current screen orientation
   // for resizing purpose.
   int GetWindowComponentForResize(aura::Window* window);
@@ -270,11 +283,13 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   gfx::Point GetEndDragLocationInScreen(aura::Window* window,
                                         const gfx::Point& location_in_screen);
 
-  // Restore |window| transform to identity transform if applicable and activate
-  // the window. Also Stack the other snapped window below |window| so that the
-  // two snapped windows are always the top two windows when split view mode is
-  // active.
-  void RestoreAndActivateSnappedWindow(aura::Window* window);
+  // Restores |window| transform to identity transform if applicable.
+  void RestoreTransformIfApplicable(aura::Window* window);
+
+  // Activates the snapped window |window| and stacks the other snapped window
+  // below |window| so that the two snapped windows are always the top two
+  // windows when split view mode is active.
+  void ActivateAndStackSnappedWindow(aura::Window* window);
 
   // During resizing, it's possible that the resizing bounds of the snapped
   // window is smaller than its minimum bounds, in this case we apply a
@@ -287,9 +302,17 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   // Set |transform| for |window| and its transient descendants.
   void SetTransform(aura::Window* window, const gfx::Transform& transform);
 
+  // Removes the window item that contains |window| from the overview window
+  // grid if |window| is currently showing in overview window grid. It should be
+  // called before trying to snap the window.
+  void RemoveWindowFromOverviewIfApplicable(aura::Window* window);
+
   // Starts/Ends overview mode if the overview mode is inactive/active.
   void StartOverview();
   void EndOverview();
+
+  // Finalizes and cleans up after a drag or resize is finished for a window.
+  void FinishWindowDrag(aura::Window* window);
 
   // Bindings for the SplitViewController interface.
   mojo::BindingSet<mojom::SplitViewController> bindings_;
@@ -340,12 +363,14 @@ class ASH_EXPORT SplitViewController : public mojom::SplitViewController,
   // The time when splitview starts. Used for metric collection purpose.
   base::Time splitview_start_time_;
 
-  // The window that needs smooth resize. It's needed as Android only supports
-  // smooth resize for one app window at a time. It's always the snapped Arc app
-  // window if there is one. And if there are two snapped Arc app windows, it's
-  // the one who stacked above the other, see GetWindowForSmoothResize() for
-  // details.
-  aura::Window* smooth_resize_window_ = nullptr;
+  // The map from a to-be-snapped window to its overview item's bounds if the
+  // window comes from the overview.
+  base::flat_map<aura::Window*, gfx::Rect> overview_window_item_bounds_map_;
+
+  // Weak ptr to the observer that observes the snapped window's transform
+  // animaiton if it comes from the overview.
+  base::WeakPtr<OverviewWindowAnimationObserver>
+      snapped_window_animation_observer_ = nullptr;
 
   base::ObserverList<Observer> observers_;
   mojo::InterfacePtrSet<mojom::SplitViewObserver> mojo_observers_;

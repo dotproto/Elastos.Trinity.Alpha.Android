@@ -10,6 +10,7 @@
 
 #include "content/public/browser/resource_request_info.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
 
 namespace {
@@ -79,7 +80,7 @@ OriginData CreateOriginData(const std::string& host, uint64_t last_visit_time) {
   return data;
 }
 
-NavigationID CreateNavigationID(SessionID::id_type tab_id,
+NavigationID CreateNavigationID(SessionID tab_id,
                                 const std::string& main_frame_url) {
   NavigationID navigation_id;
   navigation_id.tab_id = tab_id;
@@ -95,13 +96,14 @@ PageRequestSummary CreatePageRequestSummary(
   GURL main_frame_gurl(main_frame_url);
   PageRequestSummary summary(main_frame_gurl);
   summary.initial_url = GURL(initial_url);
-  summary.UpdateOrAddToOrigins(CreateURLRequestSummary(1, main_frame_url));
+  summary.UpdateOrAddToOrigins(CreateURLRequestSummary(
+      SessionID::FromSerializedValue(1), main_frame_url));
   for (auto& request_summary : subresource_requests)
     summary.UpdateOrAddToOrigins(request_summary);
   return summary;
 }
 
-URLRequestSummary CreateURLRequestSummary(SessionID::id_type tab_id,
+URLRequestSummary CreateURLRequestSummary(SessionID tab_id,
                                           const std::string& main_frame_url,
                                           const std::string& request_url,
                                           content::ResourceType resource_type,
@@ -121,7 +123,7 @@ URLRequestSummary CreateURLRequestSummary(SessionID::id_type tab_id,
 }
 
 URLRequestSummary CreateRedirectRequestSummary(
-    SessionID::id_type session_id,
+    SessionID session_id,
     const std::string& main_frame_url,
     const std::string& redirect_url) {
   URLRequestSummary summary =
@@ -150,6 +152,7 @@ void PopulateTestConfig(LoadingPredictorConfig* config, bool small_db) {
   }
   config->is_origin_learning_enabled = true;
   config->mode = LoadingPredictorConfig::LEARNING;
+  config->flush_data_to_disk_delay_seconds = 0;
 }
 
 scoped_refptr<net::HttpResponseHeaders> MakeResponseHeaders(
@@ -231,7 +234,8 @@ std::unique_ptr<net::URLRequest> CreateURLRequest(
     content::ResourceType resource_type,
     bool is_main_frame) {
   std::unique_ptr<net::URLRequest> request = url_request_context.CreateRequest(
-      url, priority, &g_empty_url_request_delegate);
+      url, priority, &g_empty_url_request_delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
   request->set_site_for_cookies(url);
   content::ResourceRequestInfo::AllocateForTesting(
       request.get(), resource_type, nullptr, -1, -1, -1, is_main_frame, false,

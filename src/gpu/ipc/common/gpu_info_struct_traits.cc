@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gpu/ipc/common/gpu_info_struct_traits.h"
+#include "build/build_config.h"
 
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 
@@ -224,6 +225,13 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
 #if defined(USE_X11)
   out->system_visual = data.system_visual();
   out->rgba_visual = data.rgba_visual();
+#endif
+
+#if defined(OS_WIN)
+  out->supports_dx12 = data.supports_dx12();
+  out->supports_vulkan = data.supports_vulkan();
+  out->d3d12_feature_level = data.d3d12_feature_level();
+  out->vulkan_version = data.vulkan_version();
 #endif
 
   return data.ReadInitializationTime(&out->initialization_time) &&

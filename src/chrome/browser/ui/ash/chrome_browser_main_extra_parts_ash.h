@@ -15,6 +15,10 @@ namespace aura {
 class UserActivityForwarder;
 }
 
+namespace chromeos {
+class NetworkPortalNotificationController;
+}
+
 namespace ui {
 class UserActivityDetector;
 }
@@ -27,7 +31,6 @@ class CastConfigClientMediaRouter;
 class ChromeNewWindowClient;
 class ChromeShellContentState;
 class DataPromoNotification;
-class DockedMagnifierClient;
 class ImeControllerClient;
 class ImmersiveContextMus;
 class ImmersiveHandlerFactoryMus;
@@ -90,6 +93,10 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<VolumeController> volume_controller_;
   std::unique_ptr<VpnListForwarder> vpn_list_forwarder_;
   std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
+  // TODO(stevenjb): Move NetworkPortalNotificationController to c/b/ui/ash and
+  // elim chromeos:: namespace. https://crbug.com/798569.
+  std::unique_ptr<chromeos::NetworkPortalNotificationController>
+      network_portal_notification_controller_;
 
   std::unique_ptr<internal::ChromeLauncherControllerInitializer>
       chrome_launcher_controller_initializer_;
@@ -110,7 +117,6 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   // Initialized in PostBrowserStart in all configs:
   std::unique_ptr<DataPromoNotification> data_promo_notification_;
   std::unique_ptr<NightLightClient> night_light_client_;
-  std::unique_ptr<DockedMagnifierClient> docked_magnifier_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsAsh);
 };

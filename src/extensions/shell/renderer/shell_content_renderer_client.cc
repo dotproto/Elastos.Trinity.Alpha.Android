@@ -18,7 +18,7 @@
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container.h"
 #include "extensions/shell/common/shell_extensions_client.h"
 #include "extensions/shell/renderer/shell_extensions_renderer_client.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 #if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -84,13 +84,15 @@ blink::WebPlugin* ShellContentRendererClient::CreatePluginReplacement(
   return NULL;
 }
 
-bool ShellContentRendererClient::WillSendRequest(
+void ShellContentRendererClient::WillSendRequest(
     blink::WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
-    GURL* new_url) {
+    const url::Origin* initiator_origin,
+    GURL* new_url,
+    bool* attach_same_site_cookies) {
+  *attach_same_site_cookies = false;
   // TODO(jamescook): Cause an error for bad extension scheme requests?
-  return false;
 }
 
 bool ShellContentRendererClient::IsExternalPepperPlugin(
@@ -103,10 +105,6 @@ bool ShellContentRendererClient::IsExternalPepperPlugin(
 #else
   return false;
 #endif
-}
-
-bool ShellContentRendererClient::ShouldGatherSiteIsolationStats() const {
-  return false;
 }
 
 content::BrowserPluginDelegate*

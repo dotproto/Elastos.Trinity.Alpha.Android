@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
 
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -61,7 +63,7 @@
   switch (self.type) {
     case PRIMARY:
       return ToolbarComponentVisibilityAlways &
-             ~ToolbarComponentVisibilityCompactWidthRegularHeight;
+             ~ToolbarComponentVisibilitySplit;
     case SECONDARY:
       return ToolbarComponentVisibilitySplit;
     case LEGACY:
@@ -73,7 +75,7 @@
   switch (self.type) {
     case PRIMARY:
       return ToolbarComponentVisibilityAlways &
-             ~ToolbarComponentVisibilityCompactWidthRegularHeight;
+             ~ToolbarComponentVisibilitySplit;
     case SECONDARY:
       return ToolbarComponentVisibilityNone;
     case LEGACY:
@@ -84,7 +86,8 @@
 - (ToolbarComponentVisibility)reloadButtonVisibility {
   switch (self.type) {
     case PRIMARY:
-      return ToolbarComponentVisibilityRegularWidthRegularHeight;
+      return ToolbarComponentVisibilityAlways &
+             ~ToolbarComponentVisibilitySplit;
     case SECONDARY:
       return ToolbarComponentVisibilityNone;
     case LEGACY:
@@ -95,7 +98,8 @@
 - (ToolbarComponentVisibility)stopButtonVisibility {
   switch (self.type) {
     case PRIMARY:
-      return ToolbarComponentVisibilityRegularWidthRegularHeight;
+      return ToolbarComponentVisibilityAlways &
+             ~ToolbarComponentVisibilitySplit;
     case SECONDARY:
       return ToolbarComponentVisibilityNone;
     case LEGACY:
@@ -106,8 +110,7 @@
 - (ToolbarComponentVisibility)bookmarkButtonVisibility {
   switch (self.type) {
     case PRIMARY:
-      return ToolbarComponentVisibilityAlways &
-             ~ToolbarComponentVisibilityCompactWidthRegularHeight;
+      return ToolbarComponentVisibilityRegularWidthRegularHeight;
     case SECONDARY:
       return ToolbarComponentVisibilityNone;
     case LEGACY:

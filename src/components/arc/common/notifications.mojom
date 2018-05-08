@@ -34,14 +34,16 @@ enum ArcNotificationType {
   BUNDLED = 4,
 };
 
-// These values are corresponding to the priorities of Android notification.
+// These values are corresponding to the priorities or importance of Android
+// notification.
 [Extensible]
 enum ArcNotificationPriority {
-  MIN = -2,  // same value as Notification.PRIORITY_MIN
-  LOW = -1,  // same value as Notification.PRIORITY_LOW
-  DEFAULT = 0,  // same value as Notification.PRIORITY_DEFAULT
-  HIGH = 1,  // same value as Notification.PRIORITY_HIGH
-  MAX = 2,  // same value as Notification.PRIORITY_MAX
+  NONE = -3,
+  MIN = -2,
+  LOW = -1,
+  DEFAULT = 0,
+  HIGH = 1,
+  MAX = 2,
 };
 
 // DEPRECATED
@@ -139,21 +141,6 @@ struct ArcNotificationData {
   string? package_name;
 };
 
-[MinVersion=2]
-struct ArcToastData {
-  // Unique identifier
-  string id;
-  // Toast text.
-  string? text;
-  // Toast duration in milliseconds. If -1, the toast will be displayed until
-  // the dismiss button is clicked.
-  int32 duration;
-  // Toast dismiss button label, if set. Otherwise, default label is used for
-  // the dismiss button.
-  [MinVersion=4]
-  string? dismiss_text;
-};
-
 // Next Method ID: 6
 interface NotificationsHost {
   // Tells the Chrome that a notification is posted (created or updated) on
@@ -165,14 +152,6 @@ interface NotificationsHost {
   // Notifies that a notification is removed on Android.
   // |key| is the identifier of the notification.
   OnNotificationRemoved@1(string key);
-
-  [MinVersion=2]
-  // Shows a toast, or queues it if another toast is visible.
-  OnToastPosted@2(ArcToastData data);
-
-  [MinVersion=2]
-  // Hides the visible toast immediately, or cancels the scheduled one.
-  OnToastCancelled@3(ArcToastData data);
 
   [MinVersion=13]
   // Notifies that an existing notiication is updated on Android.

@@ -16,11 +16,16 @@
 #include "ash/app_list/model/app_list_view_state.h"
 #include "ash/app_list/model/search/search_model.h"
 #include "ash/ash_export.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/interfaces/app_list.mojom.h"
+#include "ash/session/session_observer.h"
+#include "ash/shell_observer.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
+#include "base/scoped_observer.h"
 #include "components/sync/model/string_ordinal.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
-#include "ui/app_list/app_list_constants.h"
+#include "ui/keyboard/keyboard_controller_observer.h"
 
 namespace ui {
 class MouseWheelEvent;
@@ -35,10 +40,16 @@ namespace ash {
 // Ash's AppListController owns the AppListModel and implements interface
 // functions that allow Chrome to modify and observe the Shelf and AppListModel
 // state.
-class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
-                                         public app_list::AppListModelObserver {
+class ASH_EXPORT AppListControllerImpl
+    : public mojom::AppListController,
+      public SessionObserver,
+      public app_list::AppListModelObserver,
+      public ash::ShellObserver,
+      public TabletModeObserver,
+      public keyboard::KeyboardControllerObserver {
  public:
   using AppListItemMetadataPtr = mojom::AppListItemMetadataPtr;
+  using SearchResultMetadataPtr = mojom::SearchResultMetadataPtr;
   AppListControllerImpl();
   ~AppListControllerImpl() override;
 
@@ -68,6 +79,8 @@ class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
   void SetSearchHintText(const base::string16& hint_text) override;
   void UpdateSearchBox(const base::string16& text,
                        bool initiated_by_user) override;
+  void PublishSearchResults(
+      std::vector<SearchResultMetadataPtr> results) override;
   void SetItemMetadata(const std::string& id,
                        AppListItemMetadataPtr data) override;
   void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) override;
@@ -76,6 +89,13 @@ class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
                                 int32_t percent_downloaded) override;
   void SetModelData(std::vector<AppListItemMetadataPtr> apps,
                     bool is_search_engine_google) override;
+
+  void SetSearchResultMetadata(SearchResultMetadataPtr metadata) override;
+  void SetSearchResultIsInstalling(const std::string& id,
+                                   bool is_installing) override;
+  void SetSearchResultPercentDownloaded(const std::string& id,
+                                        int32_t percent_downloaded) override;
+  void NotifySearchResultItemInstalled(const std::string& id) override;
 
   void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
   void FindOrCreateOemFolder(
@@ -98,6 +118,9 @@ class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
   void OnAppListItemWillBeDeleted(app_list::AppListItem* item) override;
   void OnAppListItemUpdated(app_list::AppListItem* item) override;
 
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+
   // Methods used in ash:
   bool GetTargetVisibility() const;
   bool IsVisible() const;
@@ -119,11 +142,13 @@ class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
   void InvokeSearchResultAction(const std::string& result_id,
                                 int action_index,
                                 int event_flags);
+  using GetContextMenuModelCallback =
+      AppListViewDelegateMash::GetContextMenuModelCallback;
+  void GetSearchResultContextMenuModel(const std::string& result_id,
+                                       GetContextMenuModelCallback callback);
   void ViewShown(int64_t display_id);
   void ViewClosing();
   void ActivateItem(const std::string& id, int event_flags);
-  using GetContextMenuModelCallback =
-      AppListViewDelegateMash::GetContextMenuModelCallback;
   void GetContextMenuModel(const std::string& id,
                            GetContextMenuModelCallback callback);
   void ContextMenuItemSelected(const std::string& id,
@@ -136,25 +161,56 @@ class ASH_EXPORT AppListControllerImpl : public mojom::AppListController,
 
   void FlushForTesting();
 
+  // ShellObserver:
+  void OnVirtualKeyboardStateChanged(bool activated,
+                                     aura::Window* root_window) override;
+  void OnOverviewModeStarting() override;
+  void OnOverviewModeEnding() override;
+
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
+
+  // KeyboardControllerObserver:
+  void OnKeyboardAvailabilityChanged(const bool is_available) override;
+
+  bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
+
+  // Returns true if the home launcher is enabled in tablet mode.
+  bool IsHomeLauncherEnabledInTabletMode() const;
+
  private:
   syncer::StringOrdinal GetOemFolderPos();
   std::unique_ptr<app_list::AppListItem> CreateAppListItem(
       AppListItemMetadataPtr metadata);
   app_list::AppListFolderItem* FindFolderItem(const std::string& folder_id);
 
+  mojom::AppListClientPtr client_;
+
   AppListViewDelegateMash view_delegate_;
-  app_list::AppListPresenterImpl presenter_;
   app_list::AppListModel model_;
   app_list::SearchModel search_model_;
+
+  // |presenter_| should be put below |client_| and |model_| to prevent a crash
+  // in destruction.
+  app_list::AppListPresenterImpl presenter_;
 
   // Bindings for the AppListController interface.
   mojo::BindingSet<mojom::AppListController> bindings_;
 
-  mojom::AppListClientPtr client_;
-
   // Token to view map for classic/mus ash (i.e. non-mash).
   std::unique_ptr<app_list::AnswerCardContentsRegistry>
       answer_card_contents_registry_;
+
+  ScopedObserver<keyboard::KeyboardController,
+                 keyboard::KeyboardControllerObserver>
+      keyboard_observer_;
+
+  // Whether the on-screen keyboard is shown.
+  bool onscreen_keyboard_shown_ = false;
+
+  // Whether the home launcher feature is enabled.
+  const bool is_home_launcher_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListControllerImpl);
 };

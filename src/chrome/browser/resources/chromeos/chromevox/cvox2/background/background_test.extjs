@@ -108,7 +108,7 @@ BackgroundTest.prototype = {
       <p>After2</p>
       <p>After3</p>
     </div>
-    <div id="live" aria-live="polite"></div>
+    <div id="live" aria-live="assertive"></div>
     <div id="delete" role="button">Delete</div>
     <script>
       document.getElementById('delete').addEventListener('click', function() {
@@ -1343,7 +1343,7 @@ TEST_F('BackgroundTest', 'TextSelectionAndLiveRegion', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*!
     <div><input value="test" type="text"></input></div>
-    <div id="live" aria-live="polite"></div>
+    <div id="live" aria-live="assertive"></div>
     <script>
       const input = document.querySelector('input');
       const [div, live] = document.querySelectorAll('div');
@@ -1416,7 +1416,8 @@ TEST_F('BackgroundTest', 'TableColumnHeaders', function() {
   });
 });
 
-TEST_F('BackgroundTest', 'ActiveDescendantUpdates', function() {
+// Flaky, see http://crbug.com/825429.
+TEST_F('BackgroundTest', 'DISABLED_ActiveDescendantUpdates', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*!
     <div aria-label="container" tabindex=0 role="group" id="active"
@@ -1532,9 +1533,78 @@ TEST_F('BackgroundTest', 'NavigationSyncsSelect', function() {
   */}, function(root) {
     var select = root.find({role: RoleType.POP_UP_BUTTON});
     mockFeedback.call(select.doDefault.bind(select))
-        .expectSpeech('apple', 'Selected')
+        .expectSpeech('apple', 'Menu item', ' 1 of 2 ')
         .call(doCmd('nextObject'))
-        .expectSpeech('grape', 'Selected')
+        .expectNextSpeechUtteranceIsNot('Selected')
+        .expectNextSpeechUtteranceIsNot('Unselected')
+        .expectSpeech('grape', 'Menu item')
+        .expectNextSpeechUtteranceIsNot('Selected')
+        .expectNextSpeechUtteranceIsNot('Unselected')
+        .expectSpeech(' 2 of 2 ')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'NavigationIgnoresLabels', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <p>before</p>
+    <p id="label">label</p>
+    <a href="#next" id="lebal">lebal</a>
+    <p>after</p>
+    <button aria-labelledby="label"></button>
+  */}, function(root) {
+    mockFeedback.expectSpeech('before')
+        .call(doCmd('nextObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('nextObject'))
+        .expectSpeech('after')
+        .call(doCmd('previousObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('previousObject'))
+        .expectSpeech('before')
+        .call(doCmd('nextObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('nextObject'))
+        .expectSpeech('after')
+        .call(doCmd('nextObject'))
+        .expectSpeech('label', 'lebal', 'Button')
+        .call(doCmd('nextObject'))
+        .expectEarcon(cvox.Earcon.WRAP)
+        .call(doCmd('nextObject'))
+        .expectSpeech('before')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'NavigationIgnoresDescriptions', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <p>before</p>
+    <p id="desc">label</p>
+    <a href="#next" id="csed">lebal</a>
+    <p>after</p>
+    <button aria-describedby="desc"></button>
+  */}, function(root) {
+    mockFeedback.expectSpeech('before')
+        .call(doCmd('nextObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('nextObject'))
+        .expectSpeech('after')
+        .call(doCmd('previousObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('previousObject'))
+        .expectSpeech('before')
+        .call(doCmd('nextObject'))
+        .expectSpeech('lebal', 'Link')
+        .call(doCmd('nextObject'))
+        .expectSpeech('after')
+        .call(doCmd('nextObject'))
+        .expectSpeech('label', 'lebal', 'Button')
+        .call(doCmd('nextObject'))
+        .expectEarcon(cvox.Earcon.WRAP)
+        .call(doCmd('nextObject'))
+        .expectSpeech('before')
         .replay();
   });
 });

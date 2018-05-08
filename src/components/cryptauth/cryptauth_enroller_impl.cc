@@ -7,10 +7,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/cryptauth_client_impl.h"
 #include "components/cryptauth/cryptauth_enrollment_utils.h"
 #include "components/cryptauth/secure_message_delegate.h"
-#include "components/proximity_auth/logging/logging.h"
 #include "crypto/sha2.h"
 
 namespace cryptauth {
@@ -54,9 +55,9 @@ std::string CreateEnrollmentPublicMetadata() {
 }  // namespace
 
 CryptAuthEnrollerImpl::CryptAuthEnrollerImpl(
-    std::unique_ptr<CryptAuthClientFactory> client_factory,
+    CryptAuthClientFactory* client_factory,
     std::unique_ptr<SecureMessageDelegate> secure_message_delegate)
-    : client_factory_(std::move(client_factory)),
+    : client_factory_(client_factory),
       secure_message_delegate_(std::move(secure_message_delegate)),
       weak_ptr_factory_(this) {}
 
@@ -211,13 +212,15 @@ void CryptAuthEnrollerImpl::OnOuterSecureMessageCreated(
 
 void CryptAuthEnrollerImpl::OnFinishEnrollmentSuccess(
     const FinishEnrollmentResponse& response) {
-  if (response.status() != kResponseStatusOk) {
+  const bool success = response.status() == kResponseStatusOk;
+
+  if (!success) {
     PA_LOG(WARNING) << "Unexpected status for FinishEnrollment: "
                     << response.status();
-    callback_.Run(false);
-  } else {
-    callback_.Run(true);
   }
+
+  UMA_HISTOGRAM_BOOLEAN("CryptAuth.Enrollment.Result", success);
+  callback_.Run(success);
 }
 
 void CryptAuthEnrollerImpl::OnFinishEnrollmentFailure(

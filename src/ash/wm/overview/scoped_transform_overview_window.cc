@@ -5,17 +5,14 @@
 #include "ash/wm/overview/scoped_transform_overview_window.h"
 
 #include <algorithm>
-#include <memory>
-#include <vector>
 
 #include "ash/public/cpp/ash_features.h"
-#include "ash/public/cpp/ash_switches.h"
+#include "ash/shell.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_window_animation_observer.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector_item.h"
-#include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
@@ -33,7 +30,7 @@
 #include "ui/gfx/transform_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
-#include "ui/wm/core/shadow_types.h"
+#include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -104,15 +101,21 @@ class ScopedTransformOverviewWindow::LayerCachingAndFilteringObserver
 
 // WindowMask is applied to overview windows to give them rounded edges while
 // they are in overview mode.
-class ScopedTransformOverviewWindow::WindowMask : public ui::LayerDelegate {
+class ScopedTransformOverviewWindow::WindowMask : public ui::LayerDelegate,
+                                                  public aura::WindowObserver {
  public:
   explicit WindowMask(aura::Window* window)
       : layer_(ui::LAYER_TEXTURED), window_(window) {
+    window_->AddObserver(this);
     layer_.set_delegate(this);
     layer_.SetFillsBoundsOpaquely(false);
   }
 
-  ~WindowMask() override { layer_.set_delegate(nullptr); }
+  ~WindowMask() override {
+    if (window_)
+      window_->RemoveObserver(this);
+    layer_.set_delegate(nullptr);
+  }
 
   void set_top_inset(int top_inset) { top_inset_ = top_inset; }
   ui::Layer* layer() { return &layer_; }
@@ -147,6 +150,19 @@ class ScopedTransformOverviewWindow::WindowMask : public ui::LayerDelegate {
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override {}
 
+  // aura::WindowObserver:
+  void OnWindowBoundsChanged(aura::Window* window,
+                             const gfx::Rect& old_bounds,
+                             const gfx::Rect& new_bounds,
+                             ui::PropertyChangeReason reason) override {
+    layer_.SetBounds(new_bounds);
+  }
+
+  void OnWindowDestroying(aura::Window* window) override {
+    window_->RemoveObserver(this);
+    window_ = nullptr;
+  }
+
   ui::Layer layer_;
   int top_inset_ = 0;
   // Pointer to the window of which this is a mask to.
@@ -171,8 +187,7 @@ ScopedTransformOverviewWindow::ScopedTransformOverviewWindow(
 ScopedTransformOverviewWindow::~ScopedTransformOverviewWindow() = default;
 
 void ScopedTransformOverviewWindow::RestoreWindow(bool reset_transform) {
-  ::wm::SetShadowElevation(window_, original_shadow_elevation_);
-
+  Shell::Get()->shadow_controller()->UpdateShadowForWindow(window_);
   wm::GetWindowState(window_)->set_ignored_by_shelf(ignored_by_shelf_);
   if (minimized_widget_) {
     mask_.reset();
@@ -476,6 +491,12 @@ gfx::Rect ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
   return new_bounds;
 }
 
+gfx::Rect ScopedTransformOverviewWindow::GetMaskBoundsForTesting() const {
+  if (!mask_)
+    return gfx::Rect();
+  return mask_->layer()->bounds();
+}
+
 void ScopedTransformOverviewWindow::Close() {
   if (immediate_close_for_tests) {
     CloseWidget();
@@ -488,8 +509,7 @@ void ScopedTransformOverviewWindow::Close() {
 }
 
 void ScopedTransformOverviewWindow::PrepareForOverview() {
-  original_shadow_elevation_ = window_->GetProperty(::wm::kShadowElevationKey);
-  ::wm::SetShadowElevation(window_, ::wm::kShadowElevationNone);
+  Shell::Get()->shadow_controller()->UpdateShadowForWindow(window_);
 
   DCHECK(!overview_started_);
   overview_started_ = true;
@@ -557,6 +577,7 @@ void ScopedTransformOverviewWindow::CancelAnimationsListener() {
 void ScopedTransformOverviewWindow::OnImplicitAnimationsCompleted() {
   DCHECK(IsNewOverviewUi());
   CreateAndApplyMaskAndShadow();
+  selector_item_->OnDragAnimationCompleted();
 }
 
 void ScopedTransformOverviewWindow::CreateMirrorWindowForMinimizedState() {

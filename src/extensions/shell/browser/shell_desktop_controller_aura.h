@@ -20,7 +20,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/power_manager_client.h"
-#include "ui/display/manager/chromeos/display_configurator.h"
+#include "ui/display/manager/display_configurator.h"
 #endif
 
 namespace aura {
@@ -108,6 +108,10 @@ class ShellDesktopControllerAura
 
   // Returns all root windows managed by RootWindowControllers.
   aura::Window::Windows GetAllRootWindows();
+
+  // Updates the bounds of |app_window|. This may involve reparenting the window
+  // to a different root window if the new bounds are in a different display.
+  void SetWindowBoundsInScreen(AppWindow* app_window, const gfx::Rect& bounds);
 
  protected:
   // Creates and sets the aura clients and window manager stuff. Subclass may

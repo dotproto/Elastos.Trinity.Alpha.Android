@@ -19,13 +19,19 @@
 // present any UI, but simply captures the presentation requests.
 @interface FakeDocumentInteractionController : NSObject
 
+@property(nonatomic, weak) id<UIDocumentInteractionControllerDelegate> delegate;
+
+// Whether or not this controller can present Open In... menu. Defaults to YES.
+@property(nonatomic) BOOL presentsOpenInMenu;
+
+// Menu that is currently being presented.
+@property(nonatomic, readonly) OpenInMenu* presentedOpenInMenu;
+
 // Fake implementations of UIDocumentInteractionController methods:
 - (BOOL)presentOpenInMenuFromRect:(CGRect)rect
                            inView:(UIView*)view
                          animated:(BOOL)animated;
 
-// Menu that is currently being presented.
-@property(nonatomic, readonly) OpenInMenu* presentedOpenInMenu;
 
 @end
 

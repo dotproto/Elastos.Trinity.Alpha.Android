@@ -82,6 +82,7 @@ class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
   }
 
   void Initialize() {
+    SetQuicReloadableFlag(quic_respect_ietf_header, true);
     session_.reset();
     connection_ = new PacketSavingConnection(&helper_, &alarm_factory_,
                                              Perspective::IS_CLIENT,
@@ -303,10 +304,14 @@ TEST_P(QuicSpdyClientSessionTest, InvalidPacketReceived) {
   QuicSocketAddress client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
+      .WillRepeatedly(Invoke(static_cast<MockQuicConnection*>(connection_),
                              &MockQuicConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnCanWrite()).Times(AnyNumber());
-  EXPECT_CALL(*connection_, OnError(_)).Times(1);
+  if (connection_->transport_version() == QUIC_VERSION_99) {
+    EXPECT_CALL(*connection_, OnError(_)).Times(3);
+  } else {
+    EXPECT_CALL(*connection_, OnError(_)).Times(1);
+  }
 
   // Verify that empty packets don't close the connection.
   QuicReceivedPacket zero_length_packet(nullptr, 0, QuicTime::Zero(), false);
@@ -325,13 +330,17 @@ TEST_P(QuicSpdyClientSessionTest, InvalidPacketReceived) {
   QuicConnectionId connection_id = session_->connection()->connection_id();
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
       connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
-      PACKET_6BYTE_PACKET_NUMBER, nullptr, Perspective::IS_SERVER));
+      PACKET_4BYTE_PACKET_NUMBER, nullptr, Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   // Change the last byte of the encrypted data.
   *(const_cast<char*>(received->data() + received->length() - 1)) += 1;
   EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(0);
-  EXPECT_CALL(*connection_, OnError(Truly(CheckForDecryptionError))).Times(1);
+  if (connection_->transport_version() == QUIC_VERSION_99) {
+    EXPECT_CALL(*connection_, OnError(Truly(CheckForDecryptionError))).Times(0);
+  } else {
+    EXPECT_CALL(*connection_, OnError(Truly(CheckForDecryptionError))).Times(1);
+  }
   session_->ProcessUdpPacket(client_address, server_address, *received);
 }
 
@@ -341,7 +350,7 @@ TEST_P(QuicSpdyClientSessionTest, InvalidFramedPacketReceived) {
   QuicSocketAddress client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
+      .WillRepeatedly(Invoke(static_cast<MockQuicConnection*>(connection_),
                              &MockQuicConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnError(_)).Times(1);
 
@@ -350,7 +359,7 @@ TEST_P(QuicSpdyClientSessionTest, InvalidFramedPacketReceived) {
   ParsedQuicVersionVector versions = {GetParam()};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
       connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
-      PACKET_6BYTE_PACKET_NUMBER, &versions, Perspective::IS_SERVER));
+      PACKET_4BYTE_PACKET_NUMBER, &versions, Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(1);

@@ -15,7 +15,7 @@
 #include "content/public/browser/media_controller.h"
 #include "content/public/common/presentation_connection_message.h"
 #include "content/public/common/presentation_info.h"
-#include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 
 namespace content {
 
@@ -25,21 +25,23 @@ class PresentationScreenAvailabilityListener;
 using PresentationConnectionCallback =
     base::OnceCallback<void(const PresentationInfo&)>;
 using PresentationConnectionErrorCallback =
-    base::OnceCallback<void(const PresentationError&)>;
+    base::OnceCallback<void(const blink::mojom::PresentationError&)>;
 using DefaultPresentationConnectionCallback =
     base::RepeatingCallback<void(const PresentationInfo&)>;
 
 struct PresentationConnectionStateChangeInfo {
   explicit PresentationConnectionStateChangeInfo(
-      PresentationConnectionState state)
+      blink::mojom::PresentationConnectionState state)
       : state(state),
-        close_reason(PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR) {}
+        close_reason(
+            blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR) {
+  }
   ~PresentationConnectionStateChangeInfo() = default;
 
-  PresentationConnectionState state;
+  blink::mojom::PresentationConnectionState state;
 
   // |close_reason| and |messsage| are only used for state change to CLOSED.
-  PresentationConnectionCloseReason close_reason;
+  blink::mojom::PresentationConnectionCloseReason close_reason;
   std::string message;
 };
 

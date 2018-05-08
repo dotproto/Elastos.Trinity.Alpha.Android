@@ -38,6 +38,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -125,6 +126,7 @@ public class Shell extends LinearLayout {
         mWindow = null;
         mNativeShell = 0;
         mContentViewCore.destroy();
+        mWebContents = null;
     }
 
     /**
@@ -164,7 +166,7 @@ public class Shell extends LinearLayout {
                 }
                 loadUrl(mUrlTextView.getText().toString());
                 setKeyboardVisibilityForUrl(false);
-                mContentViewCore.getContainerView().requestFocus();
+                getContentView().requestFocus();
                 return true;
             }
         });
@@ -184,7 +186,7 @@ public class Shell extends LinearLayout {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
                 if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    mContentViewCore.getContainerView().requestFocus();
+                    getContentView().requestFocus();
                     return true;
                 }
                 return false;
@@ -208,8 +210,8 @@ public class Shell extends LinearLayout {
         }
         mUrlTextView.clearFocus();
         // TODO(aurimas): Remove this when crbug.com/174541 is fixed.
-        mContentViewCore.getContainerView().clearFocus();
-        mContentViewCore.getContainerView().requestFocus();
+        getContentView().clearFocus();
+        getContentView().requestFocus();
     }
 
     /**
@@ -303,11 +305,11 @@ public class Shell extends LinearLayout {
         mViewAndroidDelegate = new ShellViewAndroidDelegate(cv);
         mContentViewCore = (ContentViewCoreImpl) ContentViewCore.create(
                 context, "", webContents, mViewAndroidDelegate, cv, mWindow);
-        mWebContents = mContentViewCore.getWebContents();
+        mWebContents = webContents;
         SelectionPopupController controller = SelectionPopupController.fromWebContents(webContents);
         controller.setActionModeCallback(defaultActionCallback());
         mNavigationController = mWebContents.getNavigationController();
-        if (getParent() != null) mContentViewCore.onShow();
+        if (getParent() != null) mWebContents.onShow();
         if (mWebContents.getVisibleUrl() != null) {
             mUrlTextView.setText(mWebContents.getVisibleUrl());
         }
@@ -316,7 +318,7 @@ public class Shell extends LinearLayout {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
         cv.requestFocus();
-        mContentViewRenderView.setCurrentContentViewCore(mContentViewCore);
+        mContentViewRenderView.setCurrentWebContents(mWebContents);
     }
 
     /**
@@ -409,7 +411,8 @@ public class Shell extends LinearLayout {
      * @return The {@link ViewGroup} currently shown by this Shell.
      */
     public ViewGroup getContentView() {
-        return mContentViewCore.getContainerView();
+        ViewAndroidDelegate viewDelegate = mWebContents.getViewAndroidDelegate();
+        return viewDelegate != null ? viewDelegate.getContainerView() : null;
     }
 
     /**

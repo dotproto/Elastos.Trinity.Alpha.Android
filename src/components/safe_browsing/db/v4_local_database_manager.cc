@@ -19,12 +19,11 @@
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/timer/elapsed_timer.h"
-#include "components/safe_browsing/db/notification_types.h"
 #include "components/safe_browsing/db/v4_feature_list.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
 #include "crypto/sha2.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using content::BrowserThread;
 
@@ -63,14 +62,8 @@ ListInfos GetListInfos() {
   const bool kSyncAlways = true;
   const bool kSyncNever = false;
   return ListInfos({
-      ListInfo(kSyncOnlyOnChromeBuilds, "CertCsdDownloadWhitelist.store",
-               GetCertCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
       ListInfo(kSyncAlways, "IpMalware.store", GetIpMalwareId(),
                SB_THREAT_TYPE_UNUSED),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdDownloadWhitelist.store",
-               GetUrlCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdWhitelist.store",
-               GetUrlCsdWhitelistId(), SB_THREAT_TYPE_CSD_WHITELIST),
       ListInfo(kSyncAlways, "UrlSoceng.store", GetUrlSocEngId(),
                SB_THREAT_TYPE_URL_PHISHING),
       ListInfo(kSyncAlways, "UrlMalware.store", GetUrlMalwareId(),
@@ -81,12 +74,20 @@ ListInfos GetListInfos() {
                SB_THREAT_TYPE_URL_BINARY_MALWARE),
       ListInfo(kSyncAlways, "ChromeExtMalware.store", GetChromeExtMalwareId(),
                SB_THREAT_TYPE_EXTENSION),
+      ListInfo(kSyncOnlyOnChromeBuilds, "CertCsdDownloadWhitelist.store",
+               GetCertCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
       ListInfo(kSyncOnlyOnChromeBuilds, "ChromeUrlClientIncident.store",
                GetChromeUrlClientIncidentId(),
                SB_THREAT_TYPE_BLACKLISTED_RESOURCE),
-      ListInfo(kSyncNever, "", GetChromeUrlApiId(), SB_THREAT_TYPE_API_ABUSE),
+      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdDownloadWhitelist.store",
+               GetUrlCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
+      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdWhitelist.store",
+               GetUrlCsdWhitelistId(), SB_THREAT_TYPE_CSD_WHITELIST),
       ListInfo(kSyncOnlyOnChromeBuilds, "UrlSubresourceFilter.store",
                GetUrlSubresourceFilterId(), SB_THREAT_TYPE_SUBRESOURCE_FILTER),
+      ListInfo(kSyncOnlyOnChromeBuilds, "UrlSuspiciousSiteId.store",
+               GetUrlSuspiciousSiteId(), SB_THREAT_TYPE_SUSPICIOUS_SITE),
+      ListInfo(kSyncNever, "", GetChromeUrlApiId(), SB_THREAT_TYPE_API_ABUSE),
   });
   // NOTE(vakh): IMPORTANT: Please make sure that the server already supports
   // any list before adding it to this list otherwise the prefix updates break
@@ -109,6 +110,8 @@ ThreatSeverity GetThreatSeverity(const ListIdentifier& list_id) {
       return 2;
     case CSD_WHITELIST:
       return 3;
+    case SUSPICIOUS:
+      return 4;
     default:
       NOTREACHED() << "Unexpected ThreatType encountered: "
                    << list_id.threat_type();
@@ -127,6 +130,9 @@ ListIdentifier GetUrlIdFromSBThreatType(SBThreatType sb_threat_type) {
 
     case SB_THREAT_TYPE_URL_UNWANTED:
       return GetUrlUwsId();
+
+    case SB_THREAT_TYPE_SUSPICIOUS_SITE:
+      return GetUrlSuspiciousSiteId();
 
     default:
       NOTREACHED();
@@ -471,14 +477,14 @@ bool V4LocalDatabaseManager::IsSupported() const {
 }
 
 void V4LocalDatabaseManager::StartOnIOThread(
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
-  SafeBrowsingDatabaseManager::StartOnIOThread(request_context_getter, config);
+  SafeBrowsingDatabaseManager::StartOnIOThread(url_loader_factory, config);
 
   db_updated_callback_ = base::Bind(&V4LocalDatabaseManager::DatabaseUpdated,
                                     weak_factory_.GetWeakPtr());
 
-  SetupUpdateProtocolManager(request_context_getter, config);
+  SetupUpdateProtocolManager(url_loader_factory, config);
   SetupDatabase();
 
   enabled_ = true;
@@ -561,21 +567,14 @@ void V4LocalDatabaseManager::DatabaseUpdated() {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&V4LocalDatabaseManager::PostUpdateNotificationOnUIThread,
-                   content::Source<SafeBrowsingDatabaseManager>(this)));
+        base::BindOnce(
+            &V4LocalDatabaseManager::PostUpdateNotificationOnUIThread, this));
   }
 }
 
-// static
-void V4LocalDatabaseManager::PostUpdateNotificationOnUIThread(
-    const content::NotificationSource& source) {
+void V4LocalDatabaseManager::PostUpdateNotificationOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // The notification needs to be posted on the UI thread because the extension
-  // checker is observing UI thread's notification service.
-  content::NotificationService::current()->Notify(
-      NOTIFICATION_SAFE_BROWSING_UPDATE_COMPLETE, source,
-      content::NotificationService::NoDetails());
+  update_complete_callback_list_.Notify();
 }
 
 void V4LocalDatabaseManager::DeletePVer3StoreFiles() {
@@ -926,14 +925,14 @@ void V4LocalDatabaseManager::SetupDatabase() {
 }
 
 void V4LocalDatabaseManager::SetupUpdateProtocolManager(
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
   V4UpdateCallback update_callback =
       base::Bind(&V4LocalDatabaseManager::UpdateRequestCompleted,
                  weak_factory_.GetWeakPtr());
 
   v4_update_protocol_manager_ = V4UpdateProtocolManager::Create(
-      request_context_getter, config, update_callback,
+      url_loader_factory, config, update_callback,
       extended_reporting_level_callback_);
 }
 

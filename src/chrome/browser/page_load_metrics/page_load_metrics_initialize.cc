@@ -19,7 +19,6 @@
 #include "chrome/browser/page_load_metrics/observers/data_reduction_proxy_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/google_captcha_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/loading_predictor_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/local_network_requests_page_load_metrics_observer.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/page_load_metrics/observers/noscript_preview_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/offline_page_previews_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/page_capping_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/prerender_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/protocol_page_load_metrics_observer.h"
@@ -96,8 +96,6 @@ void PageLoadMetricsEmbedder::RegisterObservers(
         std::make_unique<data_reduction_proxy::LoFiPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<FromGWSPageLoadMetricsObserver>());
     tracker->AddObserver(
-        std::make_unique<google_captcha_observer::GoogleCaptchaObserver>());
-    tracker->AddObserver(
         std::make_unique<DocumentWritePageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<MediaPageLoadMetricsObserver>());
     tracker->AddObserver(
@@ -107,6 +105,8 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(
         std::make_unique<
             previews::OfflinePagePreviewsPageLoadMetricsObserver>());
+    tracker->AddObserver(
+        std::make_unique<PageCappingPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<previews::PreviewsUKMObserver>());
     tracker->AddObserver(
         std::make_unique<ServiceWorkerPageLoadMetricsObserver>());

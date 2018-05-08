@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/auto_reset.h"
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/devtools_instrumentation.h"
@@ -366,10 +365,6 @@ size_t ProxyImpl::CompositedAnimationsCount() const {
 
 size_t ProxyImpl::MainThreadAnimationsCount() const {
   return host_impl_->mutator_host()->MainThreadAnimationsCount();
-}
-
-size_t ProxyImpl::MainThreadCompositableAnimationsCount() const {
-  return host_impl_->mutator_host()->MainThreadCompositableAnimationsCount();
 }
 
 bool ProxyImpl::CurrentFrameHadRAF() const {

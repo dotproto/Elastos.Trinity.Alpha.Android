@@ -79,6 +79,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                        blink::WebTouchEvent *event,
                        const ui::LatencyInfo& latency);
 
+  // |event| is in root coordinates.
   void BubbleScrollEvent(RenderWidgetHostViewBase* target_view,
                          const blink::WebGestureEvent& event,
                          const RenderWidgetHostViewBase* resending_view);
@@ -145,6 +146,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
       viz::EventSource source,
       gfx::PointF* transformed_point) const;
 
+  bool IsViewInMap(const RenderWidgetHostViewBase* view) const;
   void RouteTouchscreenGestureEvent(RenderWidgetHostViewBase* root_view,
                                     blink::WebGestureEvent* event,
                                     const ui::LatencyInfo& latency);
@@ -166,7 +168,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // in different processes for MouseEnter and MouseLeave event handlers to
   // properly fire. This method determines which RenderWidgetHostViews other
   // than the actual target require notification, and sends the appropriate
-  // events to them.
+  // events to them. |event| should be in |root_view|'s coordinate space.
   void SendMouseEnterOrLeaveEvents(const blink::WebMouseEvent& event,
                                    RenderWidgetHostViewBase* target,
                                    RenderWidgetHostViewBase* root_view);
@@ -231,8 +233,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                                         gfx::PointF* transformed_point,
                                         viz::EventSource source) const;
 
-  // TODO(818214): Remove once this issue no longer occurs.
-  void ReportBubblingScrollToSameView(const blink::WebGestureEvent& event);
+  // TODO(828422): Remove once this issue no longer occurs.
+  void ReportBubblingScrollToSameView(const blink::WebGestureEvent& event,
+                                      const RenderWidgetHostViewBase* view);
 
   // RenderWidgetTargeter::Delegate:
   RenderWidgetTargetResult FindTargetSynchronously(
@@ -251,6 +254,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   TargetMap touchscreen_gesture_target_map_;
   TargetData touch_target_;
   TargetData touchscreen_gesture_target_;
+  // The following variable is temporary, for diagnosis of
+  // https://crbug.com/824774.
+  bool touchscreen_gesture_target_in_map_;
   TargetData touchpad_gesture_target_;
   TargetData bubbling_gesture_scroll_target_;
   TargetData first_bubbling_scroll_target_;
@@ -280,6 +286,8 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostInputEventRouter);
   friend class RenderWidgetHostInputEventRouterTest;
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
+                           HitTestStaleDataDeletedView);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
                            InputEventRouterGestureTargetMapTest);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,

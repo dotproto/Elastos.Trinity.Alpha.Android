@@ -254,8 +254,6 @@ VariationsService::VariationsService(
       weak_ptr_factory_(this) {
   DCHECK(client_.get());
   DCHECK(resource_request_allowed_notifier_.get());
-
-  resource_request_allowed_notifier_->Init(this);
 }
 
 VariationsService::~VariationsService() {
@@ -263,6 +261,8 @@ VariationsService::~VariationsService() {
 
 void VariationsService::PerformPreMainMessageLoopStartup() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  InitResourceRequestedAllowedNotifier();
 
   if (!IsFetchingEnabled())
     return;
@@ -448,6 +448,14 @@ bool VariationsService::StoreSeed(const std::string& seed_data,
 std::unique_ptr<const base::FieldTrial::EntropyProvider>
 VariationsService::CreateLowEntropyProvider() {
   return state_manager_->CreateLowEntropyProvider();
+}
+
+void VariationsService::InitResourceRequestedAllowedNotifier() {
+  // ResourceRequestAllowedNotifier does not install an observer if there is no
+  // NetworkChangeNotifier, which results in never being notified of changes to
+  // network status.
+  DCHECK(net::NetworkChangeNotifier::HasNetworkChangeNotifier());
+  resource_request_allowed_notifier_->Init(this);
 }
 
 bool VariationsService::DoFetchFromURL(const GURL& url, bool is_http_retry) {

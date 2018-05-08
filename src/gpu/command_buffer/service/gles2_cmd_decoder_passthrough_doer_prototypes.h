@@ -731,7 +731,7 @@ error::Error DoGenVertexArraysOES(GLsizei n, volatile GLuint* arrays);
 error::Error DoDeleteVertexArraysOES(GLsizei n, const volatile GLuint* arrays);
 error::Error DoIsVertexArrayOES(GLuint array, uint32_t* result);
 error::Error DoBindVertexArrayOES(GLuint array);
-error::Error DoSwapBuffers();
+error::Error DoSwapBuffers(GLbitfield flags);
 error::Error DoGetMaxValueInBufferCHROMIUM(GLuint buffer_id,
                                            GLsizei count,
                                            GLenum type,
@@ -765,11 +765,13 @@ error::Error DoGetUniformsES3CHROMIUM(GLuint program,
 error::Error DoGetTranslatedShaderSourceANGLE(GLuint shader,
                                               std::string* source);
 error::Error DoSwapBuffersWithBoundsCHROMIUM(GLsizei count,
-                                             const volatile GLint* rects);
+                                             const volatile GLint* rects,
+                                             GLbitfield flags);
 error::Error DoPostSubBufferCHROMIUM(GLint x,
                                      GLint y,
                                      GLint width,
-                                     GLint height);
+                                     GLint height,
+                                     GLbitfield flags);
 error::Error DoCopyTextureCHROMIUM(GLuint source_id,
                                    GLint source_level,
                                    GLenum dest_target,
@@ -868,7 +870,7 @@ error::Error DoScheduleDCLayerCHROMIUM(
     GLuint edge_aa_mask,
     GLenum filter,
     const GLfloat* bounds_rect);
-error::Error DoCommitOverlayPlanesCHROMIUM();
+error::Error DoCommitOverlayPlanesCHROMIUM(GLbitfield flags);
 error::Error DoSetColorSpaceMetadataCHROMIUM(GLuint texture_id,
                                              gfx::ColorSpace color_space);
 error::Error DoFlushDriverCachesCHROMIUM();
@@ -1009,7 +1011,6 @@ error::Error DoBeginRasterCHROMIUM(GLuint texture_id,
                                    GLuint sk_color,
                                    GLuint msaa_sample_count,
                                    GLboolean can_use_lcd_text,
-                                   GLboolean use_distance_field_text,
                                    GLint color_type,
                                    GLuint color_space_transfer_cache_id);
 error::Error DoRasterCHROMIUM(GLsizeiptr size, const void* list);

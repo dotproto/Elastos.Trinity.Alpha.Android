@@ -10,7 +10,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
@@ -26,7 +25,7 @@
 #include "content/shell/renderer/layout_test/layout_test_render_frame_observer.h"
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/renderer/layout_test/test_media_stream_renderer_factory.h"
-#include "content/shell/renderer/layout_test/test_websocket_handshake_throttle.h"
+#include "content/shell/renderer/layout_test/test_websocket_handshake_throttle_provider.h"
 #include "content/shell/renderer/shell_render_view_observer.h"
 #include "content/shell/test_runner/web_frame_test_proxy.h"
 #include "content/shell/test_runner/web_test_interfaces.h"
@@ -35,17 +34,17 @@
 #include "content/test/mock_webclipboard_impl.h"
 #include "media/base/audio_latency.h"
 #include "media/base/mime_util.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/platform/WebAudioLatencyHint.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebPluginParams.h"
-#include "third_party/WebKit/public/web/WebTestingSupport.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor.h"
+#include "third_party/blink/public/platform/web_audio_latency_hint.h"
+#include "third_party/blink/public/platform/web_media_stream_center.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
+#include "third_party/blink/public/web/web_testing_support.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/icc_profile.h"
 #include "v8/include/v8.h"
 
@@ -129,6 +128,7 @@ LayoutTestContentRendererClient::LayoutTestContentRendererClient() {
   EnableWebTestProxyCreation(base::Bind(&WebViewTestProxyCreated),
                              base::Bind(&WebWidgetTestProxyCreated),
                              base::Bind(&WebFrameTestProxyCreated));
+  SetWorkerRewriteURLFunction(RewriteLayoutTestsURL);
 }
 
 LayoutTestContentRendererClient::~LayoutTestContentRendererClient() {
@@ -227,9 +227,9 @@ LayoutTestContentRendererClient::CreateMediaStreamRendererFactory() {
 #endif
 }
 
-std::unique_ptr<blink::WebSocketHandshakeThrottle>
-LayoutTestContentRendererClient::CreateWebSocketHandshakeThrottle() {
-  return std::make_unique<TestWebSocketHandshakeThrottle>();
+std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+LayoutTestContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
+  return std::make_unique<TestWebSocketHandshakeThrottleProvider>();
 }
 
 void LayoutTestContentRendererClient::DidInitializeWorkerContextOnWorkerThread(

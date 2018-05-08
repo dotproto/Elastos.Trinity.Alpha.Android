@@ -26,12 +26,12 @@
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_heap.h"
 
 using ::testing::_;
 
@@ -88,7 +88,7 @@ class LocalWebRtcMediaStreamAdapterTest : public WebRtcMediaStreamAdapterTest {
     audio_tracks[0].Initialize(blink::WebString::FromUTF8(audio_track_id),
                                audio_source);
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(),
-                Initialize(_, _, -1));
+                Initialize(_, _));
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(),
                 SetAutomaticGainControl(true));
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(), Start());

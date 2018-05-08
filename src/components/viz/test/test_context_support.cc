@@ -69,20 +69,23 @@ void TestContextSupport::SetScheduleOverlayPlaneCallback(
   schedule_overlay_plane_callback_ = schedule_overlay_plane_callback;
 }
 
-void TestContextSupport::Swap() {}
+void TestContextSupport::Swap(uint32_t flags) {}
 
-void TestContextSupport::SwapWithBounds(const std::vector<gfx::Rect>& rects) {}
+void TestContextSupport::SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                                        uint32_t flags) {}
 
-void TestContextSupport::PartialSwapBuffers(const gfx::Rect& sub_buffer) {}
+void TestContextSupport::PartialSwapBuffers(const gfx::Rect& sub_buffer,
+                                            uint32_t flags) {}
 
-void TestContextSupport::CommitOverlayPlanes() {}
+void TestContextSupport::CommitOverlayPlanes(uint32_t flags) {}
 
 void TestContextSupport::ScheduleOverlayPlane(
     int plane_z_order,
     gfx::OverlayTransform plane_transform,
     unsigned overlay_texture_id,
     const gfx::Rect& display_bounds,
-    const gfx::RectF& uv_rect) {
+    const gfx::RectF& uv_rect,
+    bool enable_blend) {
   if (!schedule_overlay_plane_callback_.is_null()) {
     schedule_overlay_plane_callback_.Run(plane_z_order, plane_transform,
                                          overlay_texture_id, display_bounds,

@@ -111,7 +111,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     // Called to notify that ARC begins to start.
     virtual void OnArcStarted() {}
 
-    // Called to notify that ARC has been initialized successfully.
+    // Called to notify that ARC has been successfully provisioned for the first
+    // time after OptIn.
     virtual void OnArcInitialStart() {}
 
     // Called when ARC session is stopped, and is not being restarted
@@ -142,8 +143,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   static ArcSessionManager* Get();
 
-  static void DisableUIForTesting();
-  static void EnableCheckAndroidManagementForTesting();
+  static void SetUiEnabledForTesting(bool enabled);
+  static void EnableCheckAndroidManagementForTesting(bool enable);
 
   // Returns true if ARC is allowed to run for the current session.
   // TODO(hidehiko): The name is very close to IsArcAllowedForProfile(), but
@@ -364,10 +365,12 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   bool reenable_arc_ = false;
   bool provisioning_reported_ = false;
   // In case ARC is started from OOBE |oobe_start_|, set to true. This flag is
-  // used to remember |IsArcOobeOptInActive| state when ARC start request was
-  // made.  |IsArcOobeOptInActive| will be changed by the time when
-  // |oobe_start_| is checked to prevent the Play Store auto-launch.
-  bool oobe_start_ = false;
+  // used to remember |IsArcOobeOptInActive| or
+  // |IsArcOptInWizardForAssistantActive| state when ARC start request was made.
+  // |IsArcOobeOptInActive| or |IsArcOptInWizardForAssistantActive| will be
+  // changed by the time when |oobe_or_opa_start_| is checked to prevent the
+  // Play Store auto-launch.
+  bool oobe_or_assistant_wizard_start_ = false;
   bool directly_started_ = false;
   base::OneShotTimer arc_sign_in_timer_;
 

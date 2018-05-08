@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
@@ -15,6 +14,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "services/resource_coordinator/public/cpp/process_resource_coordinator.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
+#include "services/resource_coordinator/public/cpp/system_resource_coordinator.h"
 #include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
 
 #if defined(OS_MACOSX)
@@ -25,7 +25,8 @@ namespace resource_coordinator {
 
 namespace {
 
-const int kDefaultMeasurementIntervalInSeconds = 1;
+constexpr base::TimeDelta kDefaultMeasurementInterval =
+    base::TimeDelta::FromMinutes(10);
 
 base::LazyInstance<ResourceCoordinatorRenderProcessProbe>::DestructorAtExit
     g_probe = LAZY_INSTANCE_INITIALIZER;
@@ -36,37 +37,8 @@ RenderProcessInfo::RenderProcessInfo() = default;
 
 RenderProcessInfo::~RenderProcessInfo() = default;
 
-RenderProcessMetricsHandler::RenderProcessMetricsHandler() = default;
-
-RenderProcessMetricsHandler::~RenderProcessMetricsHandler() = default;
-
-class ResourceCoordinatorRenderProcessMetricsHandler
-    : public RenderProcessMetricsHandler {
- public:
-  ResourceCoordinatorRenderProcessMetricsHandler() = default;
-  ~ResourceCoordinatorRenderProcessMetricsHandler() override = default;
-
-  // Send collected metrics back to the |resource_coordinator| service
-  // and initiates another render process metrics gather cycle.
-  bool HandleMetrics(
-      const RenderProcessInfoMap& render_process_info_map) override {
-    for (auto& render_process_info_map_entry : render_process_info_map) {
-      auto& render_process_info = render_process_info_map_entry.second;
-      // TODO(oysteine): Move the multiplier used to avoid precision loss
-      // into a shared location, when this property gets used.
-      render_process_info.host->GetProcessResourceCoordinator()->SetCPUUsage(
-          render_process_info.cpu_usage);
-    }
-
-    return true;
-  }
-};
-
 ResourceCoordinatorRenderProcessProbe::ResourceCoordinatorRenderProcessProbe()
-    : metrics_handler_(
-          std::make_unique<ResourceCoordinatorRenderProcessMetricsHandler>()),
-      interval_ms_(
-          base::TimeDelta::FromSeconds(kDefaultMeasurementIntervalInSeconds)) {
+    : interval_(kDefaultMeasurementInterval) {
   UpdateWithFieldTrialParams();
 }
 
@@ -90,10 +62,30 @@ bool ResourceCoordinatorRenderProcessProbe::IsEnabled() {
 
 void ResourceCoordinatorRenderProcessProbe::StartGatherCycle() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // TODO(siggi): It irks me to have this bit of policy embedded here.
+  //     I feel this should be moved to the caller...
   if (!ResourceCoordinatorRenderProcessProbe::IsEnabled()) {
     return;
   }
 
+  DCHECK(!is_gather_cycle_started_);
+
+  is_gather_cycle_started_ = true;
+  if (!is_gathering_) {
+    timer_.Start(FROM_HERE, base::TimeDelta(), this,
+                 &ResourceCoordinatorRenderProcessProbe::
+                     RegisterAliveRenderProcessesOnUIThread);
+  }
+}
+
+void ResourceCoordinatorRenderProcessProbe::StartSingleGather() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (is_gathering_)
+    return;
+
+  // If the gather cycle is started this measurement will go through early,
+  // and the interval between measurements will be shortened.
   timer_.Start(FROM_HERE, base::TimeDelta(), this,
                &ResourceCoordinatorRenderProcessProbe::
                    RegisterAliveRenderProcessesOnUIThread);
@@ -102,6 +94,7 @@ void ResourceCoordinatorRenderProcessProbe::StartGatherCycle() {
 void ResourceCoordinatorRenderProcessProbe::
     RegisterAliveRenderProcessesOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(!is_gathering_);
 
   ++current_gather_cycle_;
 
@@ -109,26 +102,33 @@ void ResourceCoordinatorRenderProcessProbe::
            content::RenderProcessHost::AllHostsIterator();
        !rph_iter.IsAtEnd(); rph_iter.Advance()) {
     content::RenderProcessHost* host = rph_iter.GetCurrentValue();
-    base::ProcessHandle handle = host->GetHandle();
     // Process may not be valid yet.
-    if (handle == base::kNullProcessHandle) {
+    if (!host->GetProcess().IsValid()) {
       continue;
     }
 
-    auto& render_process_info = render_process_info_map_[handle];
+    auto& render_process_info = render_process_info_map_[host->GetID()];
     render_process_info.last_gather_cycle_active = current_gather_cycle_;
-
     if (render_process_info.metrics.get() == nullptr) {
+      DCHECK(!render_process_info.process.IsValid());
+
+      // Duplicate the process to retain ownership of it through the thread
+      // bouncing.
+      render_process_info.process = host->GetProcess().Duplicate();
+
 #if defined(OS_MACOSX)
       render_process_info.metrics = base::ProcessMetrics::CreateProcessMetrics(
-          handle, content::BrowserChildProcessHost::GetPortProvider());
+          render_process_info.process.Handle(),
+          content::BrowserChildProcessHost::GetPortProvider());
 #else
-      render_process_info.metrics =
-          base::ProcessMetrics::CreateProcessMetrics(handle);
+      render_process_info.metrics = base::ProcessMetrics::CreateProcessMetrics(
+          render_process_info.process.Handle());
 #endif
-      render_process_info.host = host;
+      render_process_info.render_process_host_id = host->GetID();
     }
   }
+
+  is_gathering_ = true;
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
@@ -140,6 +140,7 @@ void ResourceCoordinatorRenderProcessProbe::
 void ResourceCoordinatorRenderProcessProbe::
     CollectRenderProcessMetricsOnIOThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK(is_gathering_);
 
   RenderProcessInfoMap::iterator iter = render_process_info_map_.begin();
   while (iter != render_process_info_map_.end()) {
@@ -167,31 +168,68 @@ void ResourceCoordinatorRenderProcessProbe::
 void ResourceCoordinatorRenderProcessProbe::
     HandleRenderProcessMetricsOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (metrics_handler_->HandleMetrics(render_process_info_map_)) {
-    timer_.Start(FROM_HERE, interval_ms_, this,
+  DCHECK(is_gathering_);
+  is_gathering_ = false;
+
+  if (DispatchMetrics() && is_gather_cycle_started_) {
+    timer_.Start(FROM_HERE, interval_, this,
                  &ResourceCoordinatorRenderProcessProbe::
                      RegisterAliveRenderProcessesOnUIThread);
+  } else {
+    is_gather_cycle_started_ = false;
   }
-}
-
-bool ResourceCoordinatorRenderProcessProbe::
-    AllRenderProcessMeasurementsAreCurrentForTesting() const {
-  for (auto& render_process_info_map_entry : render_process_info_map_) {
-    auto& render_process_info = render_process_info_map_entry.second;
-    if (render_process_info.last_gather_cycle_active != current_gather_cycle_ ||
-        render_process_info.cpu_usage < 0.0) {
-      return false;
-    }
-  }
-  return true;
 }
 
 void ResourceCoordinatorRenderProcessProbe::UpdateWithFieldTrialParams() {
   int64_t interval_ms = GetGRCRenderProcessCPUProfilingIntervalInMs();
 
   if (interval_ms > 0) {
-    interval_ms_ = base::TimeDelta::FromMilliseconds(interval_ms);
+    interval_ = base::TimeDelta::FromMilliseconds(interval_ms);
   }
+}
+
+SystemResourceCoordinator*
+ResourceCoordinatorRenderProcessProbe::EnsureSystemResourceCoordinator() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!system_resource_coordinator_) {
+    content::ServiceManagerConnection* connection =
+        content::ServiceManagerConnection::GetForProcess();
+    if (connection)
+      system_resource_coordinator_ =
+          std::make_unique<SystemResourceCoordinator>(
+              connection->GetConnector());
+  }
+
+  return system_resource_coordinator_.get();
+}
+
+bool ResourceCoordinatorRenderProcessProbe::DispatchMetrics() {
+  SystemResourceCoordinator* system_resource_coordinator =
+      EnsureSystemResourceCoordinator();
+
+  if (system_resource_coordinator) {
+    bool dispatched_measurement = false;
+    for (auto& render_process_info_map_entry : render_process_info_map_) {
+      auto& render_process_info = render_process_info_map_entry.second;
+      // TODO(oysteine): Move the multiplier used to avoid precision loss
+      // into a shared location, when this property gets used.
+
+      // Note that the RPH may have been deleted while the CPU metrics were
+      // acquired on a blocking thread.
+      content::RenderProcessHost* host = content::RenderProcessHost::FromID(
+          render_process_info.render_process_host_id);
+      if (host) {
+        dispatched_measurement = true;
+        host->GetProcessResourceCoordinator()->SetCPUUsage(
+            render_process_info.cpu_usage);
+      }
+    }
+
+    if (dispatched_measurement)
+      system_resource_coordinator->OnProcessCPUUsageReady();
+  }
+
+  return true;
 }
 
 }  // namespace resource_coordinator

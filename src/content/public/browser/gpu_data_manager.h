@@ -12,8 +12,6 @@
 #include "base/process/process.h"
 #include "content/common/content_export.h"
 
-class GURL;
-
 namespace gpu {
 struct GPUInfo;
 struct VideoMemoryUsageStats;
@@ -36,9 +34,8 @@ class GpuDataManager {
 
   // This indicator might change because we could collect more GPU info or
   // because the GPU blacklist could be updated.
-  // If this returns false, any further GPU access, including launching GPU
-  // process, establish GPU channel, and GPU info collection, should be
-  // blocked.
+  // If this returns false, any further GPU access, including establishing GPU
+  // channel, and GPU info collection, should be blocked.
   // Can be called on any thread.
   // If |reason| is not nullptr and GPU access is blocked, upon return, |reason|
   // contains a description of the reason why GPU access is blocked.
@@ -59,18 +56,10 @@ class GpuDataManager {
   virtual void AddObserver(GpuDataManagerObserver* observer) = 0;
   virtual void RemoveObserver(GpuDataManagerObserver* observer) = 0;
 
-  // Allows a given domain previously blocked from accessing 3D APIs
-  // to access them again.
-  virtual void UnblockDomainFrom3DAPIs(const GURL& url) = 0;
-
   virtual void DisableHardwareAcceleration() = 0;
 
   // Whether a GPU is in use (as opposed to a software renderer).
   virtual bool HardwareAccelerationEnabled() const = 0;
-
-  // Extensions that are currently disabled.
-  virtual void GetDisabledExtensions(
-      std::string* disabled_extensions) const = 0;
 
  protected:
   virtual ~GpuDataManager() {}

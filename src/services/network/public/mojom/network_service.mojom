@@ -18,6 +18,7 @@ import "services/network/public/mojom/udp_socket.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/network_param.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
+import "services/network/public/mojom/websocket.mojom";
 import "services/proxy_resolver/public/mojom/proxy_resolver.mojom";
 import "services/network/public/mojom/restricted_cookie_manager.mojom";
 import "url/mojom/origin.mojom";
@@ -108,6 +109,13 @@ struct NetworkContextParams {
   // other channels (navigation, issuing requests, etc)? Or can
   // ProxyConfigServices be modified not to need this notification?
   ProxyConfigPollerClient? proxy_config_poller_client;
+
+  // Only used on OS_CHROMEOS platform.
+  bool allow_gssapi_library_load = false;
+
+  // The GSSAPI library name.
+  // Only used on (OS_POSIX && !OS_ANDROID) platform.
+  string gssapi_library_name;
 };
 
 struct NetworkConditions {
@@ -125,9 +133,9 @@ struct NetworkConditions {
   double upload_throughput;
 };
 
-// Used in NetworkContext.ClearHttpCache() to specify the resources to
-// keep/delete based on their URLs.
-struct ClearCacheUrlFilter {
+// Used in some clearing methods of URL-keyed data to specify the resources to
+// keep/delete.
+struct ClearDataFilter {
   enum Type {DELETE_MATCHES, KEEP_MATCHES};
 
   Type type;
@@ -141,6 +149,23 @@ struct ClearCacheUrlFilter {
 
   // List of URL origins.
   array<url.mojom.Origin> origins;
+};
+
+// Represents the accumulated network usage for a consumer.
+struct NetworkUsage {
+  // |process_id| is 0 for the browser process, otherwise it's the child process
+  // ID.
+  uint32 process_id;
+
+  // The ID of the IPC route for the consumer, which identifies the RenderFrame
+  // or like-thing.
+  uint32 routing_id;
+
+  // Raw bytes received from the network since the start/restart of the service.
+  int64 total_bytes_received;
+
+  // Raw bytes sent to the network since the start/restart of the service.
+  int64 total_bytes_sent;
 };
 
 // Represents a distinct context for making network requests, with its own
@@ -174,7 +199,22 @@ interface NetworkContext {
   // in either direction by using null Time values for either argument.
   ClearHttpCache(mojo_base.mojom.Time start_time,
                  mojo_base.mojom.Time end_time,
-                 ClearCacheUrlFilter? filter) => ();
+                 ClearDataFilter? filter) => ();
+
+  // Clears channel IDs. A specific range of time can be specified with
+  // |start_time| and |end_time|. This supports unbounded deletes in either
+  // direction by using null Time values for either argument.
+  //
+  // If a non-null |filter| is specified, will clear only IDs matching the
+  // filter. Filtering by origins is not supported. If |filter| is non-null,
+  // |filter.origins| must be empty.
+  ClearChannelIds(mojo_base.mojom.Time start_time,
+                  mojo_base.mojom.Time end_time,
+                  ClearDataFilter? filter) => ();
+
+  // Clears all entries from the HTTP Auth cache that were added since
+  // |start_time|. Supports unbounded delete using null Time value.
+  ClearHttpAuthCache(mojo_base.mojom.Time start_time) => ();
 
   // Configures network conditions for the specified throttling profile.
   // The throttling will be applied only to requests that have
@@ -186,6 +226,12 @@ interface NetworkContext {
 
   // Updates the Accept-Language header to be used for requests.
   SetAcceptLanguage(string new_accept_language);
+
+  // Updates the CT policy to be used for requests.
+  SetCTPolicy(array<string> required_hosts,
+              array<string> excluded_hosts,
+              array<string> excluded_spkis,
+              array<string> excluded_legacy_spkis);
 
   // Creates a UDP socket. Caller can supply a |receiver| interface pointer
   // to listen for incoming datagrams. A null |receiver| is acceptable if caller
@@ -212,14 +258,15 @@ interface NetworkContext {
                         TCPServerSocket& socket)
       => (int32 result, net.interfaces.IPEndPoint? local_addr_out);
 
-  // Creates a TCP socket connected to |remote_addr|. |observer| will be used
-  // to listen for any network connection error on the newly established
-  // connection. The socket created can only be used for the purpose specified
-  // in |traffic_annotation|, and cannot be re-used for other purposes.
-  // |local_addr| should be set to null unless the caller wants to bind the
-  // socket to a specific address and port. On success, |result| is net::OK.
-  // Caller is to use |send_stream| to send data and |receive_stream| to receive
-  // data over the connection. On failure, |result| is a network error code.
+  // Creates a TCP socket connected to |remote_addr|. |observer| if non-null
+  // will be used to listen for any network connection error on the newly
+  // established connection. The socket created can only be used for the purpose
+  // specified in |traffic_annotation|, and cannot be re-used for other
+  // purposes. |local_addr| should be set to null unless the caller wants to
+  // bind the socket to a specific address and port. On success, |result| is
+  // net::OK. Caller is to use |send_stream| to send data and |receive_stream|
+  // to receive data over the connection. On failure, |result| is a network
+  // error code.
   //
   // Any sockets that are created but are yet to be destroyed will be destroyed
   // when NetworkContext goes away.
@@ -228,10 +275,16 @@ interface NetworkContext {
       net.interfaces.AddressList remote_addr_list,
       MutableNetworkTrafficAnnotationTag traffic_annotation,
       TCPConnectedSocket& socket,
-      TCPConnectedSocketObserver observer)
+      TCPConnectedSocketObserver? observer)
      => (int32 result,
          handle<data_pipe_consumer>? receive_stream,
          handle<data_pipe_producer>? send_stream);
+
+  // Creates a WebSocket connection.
+  CreateWebSocket(WebSocket& request,
+                  int32 process_id,
+                  int32 render_frame_id,
+                  url.mojom.Origin origin);
 
   [Sync]
   // Adds explicitly-specified data as if it was processed from an
@@ -239,6 +292,10 @@ interface NetworkContext {
   AddHSTSForTesting(string host,
                     mojo_base.mojom.Time expiry,
                     bool include_subdomains) => ();
+
+  [Sync]
+  // Will force the transaction to fail with the given error code.
+  SetFailingHttpTransactionForTesting(int32 rv) => ();
 };
 
 // The content/browser implementation of this SSLPrivateKey interface wraps the
@@ -256,18 +313,27 @@ interface SSLPrivateKey {
        array<uint8> input) => (int32 net_error, array<uint8> signature);
 };
 
+// The |credentials| output parameter is given to URLRequest::SetAuth()
+// through this mojo interface. It is not set when URLRequest::CancelAuth()
+// needs to be called.
+interface AuthChallengeResponder {
+   OnAuthCredentials(AuthCredentials? credentials);
+};
+
 // Network service interface to the browser.
 interface NetworkServiceClient {
   // Called when we receive an authentication failure.
-  // The |credentials| output parameter is given to URLRequest::SetAuth()
-  // through this mojo interface. It is not set when URLRequest::CancelAuth()
-  // needs to be called.
+  // The |auth_challenge_responder| will respond to auth challenge with
+  // credentials.
   OnAuthRequired(uint32 process_id,
                  uint32 routing_id,
                  uint32 request_id,
                  url.mojom.Url url,
+                 url.mojom.Url site_for_cookies,
                  bool first_auth_attempt,
-                 AuthChallengeInfo auth_info) => (AuthCredentials? credentials);
+                 AuthChallengeInfo auth_info,
+                 int32 resource_type,
+                 AuthChallengeResponder auth_challenge_responder);
   // Called when an SSL certificate requested message is received for client
   // authentication.
   // The |algorithm_preferences| parameter corresponds to the return value
@@ -321,4 +387,7 @@ interface NetworkService {
   // Gets the NetworkChangeManager.
   GetNetworkChangeManager(
       NetworkChangeManager& network_change_manager);
+
+  // Gets the accumulated network usage since the start/restart of the service.
+  GetTotalNetworkUsages() => (array<NetworkUsage> total_network_usages);
 };

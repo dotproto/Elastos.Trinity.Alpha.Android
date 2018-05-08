@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -22,6 +24,8 @@
 #include "chrome/browser/extensions/api/developer_private/entry_picker.h"
 #include "chrome/browser/extensions/api/developer_private/extension_info_generator.h"
 #include "chrome/browser/extensions/api/developer_private/show_permissions_dialog_helper.h"
+#include "chrome/browser/extensions/chrome_zipfile_installer.h"
+#include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -42,7 +46,6 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/extensions/extension_loader_handler.h"
 #include "chrome/common/extensions/api/developer_private.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
@@ -56,6 +59,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/drop_data.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/api/file_handlers/app_file_handler_util.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -71,19 +75,23 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/warning_service.h"
+#include "extensions/browser/zipfile_installer.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "net/base/filename_util.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation.h"
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/isolated_context.h"
+#include "third_party/re2/src/re2/re2.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace extensions {
@@ -127,8 +135,41 @@ ExtensionService* GetExtensionService(content::BrowserContext* context) {
 
 std::string ReadFileToString(const base::FilePath& path) {
   std::string data;
+  // This call can fail, but it doesn't matter for our purposes. If it fails,
+  // we simply return an empty string for the manifest, and ignore it.
   ignore_result(base::ReadFileToString(path, &data));
   return data;
+}
+
+using GetManifestErrorCallback =
+    base::OnceCallback<void(const base::FilePath& file_path,
+                            const std::string& error,
+                            size_t line_number,
+                            const std::string& manifest)>;
+// Takes in an |error| string and tries to parse it as a manifest error (with
+// line number), asynchronously calling |callback| with the results.
+void GetManifestError(const std::string& error,
+                      const base::FilePath& extension_path,
+                      GetManifestErrorCallback callback) {
+  size_t line = 0u;
+  size_t column = 0u;
+  std::string regex = base::StringPrintf("%s  Line: (\\d+), column: (\\d+), .*",
+                                         manifest_errors::kManifestParseError);
+  // If this was a JSON parse error, we can highlight the exact line with the
+  // error. Otherwise, we should still display the manifest (for consistency,
+  // reference, and so that if we ever make this really fancy and add an editor,
+  // it's ready).
+  //
+  // This regex call can fail, but if it does, we just don't highlight anything.
+  re2::RE2::FullMatch(error, regex, &line, &column);
+
+  // This will read the manifest and call AddFailure with the read manifest
+  // contents.
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(&ReadFileToString,
+                     extension_path.Append(kManifestFilename)),
+      base::BindOnce(std::move(callback), extension_path, error, line));
 }
 
 bool UserCanModifyExtensionConfiguration(
@@ -603,11 +644,9 @@ ExtensionFunction::ResponseAction DeveloperPrivateAutoUpdateFunction::Run() {
     ExtensionUpdater::CheckParams params;
     params.fetch_priority = ManifestFetchData::FetchPriority::FOREGROUND;
     params.install_immediately = true;
-    // TODO(crbug.com/714018): Replace base::BindRepeating with base::BindOnce.
-    params.callback =
-        base::BindRepeating(&DeveloperPrivateAutoUpdateFunction::OnComplete,
-                            this /* ref counted */);
-    updater->CheckNow(params);
+    params.callback = base::BindOnce(
+        &DeveloperPrivateAutoUpdateFunction::OnComplete, this /* refcounted */);
+    updater->CheckNow(std::move(params));
   }
   return RespondLater();
 }
@@ -904,11 +943,10 @@ void DeveloperPrivateReloadFunction::OnLoadFailure(
     const std::string& error) {
   if (file_path == reloading_extension_path_) {
     // Reload failed - create an error to pass back to the extension.
-    ExtensionLoaderHandler::GetManifestError(
+    GetManifestError(
         error, file_path,
-        // TODO(devlin): Update GetManifestError to take a OnceCallback.
-        base::BindRepeating(&DeveloperPrivateReloadFunction::OnGotManifestError,
-                            this));  // Creates a reference.
+        base::BindOnce(&DeveloperPrivateReloadFunction::OnGotManifestError,
+                       this));  // Creates a reference.
     ClearObservers();
   }
 }
@@ -1070,7 +1108,7 @@ void DeveloperPrivateLoadUnpackedFunction::OnLoadComplete(
     return;
   }
 
-  ExtensionLoaderHandler::GetManifestError(
+  GetManifestError(
       error, file_path,
       base::Bind(&DeveloperPrivateLoadUnpackedFunction::OnGotManifestError,
                  this));
@@ -1085,6 +1123,52 @@ void DeveloperPrivateLoadUnpackedFunction::OnGotManifestError(
   Respond(OneArgument(
       CreateLoadError(file_path, error, line_number, manifest, retry_guid_)
           .ToValue()));
+}
+
+DeveloperPrivateInstallDroppedFileFunction::
+    DeveloperPrivateInstallDroppedFileFunction() = default;
+DeveloperPrivateInstallDroppedFileFunction::
+    ~DeveloperPrivateInstallDroppedFileFunction() = default;
+
+ExtensionFunction::ResponseAction
+DeveloperPrivateInstallDroppedFileFunction::Run() {
+  content::WebContents* web_contents = GetSenderWebContents();
+  if (!web_contents)
+    return RespondNow(Error(kCouldNotFindWebContentsError));
+
+  DeveloperPrivateAPI* api = DeveloperPrivateAPI::Get(browser_context());
+  base::FilePath path = api->GetDraggedPath(web_contents);
+  if (path.empty())
+    return RespondNow(Error("No dragged path"));
+
+  ExtensionService* service = GetExtensionService(browser_context());
+  if (path.MatchesExtension(FILE_PATH_LITERAL(".zip"))) {
+    ZipFileInstaller::Create(
+        content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+        MakeRegisterInExtensionServiceCallback(service))
+        ->LoadFromZipFile(path);
+  } else {
+    auto prompt = std::make_unique<ExtensionInstallPrompt>(web_contents);
+    scoped_refptr<CrxInstaller> crx_installer =
+        CrxInstaller::Create(service, std::move(prompt));
+    crx_installer->set_error_on_unsupported_requirements(true);
+    crx_installer->set_off_store_install_allow_reason(
+        CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
+    crx_installer->set_install_immediately(true);
+
+    if (path.MatchesExtension(FILE_PATH_LITERAL(".user.js"))) {
+      crx_installer->InstallUserScript(path, net::FilePathToFileURL(path));
+    } else if (path.MatchesExtension(FILE_PATH_LITERAL(".crx"))) {
+      crx_installer->InstallCrx(path);
+    } else {
+      EXTENSION_FUNCTION_VALIDATE(false);
+    }
+  }
+
+  // TODO(devlin): We could optionally wait to return until we validate whether
+  // the load succeeded or failed. For now, that's unnecessary, and just adds
+  // complexity.
+  return RespondNow(NoArguments());
 }
 
 DeveloperPrivateNotifyDragInstallInProgressFunction::
@@ -1381,7 +1465,7 @@ void DeveloperPrivateLoadDirectoryFunction::ReadDirectoryByFileSystemAPICb(
   pending_copy_operations_count_ += file_list.size();
 
   for (size_t i = 0; i < file_list.size(); ++i) {
-    if (file_list[i].is_directory) {
+    if (file_list[i].type == filesystem::mojom::FsFileType::DIRECTORY) {
       ReadDirectoryByFileSystemAPI(project_path.Append(file_list[i].name),
                                    destination_path.Append(file_list[i].name));
       continue;

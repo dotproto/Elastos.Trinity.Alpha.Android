@@ -12,11 +12,10 @@
 namespace syncer {
 
 ModelTypeSyncBridge::ModelTypeSyncBridge(
-    const ChangeProcessorFactory& change_processor_factory,
-    ModelType type)
-    : type_(type),
-      change_processor_factory_(change_processor_factory),
-      change_processor_(change_processor_factory_.Run(type_, this)) {}
+    std::unique_ptr<ModelTypeChangeProcessor> change_processor)
+    : change_processor_(std::move(change_processor)) {
+  DCHECK(change_processor_);
+}
 
 ModelTypeSyncBridge::~ModelTypeSyncBridge() {}
 
@@ -36,24 +35,23 @@ ConflictResolution ModelTypeSyncBridge::ResolveConflict(
 
 void ModelTypeSyncBridge::OnSyncStarting(
     const ModelErrorHandler& error_handler,
-    const ModelTypeChangeProcessor::StartCallback& start_callback) {
-  change_processor_->OnSyncStarting(std::move(error_handler), start_callback);
+    ModelTypeChangeProcessor::StartCallback start_callback) {
+  change_processor_->OnSyncStarting(std::move(error_handler),
+                                    std::move(start_callback));
 }
 
 void ModelTypeSyncBridge::DisableSync() {
-  DCHECK(change_processor_);
-  const bool model_ready_to_sync = change_processor_->IsTrackingMetadata();
+  // The processor resets its internal state and clears the metadata (by calling
+  // ApplyDisableSyncChanges() of this bridge).
   change_processor_->DisableSync();
-  change_processor_ = change_processor_factory_.Run(type_, this);
-  if (model_ready_to_sync) {
-    change_processor_->ModelReadyToSync(std::make_unique<MetadataBatch>());
-  }
 }
 
-void ModelTypeSyncBridge::ApplyDisableSyncChanges(
+ModelTypeSyncBridge::DisableSyncResponse
+ModelTypeSyncBridge::ApplyDisableSyncChanges(
     std::unique_ptr<MetadataChangeList> delete_metadata_change_list) {
   // Nothing to do if this fails, so just ignore the error it might return.
   ApplySyncChanges(std::move(delete_metadata_change_list), EntityChangeList());
+  return DisableSyncResponse::kModelStillReadyToSync;
 }
 
 ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() const {

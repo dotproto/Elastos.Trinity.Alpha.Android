@@ -4,7 +4,6 @@
 
 #include "content/browser/android/synchronous_compositor_sync_call_bridge.h"
 
-#include "content/browser/android/synchronous_compositor_browser_filter.h"
 #include "content/browser/android/synchronous_compositor_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -17,7 +16,6 @@ SynchronousCompositorSyncCallBridge::SynchronousCompositorSyncCallBridge(
     SynchronousCompositorHost* host)
     : routing_id_(host->routing_id()),
       host_(host),
-      mojo_enabled_(base::FeatureList::IsEnabled(features::kMojoInputMessages)),
       begin_frame_condition_(&lock_) {
   DCHECK(host);
 }
@@ -25,23 +23,6 @@ SynchronousCompositorSyncCallBridge::SynchronousCompositorSyncCallBridge(
 SynchronousCompositorSyncCallBridge::~SynchronousCompositorSyncCallBridge() {
   DCHECK(frame_futures_.empty());
   DCHECK(!window_android_in_vsync_);
-}
-
-void SynchronousCompositorSyncCallBridge::BindFilterOnUIThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(host_);
-  if (mojo_enabled_ || bound_to_filter_)
-    return;
-  scoped_refptr<SynchronousCompositorBrowserFilter> filter = host_->GetFilter();
-  if (!filter)
-    return;
-  bound_to_filter_ = true;
-  scoped_refptr<SynchronousCompositorSyncCallBridge> thiz = this;
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &SynchronousCompositorBrowserFilter::RegisterSyncCallBridge,
-          std::move(filter), routing_id_, thiz));
 }
 
 void SynchronousCompositorSyncCallBridge::RemoteReady() {
@@ -55,11 +36,11 @@ void SynchronousCompositorSyncCallBridge::RemoteClosedOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::AutoLock lock(lock_);
   SignalRemoteClosedToAllWaitersOnIOThread();
-  UnregisterSyncCallBridgeIfNecessary();
 }
 
 bool SynchronousCompositorSyncCallBridge::ReceiveFrameOnIOThread(
     int layer_tree_frame_sink_id,
+    uint32_t metadata_version,
     base::Optional<viz::CompositorFrame> compositor_frame) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::AutoLock lock(lock_);
@@ -77,13 +58,12 @@ bool SynchronousCompositorSyncCallBridge::ReceiveFrameOnIOThread(
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&SynchronousCompositorSyncCallBridge::
                            ProcessFrameMetadataOnUIThread,
-                       this, compositor_frame->metadata.Clone()));
+                       this, metadata_version,
+                       compositor_frame->metadata.Clone()));
     frame_ptr->frame.reset(new viz::CompositorFrame);
     *frame_ptr->frame = std::move(*compositor_frame);
   }
   future->SetFrame(std::move(frame_ptr));
-
-  UnregisterSyncCallBridgeIfNecessary();
   return true;
 }
 
@@ -103,12 +83,9 @@ bool SynchronousCompositorSyncCallBridge::WaitAfterVSyncOnUIThread(
     ui::WindowAndroid* window_android) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::AutoLock lock(lock_);
-  if (!mojo_enabled_ && !bound_to_filter_)
-    BindFilterOnUIThread();
   if (remote_state_ != RemoteState::READY)
     return false;
   DCHECK(!begin_frame_response_valid_);
-  DCHECK(mojo_enabled_ || bound_to_filter_);
   if (window_android_in_vsync_) {
     DCHECK_EQ(window_android_in_vsync_, window_android);
     return true;
@@ -127,8 +104,6 @@ bool SynchronousCompositorSyncCallBridge::SetFrameFutureOnUIThread(
   if (remote_state_ != RemoteState::READY)
     return false;
 
-  BindFilterOnUIThread();
-  DCHECK(mojo_enabled_ || bound_to_filter_);
   // Allowing arbitrary number of pending futures can lead to increase in frame
   // latency. Due to this, Android platform already ensures that here that there
   // can be at most 2 pending frames. Here, we rely on Android to do the
@@ -142,20 +117,7 @@ bool SynchronousCompositorSyncCallBridge::SetFrameFutureOnUIThread(
 void SynchronousCompositorSyncCallBridge::HostDestroyedOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(host_);
-  scoped_refptr<SynchronousCompositorBrowserFilter> filter = host_->GetFilter();
-
-  base::AutoLock lock(lock_);
-  bound_to_filter_ = false;
   host_ = nullptr;
-
-  if (filter) {
-    unregister_callback_ =
-        base::BindOnce(&SynchronousCompositorSyncCallBridge::
-                           UnregisterSyncCallBridgeOnIOThread,
-                       this, filter);
-
-    UnregisterSyncCallBridgeIfNecessary();
-  }
 }
 
 bool SynchronousCompositorSyncCallBridge::IsRemoteReadyOnUIThread() {
@@ -169,40 +131,36 @@ void SynchronousCompositorSyncCallBridge::VSyncCompleteOnUIThread() {
   DCHECK(window_android_in_vsync_);
   window_android_in_vsync_ = nullptr;
 
-  base::AutoLock lock(lock_);
-  if (remote_state_ != RemoteState::READY)
-    return;
+  bool update_state = false;
+  SyncCompositorCommonRendererParams render_params;
+  {
+    base::AutoLock lock(lock_);
+    if (remote_state_ != RemoteState::READY)
+      return;
 
-  // If we haven't received a response yet. Wait for it.
-  if (!begin_frame_response_valid_) {
-    base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope
-        allow_base_sync_primitives;
-    begin_frame_condition_.Wait();
+    // If we haven't received a response yet. Wait for it.
+    if (!begin_frame_response_valid_) {
+      base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope
+          allow_base_sync_primitives;
+      begin_frame_condition_.Wait();
+    }
+    DCHECK(begin_frame_response_valid_ || remote_state_ != RemoteState::READY);
+    begin_frame_response_valid_ = false;
+    if (remote_state_ == RemoteState::READY) {
+      update_state = true;
+      render_params = last_render_params_;
+    }
   }
-  DCHECK(begin_frame_response_valid_ || remote_state_ != RemoteState::READY);
-  begin_frame_response_valid_ = false;
-  if (remote_state_ == RemoteState::READY)
-    host_->UpdateState(last_render_params_);
+  if (update_state)
+    host_->UpdateState(render_params);
 }
 
 void SynchronousCompositorSyncCallBridge::ProcessFrameMetadataOnUIThread(
+    uint32_t metadata_version,
     viz::CompositorFrameMetadata metadata) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (host_)
-    host_->UpdateFrameMetaData(std::move(metadata));
-}
-
-void SynchronousCompositorSyncCallBridge::UnregisterSyncCallBridgeOnIOThread(
-    scoped_refptr<SynchronousCompositorBrowserFilter> filter) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  {
-    base::AutoLock lock(lock_);
-    if (remote_state_ == RemoteState::READY)
-      SignalRemoteClosedToAllWaitersOnIOThread();
-  }
-  if (filter)
-    filter->UnregisterSyncCallBridge(routing_id_);
+    host_->UpdateFrameMetaData(metadata_version, std::move(metadata));
 }
 
 void SynchronousCompositorSyncCallBridge::
@@ -215,19 +173,6 @@ void SynchronousCompositorSyncCallBridge::
   }
   frame_futures_.clear();
   begin_frame_condition_.Signal();
-}
-
-void SynchronousCompositorSyncCallBridge::
-    UnregisterSyncCallBridgeIfNecessary() {
-  // Can be called from either thread.
-  lock_.AssertAcquired();
-
-  // If no more frames left deregister if necessary. Post a task as
-  // unregistering will destroy this object.
-  if (frame_futures_.empty() && unregister_callback_) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            std::move(unregister_callback_));
-  }
 }
 
 }  // namespace content

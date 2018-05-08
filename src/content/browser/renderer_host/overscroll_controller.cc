@@ -17,10 +17,10 @@ namespace content {
 
 namespace {
 
-bool IsPullToRefreshEnabled() {
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-             switches::kPullToRefresh) == "1";
-}
+// Minimum amount of time after an actual scroll after which a pull-to-refresh
+// can start.
+constexpr base::TimeDelta kPullToRefreshCoolOffDelay =
+    base::TimeDelta::FromMilliseconds(600);
 
 bool IsGestureEventFromTouchpad(const blink::WebInputEvent& event) {
   DCHECK(blink::WebInputEvent::IsGestureEventType(event.GetType()));
@@ -84,6 +84,19 @@ bool OverscrollController::ShouldProcessEvent(
   return true;
 }
 
+bool OverscrollController::ShouldIgnoreInertialEvent(
+    const blink::WebInputEvent& event) const {
+  if (!ignore_following_inertial_events_ ||
+      event.GetType() != blink::WebInputEvent::kGestureScrollUpdate) {
+    return false;
+  }
+
+  const blink::WebGestureEvent& gesture =
+      static_cast<const blink::WebGestureEvent&>(event);
+  return gesture.data.scroll_update.inertial_phase ==
+         blink::WebGestureEvent::kMomentumPhase;
+}
+
 bool OverscrollController::WillHandleEvent(const blink::WebInputEvent& event) {
   if (!ShouldProcessEvent(event))
     return false;
@@ -93,11 +106,27 @@ bool OverscrollController::WillHandleEvent(const blink::WebInputEvent& event) {
   if (event.GetType() == blink::WebInputEvent::kMouseWheel)
     return false;
 
-  if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin ||
-      event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
+  if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+    ignore_following_inertial_events_ = false;
+    time_since_last_ignored_scroll_ =
+        event.TimeStamp() - last_ignored_scroll_time_;
     // Will handle events when processing ACKs to ensure the correct order.
     return false;
   }
+
+  if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
+    if (scroll_state_ == ScrollState::CONTENT_CONSUMING ||
+        overscroll_ignored_) {
+      last_ignored_scroll_time_ = event.TimeStamp();
+    }
+    // Will handle events when processing ACKs to ensure the correct order.
+    return false;
+  }
+
+  // Consume the scroll-update events if they are from a inertial scroll (fling)
+  // event that completed an overscroll gesture.
+  if (ShouldIgnoreInertialEvent(event))
+    return true;
 
   bool reset_scroll_state = false;
   if (scroll_state_ != ScrollState::NONE || overscroll_delta_x_ ||
@@ -152,13 +181,17 @@ void OverscrollController::OnDidOverscroll(
     const ui::DidOverscrollParams& params) {
   // TODO(sunyunjia): We should also decide whether to trigger overscroll,
   // update scroll_state_ here. See https://crbug.com/799467.
-  if (delegate_)
-    delegate_->OnOverscrollBehaviorUpdate(params.overscroll_behavior);
+  behavior_ = params.overscroll_behavior;
 }
 
 void OverscrollController::ReceivedEventACK(const blink::WebInputEvent& event,
                                             bool processed) {
   if (!ShouldProcessEvent(event))
+    return;
+
+  // An inertial scroll (fling) event from a completed overscroll gesture
+  // should not modify states below.
+  if (ShouldIgnoreInertialEvent(event))
     return;
 
   if (processed) {
@@ -200,7 +233,7 @@ void OverscrollController::Cancel() {
   ResetScrollState();
 }
 
-bool OverscrollController::DispatchEventCompletesAction (
+bool OverscrollController::DispatchEventCompletesAction(
     const blink::WebInputEvent& event) const {
   if (overscroll_mode_ == OVERSCROLL_NONE)
     return false;
@@ -210,8 +243,22 @@ bool OverscrollController::DispatchEventCompletesAction (
   // after the threshold.
   if (event.GetType() != blink::WebInputEvent::kMouseMove &&
       event.GetType() != blink::WebInputEvent::kGestureScrollEnd &&
-      event.GetType() != blink::WebInputEvent::kGestureFlingStart)
+      event.GetType() != blink::WebInputEvent::kGestureFlingStart &&
+      event.GetType() != blink::WebInputEvent::kGestureScrollUpdate)
     return false;
+
+  // Complete the overscroll gesture for inertial scroll (fling) event from
+  // touchpad.
+  if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
+    if (overscroll_source_ != OverscrollSource::TOUCHPAD)
+      return false;
+    DCHECK(IsGestureEventFromTouchpad(event));
+    const blink::WebGestureEvent gesture_event =
+        static_cast<const blink::WebGestureEvent&>(event);
+    if (gesture_event.data.scroll_update.inertial_phase !=
+        blink::WebGestureEvent::kMomentumPhase)
+      return false;
+  }
 
   if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd &&
       overscroll_source_ == OverscrollSource::TOUCHPAD) {
@@ -424,11 +471,27 @@ bool OverscrollController::ProcessOverscroll(float delta_x,
            fabs(overscroll_delta_y_) > fabs(overscroll_delta_x_) * kMinRatio)
     new_mode = overscroll_delta_y_ > 0.f ? OVERSCROLL_SOUTH : OVERSCROLL_NORTH;
 
+  // The horizontal overscroll is used for history navigation. Enable it for
+  // touchpad only if TouchpadOverscrollHistoryNavigation is enabled.
+  if ((new_mode == OVERSCROLL_EAST || new_mode == OVERSCROLL_WEST) &&
+      is_touchpad &&
+      !OverscrollConfig::TouchpadOverscrollHistoryNavigationEnabled()) {
+    new_mode = OVERSCROLL_NONE;
+  }
+
   // The vertical overscroll is used for pull-to-refresh. Enable it only if
   // pull-to-refresh is enabled.
-  if ((new_mode == OVERSCROLL_SOUTH || new_mode == OVERSCROLL_NORTH) &&
-      !IsPullToRefreshEnabled())
-    new_mode = OVERSCROLL_NONE;
+  if (new_mode == OVERSCROLL_SOUTH || new_mode == OVERSCROLL_NORTH) {
+    auto ptr_mode = OverscrollConfig::GetPullToRefreshMode();
+    if (ptr_mode == OverscrollConfig::PullToRefreshMode::kDisabled ||
+        (ptr_mode ==
+             OverscrollConfig::PullToRefreshMode::kEnabledTouchschreen &&
+         is_touchpad) ||
+        time_since_last_ignored_scroll_ < kPullToRefreshCoolOffDelay) {
+      overscroll_ignored_ = true;
+      new_mode = OVERSCROLL_NONE;
+    }
+  }
 
   if (overscroll_mode_ == OVERSCROLL_NONE) {
     SetOverscrollMode(new_mode, is_touchpad ? OverscrollSource::TOUCHPAD
@@ -470,6 +533,7 @@ bool OverscrollController::ProcessOverscroll(float delta_x,
 }
 
 void OverscrollController::CompleteAction() {
+  ignore_following_inertial_events_ = true;
   if (delegate_)
     delegate_->OnOverscrollComplete(overscroll_mode_);
   Reset();
@@ -499,8 +563,10 @@ void OverscrollController::SetOverscrollMode(OverscrollMode mode,
     scroll_state_ = ScrollState::OVERSCROLLING;
     locked_mode_ = overscroll_mode_;
   }
-  if (delegate_)
-    delegate_->OnOverscrollModeChange(old_mode, overscroll_mode_, source);
+  if (delegate_) {
+    delegate_->OnOverscrollModeChange(old_mode, overscroll_mode_, source,
+                                      behavior_);
+  }
 }
 
 void OverscrollController::ResetScrollState() {

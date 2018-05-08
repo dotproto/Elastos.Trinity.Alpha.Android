@@ -17,7 +17,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -216,6 +216,11 @@ void TabDragControllerTest::SetWindowFinderForTabStrip(
   tab_strip->drag_controller_->window_finder_ = std::move(window_finder);
 }
 
+void TabDragControllerTest::HandleGestureEvent(TabStrip* tab_strip,
+                                               ui::GestureEvent* event) {
+  tab_strip->OnGestureEvent(event);
+}
+
 void TabDragControllerTest::SetUp() {
 #if defined(USE_AURA)
   // This needs to be disabled as it can interfere with when events are
@@ -380,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(TabDragControllerTest, GestureEndShouldEndDragTest) {
   ui::GestureEvent gesture_end(tab_1_center.x(), tab_1_center.x(), 0,
                                base::TimeTicks(),
                                ui::GestureEventDetails(ui::ET_GESTURE_END));
-  tab_strip->OnGestureEvent(&gesture_end);
+  HandleGestureEvent(tab_strip, &gesture_end);
   EXPECT_FALSE(TabDragController::IsActive());
   EXPECT_FALSE(tab_strip->IsDragSessionActive());
 }
@@ -816,7 +821,7 @@ class MaximizedBrowserWindowWaiter {
  private:
   bool CheckMaximized() {
     if (!window_->IsMaximized()) {
-      base::MessageLoop::current()->task_runner()->PostTask(
+      base::MessageLoopCurrent::Get()->task_runner()->PostTask(
           FROM_HERE,
           base::BindOnce(
               base::IgnoreResult(&MaximizedBrowserWindowWaiter::CheckMaximized),
@@ -1589,17 +1594,13 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   EXPECT_FALSE(browser2->window()->IsMaximized());
 }
 
-#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
 // TODO(sky,sad): Disabled as it fails due to resize locks with a real
 // compositor. crbug.com/331924
-#define MAYBE_DragDirectlyToSecondWindow DISABLED_DragDirectlyToSecondWindow
-#else
-#define MAYBE_DragDirectlyToSecondWindow DragDirectlyToSecondWindow
-#endif
+// Also fails on mac, crbug.com/837219
 // Creates two browsers, drags from first into the second in such a way that
 // no detaching should happen.
 IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
-                       MAYBE_DragDirectlyToSecondWindow) {
+                       DISABLED_DragDirectlyToSecondWindow) {
   TabStrip* tab_strip = GetTabStripForBrowser(browser());
 
   // Add another tab to browser().

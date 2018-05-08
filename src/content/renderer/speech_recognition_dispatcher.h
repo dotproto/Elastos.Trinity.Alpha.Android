@@ -9,10 +9,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "content/common/speech_recognizer.mojom.h"
 #include "content/public/common/speech_recognition_result.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "third_party/WebKit/public/web/WebSpeechRecognitionHandle.h"
-#include "third_party/WebKit/public/web/WebSpeechRecognizer.h"
+#include "third_party/blink/public/web/web_speech_recognition_handle.h"
+#include "third_party/blink/public/web/web_speech_recognizer.h"
+#include "third_party/blink/public/web/web_speech_recognizer_client.h"
 
 namespace content {
 struct SpeechRecognitionError;
@@ -37,11 +39,11 @@ class SpeechRecognitionDispatcher : public RenderFrameObserver,
   // blink::WebSpeechRecognizer implementation.
   void Start(const blink::WebSpeechRecognitionHandle&,
              const blink::WebSpeechRecognitionParams&,
-             blink::WebSpeechRecognizerClient*) override;
+             const blink::WebSpeechRecognizerClient&) override;
   void Stop(const blink::WebSpeechRecognitionHandle&,
-            blink::WebSpeechRecognizerClient*) override;
+            const blink::WebSpeechRecognizerClient&) override;
   void Abort(const blink::WebSpeechRecognitionHandle&,
-             blink::WebSpeechRecognizerClient*) override;
+             const blink::WebSpeechRecognizerClient&) override;
 
   void OnRecognitionStarted(int request_id);
   void OnAudioStarted(int request_id);
@@ -59,8 +61,12 @@ class SpeechRecognitionDispatcher : public RenderFrameObserver,
       const blink::WebSpeechRecognitionHandle& handle);
   const blink::WebSpeechRecognitionHandle& GetHandleFromID(int handle_id);
 
+  mojom::SpeechRecognizer& GetSpeechRecognitionHost();
+
+  mojom::SpeechRecognizerPtr speech_recognition_host_;
+
   // The Blink client class that we use to send events back to the JS world.
-  blink::WebSpeechRecognizerClient* recognizer_client_;
+  blink::WebSpeechRecognizerClient recognizer_client_;
 
   // This maps between request id values and the Blink handle values.
   HandleMap handle_map_;

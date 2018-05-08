@@ -1,3 +1,5 @@
+per-file chromeos_features.cc=*
+per-file chromeos_features.h=*
 per-file chromeos_switches.cc=*
 per-file chromeos_switches.h=*
 per-file chromeos.gyp=*
@@ -7,6 +9,7 @@ achuith@chromium.org
 alemate@chromium.org
 derat@chromium.org
 oshima@chromium.org
+rkc@chromium.org
 satorux@chromium.org
 stevenjb@chromium.org
 xiyuan@chromium.org

@@ -51,6 +51,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/preferences/preferences_launcher.h"
 #include "chrome/browser/android/signin/signin_promo_util_android.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -142,14 +143,6 @@ AddressNormalizer* ChromeAutofillClient::GetAddressNormalizer() {
   return nullptr;
 }
 
-SaveCardBubbleController* ChromeAutofillClient::GetSaveCardBubbleController() {
-#if defined(OS_ANDROID)
-  return nullptr;
-#else
-  return SaveCardBubbleControllerImpl::FromWebContents(web_contents());
-#endif
-}
-
 void ChromeAutofillClient::ShowAutofillSettings() {
 #if defined(OS_ANDROID)
   chrome::android::PreferencesLauncher::ShowAutofillSettings();
@@ -196,7 +189,6 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
 void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
     const CreditCard& card,
     std::unique_ptr<base::DictionaryValue> legal_message,
-    bool should_cvc_be_requested,
     const base::Closure& callback) {
 #if defined(OS_ANDROID)
   std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
@@ -213,8 +205,7 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
-  controller->ShowBubbleForUpload(card, std::move(legal_message),
-                                  should_cvc_be_requested, callback);
+  controller->ShowBubbleForUpload(card, std::move(legal_message), callback);
 #endif
 }
 
@@ -427,9 +418,10 @@ void ChromeAutofillClient::ShowHttpNotSecureExplanation() {
 }
 
 bool ChromeAutofillClient::IsAutofillSupported() {
-  // VR browsing does not support popups at the moment.
-  if (vr::VrTabHelper::IsInVr(web_contents())) {
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kAutofill);
+  // VR browsing supports the autofill behind a flag. When the flag is removed
+  // we can remove this condition.
+  if (vr::VrTabHelper::IsUiSuppressedInVr(web_contents(),
+                                          vr::UiSuppressedElement::kAutofill)) {
     return false;
   }
 

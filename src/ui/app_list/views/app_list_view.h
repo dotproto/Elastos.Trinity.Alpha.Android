@@ -9,11 +9,11 @@
 #include <vector>
 
 #include "ash/app_list/model/app_list_view_state.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
-#include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
@@ -31,7 +31,6 @@ class Screen;
 
 namespace ui {
 class AnimationMetricsReporter;
-class ImplicitAnimationObserver;
 }
 
 namespace app_list {
@@ -167,6 +166,9 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // necessary key events to the search box.
   void RedirectKeyEventToSearchBox(ui::KeyEvent* event);
 
+  // Called when on-screen keyboard's visibility is changed.
+  void OnScreenKeyboardShown(bool shown);
+
   // Sets |is_in_drag_| and updates the visibility of app list items.
   void SetIsInDrag(bool is_in_drag);
 
@@ -213,8 +215,17 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
 
   bool drag_started_from_peeking() const { return drag_started_from_peeking_; }
 
-  void SetIsIgnoringScrollEvents(bool is_ignoring);
-  bool is_ignoring_scroll_events() const { return is_ignoring_scroll_events_; }
+  void set_onscreen_keyboard_shown(bool onscreen_keyboard_shown) {
+    onscreen_keyboard_shown_ = onscreen_keyboard_shown;
+  }
+  bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
+
+  // Returns true if the home launcher is enabled in tablet mode.
+  bool IsHomeLauncherEnabledInTabletMode() const;
+
+  views::View* app_list_background_shield_for_test() {
+    return app_list_background_shield_;
+  }
 
  private:
   // A widget observer that is responsible for keeping the AppListView state up
@@ -302,6 +313,9 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // histograms.
   void RecordFolderMetrics();
 
+  // Returns true if scroll events should be ignored.
+  bool ShouldIgnoreScrollEvents();
+
   AppListViewDelegate* delegate_;  // Weak. Owned by AppListService.
   AppListModel* const model_;      // Not Owned.
   SearchModel* const search_model_;  // Not Owned.
@@ -377,11 +391,11 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   const std::unique_ptr<ui::AnimationMetricsReporter>
       state_animation_metrics_reporter_;
 
-  // Whether to ignore the scroll events.
-  bool is_ignoring_scroll_events_ = false;
+  // Whether the on-screen keyboard is shown.
+  bool onscreen_keyboard_shown_ = false;
 
-  // Observes the completion of scroll animation.
-  std::unique_ptr<ui::ImplicitAnimationObserver> scroll_animation_observer_;
+  // Whether the home launcher feature is enabled.
+  const bool is_home_launcher_enabled_;
 
   base::WeakPtrFactory<AppListView> weak_ptr_factory_;
 

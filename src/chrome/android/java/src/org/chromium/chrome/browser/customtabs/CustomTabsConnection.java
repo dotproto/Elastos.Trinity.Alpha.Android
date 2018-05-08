@@ -9,7 +9,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Binder;
@@ -17,13 +16,13 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
 import android.os.SystemClock;
+import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 import android.support.customtabs.CustomTabsCallback;
 import android.support.customtabs.CustomTabsIntent;
 import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsSessionToken;
 import android.text.TextUtils;
-import android.util.Pair;
 import android.widget.RemoteViews;
 
 import org.json.JSONException;
@@ -40,6 +39,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.blink_public.web.WebReferrerPolicy;
 import org.chromium.chrome.R;
@@ -50,6 +50,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.browserservices.BrowserSessionContentUtils;
+import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.browserservices.PostMessageHandler;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.init.ChainedTasks;
@@ -57,9 +58,10 @@ import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content.browser.BrowserStartupController;
@@ -67,7 +69,6 @@ import org.chromium.content.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
-import org.chromium.net.GURLUtils;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -80,7 +81,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Implementation of the ICustomTabsConnectionService interface.
+ * Implementation of the ICustomTabsService interface.
  *
  * Note: This class is meant to be package private, and is public to be
  * accessible from {@link ChromeApplication}.
@@ -132,18 +133,6 @@ public class CustomTabsConnection {
     static final Set<String> BACKGROUND_GROUPS = new HashSet<>(
             Arrays.asList("/bg_non_interactive", "/apps/bg_non_interactive", "/background"));
 
-    // For testing only, DO NOT USE.
-    @VisibleForTesting
-    static final String DEBUG_OVERRIDE_KEY =
-            "android.support.customtabs.maylaunchurl.DEBUG_OVERRIDE";
-    private static final int NO_OVERRIDE = 0;
-    @VisibleForTesting
-    static final int NO_PRERENDERING = 1;
-    @VisibleForTesting
-    static final int PREFETCH_ONLY = 2;
-    @VisibleForTesting
-    static final int HIDDEN_TAB = 3;
-
     // TODO(lizeb): Move to the support library.
     @VisibleForTesting
     static final String REDIRECT_ENDPOINT_KEY = "android.support.customtabs.REDIRECT_ENDPOINT";
@@ -156,72 +145,84 @@ public class CustomTabsConnection {
     static final String PARALLEL_REQUEST_URL_KEY =
             "android.support.customtabs.PARALLEL_REQUEST_URL";
 
+    @IntDef({PARALLEL_REQUEST_NO_REQUEST, PARALLEL_REQUEST_SUCCESS,
+            PARALLEL_REQUEST_FAILURE_NOT_INITIALIZED, PARALLEL_REQUEST_FAILURE_NOT_AUTHORIZED,
+            PARALLEL_REQUEST_FAILURE_INVALID_URL, PARALLEL_REQUEST_FAILURE_INVALID_REFERRER,
+            PARALLEL_REQUEST_FAILURE_INVALID_REFERRER_FOR_SESSION})
+    @interface ParallelRequestStatus {}
+
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_NO_REQUEST = 0;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_SUCCESS = 1;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_FAILURE_NOT_INITIALIZED = 2;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_FAILURE_NOT_AUTHORIZED = 3;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_FAILURE_INVALID_URL = 4;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_FAILURE_INVALID_REFERRER = 5;
+    @VisibleForTesting
+    static final int PARALLEL_REQUEST_FAILURE_INVALID_REFERRER_FOR_SESSION = 6;
+    private static final int PARALLEL_REQUEST_STATUS_MAX = 7;
+
+    private static final String[] PARALLEL_REQUEST_MESSAGES = {"No request", "Success",
+            "Chrome not initialized", "Not authorized", "Invalid URL", "Invalid referrer",
+            "Invalid referrer for session"};
+
+    private static final EnumeratedHistogramSample sParallelRequestStatusOnStart =
+            new EnumeratedHistogramSample(
+                    "CustomTabs.ParallelRequestStatusOnStart", PARALLEL_REQUEST_STATUS_MAX);
+
     private static final CustomTabsConnection sInstance =
             AppHooks.get().createCustomTabsConnection();
+    private @Nullable String mTrustedPublisherUrlPackage;
 
-    /** Holds the parameters for the current speculation. */
+    /** Holds the parameters for the current hidden tab speculation. */
     @VisibleForTesting
     static final class SpeculationParams {
-        @VisibleForTesting
-        static final int NO_SPECULATION = 0;
-        @VisibleForTesting
-        static final int PREFETCH = 1;
-        @VisibleForTesting
-        static final int PRERENDER = 2;
-        @VisibleForTesting
-        static final int HIDDEN_TAB = 3;
-
         public final CustomTabsSessionToken session;
         public final String url;
-        public final int speculationMode;
-
-        // Only for prerender.
-        public final WebContents webContents;
-
-        // Only for hidden tab.
         public final Tab tab;
-        @VisibleForTesting
-        boolean mDidFinishLoad;
+        public final TabObserver observer;
 
-        // For both hidden tab and prerender
         public final String referrer;
         public final Bundle extras;
 
-        static SpeculationParams forPrefetch(CustomTabsSessionToken session, String url) {
-            return new SpeculationParams(session, url, PREFETCH, null, null, null, null);
-        }
-
-        static SpeculationParams forPrerender(CustomTabsSessionToken session, String url,
-                WebContents webcontents, String referrer, Bundle extras) {
-            return new SpeculationParams(
-                    session, url, PRERENDER, webcontents, referrer, extras, null);
-        }
-        static SpeculationParams forHiddenTab(CustomTabsSessionToken session, String url, Tab tab,
-                String referrer, Bundle extras) {
-            return new SpeculationParams(session, url, HIDDEN_TAB, null, referrer, extras, tab);
-        }
-
-        private SpeculationParams(CustomTabsSessionToken session, String url, int speculationMode,
-                WebContents webContents, String referrer, Bundle extras, Tab tab) {
+        private SpeculationParams(CustomTabsSessionToken session, String url, Tab tab,
+                TabObserver observer, String referrer, Bundle extras) {
             this.session = session;
             this.url = url;
-            this.speculationMode = speculationMode;
-            this.webContents = webContents;
+            this.tab = tab;
+            this.observer = observer;
             this.referrer = referrer;
             this.extras = extras;
-            this.tab = tab;
+        }
+    }
+
+    static class HiddenTabObserver extends EmptyTabObserver {
+        private CustomTabsConnection mCustomTabsConnection;
+
+        HiddenTabObserver(CustomTabsConnection connection) {
+            mCustomTabsConnection = connection;
+        }
+
+        @Override
+        public void onCrash(Tab tab, boolean sadTabShown) {
+            final CustomTabsConnection connection = mCustomTabsConnection;
+            ThreadUtils.postOnUiThread(() -> { connection.cancelSpeculation(null /* session */); });
         }
     }
 
     @VisibleForTesting
     SpeculationParams mSpeculation;
     protected final Context mContext;
-    protected final ClientManager mClientManager;
+    @VisibleForTesting
+    final ClientManager mClientManager;
     protected final boolean mLogRequests;
     private final AtomicBoolean mWarmupHasBeenCalled = new AtomicBoolean();
     private final AtomicBoolean mWarmupHasBeenFinished = new AtomicBoolean();
-    private ExternalPrerenderHandler mExternalPrerenderHandler;
-    private boolean mForcePrerenderForTesting;
 
     // Conversion between native TimeTicks and SystemClock.uptimeMillis().
     private long mNativeTickOffsetUs;
@@ -320,7 +321,6 @@ public class CustomTabsConnection {
 
     public boolean newSession(CustomTabsSessionToken session) {
         boolean success = newSessionInternal(session);
-        if (mForcePrerenderForTesting) mClientManager.setPrerenderCellularForSession(session, true);
         logCall("newSession()", success);
         return success;
     }
@@ -476,9 +476,9 @@ public class CustomTabsConnection {
 
     /**
      * High confidence mayLaunchUrl() call, that is:
-     * - Tries to prerender if possible.
+     * - Tries to speculate if possible.
      * - An empty URL cancels the current prerender if any.
-     * - If prerendering is not possible, makes sure that there is a spare renderer.
+     * - Start a spare renderer if necessary.
      */
     private void highConfidenceMayLaunchUrl(CustomTabsSessionToken session,
             int uid, String url, Bundle extras, List<Bundle> otherLikelyBundles) {
@@ -489,11 +489,10 @@ public class CustomTabsConnection {
         }
 
         url = DataReductionProxySettings.getInstance().maybeRewriteWebliteUrl(url);
-        int debugOverrideValue = NO_OVERRIDE;
-        if (extras != null) debugOverrideValue = extras.getInt(DEBUG_OVERRIDE_KEY, NO_OVERRIDE);
-
-        int speculationMode = getSpeculationMode(session, debugOverrideValue);
-        if (maySpeculate(session)) startSpeculation(session, url, speculationMode, extras, uid);
+        if (maySpeculate(session)) {
+            boolean canUseHiddenTab = mClientManager.getCanUseHiddenTab(session);
+            startSpeculation(session, url, canUseHiddenTab, extras, uid);
+        }
         preconnectUrls(otherLikelyBundles);
     }
 
@@ -668,7 +667,7 @@ public class CustomTabsConnection {
     }
 
     public boolean requestPostMessageChannel(CustomTabsSessionToken session,
-            Uri postMessageOrigin) {
+            Origin postMessageOrigin) {
         boolean success = requestPostMessageChannelInternal(session, postMessageOrigin);
         logCall("requestPostMessageChannel() with origin "
                 + (postMessageOrigin != null ? postMessageOrigin.toString() : ""), success);
@@ -676,7 +675,7 @@ public class CustomTabsConnection {
     }
 
     private boolean requestPostMessageChannelInternal(final CustomTabsSessionToken session,
-            final Uri postMessageOrigin) {
+            final Origin postMessageOrigin) {
         if (!mWarmupHasBeenCalled.get()) return false;
         if (!isCallerForegroundOrSelf() && !BrowserSessionContentUtils.isActiveSession(session)) {
             return false;
@@ -711,7 +710,7 @@ public class CustomTabsConnection {
      * @return The validated origin {@link Uri} for the given session's client.
      */
     protected Uri verifyOriginForSession(
-            CustomTabsSessionToken session, int clientUid, Uri origin) {
+            CustomTabsSessionToken session, int clientUid, Origin origin) {
         if (clientUid == Process.myUid()) return Uri.EMPTY;
         return null;
     }
@@ -738,7 +737,7 @@ public class CustomTabsConnection {
     }
 
     public boolean validateRelationship(
-            CustomTabsSessionToken sessionToken, int relation, Uri origin, Bundle extras) {
+            CustomTabsSessionToken sessionToken, int relation, Origin origin, Bundle extras) {
         // Essential parts of the verification will depend on native code and will be run sync on UI
         // thread. Make sure the client has called warmup() beforehand.
         if (!mWarmupHasBeenCalled.get()) return false;
@@ -763,88 +762,12 @@ public class CustomTabsConnection {
         mClientManager.registerLaunch(session, url);
     }
 
-    /**
-     * Transfers a prerendered WebContents if one exists.
-     *
-     * This resets the internal WebContents; a subsequent call to this method
-     * returns null. Must be called from the UI thread.
-     * If a prerender exists for a different URL with the same sessionId or with
-     * a different referrer, then this is treated as a mispredict from the
-     * client application, and cancels the previous prerender. This is done to
-     * avoid keeping resources laying around for too long, but is subject to a
-     * race condition, as the following scenario is possible:
-     * The application calls:
-     * 1. mayLaunchUrl(url1) <- IPC
-     * 2. loadUrl(url2) <- Intent
-     * 3. mayLaunchUrl(url3) <- IPC
-     * If the IPC for url3 arrives before the intent for url2, then this methods
-     * cancels the prerender for url3, which is unexpected. On the other
-     * hand, not cancelling the previous prerender leads to wasted resources, as
-     * a WebContents is lingering. This can be solved by requiring applications
-     * to call mayLaunchUrl(null) to cancel a current prerender before 2, that
-     * is for a mispredict.
-     *
-     * Note that this methods accepts URLs that don't exactly match the initially
-     * prerendered URL. More precisely, the #fragment is ignored. In this case,
-     * the client needs to navigate to the correct URL after the WebContents
-     * swap. This can be tested using {@link UrlUtilities#urlsFragmentsDiffer}.
-     *
-     * @param session The Binder object identifying a session.
-     * @param url The URL the WebContents is for.
-     * @param referrer The referrer to use for |url|.
-     * @return The prerendered WebContents, or null.
-     */
-    WebContents takePrerenderedUrl(CustomTabsSessionToken session, String url, String referrer) {
-        ThreadUtils.assertOnUiThread();
-        if (mSpeculation == null || session == null || !session.equals(mSpeculation.session)) {
-            return null;
-        }
-
-        if (mSpeculation.speculationMode == SpeculationParams.PREFETCH) {
-            cancelSpeculation(session);
-            return null;
-        }
-
-        WebContents webContents = mSpeculation.webContents;
-        String prerenderedUrl = mSpeculation.url;
-        String prerenderReferrer = mSpeculation.referrer;
-        if (referrer == null) referrer = "";
-        boolean ignoreFragments = mClientManager.getIgnoreFragmentsForSession(session);
-        boolean urlsMatch = TextUtils.equals(prerenderedUrl, url)
-                || (ignoreFragments
-                        && UrlUtilities.urlsMatchIgnoringFragments(prerenderedUrl, url));
-        WebContents result = null;
-        if (urlsMatch && TextUtils.equals(prerenderReferrer, referrer)) {
-            recordSpeculationStatusOnSwap(SPECULATION_STATUS_ON_SWAP_PRERENDER_TAKEN);
-            result = webContents;
-            mSpeculation = null;
-        } else {
-            recordSpeculationStatusOnSwap(SPECULATION_STATUS_ON_SWAP_PRERENDER_NOT_MATCHED);
-            cancelSpeculation(session);
-        }
-        if (!mClientManager.usesDefaultSessionParameters(session) && webContents != null) {
-            RecordHistogram.recordBooleanHistogram(
-                    "CustomTabs.NonDefaultSessionPrerenderMatched", result != null);
-        }
-
-        // Since the prerender is used, discard the spare webcontents.
-        if (result != null) WarmupManager.getInstance().destroySpareWebContents();
-        return result;
-    }
-
     @VisibleForTesting
     String getSpeculatedUrl(CustomTabsSessionToken session) {
         if (mSpeculation == null || session == null || !session.equals(mSpeculation.session)) {
             return null;
         }
-        switch (mSpeculation.speculationMode) {
-            case SpeculationParams.PRERENDER:
-                return mSpeculation.webContents != null ? mSpeculation.url : null;
-            case SpeculationParams.HIDDEN_TAB:
-                return mSpeculation.tab != null ? mSpeculation.url : null;
-            default:
-                return null;
-        }
+        return mSpeculation.tab != null ? mSpeculation.url : null;
     }
 
     /**
@@ -863,6 +786,7 @@ public class CustomTabsConnection {
             if (mSpeculation == null || session == null) return null;
             if (session.equals(mSpeculation.session) && mSpeculation.tab != null) {
                 Tab tab = mSpeculation.tab;
+                tab.removeObserver(mSpeculation.observer);
                 String speculatedUrl = mSpeculation.url;
                 String speculationReferrer = mSpeculation.referrer;
                 mSpeculation = null;
@@ -903,7 +827,7 @@ public class CustomTabsConnection {
         if (mWarmupTasks != null) mWarmupTasks.cancel();
 
         maybePreconnectToRedirectEndpoint(session, url, intent);
-        maybeStartParallelRequest(session, intent);
+        handleParallelRequest(session, intent);
     }
 
     private void maybePreconnectToRedirectEndpoint(
@@ -920,23 +844,65 @@ public class CustomTabsConnection {
         Uri redirectEndpoint = intent.getParcelableExtra(REDIRECT_ENDPOINT_KEY);
         if (redirectEndpoint == null || !isValid(redirectEndpoint)) return;
 
-        String origin = GURLUtils.getOrigin(url);
+        Origin origin = new Origin(url);
         if (origin == null) return;
-        if (!mClientManager.isFirstPartyOriginForSession(session, Uri.parse(origin))) return;
+        if (!mClientManager.isFirstPartyOriginForSession(session, origin)) return;
 
         WarmupManager.getInstance().maybePreconnectUrlAndSubResources(
                 Profile.getLastUsedProfile(), redirectEndpoint.toString());
     }
 
-    private void maybeStartParallelRequest(CustomTabsSessionToken session, Intent intent) {
-        if (!mClientManager.getAllowParallelRequestForSession(session)) return;
+    @VisibleForTesting
+    @ParallelRequestStatus
+    int handleParallelRequest(CustomTabsSessionToken session, Intent intent) {
+        int status = maybeStartParallelRequest(session, intent);
+        sParallelRequestStatusOnStart.record(status);
+
+        if (mLogRequests) {
+            Log.w(TAG, "handleParallelRequest() = " + PARALLEL_REQUEST_MESSAGES[status]);
+        }
+        return status;
+    }
+
+    /**
+     * Maybe starts a parallel request.
+     *
+     * @param session Calling context session.
+     * @param intent Incoming intent with the extras.
+     * @return Whether the request was started, with reason in case of failure.
+     */
+    @ParallelRequestStatus
+    private int maybeStartParallelRequest(CustomTabsSessionToken session, Intent intent) {
+        ThreadUtils.assertOnUiThread();
+
+        if (!intent.hasExtra(PARALLEL_REQUEST_URL_KEY)) return PARALLEL_REQUEST_NO_REQUEST;
+        if (!ChromeBrowserInitializer.getInstance(mContext).hasNativeInitializationCompleted()) {
+            return PARALLEL_REQUEST_FAILURE_NOT_INITIALIZED;
+        }
+        if (!mClientManager.getAllowParallelRequestForSession(session)) {
+            return PARALLEL_REQUEST_FAILURE_NOT_AUTHORIZED;
+        }
         Uri referrer = intent.getParcelableExtra(PARALLEL_REQUEST_REFERRER_KEY);
         Uri url = intent.getParcelableExtra(PARALLEL_REQUEST_URL_KEY);
         int policy =
                 intent.getIntExtra(PARALLEL_REQUEST_REFERRER_POLICY_KEY, WebReferrerPolicy.DEFAULT);
-        if (referrer == null || url == null) return;
+        if (url == null) return PARALLEL_REQUEST_FAILURE_INVALID_URL;
+        if (referrer == null) return PARALLEL_REQUEST_FAILURE_INVALID_REFERRER;
         if (policy < 0 || policy > WebReferrerPolicy.LAST) policy = WebReferrerPolicy.DEFAULT;
-        startParallelRequest(session, url, referrer, policy);
+
+        if (url.toString().equals("") || !isValid(url)) return PARALLEL_REQUEST_FAILURE_INVALID_URL;
+        if (!canDoParallelRequest(session, referrer)) {
+            return PARALLEL_REQUEST_FAILURE_INVALID_REFERRER_FOR_SESSION;
+        }
+
+        String urlString = url.toString();
+        String referrerString = referrer.toString();
+        nativeCreateAndStartDetachedResourceRequest(
+                Profile.getLastUsedProfile(), urlString, referrerString, policy);
+        if (mLogRequests) {
+            Log.w(TAG, "startParallelRequest(%s, %s, %d)", urlString, referrerString, policy);
+        }
+        return PARALLEL_REQUEST_SUCCESS;
     }
 
     /** @return Whether {@code session} can create a parallel request for a given
@@ -953,32 +919,7 @@ public class CustomTabsConnection {
         // TODO(lizeb): Relax the restrictions.
         return ChromeBrowserInitializer.getInstance(mContext).hasNativeInitializationCompleted()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_PARALLEL_REQUEST)
-                && mClientManager.isFirstPartyOriginForSession(session, referrer);
-    }
-
-    /**
-     * Starts a parallel request.
-     *
-     * @param session Calling context session.
-     * @param url URL to send the request to.
-     * @param referrer Referrer (and first party for cookies) to use.
-     * @param referrerPolicy Referrer policy for the parallel request.
-     * @return Whether the request started. False if the session is not authorized to use the
-     *         provided origin, if Chrome hasn't been initialized, or the feature is disabled.
-     *         Also fails if the URL is neither HTTPS not HTTP.
-     */
-    @VisibleForTesting
-    boolean startParallelRequest(CustomTabsSessionToken session, Uri url, Uri referrer,
-            @WebReferrerPolicy int referrerPolicy) {
-        ThreadUtils.assertOnUiThread();
-        if (url.toString().equals("") || !isValid(url)
-                || !canDoParallelRequest(session, referrer)) {
-            return false;
-        }
-
-        nativeCreateAndStartDetachedResourceRequest(
-                Profile.getLastUsedProfile(), url.toString(), referrer.toString(), referrerPolicy);
-        return true;
+                && mClientManager.isFirstPartyOriginForSession(session, new Origin(referrer));
     }
 
     /** See {@link ClientManager#getReferrerForSession(CustomTabsSessionToken)} */
@@ -991,9 +932,14 @@ public class CustomTabsConnection {
         return mClientManager.shouldHideDomainForSession(session);
     }
 
-    /** @see ClientManager#shouldPrerenderOnCellularForSession(CustomTabsSessionToken) */
+    /** @see ClientManager#shouldSpeculateLoadOnCellularForSession(CustomTabsSessionToken) */
+    public boolean shouldSpeculateLoadOnCellularForSession(CustomTabsSessionToken session) {
+        return mClientManager.shouldSpeculateLoadOnCellularForSession(session);
+    }
+
+    /** TODO(mattcary): remove when downstream uses are removed **/
     public boolean shouldPrerenderOnCellularForSession(CustomTabsSessionToken session) {
-        return mClientManager.shouldPrerenderOnCellularForSession(session);
+        return mClientManager.shouldSpeculateLoadOnCellularForSession(session);
     }
 
     /** @see ClientManager#shouldSendNavigationInfoForSession(CustomTabsSessionToken) */
@@ -1022,8 +968,13 @@ public class CustomTabsConnection {
     }
 
     @VisibleForTesting
-    void setShouldPrerenderOnCellularForSession(CustomTabsSessionToken session, boolean value) {
-        mClientManager.setPrerenderCellularForSession(session, value);
+    void setShouldSpeculateLoadOnCellularForSession(CustomTabsSessionToken session, boolean value) {
+        mClientManager.setSpeculateLoadOnCellularForSession(session, value);
+    }
+
+    @VisibleForTesting
+    void setCanUseHiddenTabForSession(CustomTabsSessionToken session, boolean value) {
+        mClientManager.setCanUseHiddenTab(session, value);
     }
 
     /**
@@ -1031,14 +982,6 @@ public class CustomTabsConnection {
      */
     void setSendNavigationInfoForSession(CustomTabsSessionToken session, boolean send) {
         mClientManager.setSendNavigationInfoForSession(session, send);
-    }
-
-    void setSpeculationModeForSession(CustomTabsSessionToken session, int speculationMode) {
-        mClientManager.setSpeculationModeForSession(session, speculationMode);
-    }
-
-    int getSpeculationModeForSession(CustomTabsSessionToken session) {
-        return mClientManager.getSpeculationModeForSession(session);
     }
 
     /**
@@ -1069,10 +1012,15 @@ public class CustomTabsConnection {
      * @param session The session to use for getting client callback.
      * @param url The current url for the tab.
      * @param title The current title for the tab.
-     * @param screenshot A screenshot of the tab contents.
+     * @param snapshotPath Uri location for screenshot of the tab contents which is publicly
+     *         available for sharing.
      */
     public void sendNavigationInfo(
-            CustomTabsSessionToken session, String url, String title, Bitmap screenshot) { }
+            CustomTabsSessionToken session, String url, String title, Uri snapshotPath) {}
+
+    // TODO(yfriedman): Remove when internal code is deleted.
+    public void sendNavigationInfo(
+            CustomTabsSessionToken session, String url, String title, Bitmap snapshotPath) {}
 
     /**
      * Called when the bottom bar for the custom tab has been hidden or shown completely by user
@@ -1099,7 +1047,7 @@ public class CustomTabsConnection {
      * @param navigationEvent The navigation event code, defined in {@link CustomTabsCallback}
      * @return true for success.
      */
-    boolean notifyNavigationEvent(CustomTabsSessionToken session, int navigationEvent) {
+    public boolean notifyNavigationEvent(CustomTabsSessionToken session, int navigationEvent) {
         CustomTabsCallback callback = mClientManager.getCallbackForSession(session);
         if (callback == null) return false;
 
@@ -1337,7 +1285,7 @@ public class CustomTabsConnection {
         }
         ConnectivityManager cm =
                 (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm.isActiveNetworkMetered() && !shouldPrerenderOnCellularForSession(session)) {
+        if (cm.isActiveNetworkMetered() && !shouldSpeculateLoadOnCellularForSession(session)) {
             return SPECULATION_STATUS_ON_START_NOT_ALLOWED_NETWORK_METERED;
         }
         return SPECULATION_STATUS_ON_START_ALLOWED;
@@ -1354,114 +1302,31 @@ public class CustomTabsConnection {
         ThreadUtils.assertOnUiThread();
         if (mSpeculation == null) return;
         if (session == null || session.equals(mSpeculation.session)) {
-            switch (mSpeculation.speculationMode) {
-                case SpeculationParams.PRERENDER:
-                    if (mSpeculation.webContents == null) return;
-                    mExternalPrerenderHandler.cancelCurrentPrerender();
-                    mSpeculation.webContents.destroy();
-                    break;
-                case SpeculationParams.PREFETCH:
-                    Profile profile = Profile.getLastUsedProfile();
-                    new LoadingPredictor(profile).cancelPageLoadHint(mSpeculation.url);
-                    break;
-                case SpeculationParams.HIDDEN_TAB:
-                    mSpeculation.tab.destroy();
-                    break;
-                default:
-                    return;
-            }
+            mSpeculation.tab.destroy();
             mSpeculation = null;
         }
     }
 
     /*
      * This function will do as much as it can to have a subsequent navigation
-     * to the specified url sped up.
+     * to the specified url sped up, including speculatively loading a url, preconnecting,
+     * and starting a spare renderer.
      */
-    private void startSpeculation(CustomTabsSessionToken session, String url, int speculationMode,
+    private void startSpeculation(CustomTabsSessionToken session, String url, boolean useHiddenTab,
             Bundle extras, int uid) {
         WarmupManager warmupManager = WarmupManager.getInstance();
         Profile profile = Profile.getLastUsedProfile();
-        boolean preconnect = true, createSpareWebContents = true;
-        if (speculationMode == SpeculationParams.HIDDEN_TAB
-                && !ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_BACKGROUND_TAB)) {
-            speculationMode = SpeculationParams.PRERENDER;
-        }
 
         // At most one on-going speculation, clears the previous one.
         cancelSpeculation(null);
 
-        switch (speculationMode) {
-            case SpeculationParams.PREFETCH:
-                boolean didPrefetch = new LoadingPredictor(profile).prepareForPageLoad(url);
-                recordSpeculationStatusOnStart(SPECULATION_STATUS_ON_START_PREFETCH);
-                if (didPrefetch) mSpeculation = SpeculationParams.forPrefetch(session, url);
-                preconnect = !didPrefetch;
-                break;
-            case SpeculationParams.PRERENDER:
-                boolean didPrerender = prerenderUrl(session, url, extras, uid);
-                recordSpeculationStatusOnStart(didPrerender
-                                ? SPECULATION_STATUS_ON_START_PRERENDER
-                                : SPECULATION_STATUS_ON_START_PRERENDER_NOT_STARTED);
-                createSpareWebContents = !didPrerender;
-                break;
-            case SpeculationParams.HIDDEN_TAB:
-                recordSpeculationStatusOnStart(SPECULATION_STATUS_ON_START_BACKGROUND_TAB);
-                launchUrlInHiddenTab(session, url, extras);
-                createSpareWebContents = false;
-                break;
-            default:
-                break;
+        if (useHiddenTab) {
+            recordSpeculationStatusOnStart(SPECULATION_STATUS_ON_START_BACKGROUND_TAB);
+            launchUrlInHiddenTab(session, url, extras);
+        } else {
+            warmupManager.createSpareWebContents();
         }
-        if (preconnect) warmupManager.maybePreconnectUrlAndSubResources(profile, url);
-        if (createSpareWebContents) warmupManager.createSpareWebContents();
-    }
-
-    /**
-     * Tries to request a prerender for a given URL.
-     *
-     * @param session Session the request comes from.
-     * @param url URL to prerender.
-     * @param extras extra parameters.
-     * @param uid UID of the caller.
-     * @return true if a prerender has been initiated.
-     */
-    private boolean prerenderUrl(
-            CustomTabsSessionToken session, String url, Bundle extras, int uid) {
-        ThreadUtils.assertOnUiThread();
-        if (!mWarmupHasBeenCalled.get()) return false;
-
-        boolean throttle = !shouldPrerenderOnCellularForSession(session);
-        if (throttle && !mClientManager.isPrerenderingAllowed(uid)) return false;
-
-        Intent extrasIntent = new Intent();
-        if (extras != null) extrasIntent.putExtras(extras);
-        if (IntentHandler.getExtraHeadersFromIntent(extrasIntent) != null) return false;
-        if (mExternalPrerenderHandler == null) {
-            mExternalPrerenderHandler = new ExternalPrerenderHandler();
-        }
-        Rect contentBounds = ExternalPrerenderHandler.estimateContentSize(mContext, true);
-        String referrer = getReferrer(session, extrasIntent);
-
-        boolean forced = shouldPrerenderOnCellularForSession(session);
-        Pair<WebContents, WebContents> webContentsPair = mExternalPrerenderHandler.addPrerender(
-                Profile.getLastUsedProfile(), url, referrer, contentBounds, forced);
-        if (webContentsPair == null) return false;
-        WebContents dummyWebContents = webContentsPair.first;
-        if (webContentsPair.second != null) {
-            mClientManager.resetPostMessageHandlerForSession(session, webContentsPair.second);
-        }
-        if (throttle) mClientManager.registerPrerenderRequest(uid, url);
-        mSpeculation =
-                SpeculationParams.forPrerender(session, url, dummyWebContents, referrer, extras);
-
-        RecordHistogram.recordBooleanHistogram("CustomTabs.PrerenderSessionUsesDefaultParameters",
-                mClientManager.usesDefaultSessionParameters(session));
-
-        // Forced prerenders are often discarded, and take a small amount of memory. In this case,
-        // don't kill the spare renderer as it's highly likely to be used later.
-        if (!forced) WarmupManager.getInstance().destroySpareWebContents();
-        return true;
+        warmupManager.maybePreconnectUrlAndSubResources(profile, url);
     }
 
     /**
@@ -1475,10 +1340,11 @@ public class CustomTabsConnection {
         if (IntentHandler.getExtraHeadersFromIntent(extrasIntent) != null) return;
 
         Tab tab = Tab.createDetached(new CustomTabDelegateFactory(false, false, null));
+        HiddenTabObserver observer = new HiddenTabObserver(this);
+        tab.addObserver(observer);
 
         // Updating post message as soon as we have a valid WebContents.
-        mClientManager.resetPostMessageHandlerForSession(
-                session, tab.getContentViewCore().getWebContents());
+        mClientManager.resetPostMessageHandlerForSession(session, tab.getWebContents());
 
         LoadUrlParams loadParams = new LoadUrlParams(url);
         String referrer = getReferrer(session, extrasIntent);
@@ -1486,7 +1352,7 @@ public class CustomTabsConnection {
             loadParams.setReferrer(
                     new Referrer(referrer, WebReferrerPolicy.DEFAULT));
         }
-        mSpeculation = SpeculationParams.forHiddenTab(session, url, tab, referrer, extras);
+        mSpeculation = new SpeculationParams(session, url, tab, observer, referrer, extras);
         mSpeculation.tab.loadUrl(loadParams);
     }
 
@@ -1498,22 +1364,6 @@ public class CustomTabsConnection {
     @VisibleForTesting
     void ban(int uid) {
         mClientManager.ban(uid);
-    }
-
-    @VisibleForTesting
-    void setForcePrerender(boolean force) {
-        mForcePrerenderForTesting = force;
-    }
-
-    private int getSpeculationMode(CustomTabsSessionToken session, int debugOverrideValue) {
-        switch (debugOverrideValue) {
-            case PREFETCH_ONLY:
-                return SpeculationParams.PREFETCH;
-            case NO_PRERENDERING:
-                return SpeculationParams.NO_SPECULATION;
-            default:
-                return getSpeculationModeForSession(session);
-        }
     }
 
     /**
@@ -1534,6 +1384,18 @@ public class CustomTabsConnection {
         }
         if (referrer == null) referrer = "";
         return referrer;
+    }
+
+    /**
+     * @return The package name of a client for which the publisher URL from a trusted CDN can be
+     *         shown, or null to disallow showing the publisher URL.
+     */
+    public @Nullable String getTrustedCdnPublisherUrlPackage() {
+        return mTrustedPublisherUrlPackage;
+    }
+
+    void setTrustedPublisherUrlPackageForTest(@Nullable String packageName) {
+        mTrustedPublisherUrlPackage = packageName;
     }
 
     private static void recordSpeculationStatusOnStart(int status) {

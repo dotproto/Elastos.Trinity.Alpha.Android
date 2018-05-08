@@ -25,11 +25,11 @@
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "net/spdy/core/http2_frame_decoder_adapter.h"
-#include "net/spdy/core/spdy_alt_svc_wire_format.h"
-#include "net/spdy/core/spdy_protocol.h"
-#include "net/spdy/core/spdy_test_utils.h"
 #include "net/test/gtest_util.h"
+#include "net/third_party/spdy/core/http2_frame_decoder_adapter.h"
+#include "net/third_party/spdy/core/spdy_alt_svc_wire_format.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/core/spdy_test_utils.h"
 
 using testing::_;
 using testing::AtLeast;
@@ -76,7 +76,6 @@ class MockVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD2(OnRstStream,
                void(SpdyStreamId stream_id, SpdyErrorCode error_code));
   MOCK_METHOD0(OnSettings, void());
-  MOCK_METHOD2(OnSettingOld, void(SpdyKnownSettingsId id, uint32_t value));
   MOCK_METHOD2(OnSetting, void(SpdySettingsId id, uint32_t value));
   MOCK_METHOD0(OnSettingsAck, void());
   MOCK_METHOD0(OnSettingsEnd, void());
@@ -168,10 +167,11 @@ class QuicHeadersStreamTest : public QuicTestWithParam<TestParams> {
                                                        perspective(),
                                                        GetVersion())),
         session_(connection_),
-        headers_stream_(QuicSpdySessionPeer::GetHeadersStream(&session_)),
         body_("hello world"),
         stream_frame_(kHeadersStreamId, /*fin=*/false, /*offset=*/0, ""),
         next_promised_stream_id_(2) {
+    session_.Initialize();
+    headers_stream_ = QuicSpdySessionPeer::GetHeadersStream(&session_);
     headers_[":version"] = "HTTP/1.1";
     headers_[":status"] = "200 Ok";
     headers_["content-length"] = "11";

@@ -44,7 +44,7 @@ struct ResolutionNotificationController::ResolutionChangeInfo {
   ResolutionChangeInfo(int64_t display_id,
                        const display::ManagedDisplayMode& old_resolution,
                        const display::ManagedDisplayMode& new_resolution,
-                       const base::Closure& accept_callback);
+                       base::OnceClosure accept_callback);
   ~ResolutionChangeInfo();
 
   // The id of the display where the resolution change happens.
@@ -61,7 +61,7 @@ struct ResolutionNotificationController::ResolutionChangeInfo {
   display::ManagedDisplayMode current_resolution;
 
   // The callback when accept is chosen.
-  const base::Closure accept_callback;
+  base::OnceClosure accept_callback;
 
   // The remaining timeout in seconds. 0 if the change does not time out.
   uint8_t timeout_count;
@@ -79,11 +79,11 @@ ResolutionNotificationController::ResolutionChangeInfo::ResolutionChangeInfo(
     int64_t display_id,
     const display::ManagedDisplayMode& old_resolution,
     const display::ManagedDisplayMode& new_resolution,
-    const base::Closure& accept_callback)
+    base::OnceClosure accept_callback)
     : display_id(display_id),
       old_resolution(old_resolution),
       new_resolution(new_resolution),
-      accept_callback(accept_callback),
+      accept_callback(std::move(accept_callback)),
       timeout_count(0) {
   display::DisplayManager* display_manager = Shell::Get()->display_manager();
   if (!display::Display::HasInternalDisplay() &&
@@ -115,7 +115,7 @@ bool ResolutionNotificationController::PrepareNotificationAndSetDisplayMode(
     int64_t display_id,
     const display::ManagedDisplayMode& old_resolution,
     const display::ManagedDisplayMode& new_resolution,
-    const base::Closure& accept_callback) {
+    base::OnceClosure accept_callback) {
   Shell::Get()->screen_layout_observer()->SetDisplayChangedFromSettingsUI(
       display_id);
   display::DisplayManager* const display_manager =
@@ -144,7 +144,7 @@ bool ResolutionNotificationController::PrepareNotificationAndSetDisplayMode(
   }
 
   change_info_ = std::make_unique<ResolutionChangeInfo>(
-      display_id, old_resolution, new_resolution, accept_callback);
+      display_id, old_resolution, new_resolution, std::move(accept_callback));
   if (!original_resolution.size().IsEmpty())
     change_info_->old_resolution = original_resolution;
 
@@ -167,14 +167,12 @@ void ResolutionNotificationController::Close(bool by_user) {
     AcceptResolutionChange(false);
 }
 
-void ResolutionNotificationController::Click() {
-  AcceptResolutionChange(true);
-}
-
-void ResolutionNotificationController::ButtonClick(int button_index) {
+void ResolutionNotificationController::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   // If there's the timeout, the first button is "Accept". Otherwise the
-  // button click should be "Revert".
-  if (DoesNotificationTimeout() && button_index == 0)
+  // button click should be "Revert". Clicking on the body should accept.
+  if (!button_index || (DoesNotificationTimeout() && *button_index == 0))
     AcceptResolutionChange(true);
   else
     RevertResolutionChange(false /* display_was_removed */);
@@ -245,9 +243,9 @@ void ResolutionNotificationController::AcceptResolutionChange(
   }
   if (!change_info_)
     return;
-  base::Closure callback = change_info_->accept_callback;
+  base::OnceClosure callback = std::move(change_info_->accept_callback);
   change_info_.reset();
-  callback.Run();
+  std::move(callback).Run();
 }
 
 void ResolutionNotificationController::RevertResolutionChange(

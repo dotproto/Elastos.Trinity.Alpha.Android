@@ -21,7 +21,6 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/kill.h"
@@ -77,7 +76,6 @@
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/idle_user_detector.h"
 #include "content/renderer/ime_event_guard.h"
-#include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/internal_document_state_data.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/media/audio_device_factory.h"
@@ -97,7 +95,7 @@
 #include "content/renderer/web_ui_extension_data.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "net/base/data_url.h"
@@ -106,62 +104,62 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_util.h"
 #include "net/nqe/effective_connection_type.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/mojom/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/FilePathConversion.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebConnectionType.h"
-#include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
-#include "third_party/WebKit/public/platform/WebHTTPBody.h"
-#include "third_party/WebKit/public/platform/WebImage.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEventResult.h"
-#include "third_party/WebKit/public/platform/WebNetworkStateNotifier.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/public_features.h"
-#include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebAutofillClient.h"
-#include "third_party/WebKit/public/web/WebDOMEvent.h"
-#include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
-#include "third_party/WebKit/public/web/WebDateTimeChooserCompletion.h"
-#include "third_party/WebKit/public/web/WebDateTimeChooserParams.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFileChooserParams.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebFrameContentDumper.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebHistoryItem.h"
-#include "third_party/WebKit/public/web/WebHitTestResult.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
-#include "third_party/WebKit/public/web/WebNavigationPolicy.h"
-#include "third_party/WebKit/public/web/WebPageImportanceSignals.h"
-#include "third_party/WebKit/public/web/WebPlugin.h"
-#include "third_party/WebKit/public/web/WebPluginAction.h"
-#include "third_party/WebKit/public/web/WebRange.h"
-#include "third_party/WebKit/public/web/WebRenderTheme.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSearchableFormData.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/WebKit/public/web/WebWindowFeatures.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_connection_type.h"
+#include "third_party/blink/public/platform/web_effective_connection_type.h"
+#include "third_party/blink/public/platform/web_http_body.h"
+#include "third_party/blink/public/platform/web_image.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_input_event_result.h"
+#include "third_party/blink/public/platform/web_network_state_notifier.h"
+#include "third_party/blink/public/platform/web_point.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/public_buildflags.h"
+#include "third_party/blink/public/web/web_autofill_client.h"
+#include "third_party/blink/public/web/web_ax_object.h"
+#include "third_party/blink/public/web/web_date_time_chooser_completion.h"
+#include "third_party/blink/public/web/web_date_time_chooser_params.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_dom_event.h"
+#include "third_party/blink/public/web/web_dom_message_event.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_file_chooser_params.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_frame_content_dumper.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_hit_test_result.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_media_player_action.h"
+#include "third_party/blink/public/web/web_navigation_policy.h"
+#include "third_party/blink/public/web/web_page_importance_signals.h"
+#include "third_party/blink/public/web/web_plugin.h"
+#include "third_party/blink/public/web/web_plugin_action.h"
+#include "third_party/blink/public/web/web_range.h"
+#include "third_party/blink/public/web/web_render_theme.h"
+#include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_searchable_form_data.h"
+#include "third_party/blink/public/web/web_security_policy.h"
+#include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
+#include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -203,7 +201,6 @@
 using blink::WebAXObject;
 using blink::WebApplicationCacheHost;
 using blink::WebApplicationCacheHostClient;
-using blink::WebColor;
 using blink::WebConsoleMessage;
 using blink::WebData;
 using blink::WebDocument;
@@ -469,7 +466,7 @@ RenderViewImpl::RenderViewImpl(
     : RenderWidget(params.view_id,
                    compositor_deps,
                    blink::kWebPopupTypeNone,
-                   params.initial_size.screen_info,
+                   params.visual_properties.screen_info,
                    params.swapped_out,
                    params.hidden,
                    params.never_visible,
@@ -514,7 +511,7 @@ void RenderViewImpl::Initialize(
   was_created_by_renderer_ = was_created_by_renderer;
 #endif
   renderer_wide_named_frame_lookup_ = params->renderer_wide_named_frame_lookup;
-  display_mode_ = params->initial_size.display_mode;
+  display_mode_ = params->visual_properties.display_mode;
 
   WebFrame* opener_frame =
       RenderFrameImpl::ResolveOpener(params->opener_frame_route_id);
@@ -545,9 +542,6 @@ void RenderViewImpl::Initialize(
 
   if (switches::IsTouchDragDropEnabled())
     webview()->GetSettings()->SetTouchDragDropEnabled(true);
-
-  webview()->GetSettings()->SetBrowserSideNavigationEnabled(
-      IsBrowserSideNavigationEnabled());
 
   WebSettings::SelectionStrategyType selection_strategy =
       WebSettings::SelectionStrategyType::kCharacter;
@@ -613,13 +607,9 @@ void RenderViewImpl::Initialize(
   UpdateWebViewWithDeviceScaleFactor();
   OnSetRendererPrefs(params->renderer_preferences);
 
-  if (!params->enable_auto_resize) {
-    OnResize(params->initial_size);
-  } else {
-    OnEnableAutoResize(params->min_size, params->max_size);
-  }
+  OnSynchronizeVisualProperties(params->visual_properties);
 
-  idle_user_detector_.reset(new IdleUserDetector(this));
+  idle_user_detector_.reset(new IdleUserDetector());
 
   GetContentClient()->renderer()->RenderViewCreated(this);
 
@@ -895,7 +885,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetReportScreenSizeInPhysicalPixelsQuirk(
       prefs.report_screen_size_in_physical_pixels_quirk);
   settings->SetShouldReuseGlobalForUnownedMainFrame(
-      prefs.resue_global_for_unowned_main_frame);
+      prefs.reuse_global_for_unowned_main_frame);
   settings->SetPreferHiddenVolumeControls(true);
   settings->SetSpellCheckEnabledByDefault(prefs.spellcheck_enabled_by_default);
 
@@ -960,6 +950,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetShowContextMenuOnMouseUp(prefs.context_menu_on_mouse_up);
   settings->SetAlwaysShowContextMenuOnTouch(
       prefs.always_show_context_menu_on_touch);
+  settings->SetSmoothScrollForFindEnabled(prefs.smooth_scroll_for_find_enabled);
 
   settings->SetHideDownloadUI(prefs.hide_download_ui);
   WebRuntimeFeatures::EnableBackgroundVideoTrackOptimization(
@@ -1051,16 +1042,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
         active_url, main_frame->Top()->GetSecurityOrigin().ToString().Utf8());
   }
 
-  // Input IPC messages must not be processed if the RenderView is in
-  // swapped out state.
-  if (is_swapped_out_ &&
-      IPC_MESSAGE_ID_CLASS(message.type()) == InputMsgStart) {
-    IPC_BEGIN_MESSAGE_MAP(RenderViewImpl, message)
-      IPC_MESSAGE_HANDLER(InputMsg_HandleInputEvent, OnDiscardInputEvent)
-    IPC_END_MESSAGE_MAP()
-    return false;
-  }
-
   for (auto& observer : observers_) {
     if (observer.OnMessageReceived(message))
       return true;
@@ -1079,10 +1060,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewMsg_SetBackgroundOpaque, OnSetBackgroundOpaque)
     IPC_MESSAGE_HANDLER(ViewMsg_EnablePreferredSizeChangedMode,
                         OnEnablePreferredSizeChangedMode)
-    IPC_MESSAGE_HANDLER(ViewMsg_EnableAutoResize, OnEnableAutoResize)
-    IPC_MESSAGE_HANDLER(ViewMsg_DisableAutoResize, OnDisableAutoResize)
-    IPC_MESSAGE_HANDLER(ViewMsg_SetLocalSurfaceIdForAutoResize,
-                        OnSetLocalSurfaceIdForAutoResize)
     IPC_MESSAGE_HANDLER(ViewMsg_DisableScrollbarsForSmallWindows,
                         OnDisableScrollbarsForSmallWindows)
     IPC_MESSAGE_HANDLER(ViewMsg_SetRendererPrefs, OnSetRendererPrefs)
@@ -1103,6 +1080,8 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
                         OnSetHistoryOffsetAndLength)
     IPC_MESSAGE_HANDLER(PageMsg_AudioStateChanged, OnAudioStateChanged)
+    IPC_MESSAGE_HANDLER(PageMsg_PausePageScheduledTasks,
+                        OnPausePageScheduledTasks)
     IPC_MESSAGE_HANDLER(PageMsg_UpdateScreenInfo, OnUpdateScreenInfo)
     IPC_MESSAGE_HANDLER(PageMsg_FreezePage, OnFreezePage)
 
@@ -1176,6 +1155,10 @@ void RenderViewImpl::OnUpdateWindowScreenRect(gfx::Rect window_screen_rect) {
 
 void RenderViewImpl::OnAudioStateChanged(bool is_audio_playing) {
   webview()->AudioStateChanged(is_audio_playing);
+}
+
+void RenderViewImpl::OnPausePageScheduledTasks(bool paused) {
+  webview()->PausePageScheduledTasks(paused);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1298,8 +1281,8 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   // TODO(vangelis): Can we tell if the new view will be a background page?
   bool never_visible = false;
 
-  ResizeParams initial_size = ResizeParams();
-  initial_size.screen_info = screen_info_;
+  VisualProperties visual_properties = VisualProperties();
+  visual_properties.screen_info = screen_info_;
 
   // The initial hidden state for the RenderViewImpl here has to match what the
   // browser will eventually decide for the given disposition. Since we have to
@@ -1330,10 +1313,7 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   // the empty string.
   view_params->hidden = is_background_tab;
   view_params->never_visible = never_visible;
-  view_params->initial_size = initial_size;
-  view_params->enable_auto_resize = false;
-  view_params->min_size = gfx::Size();
-  view_params->max_size = gfx::Size();
+  view_params->visual_properties = visual_properties;
   view_params->page_zoom_level = page_zoom_level_;
 
   // Unretained() is safe here because our calling function will also call
@@ -1566,15 +1546,16 @@ void RenderViewImpl::DidUpdateLayout() {
 void RenderViewImpl::NavigateBackForwardSoon(int offset) {
   history_navigation_virtual_time_pauser_ =
       RenderThreadImpl::current()
-          ->GetRendererScheduler()
+          ->GetWebMainThreadScheduler()
           ->CreateWebScopedVirtualTimePauser(
+              "NavigateBackForwardSoon",
               blink::WebScopedVirtualTimePauser::VirtualTaskDuration::kInstant);
-  history_navigation_virtual_time_pauser_.PauseVirtualTime(true);
+  history_navigation_virtual_time_pauser_.PauseVirtualTime();
   Send(new ViewHostMsg_GoToEntryAtOffset(GetRoutingID(), offset));
 }
 
 void RenderViewImpl::DidCommitProvisionalHistoryLoad() {
-  history_navigation_virtual_time_pauser_.PauseVirtualTime(false);
+  history_navigation_virtual_time_pauser_.UnpauseVirtualTime();
 }
 
 int RenderViewImpl::HistoryBackListCount() {
@@ -1591,13 +1572,7 @@ void RenderViewImpl::DidFocus(blink::WebLocalFrame* calling_frame) {
   // TODO(jcivelli): when https://bugs.webkit.org/show_bug.cgi?id=33389 is fixed
   //                 we won't have to test for user gesture anymore and we can
   //                 move that code back to render_widget.cc
-  WebFrame* main_frame = webview() ? webview()->MainFrame() : nullptr;
-  bool is_processing_user_gesture =
-      WebUserGestureIndicator::IsProcessingUserGesture(
-          main_frame && main_frame->IsWebLocalFrame()
-              ? main_frame->ToWebLocalFrame()
-              : nullptr);
-  if (is_processing_user_gesture &&
+  if (WebUserGestureIndicator::IsProcessingUserGesture(calling_frame) &&
       !RenderThreadImpl::current()->layout_test_mode()) {
     Send(new ViewHostMsg_Focus(GetRoutingID()));
 
@@ -1681,7 +1656,7 @@ void RenderViewImpl::DidOverscroll(
     const blink::WebFloatSize& accumulatedOverscroll,
     const blink::WebFloatPoint& positionInViewport,
     const blink::WebFloatSize& velocityInViewport,
-    const blink::WebOverscrollBehavior& behavior) {
+    const cc::OverscrollBehavior& behavior) {
   RenderWidget::DidOverscroll(overscrollDelta, accumulatedOverscroll,
                               positionInViewport, velocityInViewport, behavior);
 }
@@ -1739,10 +1714,6 @@ gfx::RectF RenderViewImpl::ElementBoundsInWindow(
   blink::WebRect bounding_box_in_window = element.BoundsInViewport();
   ConvertViewportToWindowViaWidget(&bounding_box_in_window);
   return gfx::RectF(bounding_box_in_window);
-}
-
-bool RenderViewImpl::HasAddedInputHandler() const {
-  return has_added_input_handler_;
 }
 
 void RenderViewImpl::CheckPreferredSize() {
@@ -1870,77 +1841,6 @@ void RenderViewImpl::OnEnumerateDirectoryResponse(
   enumeration_completions_.erase(id);
 }
 
-void RenderViewImpl::OnEnableAutoResize(const gfx::Size& min_size,
-                                        const gfx::Size& max_size) {
-  DCHECK(disable_scrollbars_size_limit_.IsEmpty());
-  if (!webview())
-    return;
-
-  auto_resize_mode_ = true;
-
-  if (IsUseZoomForDSFEnabled()) {
-    webview()->EnableAutoResizeMode(
-        gfx::ScaleToCeiledSize(min_size,
-                               GetWebScreenInfo().device_scale_factor),
-        gfx::ScaleToCeiledSize(max_size,
-                               GetWebScreenInfo().device_scale_factor));
-  } else {
-    webview()->EnableAutoResizeMode(min_size, max_size);
-  }
-}
-
-void RenderViewImpl::OnDisableAutoResize(const gfx::Size& new_size) {
-  DCHECK(disable_scrollbars_size_limit_.IsEmpty());
-  if (!webview())
-    return;
-  auto_resize_mode_ = false;
-  auto_resize_ack_callback_.Cancel();
-  need_resize_ack_for_auto_resize_ = false;
-  webview()->DisableAutoResizeMode();
-
-  if (!new_size.IsEmpty()) {
-    ResizeParams resize_params;
-    resize_params.screen_info = screen_info_;
-    resize_params.new_size = new_size;
-    resize_params.compositor_viewport_pixel_size =
-        compositor_viewport_pixel_size_;
-    resize_params.browser_controls_shrink_blink_size =
-        browser_controls_shrink_blink_size_;
-    resize_params.top_controls_height = top_controls_height_;
-    resize_params.visible_viewport_size = visible_viewport_size_;
-    resize_params.is_fullscreen_granted = is_fullscreen_granted();
-    resize_params.display_mode = display_mode_;
-    resize_params.needs_resize_ack = false;
-    Resize(resize_params);
-  }
-}
-
-void RenderViewImpl::OnSetLocalSurfaceIdForAutoResize(
-    uint64_t sequence_number,
-    const gfx::Size& min_size,
-    const gfx::Size& max_size,
-    const content::ScreenInfo& screen_info,
-    uint32_t content_source_id,
-    const viz::LocalSurfaceId& local_surface_id) {
-  if (!auto_resize_mode_ || resize_or_repaint_ack_num_ != sequence_number) {
-    DidResizeOrRepaintAck();
-    return;
-  }
-
-  SetLocalSurfaceIdForAutoResize(sequence_number, screen_info,
-                                 content_source_id, local_surface_id);
-
-  if (IsUseZoomForDSFEnabled()) {
-    webview()->EnableAutoResizeMode(
-        gfx::ScaleToCeiledSize(min_size,
-                               GetWebScreenInfo().device_scale_factor),
-        gfx::ScaleToCeiledSize(max_size,
-                               GetWebScreenInfo().device_scale_factor));
-  } else {
-    webview()->EnableAutoResizeMode(min_size, max_size);
-  }
-}
-
 void RenderViewImpl::OnEnablePreferredSizeChangedMode() {
   if (send_preferred_size_changes_)
     return;
@@ -2031,8 +1931,9 @@ void RenderViewImpl::ResizeWebWidget() {
       browser_controls_shrink_blink_size_);
 }
 
-void RenderViewImpl::OnResize(const ResizeParams& params) {
-  TRACE_EVENT0("renderer", "RenderViewImpl::OnResize");
+void RenderViewImpl::OnSynchronizeVisualProperties(
+    const VisualProperties& params) {
+  TRACE_EVENT0("renderer", "RenderViewImpl::OnSynchronizeVisualProperties");
 
   if (webview()) {
     // Only hide popups when the size changes. There are situations (e.g. hiding
@@ -2054,23 +1955,52 @@ void RenderViewImpl::OnResize(const ResizeParams& params) {
     }
   }
 
+  bool auto_resize_mode_changed =
+      auto_resize_mode_ != params.auto_resize_enabled;
+  auto_resize_mode_ = params.auto_resize_enabled;
+  min_size_for_auto_resize_ = params.min_size_for_auto_resize;
+  max_size_for_auto_resize_ = params.max_size_for_auto_resize;
+  if (auto_resize_mode_) {
+    if (IsUseZoomForDSFEnabled()) {
+      webview()->EnableAutoResizeMode(
+          gfx::ScaleToCeiledSize(params.min_size_for_auto_resize,
+                                 params.screen_info.device_scale_factor),
+          gfx::ScaleToCeiledSize(params.max_size_for_auto_resize,
+                                 params.screen_info.device_scale_factor));
+    } else {
+      webview()->EnableAutoResizeMode(params.min_size_for_auto_resize,
+                                      params.max_size_for_auto_resize);
+    }
+  } else if (auto_resize_mode_changed) {
+    need_resize_ack_for_auto_resize_ = false;
+    webview()->DisableAutoResizeMode();
+    if (params.new_size.IsEmpty())
+      return;
+  }
+
   browser_controls_shrink_blink_size_ =
       params.browser_controls_shrink_blink_size;
   top_controls_height_ = params.top_controls_height;
   bottom_controls_height_ = params.bottom_controls_height;
 
   if (device_scale_factor_for_testing_) {
-    ResizeParams p(params);
+    VisualProperties p(params);
     p.screen_info.device_scale_factor = *device_scale_factor_for_testing_;
     p.compositor_viewport_pixel_size =
         gfx::ScaleToCeiledSize(p.new_size, p.screen_info.device_scale_factor);
-    RenderWidget::OnResize(p);
+    RenderWidget::OnSynchronizeVisualProperties(p);
   } else {
-    RenderWidget::OnResize(params);
+    RenderWidget::OnSynchronizeVisualProperties(params);
   }
 
-  if (params.scroll_focused_node_into_view)
-    webview()->ScrollFocusedEditableElementIntoView();
+  if (!params.scroll_focused_node_into_view)
+    return;
+
+  if (WebLocalFrame* focused_frame = GetWebView()->FocusedFrame()) {
+    focused_frame->LocalRoot()
+        ->FrameWidget()
+        ->ScrollFocusedEditableElementIntoView();
+  }
 }
 
 void RenderViewImpl::OnSetBackgroundOpaque(bool opaque) {
@@ -2388,34 +2318,35 @@ void RenderViewImpl::SetFocusAndActivateForTesting(bool enable) {
 void RenderViewImpl::SetDeviceScaleFactorForTesting(float factor) {
   device_scale_factor_for_testing_ = factor;
 
-  ResizeParams params;
-  params.screen_info = screen_info_;
-  params.screen_info.device_scale_factor = factor;
-  params.new_size = size();
-  params.visible_viewport_size = visible_viewport_size_;
-  params.compositor_viewport_pixel_size =
+  VisualProperties visual_properties;
+  visual_properties.screen_info = screen_info_;
+  visual_properties.screen_info.device_scale_factor = factor;
+  visual_properties.new_size = size();
+  visual_properties.visible_viewport_size = visible_viewport_size_;
+  visual_properties.compositor_viewport_pixel_size =
       gfx::ScaleToCeiledSize(size(), factor);
-  params.browser_controls_shrink_blink_size = false;
-  params.top_controls_height = 0.f;
-  params.is_fullscreen_granted = is_fullscreen_granted();
-  params.display_mode = display_mode_;
-  params.content_source_id = GetContentSourceId();
-  OnResize(params);
+  visual_properties.browser_controls_shrink_blink_size = false;
+  visual_properties.top_controls_height = 0.f;
+  visual_properties.is_fullscreen_granted = is_fullscreen_granted();
+  visual_properties.display_mode = display_mode_;
+  visual_properties.content_source_id = GetContentSourceId();
+  OnSynchronizeVisualProperties(visual_properties);
 }
 
 void RenderViewImpl::SetDeviceColorSpaceForTesting(
     const gfx::ColorSpace& color_space) {
-  ResizeParams params;
-  params.screen_info = screen_info_;
-  params.screen_info.color_space = color_space;
-  params.new_size = size();
-  params.visible_viewport_size = visible_viewport_size_;
-  params.compositor_viewport_pixel_size = compositor_viewport_pixel_size_;
-  params.browser_controls_shrink_blink_size = false;
-  params.top_controls_height = 0.f;
-  params.is_fullscreen_granted = is_fullscreen_granted();
-  params.display_mode = display_mode_;
-  OnResize(params);
+  VisualProperties visual_properties;
+  visual_properties.screen_info = screen_info_;
+  visual_properties.screen_info.color_space = color_space;
+  visual_properties.new_size = size();
+  visual_properties.visible_viewport_size = visible_viewport_size_;
+  visual_properties.compositor_viewport_pixel_size =
+      compositor_viewport_pixel_size_;
+  visual_properties.browser_controls_shrink_blink_size = false;
+  visual_properties.top_controls_height = 0.f;
+  visual_properties.is_fullscreen_granted = is_fullscreen_granted();
+  visual_properties.display_mode = display_mode_;
+  OnSynchronizeVisualProperties(visual_properties);
 }
 
 void RenderViewImpl::ForceResizeForTesting(const gfx::Size& new_size) {
@@ -2430,17 +2361,40 @@ void RenderViewImpl::UseSynchronousResizeModeForTesting(bool enable) {
 
 void RenderViewImpl::EnableAutoResizeForTesting(const gfx::Size& min_size,
                                                 const gfx::Size& max_size) {
-  OnEnableAutoResize(min_size, max_size);
+  VisualProperties visual_properties;
+  visual_properties.auto_resize_enabled = true;
+  visual_properties.min_size_for_auto_resize = min_size;
+  visual_properties.max_size_for_auto_resize = max_size;
+  visual_properties.local_surface_id = base::Optional<viz::LocalSurfaceId>(
+      viz::LocalSurfaceId(1, 1, base::UnguessableToken::Create()));
+  OnSynchronizeVisualProperties(visual_properties);
 }
 
 void RenderViewImpl::DisableAutoResizeForTesting(const gfx::Size& new_size) {
-  OnDisableAutoResize(new_size);
+  if (!auto_resize_mode_)
+    return;
+
+  VisualProperties visual_properties;
+  visual_properties.auto_resize_enabled = false;
+  visual_properties.screen_info = screen_info_;
+  visual_properties.new_size = new_size;
+  visual_properties.compositor_viewport_pixel_size =
+      compositor_viewport_pixel_size_;
+  visual_properties.browser_controls_shrink_blink_size =
+      browser_controls_shrink_blink_size_;
+  visual_properties.top_controls_height = top_controls_height_;
+  visual_properties.visible_viewport_size = visible_viewport_size_;
+  visual_properties.is_fullscreen_granted = is_fullscreen_granted();
+  visual_properties.display_mode = display_mode_;
+  visual_properties.needs_resize_ack = false;
+  OnSynchronizeVisualProperties(visual_properties);
 }
 
-void RenderViewImpl::OnResolveTapDisambiguation(double timestamp_seconds,
-                                                gfx::Point tap_viewport_offset,
-                                                bool is_long_press) {
-  webview()->ResolveTapDisambiguation(timestamp_seconds, tap_viewport_offset,
+void RenderViewImpl::OnResolveTapDisambiguation(
+    base::TimeTicks timestamp,
+    const gfx::Point& tap_viewport_offset,
+    bool is_long_press) {
+  webview()->ResolveTapDisambiguation(timestamp, tap_viewport_offset,
                                       is_long_press);
 }
 
@@ -2448,20 +2402,6 @@ void RenderViewImpl::DidCommitCompositorFrame() {
   RenderWidget::DidCommitCompositorFrame();
   for (auto& observer : observers_)
     observer.DidCommitCompositorFrame();
-}
-
-void RenderViewImpl::OnDiscardInputEvent(
-    const blink::WebInputEvent* input_event,
-    const std::vector<const blink::WebInputEvent*>& coalesced_events,
-    const ui::LatencyInfo& latency_info,
-    InputEventDispatchType dispatch_type) {
-  if (!input_event || dispatch_type == DISPATCH_TYPE_NON_BLOCKING) {
-    return;
-  }
-
-  InputEventAck ack(InputEventAckSource::MAIN_THREAD, input_event->GetType(),
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, ack));
 }
 
 void RenderViewImpl::HandleInputEvent(

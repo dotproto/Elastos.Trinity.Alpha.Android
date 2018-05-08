@@ -33,7 +33,6 @@ _SRC_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 _DEFAULT_ARCHIVE_DIR = os.path.join(_SRC_ROOT, 'out', 'binary-size-results')
 _DEFAULT_OUT_DIR = os.path.join(_SRC_ROOT, 'out', 'binary-size-build')
-_DEFAULT_ANDROID_TARGET = 'monochrome_public_apk'
 _BINARY_SIZE_DIR = os.path.join(_SRC_ROOT, 'tools', 'binary_size')
 _RESOURCE_SIZES_PATH = os.path.join(
     _SRC_ROOT, 'build', 'android', 'resource_sizes.py')
@@ -48,14 +47,18 @@ class BaseDiff(object):
     self.name = name
     self.banner = '\n' + '*' * 30 + name + '*' * 30
 
-  def AppendResults(self, logfile):
+  def AppendResults(self, logfiles):
     """Print and write diff results to an open |logfile|."""
-    _PrintAndWriteToFile(logfile, self.banner)
+    full, short = logfiles
+    _WriteToFile(full, self.banner)
+    _WriteToFile(short, self.banner)
+
     for s in self.Summary():
-      print s
-    print
+      _WriteToFile(short, s)
+    _WriteToFile(short, '')
+
     for s in self.DetailedResults():
-      logfile.write(s + '\n')
+      full.write(s + '\n')
 
   @property
   def summary_stat(self):
@@ -73,15 +76,16 @@ class BaseDiff(object):
     """Prepare a binary size diff with ready to print results."""
     raise NotImplementedError()
 
-  def RunDiff(self, logfile, before_dir, after_dir):
+  def RunDiff(self, logfiles, before_dir, after_dir):
     logging.info('Creating: %s', self.name)
     self.ProduceDiff(before_dir, after_dir)
-    self.AppendResults(logfile)
+    self.AppendResults(logfiles)
 
 
 class NativeDiff(BaseDiff):
+  # E.g.: Section Sizes (Total=1.2 kb (1222 bytes)):
   _RE_SUMMARY_STAT = re.compile(
-      r'Section Sizes \(Total=(?P<value>\d+) (?P<units>\w+)\)')
+      r'Section Sizes \(Total=(?P<value>\d+) ?(?P<units>\w+)')
   _SUMMARY_STAT_NAME = 'Native Library Delta'
 
   def __init__(self, size_name, supersize_path):
@@ -112,14 +116,16 @@ class NativeDiff(BaseDiff):
 
 
 class ResourceSizesDiff(BaseDiff):
-  _SUMMARY_SECTIONS = ('Breakdown', 'Specifics', 'StaticInitializersCount')
+  _SUMMARY_SECTIONS = (
+      'Breakdown', 'Dex', 'Specifics', 'StaticInitializersCount')
   # Sections where it makes sense to sum subsections into a section total.
   _AGGREGATE_SECTIONS = (
       'InstallBreakdown', 'Breakdown', 'MainLibInfo', 'Uncompressed')
 
-  def __init__(self, apk_name):
+  def __init__(self, apk_name, filename='results-chart.json'):
     self._apk_name = apk_name
     self._diff = None  # Set by |ProduceDiff()|
+    self._filename = filename
     super(ResourceSizesDiff, self).__init__('Resource Sizes Diff')
 
   @property
@@ -184,7 +190,7 @@ class ResourceSizesDiff(BaseDiff):
     return ret
 
   def _LoadResults(self, archive_dir):
-    chartjson_file = os.path.join(archive_dir, 'results-chart.json')
+    chartjson_file = os.path.join(archive_dir, self._filename)
     with open(chartjson_file) as f:
       chartjson = json.load(f)
     return chartjson['charts']
@@ -193,16 +199,17 @@ class ResourceSizesDiff(BaseDiff):
 class _BuildHelper(object):
   """Helper class for generating and building targets."""
   def __init__(self, args):
+    self.clean = args.clean
     self.cloud = args.cloud
     self.enable_chrome_android_internal = args.enable_chrome_android_internal
-    self.extra_gn_args_str = ''
+    self.extra_gn_args_str = args.gn_args
+    self.apply_patch = args.extra_rev
     self.max_jobs = args.max_jobs
     self.max_load_average = args.max_load_average
     self.output_directory = args.output_directory
     self.target = args.target
     self.target_os = args.target_os
     self.use_goma = args.use_goma
-    self.clean = args.clean
     self._SetDefaults()
 
   @property
@@ -257,18 +264,36 @@ class _BuildHelper(object):
     self.use_goma = self.use_goma or has_goma_dir
     self.max_load_average = (self.max_load_average or
                              str(multiprocessing.cpu_count()))
-    if not self.max_jobs:
-      self.max_jobs = '10000' if self.use_goma else '500'
 
-    if os.path.exists(os.path.join(os.path.dirname(_SRC_ROOT), 'src-internal')):
-      self.extra_gn_args_str = ' is_chrome_branded=true'
+    has_internal = os.path.exists(
+        os.path.join(os.path.dirname(_SRC_ROOT), 'src-internal'))
+    if has_internal:
+      self.extra_gn_args_str = (
+          'is_chrome_branded=true ' + self.extra_gn_args_str)
     else:
       self.extra_gn_args_str = (
-          ' ffmpeg_branding="Chrome" proprietary_codecs=true')
+          'ffmpeg_branding="Chrome" proprietary_codecs=true' +
+          self.extra_gn_args_str)
     if self.IsLinux():
-      self.extra_gn_args_str += (
-          ' is_cfi=false generate_linker_map=true')
-    self.target = self.target if self.IsAndroid() else 'chrome'
+      self.extra_gn_args_str = (
+          'is_cfi=false generate_linker_map=true ' + self.extra_gn_args_str)
+    self.extra_gn_args_str = ' ' + self.extra_gn_args_str.strip()
+
+    if not self.max_jobs:
+      if self.use_goma:
+        self.max_jobs = '10000'
+      elif has_internal:
+        self.max_jobs = '500'
+      else:
+        self.max_jobs = '50'
+
+    if not self.target:
+      if self.IsLinux():
+        self.target = 'chrome'
+      elif self.enable_chrome_android_internal:
+        self.target = 'monochrome_apk'
+      else:
+        self.target = 'monochrome_public_apk'
 
   def _GenGnCmd(self):
     gn_args = 'is_official_build=true'
@@ -411,7 +436,7 @@ class _DiffArchiveManager(object):
     """Perform diffs given two build archives."""
     before = self.build_archives[before_id]
     after = self.build_archives[after_id]
-    diff_path = self._DiffFilePath(before, after)
+    diff_path, short_diff_path = self._DiffFilePaths(before, after)
     if not self._CanDiff(before, after):
       logging.info(
           'Skipping diff for %s due to missing build archives.', diff_path)
@@ -425,26 +450,30 @@ class _DiffArchiveManager(object):
           'Skipping diff for %s and %s. Matching diff already exists: %s',
           before.rev, after.rev, diff_path)
     else:
-      if os.path.exists(diff_path):
-        os.remove(diff_path)
-      with open(diff_path, 'a') as diff_file:
+      with open(diff_path, 'w') as diff_file, \
+           open(short_diff_path, 'w') as summary_file:
         for d in self.diffs:
-          d.RunDiff(diff_file, before.dir, after.dir)
+          d.RunDiff((diff_file, summary_file), before.dir, after.dir)
       metadata.Write()
       self._AddDiffSummaryStat(before, after)
+    if os.path.exists(short_diff_path):
+      _PrintFile(short_diff_path)
     logging.info('See detailed diff results here: %s',
                  os.path.relpath(diff_path))
 
   def Summarize(self):
+    path = os.path.join(self.archive_dir, 'last_diff_summary.txt')
     if self._summary_stats:
-      path = os.path.join(self.archive_dir, 'last_diff_summary.txt')
       with open(path, 'w') as f:
         stats = sorted(
             self._summary_stats, key=lambda x: x[0].value, reverse=True)
-        _PrintAndWriteToFile(f, '\nDiff Summary')
+        _WriteToFile(f, '\nDiff Summary')
         for s, before, after in stats:
-          _PrintAndWriteToFile(f, '{:>+10} {} {} for range: {}..{}',
+          _WriteToFile(f, '{:>+10} {} {} for range: {}..{}',
                                s.value, s.units, s.name, before, after)
+    # Print cached file if all builds were cached.
+    if os.path.exists(path):
+      _PrintFile(path)
     if self.build_archives:
       supersize_path = os.path.join(_BINARY_SIZE_DIR, 'supersize')
       size2 = ''
@@ -470,8 +499,9 @@ class _DiffArchiveManager(object):
   def _CanDiff(self, before, after):
     return before.Exists() and after.Exists()
 
-  def _DiffFilePath(self, before, after):
-    return os.path.join(self._DiffDir(before, after), 'diff_results.txt')
+  def _DiffFilePaths(self, before, after):
+    ret = os.path.join(self._DiffDir(before, after), 'diff_results')
+    return ret + '.txt', ret + '.short.txt'
 
   def _DiffMetadataPath(self, before, after):
     return os.path.join(self._DiffDir(before, after), 'metadata.txt')
@@ -489,6 +519,7 @@ class _Metadata(object):
     self.is_cloud = build.IsCloud()
     self.data = {
       'revs': [a.rev for a in archives],
+      'apply_patch': build.apply_patch,
       'archive_dirs': [a.dir for a in archives],
       'target': build.target,
       'target_os': build.target_os,
@@ -502,19 +533,11 @@ class _Metadata(object):
     }
 
   def Exists(self):
-    old_metadata = {}
     path = self.data['path']
     if os.path.exists(path):
       with open(path, 'r') as f:
-        old_metadata = json.load(f)
-        # For local builds, all keys need to be the same. Differing GN args will
-        # make diffs noisy and inaccurate. GN args do not matter for --cloud
-        # since we download prebuilt build artifacts.
-        keys = self.data.keys()
-        if self.is_cloud:
-          keys.remove('gn_args')
-        return all(v == old_metadata[k]
-                   for k, v in self.data.iteritems() if k in keys)
+        return self.data == json.load(f)
+    return False
 
   def Write(self):
     with open(self.data['path'], 'w') as f:
@@ -568,27 +591,41 @@ def _GclientSyncCmd(rev, subrepo):
   return retcode
 
 
-def _SyncAndBuild(archive, build, subrepo):
+def _SyncAndBuild(archive, build, subrepo, no_gclient, extra_rev):
   """Sync, build and return non 0 if any commands failed."""
   # Simply do a checkout if subrepo is used.
-  retcode = 0
   if _CurrentGitHash(subrepo) == archive.rev:
     if subrepo != _SRC_ROOT:
       logging.info('Skipping git checkout since already at desired rev')
     else:
       logging.info('Skipping gclient sync since already at desired rev')
-  elif subrepo != _SRC_ROOT:
+  elif subrepo != _SRC_ROOT or no_gclient:
     _GitCmd(['checkout',  archive.rev], subrepo)
   else:
     # Move to a detached state since gclient sync doesn't work with local
     # commits on a branch.
     _GitCmd(['checkout', '--detach'], subrepo)
     logging.info('Syncing to %s', archive.rev)
-    retcode = _GclientSyncCmd(archive.rev, subrepo)
-  return retcode or build.Run()
+    if _GclientSyncCmd(archive.rev, subrepo):
+      return False
+  with _ApplyPatch(extra_rev, subrepo):
+    return build.Run()
 
 
-def _GenerateRevList(rev, reference_rev, all_in_range, subrepo):
+@contextmanager
+def _ApplyPatch(rev, subrepo):
+  if not rev:
+    yield
+  else:
+    restore_func = _GenRestoreFunc(subrepo)
+    try:
+      _GitCmd(['cherry-pick', rev, '--strategy-option', 'theirs'], subrepo)
+      yield
+    finally:
+      restore_func()
+
+
+def _GenerateRevList(rev, reference_rev, all_in_range, subrepo, step):
   """Normalize and optionally generate a list of commits in the given range.
 
   Returns:
@@ -597,17 +634,21 @@ def _GenerateRevList(rev, reference_rev, all_in_range, subrepo):
   rev_seq = '%s^..%s' % (reference_rev, rev)
   stdout = _GitCmd(['rev-list', rev_seq], subrepo)
   all_revs = stdout.splitlines()[::-1]
-  if all_in_range or len(all_revs) < 2:
+  if all_in_range or len(all_revs) < 2 or step:
     revs = all_revs
+    if step:
+      revs = revs[::step]
   else:
     revs = [all_revs[0], all_revs[-1]]
-  if len(revs) >= _COMMIT_COUNT_WARN_THRESHOLD:
+  num_revs = len(revs)
+  if num_revs >= _COMMIT_COUNT_WARN_THRESHOLD:
     _VerifyUserAccepts(
-        'You\'ve provided a commit range that contains %d commits.' % len(revs))
+        'You\'ve provided a commit range that contains %d commits.' % num_revs)
+  logging.info('Processing %d commits', num_revs)
   return revs
 
 
-def _ValidateRevs(rev, reference_rev, subrepo):
+def _ValidateRevs(rev, reference_rev, subrepo, extra_rev):
   def git_fatal(args, message):
     devnull = open(os.devnull, 'wb')
     retcode = subprocess.call(
@@ -619,9 +660,10 @@ def _ValidateRevs(rev, reference_rev, subrepo):
                     'date, try "git fetch origin master"')
   git_fatal(['cat-file', '-e', rev], no_obj_message % rev)
   git_fatal(['cat-file', '-e', reference_rev], no_obj_message % reference_rev)
+  if extra_rev:
+    git_fatal(['cat-file', '-e', extra_rev], no_obj_message % extra_rev)
   git_fatal(['merge-base', '--is-ancestor', reference_rev, rev],
             'reference-rev is newer than rev')
-  return rev, reference_rev
 
 
 def _VerifyUserAccepts(message):
@@ -731,13 +773,17 @@ def _ExtractFiles(to_extract, dst, z):
   return os.path.join(dst, output_dir)
 
 
-def _PrintAndWriteToFile(logfile, s, *args, **kwargs):
+def _WriteToFile(logfile, s, *args, **kwargs):
   if isinstance(s, basestring):
     data = s.format(*args, **kwargs) + '\n'
   else:
     data = '\n'.join(s) + '\n'
-  sys.stdout.write(data)
   logfile.write(data)
+
+
+def _PrintFile(path):
+  with open(path) as f:
+    sys.stdout.write(f.read())
 
 
 @contextmanager
@@ -758,19 +804,56 @@ def _CurrentGitHash(subrepo):
   return _GitCmd(['rev-parse', 'HEAD'], subrepo)
 
 
-def _SetRestoreFunc(subrepo):
+def _GenRestoreFunc(subrepo):
   branch = _GitCmd(['rev-parse', '--abbrev-ref', 'HEAD'], subrepo)
-  atexit.register(lambda: _GitCmd(['checkout', branch], subrepo))
+  # Happens when the repo didn't start on a named branch.
+  if branch == 'HEAD':
+    branch = _GitCmd(['rev-parse', 'HEAD'], subrepo)
+  def _RestoreFunc():
+    logging.warning('Restoring original git checkout')
+    _GitCmd(['checkout', branch], subrepo)
+  return _RestoreFunc
+
+
+def _SetRestoreFunc(subrepo):
+  atexit.register(_GenRestoreFunc(subrepo))
+
+
+# Used by binary size trybot.
+def _DiffMain(args):
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--before-dir', required=True)
+  parser.add_argument('--after-dir', required=True)
+  parser.add_argument('--apk-name', required=True)
+  parser.add_argument('--diff-type', required=True, choices=['native', 'sizes'])
+  parser.add_argument('--diff-output', required=True)
+  args = parser.parse_args(args)
+
+  if args.diff_type == 'native':
+    supersize_path = os.path.join(_BINARY_SIZE_DIR, 'supersize')
+    diff = NativeDiff(args.apk_name + '.size', supersize_path)
+  else:
+    diff = ResourceSizesDiff(args.apk_name, args.apk_name + '.json')
+
+  diff.ProduceDiff(args.before_dir, args.after_dir)
+  with open(args.diff_output, 'w') as f:
+    f.writelines(l + '\n' for l in diff.DetailedResults())
+
+  stat = diff.summary_stat
+  if stat:
+    print 'Summary: {} {} {}'.format(*stat)
+  else:
+    print 'Missing Summary!'
 
 
 def main():
   parser = argparse.ArgumentParser(
       description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument('rev',
+                      help='Find binary size bloat for this commit.')
   parser.add_argument('--archive-directory',
                       default=_DEFAULT_ARCHIVE_DIR,
                       help='Where results are stored.')
-  parser.add_argument('rev',
-                      help='Find binary size bloat for this commit.')
   parser.add_argument('--reference-rev',
                       help='Older rev to diff against. If not supplied, '
                            'the previous commit to rev will be used.')
@@ -789,7 +872,7 @@ def main():
                       '(Googlers only).')
   parser.add_argument('--single',
                       action='store_true',
-                      help='Sets --reference-rev=rev')
+                      help='Sets --reference-rev=rev.')
   parser.add_argument('--unstripped',
                       action='store_true',
                       help='Save the unstripped native library when archiving.')
@@ -797,15 +880,25 @@ def main():
                       help='Custom path to depot tools. Needed for --cloud if '
                            'depot tools isn\'t in your PATH.')
   parser.add_argument('--subrepo',
-                      help='Specify a subrepo directory to use. Gclient sync '
-                           'will be skipped if this option is used and all git '
-                           'commands will be executed from the subrepo '
-                           'directory. This option doesn\'t work with --cloud.')
+                      help='Specify a subrepo directory to use. Implies '
+                           '--no-gclient. All git commands will be executed '
+                           'from the subrepo directory. Does not work with '
+                           '--cloud.')
+  parser.add_argument('--no-gclient',
+                      action='store_true',
+                      help='Do not perform gclient sync steps.')
+  parser.add_argument('--apply-patch', dest='extra_rev',
+                      help='A local commit to cherry-pick before each build. '
+                           'This can leave your repo in a broken state if '
+                           'the cherry-pick fails.')
+  parser.add_argument('--step', type=int,
+                      help='Assumes --all and only builds/downloads every '
+                           '--step\'th revision.')
   parser.add_argument('-v',
                       '--verbose',
                       action='store_true',
-                      help='Show  commands executed, extra debugging output'
-                           ', and Ninja/GN output')
+                      help='Show commands executed, extra debugging output'
+                           ', and Ninja/GN output.')
 
   build_group = parser.add_argument_group('build arguments')
   build_group.add_argument('-j',
@@ -823,6 +916,9 @@ def main():
   build_group.add_argument('--clean',
                            action='store_true',
                            help='Do a clean build for each revision.')
+  build_group.add_argument('--gn-args',
+                           default='',
+                           help='Extra GN args to set.')
   build_group.add_argument('--target-os',
                            default='android',
                            choices=['android', 'linux'],
@@ -835,12 +931,16 @@ def main():
                            action='store_true',
                            help='Allow downstream targets to be built.')
   build_group.add_argument('--target',
-                           default=_DEFAULT_ANDROID_TARGET,
-                           help='GN APK target to build. Ignored for Linux. '
-                                'Default %s.' % _DEFAULT_ANDROID_TARGET)
+                           help='GN target to build. Linux default: chrome. '
+                                'Android default: monochrome_public_apk or '
+                                'monochrome_apk (depending on '
+                                '--enable-chrome-android-internal).')
   if len(sys.argv) == 1:
     parser.print_help()
-    sys.exit()
+    return 1
+  if sys.argv[1] == 'diff':
+    return _DiffMain(sys.argv[2:])
+
   args = parser.parse_args()
   log_level = logging.DEBUG if args.verbose else logging.INFO
   logging.basicConfig(level=log_level,
@@ -852,6 +952,8 @@ def main():
     if build.IsLinux():
       parser.error('--target-os linux doesn\'t work with --cloud because map '
                    'files aren\'t generated by builders (crbug.com/716209).')
+    if args.extra_rev:
+      parser.error('--apply-patch doesn\'t work with --cloud')
 
   subrepo = args.subrepo or _SRC_ROOT
   if not build.IsCloud():
@@ -864,8 +966,8 @@ def main():
   reference_rev = args.reference_rev or args.rev + '^'
   if args.single:
     reference_rev = args.rev
-  rev, reference_rev = _ValidateRevs(args.rev, reference_rev, subrepo)
-  revs = _GenerateRevList(rev, reference_rev, args.all, subrepo)
+  _ValidateRevs(args.rev, reference_rev, subrepo, args.extra_rev)
+  revs = _GenerateRevList(args.rev, reference_rev, args.all, subrepo, args.step)
   with _TmpCopyBinarySizeDir() as supersize_path:
     diffs = [NativeDiff(build.size_name, supersize_path)]
     if build.IsAndroid():
@@ -886,7 +988,8 @@ def main():
           _DownloadBuildArtifacts(
               archive, build, supersize_path, args.depot_tools_path)
         else:
-          build_failure = _SyncAndBuild(archive, build, subrepo)
+          build_failure = _SyncAndBuild(archive, build, subrepo,
+                                        args.no_gclient, args.extra_rev)
           if build_failure:
             logging.info(
                 'Build failed for %s, diffs using this rev will be skipped.',

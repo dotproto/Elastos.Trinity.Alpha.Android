@@ -46,6 +46,11 @@ class PDFiumEngine : public PDFEngine,
   explicit PDFiumEngine(PDFEngine::Client* client);
   ~PDFiumEngine() override;
 
+  using CreateDocumentLoaderFunction =
+      std::unique_ptr<DocumentLoader> (*)(DocumentLoader::Client* client);
+  static void SetCreateDocumentLoaderFunctionForTesting(
+      CreateDocumentLoaderFunction function);
+
   // PDFEngine implementation.
   bool New(const char* url, const char* headers) override;
   void PageOffsetUpdated(const pp::Point& page_offset) override;
@@ -74,7 +79,12 @@ class PDFiumEngine : public PDFEngine,
   void RotateCounterclockwise() override;
   std::string GetSelectedText() override;
   bool CanEditText() override;
+  bool HasEditableText() override;
   void ReplaceSelection(const std::string& text) override;
+  bool CanUndo() override;
+  bool CanRedo() override;
+  void Undo() override;
+  void Redo() override;
   std::string GetLinkAtPosition(const pp::Point& point) override;
   bool HasPermission(DocumentPermission permission) const override;
   void SelectAll() override;
@@ -295,9 +305,14 @@ class PDFiumEngine : public PDFEngine,
   bool OnMouseDown(const pp::MouseInputEvent& event);
   bool OnMouseUp(const pp::MouseInputEvent& event);
   bool OnMouseMove(const pp::MouseInputEvent& event);
+  void OnMouseEnter(const pp::MouseInputEvent& event);
   bool OnKeyDown(const pp::KeyboardInputEvent& event);
   bool OnKeyUp(const pp::KeyboardInputEvent& event);
   bool OnChar(const pp::KeyboardInputEvent& event);
+
+  // Decide what cursor should be displayed.
+  PP_CursorType_Dev DetermineCursorType(PDFiumPage::Area area,
+                                        int form_type) const;
 
   bool ExtendSelection(int page_index, int char_index);
 
@@ -316,7 +331,16 @@ class PDFiumEngine : public PDFEngine,
                                  uint32_t page_range_count,
                                  const PP_PrintSettings_Dev& print_settings);
 
+  bool FlattenPrintData(FPDF_DOCUMENT doc);
+  pp::Buffer_Dev GetPrintData(FPDF_DOCUMENT doc);
   pp::Buffer_Dev GetFlattenedPrintData(FPDF_DOCUMENT doc);
+
+  // Perform N-up PDF generation from |doc| based on the parameters in
+  // |print_settings|. On success, the returned buffer contains the N-up version
+  // of |doc|. On failure, the returned buffer is empty.
+  pp::Buffer_Dev NupPdfToPdf(FPDF_DOCUMENT doc,
+                             const PP_PrintSettings_Dev& print_settings);
+
   void FitContentsToPrintableAreaIfRequired(
       FPDF_DOCUMENT doc,
       const PP_PrintSettings_Dev& print_settings);
@@ -409,10 +433,9 @@ class PDFiumEngine : public PDFEngine,
                  std::vector<pp::Rect>* highlighted_rects);
 
   // Helper function to convert a device to page coordinates.  If the page is
-  // not yet loaded, page_x and page_y will be set to 0.
+  // not yet loaded, |page_x| and |page_y| will be set to 0.
   void DeviceToPage(int page_index,
-                    float device_x,
-                    float device_y,
+                    const pp::Point& device_point,
                     double* page_x,
                     double* page_y);
 
@@ -439,7 +462,8 @@ class PDFiumEngine : public PDFEngine,
                  int* stride) const;
 
   // Called when the selection changes.
-  void OnSelectionChanged();
+  void OnSelectionTextChanged();
+  void OnSelectionPositionChanged();
 
   // Common code shared by RotateClockwise() and RotateCounterclockwise().
   void RotateInternal();
@@ -699,10 +723,18 @@ class PDFiumEngine : public PDFEngine,
   // True if left mouse button is currently being held down.
   bool mouse_left_button_down_;
 
+  // True if middle mouse button is currently being held down.
+  bool mouse_middle_button_down_;
+
+  // Last known position while performing middle mouse button pan.
+  pp::Point mouse_middle_button_last_position_;
+
   // The current text used for searching.
   std::string current_find_text_;
   // The results found.
   std::vector<PDFiumRange> find_results_;
+  // Whether a search is in progress.
+  bool search_in_progress_ = false;
   // Which page to search next.
   int next_page_to_search_ = -1;
   // Where to stop searching.

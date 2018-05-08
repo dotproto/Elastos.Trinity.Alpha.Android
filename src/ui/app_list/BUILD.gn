@@ -9,17 +9,9 @@ assert(is_chromeos)
 
 component("app_list") {
   sources = [
-    "answer_card_contents_registry.cc",
-    "answer_card_contents_registry.h",
-    "app_list_constants.cc",
-    "app_list_constants.h",
     "app_list_export.h",
-    "app_list_features.cc",
-    "app_list_features.h",
     "app_list_metrics.cc",
     "app_list_metrics.h",
-    "app_list_switches.cc",
-    "app_list_switches.h",
     "app_list_util.cc",
     "app_list_util.h",
     "app_list_view_delegate.h",
@@ -39,6 +31,8 @@ component("app_list") {
     "views/app_list_page.h",
     "views/app_list_view.cc",
     "views/app_list_view.h",
+    "views/app_list_view_context_menu.cc",
+    "views/app_list_view_context_menu.h",
     "views/apps_container_view.cc",
     "views/apps_container_view.h",
     "views/apps_grid_view.cc",
@@ -88,6 +82,8 @@ component("app_list") {
     "views/search_result_tile_item_view.h",
     "views/search_result_view.cc",
     "views/search_result_view.h",
+    "views/suggestion_chip_view.cc",
+    "views/suggestion_chip_view.h",
     "views/suggestions_container_view.cc",
     "views/suggestions_container_view.h",
     "views/top_icon_animation_view.cc",
@@ -97,6 +93,7 @@ component("app_list") {
   defines = [ "APP_LIST_IMPLEMENTATION" ]
 
   deps = [
+    "//ash/public/cpp/app_list/vector_icons",
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
@@ -104,7 +101,6 @@ component("app_list") {
     "//chromeos:chromeos",
     "//components/keyed_service/core",
     "//components/sync",
-    "//components/wallpaper",
     "//mojo/public/cpp/bindings",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
@@ -112,7 +108,6 @@ component("app_list") {
     "//third_party/icu",
     "//ui/accessibility",
     "//ui/app_list/resources",
-    "//ui/app_list/vector_icons",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -126,6 +121,7 @@ component("app_list") {
     "//ui/resources",
     "//ui/strings",
     "//ui/views",
+    "//ui/views/mus/remote_view:remote_view_host",
     "//ui/wm",
   ]
 
@@ -207,13 +203,13 @@ test("app_list_unittests") {
   deps = [
     ":app_list",
     ":test_support",
+    "//ash/public/cpp/app_list/vector_icons",
     "//base",
     "//base/test:test_support",
     "//mojo/edk",
     "//skia",
     "//testing/gtest",
     "//ui/accessibility",
-    "//ui/app_list/vector_icons",
     "//ui/base",
     "//ui/chromeos/search_box",
     "//ui/compositor",

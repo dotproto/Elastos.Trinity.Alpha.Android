@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/style/typography_provider.h"
 #include "ui/views/views_export.h"
 
@@ -100,12 +101,27 @@ enum DistanceMetric {
   DISTANCE_UNRELATED_CONTROL_VERTICAL,
 
   // Embedders must start DistanceMetric enum values from here.
-  VIEWS_DISTANCE_END
+  VIEWS_DISTANCE_END,
+
+  // All Distance enum values must be below this value.
+  VIEWS_DISTANCE_MAX = 0x2000
 };
 
 // The type of a dialog content element. TEXT should be used for Labels or other
 // elements that only show text. Otherwise CONTROL should be used.
 enum DialogContentType { CONTROL, TEXT };
+
+enum EmphasisMetric {
+  // No emphasis needed for shadows, corner radius, etc.
+  EMPHASIS_NONE,
+  // Use this to indicate low-emphasis interactive elements such as buttons and
+  // text fields.
+  EMPHASIS_LOW,
+  // Use this for components with medium emphasis, such as tabs or dialogs.
+  EMPHASIS_MEDIUM,
+  // High-emphasis components like the omnibox or rich suggestions.
+  EMPHASIS_HIGH,
+};
 
 class VIEWS_EXPORT LayoutProvider {
  public:
@@ -141,6 +157,18 @@ class VIEWS_EXPORT LayoutProvider {
   // element in the content  and |trailing| is the type of the final element.
   gfx::Insets GetDialogInsetsForContentType(DialogContentType leading,
                                             DialogContentType trailing) const;
+
+  // TODO (https://crbug.com/822000): Possibly combine the following two
+  // functions into a single function returning a struct. Keeping them separate
+  // for now in case different emphasis is needed for different elements in the
+  // same context. Delete this TODO in Q4 2018.
+
+  // Returns the corner radius specific to the given emphasis metric.
+  virtual int GetCornerRadiusMetric(EmphasisMetric emphasis_metric,
+                                    const gfx::Size& size = gfx::Size()) const;
+
+  // Returns the shadow elevation metric for the given emphasis.
+  virtual int GetShadowElevationMetric(EmphasisMetric emphasis_metric) const;
 
  private:
   DefaultTypographyProvider typography_provider_;

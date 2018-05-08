@@ -66,10 +66,16 @@ class ConstrainedWindowViewTest : public InProcessBrowserTest {
 
 }  // namespace
 
+#if defined(OS_MACOSX)
+// Unexpected multiple focus managers on MacViews: http://crbug.com/824551
+#define MAYBE_FocusTest DISABLED_FocusTest
+#else
+#define MAYBE_FocusTest FocusTest
+#endif
 // Tests the intial focus of tab-modal dialogs, the restoration of focus to the
 // browser when they close, and that queued dialogs don't register themselves as
 // accelerator targets until they are displayed.
-IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, FocusTest) {
+IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, MAYBE_FocusTest) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
@@ -155,15 +161,19 @@ IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, TabMoveTest) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   std::unique_ptr<TestDialog> dialog = ShowModalDialog(web_contents);
+  // On Mac, animations cause this test to be flaky.
+  dialog->GetWidget()->SetVisibilityChangedAnimationsEnabled(false);
   EXPECT_TRUE(dialog->GetWidget()->IsVisible());
 
   // Move the tab to a second browser window; but first create another tab.
   // That prevents the first browser window from closing when its tab is moved.
   chrome::NewTab(browser());
-  browser()->tab_strip_model()->DetachWebContentsAt(
-      browser()->tab_strip_model()->GetIndexOfWebContents(web_contents));
+  std::unique_ptr<content::WebContents> owned_web_contents =
+      browser()->tab_strip_model()->DetachWebContentsAt(
+          browser()->tab_strip_model()->GetIndexOfWebContents(web_contents));
   Browser* browser2 = CreateBrowser(browser()->profile());
-  browser2->tab_strip_model()->AppendWebContents(web_contents, true);
+  browser2->tab_strip_model()->AppendWebContents(std::move(owned_web_contents),
+                                                 true);
   EXPECT_TRUE(dialog->GetWidget()->IsVisible());
 
   // Close the first browser.
@@ -181,6 +191,8 @@ IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, TabMoveTest) {
 IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, ClosesOnEscape) {
   std::unique_ptr<TestDialog> dialog =
       ShowModalDialog(browser()->tab_strip_model()->GetActiveWebContents());
+  // On Mac, animations cause this test to be flaky.
+  dialog->GetWidget()->SetVisibilityChangedAnimationsEnabled(false);
   EXPECT_TRUE(dialog->GetWidget()->IsVisible());
   EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE,
                                               false, false, false, false));

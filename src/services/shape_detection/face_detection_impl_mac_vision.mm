@@ -6,6 +6,7 @@
 
 #include <dlfcn.h>
 #include <objc/runtime.h>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -17,6 +18,26 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace shape_detection {
+
+namespace {
+
+mojom::LandmarkPtr BuildLandmark(VNFaceLandmarkRegion2D* landmark_region,
+                                 mojom::LandmarkType landmark_type,
+                                 gfx::RectF bounding_box) {
+  auto landmark = mojom::Landmark::New();
+  landmark->type = landmark_type;
+  landmark->locations.reserve(landmark_region.pointCount);
+  for (NSUInteger i = 0; i < landmark_region.pointCount; ++i) {
+    // The points are normalized to the bounding box of the detected face.
+    landmark->locations.emplace_back(
+        landmark_region.normalizedPoints[i].x * bounding_box.width() +
+            bounding_box.x(),
+        (1 - landmark_region.normalizedPoints[i].y) * bounding_box.height() +
+            bounding_box.y());
+  }
+  return landmark;
+}
+}
 
 // The VisionAPIAsyncRequestMac class submits an image analysis request for
 // asynchronous execution on a dispatch queue with default priority.
@@ -125,17 +146,54 @@ void FaceDetectionImplMacVision::Detect(const SkBitmap& bitmap,
     return;
   }
 
+  image_size_ = CGSizeMake(bitmap.width(), bitmap.height());
   // Hold on the callback until async request completes.
   detected_callback_ = std::move(callback);
   // This prevents the Detect function from being called before the
   // VisionAPIAsyncRequestMac completes.
-  binding_->PauseIncomingMethodCallProcessing();
+  if (binding_)  // Can be unbound in unit testing.
+    binding_->PauseIncomingMethodCallProcessing();
 }
 
 void FaceDetectionImplMacVision::OnFacesDetected(VNRequest* request,
                                                  NSError* error) {
-  std::move(detected_callback_).Run({});
-  binding_->ResumeIncomingMethodCallProcessing();
+  if (binding_)  // Can be unbound in unit testing.
+    binding_->ResumeIncomingMethodCallProcessing();
+
+  if (![request.results count] || error) {
+    std::move(detected_callback_).Run({});
+    return;
+  }
+
+  std::vector<mojom::FaceDetectionResultPtr> results;
+  for (VNFaceObservation* const observation in request.results) {
+    auto face = mojom::FaceDetectionResult::New();
+    // The coordinate are normalized to the dimensions of the processed image.
+    face->bounding_box = ConvertCGToGfxCoordinates(
+        CGRectMake(observation.boundingBox.origin.x * image_size_.width,
+                   observation.boundingBox.origin.y * image_size_.height,
+                   observation.boundingBox.size.width * image_size_.width,
+                   observation.boundingBox.size.height * image_size_.height),
+        image_size_.height);
+
+    if (VNFaceLandmarkRegion2D* leftEye = observation.landmarks.leftEye) {
+      face->landmarks.push_back(
+          BuildLandmark(leftEye, mojom::LandmarkType::EYE, face->bounding_box));
+    }
+    if (VNFaceLandmarkRegion2D* rightEye = observation.landmarks.rightEye) {
+      face->landmarks.push_back(BuildLandmark(
+          rightEye, mojom::LandmarkType::EYE, face->bounding_box));
+    }
+    if (VNFaceLandmarkRegion2D* outerLips = observation.landmarks.outerLips) {
+      face->landmarks.push_back(BuildLandmark(
+          outerLips, mojom::LandmarkType::MOUTH, face->bounding_box));
+    }
+
+    results.push_back(std::move(face));
+  }
+  std::move(detected_callback_).Run(std::move(results));
+
+  return;
 }
 
 }  // namespace shape_detection

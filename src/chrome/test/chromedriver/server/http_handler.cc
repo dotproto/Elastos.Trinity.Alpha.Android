@@ -15,8 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -143,12 +141,23 @@ HttpHandler::HttpHandler(
       CommandMapping(
           kGet, "session/:sessionId/window/rect",
           WrapToCommand("GetWindowRect", base::Bind(&ExecuteGetWindowRect))),
+
+      // minimize/maximize oss version
       CommandMapping(
           kPost, "session/:sessionId/window/:windowHandle/maximize",
           WrapToCommand("MaximizeWindow", base::Bind(&ExecuteMaximizeWindow))),
       CommandMapping(
           kPost, "session/:sessionId/window/:windowHandle/minimize",
           WrapToCommand("MinimizeWindow", base::Bind(&ExecuteMinimizeWindow))),
+
+      // minimize/maximize w3c version
+      CommandMapping(
+          kPost, "session/:sessionId/window/maximize",
+          WrapToCommand("MaximizeWindow", base::Bind(&ExecuteMaximizeWindow))),
+      CommandMapping(
+          kPost, "session/:sessionId/window/minimize",
+          WrapToCommand("MinimizeWindow", base::Bind(&ExecuteMinimizeWindow))),
+
       CommandMapping(kPost, "session/:sessionId/window/fullscreen",
                      WrapToCommand("FullscreenWindow",
                                    base::Bind(&ExecuteFullScreenWindow))),
@@ -808,6 +817,9 @@ HttpHandler::PrepareStandardResponse(
     case kUnsupportedOperation:
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_INTERNAL_SERVER_ERROR));
+      break;
+    case kTargetDetached:
+      response.reset(new net::HttpServerResponseInfo(net::HTTP_NOT_FOUND));
       break;
 
     // TODO(kereliuk): evaluate the usage of these as they relate to the spec

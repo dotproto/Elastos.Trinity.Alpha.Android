@@ -46,13 +46,15 @@ class DirectManipulationHandler
   // hierarchy changed.
   void SetWindowEventTarget(WindowEventTarget* event_target);
 
+  void SetDeviceScaleFactor(float device_scale_factor);
+
  private:
   friend DirectManipulationUnitTest;
 
   DirectManipulationHandler();
   ~DirectManipulationHandler() override;
 
-  enum class Gesture { kNone, kScroll, kPinch };
+  enum class Gesture { kNone, kScroll, kFling, kPinch };
 
   void TransitionToState(Gesture gesture);
 
@@ -70,10 +72,12 @@ class DirectManipulationHandler
 
   DirectManipulationHelper* helper_ = nullptr;
   WindowEventTarget* event_target_ = nullptr;
+  float device_scale_factor_ = 1.0f;
   float last_scale_ = 1.0f;
   int last_x_offset_ = 0;
   int last_y_offset_ = 0;
   bool first_ready_ = false;
+  bool should_send_scroll_begin_ = false;
 
   // Current recognized gesture from Direct Manipulation.
   Gesture gesture_state_ = Gesture::kNone;
@@ -132,6 +136,8 @@ class UI_BASE_EXPORT DirectManipulationHelper {
   // This function instantiates Direct Manipulation and creates a viewport for
   // the passed in |window|. Return false if initialize failed.
   bool Initialize();
+
+  void SetDeviceScaleFactorForTesting(float factor);
 
   Microsoft::WRL::ComPtr<IDirectManipulationManager> manager_;
   Microsoft::WRL::ComPtr<IDirectManipulationUpdateManager> update_manager_;

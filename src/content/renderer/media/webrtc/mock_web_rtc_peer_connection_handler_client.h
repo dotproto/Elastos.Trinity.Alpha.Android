@@ -10,10 +10,10 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebRTCICECandidate.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandlerClient.h"
-#include "third_party/WebKit/public/platform/WebRTCRtpReceiver.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_rtc_ice_candidate.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler_client.h"
+#include "third_party/blink/public/platform/web_rtc_rtp_receiver.h"
 
 namespace content {
 
@@ -21,7 +21,7 @@ class MockWebRTCPeerConnectionHandlerClient
     : public blink::WebRTCPeerConnectionHandlerClient {
  public:
   MockWebRTCPeerConnectionHandlerClient();
-  virtual ~MockWebRTCPeerConnectionHandlerClient();
+  ~MockWebRTCPeerConnectionHandlerClient() override;
 
   // WebRTCPeerConnectionHandlerClient implementation.
   MOCK_METHOD0(NegotiationNeeded, void());
@@ -31,11 +31,11 @@ class MockWebRTCPeerConnectionHandlerClient
   MOCK_METHOD1(DidChangeICEGatheringState, void(ICEGatheringState state));
   MOCK_METHOD1(DidChangeICEConnectionState, void(ICEConnectionState state));
   void DidAddRemoteTrack(
-      std::unique_ptr<blink::WebRTCRtpReceiver> web_rtp_receiver) {
+      std::unique_ptr<blink::WebRTCRtpReceiver> web_rtp_receiver) override {
     DidAddRemoteTrackForMock(&web_rtp_receiver);
   }
   void DidRemoveRemoteTrack(
-      std::unique_ptr<blink::WebRTCRtpReceiver> web_rtp_receiver) {
+      std::unique_ptr<blink::WebRTCRtpReceiver> web_rtp_receiver) override {
     DidRemoveRemoteTrackForMock(&web_rtp_receiver);
   }
   MOCK_METHOD1(DidAddRemoteDataChannel, void(blink::WebRTCDataChannelHandler*));

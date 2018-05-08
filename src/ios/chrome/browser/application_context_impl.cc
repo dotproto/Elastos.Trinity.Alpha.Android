@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
@@ -105,6 +106,11 @@ void ApplicationContextImpl::StartTearDown() {
   if (local_state_) {
     local_state_->CommitPendingWrite();
   }
+
+  if (network_context_) {
+    web::WebThread::DeleteSoon(web::WebThread::IO, FROM_HERE,
+                               network_context_owner_.release());
+  }
 }
 
 void ApplicationContextImpl::PostDestroyThreads() {
@@ -189,6 +195,15 @@ net::URLRequestContextGetter*
 ApplicationContextImpl::GetSystemURLRequestContext() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return ios_chrome_io_thread_->system_url_request_context_getter();
+}
+
+network::mojom::NetworkContext*
+ApplicationContextImpl::GetSystemNetworkContext() {
+  if (!network_context_) {
+    network_context_owner_ = std::make_unique<web::NetworkContextOwner>(
+        GetSystemURLRequestContext(), &network_context_);
+  }
+  return network_context_.get();
 }
 
 const std::string& ApplicationContextImpl::GetApplicationLocale() {
@@ -293,7 +308,7 @@ void ApplicationContextImpl::CreateLocalState() {
   DCHECK(!local_state_);
 
   base::FilePath local_state_path;
-  CHECK(PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
+  CHECK(base::PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
   scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple);
 
   // Register local state preferences.
@@ -321,7 +336,7 @@ void ApplicationContextImpl::CreateGCMDriver() {
   DCHECK(!gcm_driver_);
 
   base::FilePath store_path;
-  CHECK(PathService::Get(ios::DIR_GLOBAL_GCM_STORE, &store_path));
+  CHECK(base::PathService::Get(ios::DIR_GLOBAL_GCM_STORE, &store_path));
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(

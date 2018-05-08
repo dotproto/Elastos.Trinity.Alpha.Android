@@ -5,6 +5,7 @@
 #include "ash/system/bluetooth/tray_bluetooth_helper.h"
 
 #include "ash/shell.h"
+#include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/bind.h"
@@ -14,6 +15,7 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
+#include "device/bluetooth/chromeos/bluetooth_utils.h"
 
 namespace ash {
 namespace {
@@ -75,22 +77,12 @@ void TrayBluetoothHelper::InitializeOnAdapterReady(
 
 BluetoothDeviceList TrayBluetoothHelper::GetAvailableBluetoothDevices() const {
   BluetoothDeviceList device_list;
-  device::BluetoothAdapter::DeviceList devices = adapter_->GetDevices();
-  for (device::BluetoothDevice* device : devices) {
-    if (device_list.size() == kMaximumDevicesShown)
-      break;
-
-    if (device->IsPaired() || device->IsConnecting())
-      device_list.push_back(GetBluetoothDeviceInfo(device));
-  }
-
-  for (device::BluetoothDevice* device : devices) {
-    if (device_list.size() == kMaximumDevicesShown)
-      break;
-
-    if (!device->IsPaired() && !device->IsConnecting())
-      device_list.push_back(GetBluetoothDeviceInfo(device));
-  }
+  device::BluetoothAdapter::DeviceList devices =
+      device::FilterBluetoothDeviceList(adapter_->GetDevices(),
+                                        device::BluetoothFilterType::KNOWN,
+                                        kMaximumDevicesShown);
+  for (device::BluetoothDevice* device : devices)
+    device_list.push_back(GetBluetoothDeviceInfo(device));
 
   return device_list;
 }
@@ -146,6 +138,15 @@ bool TrayBluetoothHelper::GetBluetoothAvailable() {
 
 bool TrayBluetoothHelper::GetBluetoothEnabled() {
   return adapter_ && adapter_->IsPowered();
+}
+
+void TrayBluetoothHelper::SetBluetoothEnabled(bool enabled) {
+  if (GetBluetoothEnabled() != enabled) {
+    Shell::Get()->metrics()->RecordUserMetricsAction(
+        enabled ? UMA_STATUS_AREA_BLUETOOTH_ENABLED
+                : UMA_STATUS_AREA_BLUETOOTH_DISABLED);
+  }
+  Shell::Get()->bluetooth_power_controller()->SetBluetoothEnabled(enabled);
 }
 
 bool TrayBluetoothHelper::HasBluetoothDiscoverySession() {

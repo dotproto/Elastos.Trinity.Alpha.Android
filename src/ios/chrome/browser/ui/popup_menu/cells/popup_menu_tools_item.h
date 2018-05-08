@@ -15,6 +15,13 @@
 @property(nonatomic, copy) NSString* title;
 // Image to be displayed on the item.
 @property(nonatomic, strong) UIImage* image;
+// Whether the cell associated with this item should be enabled.
+@property(nonatomic, assign) BOOL enabled;
+// Number to be displayed in the badge. If 0, the badge is hidden.
+@property(nonatomic, assign) NSInteger badgeNumber;
+// Text to be displayed in the badge. Set to nil to hide the badge. The text
+// badge is only displayed if the numbered badge is hidden.
+@property(nonatomic, copy) NSString* badgeText;
 
 @end
 
@@ -24,8 +31,13 @@
 // Image view to display the image.
 @property(nonatomic, strong, readonly) UIImageView* imageView;
 
-// Sets the title of the cell.
-- (void)setTitleText:(NSString*)title;
+// Title label for the cell.
+@property(nonatomic, strong, readonly) UILabel* titleLabel;
+
+// Sets the number on the badge number.
+- (void)setBadgeNumber:(NSInteger)badgeNumber;
+// Sets the text of the badge text. Hides the badge text if |badgeText| is nil.
+- (void)setBadgeText:(NSString*)badgeText;
 
 @end
 

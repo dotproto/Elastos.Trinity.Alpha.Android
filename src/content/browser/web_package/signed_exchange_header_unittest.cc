@@ -4,6 +4,7 @@
 
 #include "content/browser/web_package/signed_exchange_header.h"
 
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -47,7 +48,8 @@ base::Optional<SignedExchangeHeader> GenerateHeaderAndParse(
 
   auto serialized = cbor::CBORWriter::Write(cbor::CBORValue(std::move(array)));
   return SignedExchangeHeader::Parse(
-      base::make_span(serialized->data(), serialized->size()));
+      base::make_span(serialized->data(), serialized->size()),
+      nullptr /* devtools_proxy */);
 }
 
 }  // namespace
@@ -70,9 +72,9 @@ TEST(SignedExchangeHeaderTest, ParseHeaderLength) {
 
 TEST(SignedExchangeHeaderTest, ParseGoldenFile) {
   base::FilePath test_htxg_path;
-  PathService::Get(content::DIR_TEST_DATA, &test_htxg_path);
+  base::PathService::Get(content::DIR_TEST_DATA, &test_htxg_path);
   test_htxg_path = test_htxg_path.AppendASCII("htxg").AppendASCII(
-      "signed_exchange_header_test.htxg");
+      "test.example.org_test.htxg");
 
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(test_htxg_path, &contents));
@@ -88,12 +90,12 @@ TEST(SignedExchangeHeaderTest, ParseGoldenFile) {
       contents_bytes + SignedExchangeHeader::kEncodedHeaderLengthInBytes,
       header_size);
   const base::Optional<SignedExchangeHeader> header =
-      SignedExchangeHeader::Parse(cbor_bytes);
+      SignedExchangeHeader::Parse(cbor_bytes, nullptr /* devtools_proxy */);
   ASSERT_TRUE(header.has_value());
   EXPECT_EQ(header->request_url(), GURL("https://test.example.org/test/"));
   EXPECT_EQ(header->request_method(), "GET");
   EXPECT_EQ(header->response_code(), static_cast<net::HttpStatusCode>(200u));
-  EXPECT_EQ(header->response_headers().size(), 5u);
+  EXPECT_EQ(header->response_headers().size(), 4u);
   EXPECT_EQ(header->response_headers().find("content-encoding")->second,
             "mi-sha256");
 }
@@ -124,12 +126,45 @@ TEST(SignedExchangeHeaderTest, UnsafeMethod) {
   ASSERT_FALSE(header.has_value());
 }
 
+TEST(SignedExchangeHeaderTest, InvalidURL) {
+  auto header = GenerateHeaderAndParse(
+      {
+          {kUrlKey, "https:://test.example.org/test/"}, {kMethodKey, "GET"},
+      },
+      {
+          {kStatusKey, "200"}, {kSignature, kSignatureString},
+      });
+  ASSERT_FALSE(header.has_value());
+}
+
+TEST(SignedExchangeHeaderTest, URLWithFragment) {
+  auto header = GenerateHeaderAndParse(
+      {
+          {kUrlKey, "https://test.example.org/test/#foo"}, {kMethodKey, "GET"},
+      },
+      {
+          {kStatusKey, "200"}, {kSignature, kSignatureString},
+      });
+  ASSERT_FALSE(header.has_value());
+}
+
+TEST(SignedExchangeHeaderTest, RelativeURL) {
+  auto header = GenerateHeaderAndParse(
+      {
+          {kUrlKey, "test/"}, {kMethodKey, "GET"},
+      },
+      {
+          {kStatusKey, "200"}, {kSignature, kSignatureString},
+      });
+  ASSERT_FALSE(header.has_value());
+}
+
 TEST(SignedExchangeHeaderTest, StatefulRequestHeader) {
   auto header = GenerateHeaderAndParse(
       {
           {kUrlKey, "https://test.example.org/test/"},
           {kMethodKey, "GET"},
-          {"Authorization", "Basic Zm9vOmJhcg=="},
+          {"authorization", "Basic Zm9vOmJhcg=="},
       },
       {
           {kStatusKey, "200"}, {kSignature, kSignatureString},
@@ -145,8 +180,30 @@ TEST(SignedExchangeHeaderTest, StatefulResponseHeader) {
       {
           {kStatusKey, "200"},
           {kSignature, kSignatureString},
-          {"Set-Cookie", "foo=bar"},
+          {"set-cookie", "foo=bar"},
       });
+  ASSERT_FALSE(header.has_value());
+}
+
+TEST(SignedExchangeHeaderTest, UppercaseRequestMap) {
+  auto header = GenerateHeaderAndParse(
+      {{kUrlKey, "https://test.example.org/test/"},
+       {kMethodKey, "GET"},
+       {"Accept-Language", "en-us"}},
+      {
+          {kStatusKey, "200"}, {kSignature, kSignatureString},
+      });
+  ASSERT_FALSE(header.has_value());
+}
+
+TEST(SignedExchangeHeaderTest, UppercaseResponseMap) {
+  auto header = GenerateHeaderAndParse(
+      {
+          {kUrlKey, "https://test.example.org/test/"}, {kMethodKey, "GET"},
+      },
+      {{kStatusKey, "200"},
+       {kSignature, kSignatureString},
+       {"Content-Length", "123"}});
   ASSERT_FALSE(header.has_value());
 }
 

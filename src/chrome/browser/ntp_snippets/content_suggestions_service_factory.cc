@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/time/default_clock.h"
 #include "base/timer/timer.h"
@@ -18,7 +17,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
@@ -33,6 +31,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/gcm_driver/gcm_profile_service.h"
+#include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/image_fetcher/core/image_decoder.h"
 #include "components/image_fetcher/core/image_fetcher.h"
 #include "components/image_fetcher/core/image_fetcher_impl.h"
@@ -76,8 +75,6 @@
 #include "components/ntp_snippets/breaking_news/breaking_news_gcm_app_handler.h"
 #include "components/ntp_snippets/breaking_news/subscription_manager.h"
 #include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
-#include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
-#include "components/physical_web/data_source/physical_web_data_source.h"
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -110,7 +107,6 @@ using ntp_snippets::GetFetchEndpoint;
 using ntp_snippets::IsBookmarkProviderEnabled;
 using ntp_snippets::IsDownloadsProviderEnabled;
 using ntp_snippets::IsForeignSessionsProviderEnabled;
-using ntp_snippets::IsPhysicalWebPageProviderEnabled;
 using ntp_snippets::IsRecentTabProviderEnabled;
 using ntp_snippets::PersistentScheduler;
 using ntp_snippets::PrefetchedPagesTracker;
@@ -130,9 +126,7 @@ using ntp_snippets::AreNtpShortcutsEnabled;
 using ntp_snippets::BreakingNewsGCMAppHandler;
 using ntp_snippets::GetPushUpdatesSubscriptionEndpoint;
 using ntp_snippets::GetPushUpdatesUnsubscriptionEndpoint;
-using ntp_snippets::PhysicalWebPageSuggestionsProvider;
 using ntp_snippets::SubscriptionManagerImpl;
-using physical_web::PhysicalWebDataSource;
 #endif  // OS_ANDROID
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -177,14 +171,12 @@ void RegisterRecentTabProviderIfEnabled(ContentSuggestionsService* service,
   service->RegisterProvider(std::move(provider));
 }
 
-void RegisterPrefetchingObserver(ContentSuggestionsService* service,
-                                 Profile* profile) {
-  // The observer is always there, but the Prefetch Dispatcher will do nothing
-  // if the feature (or preference) is off.
-  offline_pages::SuggestedArticlesObserver* observer =
-      offline_pages::PrefetchServiceFactory::GetForBrowserContext(profile)
-          ->GetSuggestedArticlesObserver();
-  observer->SetContentSuggestionsServiceAndObserve(service);
+void RegisterWithPrefetching(ContentSuggestionsService* service,
+                             Profile* profile) {
+  // There's a circular dependency between ContentSuggestionsService and
+  // PrefetchService. This closes the circle.
+  offline_pages::PrefetchServiceFactory::GetForBrowserContext(profile)
+      ->SetContentSuggestionsService(service);
 }
 
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -230,24 +222,6 @@ void RegisterBookmarkProviderIfEnabled(ContentSuggestionsService* service,
       std::make_unique<BookmarkSuggestionsProvider>(service, bookmark_model);
   service->RegisterProvider(std::move(provider));
 }
-
-#if defined(OS_ANDROID)
-
-void RegisterPhysicalWebPageProviderIfEnabled(
-    ContentSuggestionsService* service,
-    Profile* profile) {
-  if (!IsPhysicalWebPageProviderEnabled()) {
-    return;
-  }
-
-  PhysicalWebDataSource* physical_web_data_source =
-      g_browser_process->GetPhysicalWebDataSource();
-  auto provider = std::make_unique<PhysicalWebPageSuggestionsProvider>(
-      service, physical_web_data_source, profile->GetPrefs());
-  service->RegisterProvider(std::move(provider));
-}
-
-#endif  // OS_ANDROID
 
 #if defined(OS_ANDROID)
 
@@ -520,12 +494,11 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 
 #if defined(OS_ANDROID)
   RegisterDownloadsProviderIfEnabled(service, profile, offline_page_model);
-  RegisterPhysicalWebPageProviderIfEnabled(service, profile);
 #endif  // OS_ANDROID
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   RegisterRecentTabProviderIfEnabled(service, profile, offline_page_model);
-  RegisterPrefetchingObserver(service, profile);
+  RegisterWithPrefetching(service, profile);
 #endif
 
   return service;

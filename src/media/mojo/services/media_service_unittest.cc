@@ -15,9 +15,9 @@
 #include "media/base/cdm_config.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
+#include "media/mojo/buildflags.h"
 #include "media/mojo/clients/mojo_demuxer_stream_impl.h"
 #include "media/mojo/common/media_type_converters.h"
-#include "media/mojo/features.h"
 #include "media/mojo/interfaces/constants.mojom.h"
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 #include "media/mojo/interfaces/decryptor.mojom.h"
@@ -32,19 +32,43 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-using testing::Exactly;
-using testing::Invoke;
-using testing::InvokeWithoutArgs;
-using testing::StrictMock;
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#include "media/cdm/cdm_paths.h"                    // nogncheck
+#include "media/mojo/interfaces/cdm_proxy.mojom.h"  // nogncheck
+#endif
 
 namespace media {
+
 namespace {
 
-#if BUILDFLAG(ENABLE_MOJO_CDM)
+using testing::_;
+using testing::Invoke;
+using testing::InvokeWithoutArgs;
+using testing::NiceMock;
+using testing::StrictMock;
+
+MATCHER_P(MatchesResult, success, "") {
+  return arg->success == success;
+}
+
+#if BUILDFLAG(ENABLE_MOJO_CDM) && !defined(OS_ANDROID)
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 const char kInvalidKeySystem[] = "invalid.key.system";
 #endif
-const char kSecurityOrigin[] = "http://foo.com";
+
+const char kSecurityOrigin[] = "https://foo.com";
+
+class MockCdmProxyClient : public mojom::CdmProxyClient {
+ public:
+  MockCdmProxyClient() = default;
+  ~MockCdmProxyClient() override = default;
+
+  // mojom::CdmProxyClient implementation.
+  MOCK_METHOD0(NotifyHardwareReset, void());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockCdmProxyClient);
+};
 
 class MockRendererClient : public mojom::RendererClient {
  public:
@@ -76,6 +100,7 @@ class MediaServiceTest : public service_manager::test::ServiceTest {
  public:
   MediaServiceTest()
       : ServiceTest("media_service_unittests"),
+        cdm_proxy_client_binding_(&cdm_proxy_client_),
         renderer_client_binding_(&renderer_client_),
         video_stream_(DemuxerStream::VIDEO) {}
   ~MediaServiceTest() override = default;
@@ -95,27 +120,43 @@ class MediaServiceTest : public service_manager::test::ServiceTest {
     run_loop_.reset(new base::RunLoop());
   }
 
-  // MOCK_METHOD* doesn't support move only types. Work around this by having
-  // an extra method.
-  MOCK_METHOD2(OnCdmInitializedInternal, void(bool result, int cdm_id));
-  void OnCdmInitialized(mojom::CdmPromiseResultPtr result,
-                        int cdm_id,
-                        mojom::DecryptorPtr decryptor) {
-    OnCdmInitializedInternal(result->success, cdm_id);
-  }
+  MOCK_METHOD3(OnCdmInitialized,
+               void(mojom::CdmPromiseResultPtr result,
+                    int cdm_id,
+                    mojom::DecryptorPtr decryptor));
 
   void InitializeCdm(const std::string& key_system,
                      bool expected_result,
                      int cdm_id) {
     interface_factory_->CreateCdm(key_system, mojo::MakeRequest(&cdm_));
 
-    EXPECT_CALL(*this, OnCdmInitializedInternal(expected_result, cdm_id))
-        .Times(Exactly(1))
+    EXPECT_CALL(*this,
+                OnCdmInitialized(MatchesResult(expected_result), cdm_id, _))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
     cdm_->Initialize(key_system, url::Origin::Create(GURL(kSecurityOrigin)),
                      CdmConfig(),
-                     base::Bind(&MediaServiceTest::OnCdmInitialized,
-                                base::Unretained(this)));
+                     base::BindOnce(&MediaServiceTest::OnCdmInitialized,
+                                    base::Unretained(this)));
+  }
+
+  MOCK_METHOD4(OnCdmProxyInitialized,
+               void(CdmProxy::Status status,
+                    CdmProxy::Protocol protocol,
+                    uint32_t crypto_session_id,
+                    int cdm_id));
+
+  void InitializeCdmProxy(const std::string& cdm_guid) {
+    interface_factory_->CreateCdmProxy(cdm_guid,
+                                       mojo::MakeRequest(&cdm_proxy_));
+
+    EXPECT_CALL(*this, OnCdmProxyInitialized(CdmProxy::Status::kOk, _, _, _))
+        .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
+    mojom::CdmProxyClientAssociatedPtrInfo client_ptr_info;
+    cdm_proxy_client_binding_.Bind(mojo::MakeRequest(&client_ptr_info));
+    cdm_proxy_->Initialize(
+        std::move(client_ptr_info),
+        base::BindOnce(&MediaServiceTest::OnCdmProxyInitialized,
+                       base::Unretained(this)));
   }
 
   MOCK_METHOD1(OnRendererInitialized, void(bool));
@@ -136,14 +177,14 @@ class MediaServiceTest : public service_manager::test::ServiceTest {
     renderer_client_binding_.Bind(mojo::MakeRequest(&client_ptr_info));
 
     EXPECT_CALL(*this, OnRendererInitialized(expected_result))
-        .Times(Exactly(1))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
     std::vector<mojom::DemuxerStreamPtrInfo> streams;
     streams.push_back(std::move(video_stream_proxy_info));
-    renderer_->Initialize(std::move(client_ptr_info), std::move(streams),
-                          base::nullopt, base::nullopt,
-                          base::Bind(&MediaServiceTest::OnRendererInitialized,
-                                     base::Unretained(this)));
+    renderer_->Initialize(
+        std::move(client_ptr_info), std::move(streams), base::nullopt,
+        base::nullopt,
+        base::BindOnce(&MediaServiceTest::OnRendererInitialized,
+                       base::Unretained(this)));
   }
 
   MOCK_METHOD0(ConnectionClosed, void());
@@ -153,9 +194,13 @@ class MediaServiceTest : public service_manager::test::ServiceTest {
 
   mojom::InterfaceFactoryPtr interface_factory_;
   mojom::ContentDecryptionModulePtr cdm_;
+  mojom::CdmProxyPtr cdm_proxy_;
   mojom::RendererPtr renderer_;
 
-  StrictMock<MockRendererClient> renderer_client_;
+  NiceMock<MockCdmProxyClient> cdm_proxy_client_;
+  mojo::AssociatedBinding<mojom::CdmProxyClient> cdm_proxy_client_binding_;
+
+  NiceMock<MockRendererClient> renderer_client_;
   mojo::AssociatedBinding<mojom::RendererClient> renderer_client_binding_;
 
   StrictMock<MockDemuxerStream> video_stream_;
@@ -170,7 +215,8 @@ class MediaServiceTest : public service_manager::test::ServiceTest {
 // Note: base::RunLoop::RunUntilIdle() does not work well in these tests because
 // even when the loop is idle, we may still have pending events in the pipe.
 
-#if BUILDFLAG(ENABLE_MOJO_CDM)
+// TODO(crbug.com/829233): Enable these tests on Android.
+#if BUILDFLAG(ENABLE_MOJO_CDM) && !defined(OS_ANDROID)
 TEST_F(MediaServiceTest, InitializeCdm_Success) {
   InitializeCdm(kClearKeyKeySystem, true, 1);
   run_loop_->Run();
@@ -180,26 +226,21 @@ TEST_F(MediaServiceTest, InitializeCdm_InvalidKeySystem) {
   InitializeCdm(kInvalidKeySystem, false, 0);
   run_loop_->Run();
 }
-#endif  // BUILDFLAG(ENABLE_MOJO_CDM)
+#endif  // BUILDFLAG(ENABLE_MOJO_CDM) && !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-// Sometimes fails on Linux. http://crbug.com/594977
-#if defined(OS_LINUX)
-#define MAYBE_InitializeRenderer_Success DISABLED_InitializeRenderer_Success
-#else
-#define MAYBE_InitializeRenderer_Success InitializeRenderer_Success
-#endif
-
-TEST_F(MediaServiceTest, MAYBE_InitializeRenderer_Success) {
+TEST_F(MediaServiceTest, InitializeRenderer) {
   InitializeRenderer(TestVideoConfig::Normal(), true);
   run_loop_->Run();
 }
+#endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 
-TEST_F(MediaServiceTest, InitializeRenderer_InvalidConfig) {
-  InitializeRenderer(TestVideoConfig::Invalid(), false);
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+TEST_F(MediaServiceTest, CdmProxy) {
+  InitializeCdmProxy(kClearKeyCdmGuid);
   run_loop_->Run();
 }
-#endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 TEST_F(MediaServiceTest, Lifetime) {
   // The lifetime of the media service is controlled by the number of
@@ -217,7 +258,6 @@ TEST_F(MediaServiceTest, Lifetime) {
   // Disconnecting InterfaceFactory service should terminate the app, which will
   // close the connection.
   EXPECT_CALL(*this, ConnectionClosed())
-      .Times(Exactly(1))
       .WillOnce(Invoke(run_loop_.get(), &base::RunLoop::Quit));
   interface_factory_.reset();
 

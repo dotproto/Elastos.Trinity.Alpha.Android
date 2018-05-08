@@ -194,7 +194,6 @@ chrome_ios_eg_test("ios_chrome_external_url_egtests") {
   deps = [
     "//ios/chrome/browser/metrics:external_url_eg_tests",
     "//ios/chrome/browser/translate:external_url_eg_tests",
-    "//ios/chrome/browser/ui:external_url_eg_tests",
   ]
 }
 
@@ -228,8 +227,10 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui",
+    "//ios/chrome/browser/ui/location_bar:location_bar",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
     "//ios/chrome/browser/ui/payments:payments_ui",
+    "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/settings:settings",
     "//ios/chrome/browser/ui/settings/cells",
     "//ios/chrome/browser/ui/static_content",

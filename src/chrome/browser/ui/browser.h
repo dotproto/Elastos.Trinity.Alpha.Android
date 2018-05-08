@@ -43,7 +43,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/page_zoom.h"
 #include "extensions/buildflags/buildflags.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -70,7 +70,6 @@ class BrowserLiveTabContext;
 class BrowserWindow;
 class FastUnloadController;
 class FindBarController;
-class PictureInPictureWindowController;
 class Profile;
 class ScopedKeepAlive;
 class StatusBubble;
@@ -83,6 +82,7 @@ class BrowserCommandController;
 }
 
 namespace content {
+class PictureInPictureWindowController;
 class SessionStorageNamespace;
 }
 
@@ -500,7 +500,9 @@ class Browser : public TabStripModelObserver,
                            bool is_audible) override;
   void OnDidBlockFramebust(content::WebContents* web_contents,
                            const GURL& url) override;
-  void UpdatePictureInPictureSurfaceId(viz::SurfaceId surface_id) override;
+  void UpdatePictureInPictureSurfaceId(const viz::SurfaceId& surface_id,
+                                       const gfx::Size& natural_size) override;
+  void ExitPictureInPicture() override;
 
   bool is_type_tabbed() const { return type_ == TYPE_TABBED; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
@@ -585,7 +587,7 @@ class Browser : public TabStripModelObserver,
                               content::InvalidateTypes changed_flags) override;
   void VisibleSecurityStateChanged(content::WebContents* source) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -648,8 +650,10 @@ class Browser : public TabStripModelObserver,
                           int request_id,
                           const base::FilePath& path) override;
   bool EmbedsFullscreenWidget() const override;
-  void EnterFullscreenModeForTab(content::WebContents* web_contents,
-                                 const GURL& origin) override;
+  void EnterFullscreenModeForTab(
+      content::WebContents* web_contents,
+      const GURL& origin,
+      const blink::WebFullscreenOptions& options) override;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const override;
@@ -673,6 +677,9 @@ class Browser : public TabStripModelObserver,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;
   void LostMouseLock() override;
+  void RequestKeyboardLock(content::WebContents* web_contents,
+                           bool esc_key_locked) override;
+  void CancelKeyboardLockRequest(content::WebContents* web_contents) override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -699,11 +706,11 @@ class Browser : public TabStripModelObserver,
 #endif
 
   // Overridden from CoreTabHelperDelegate:
-  // Note that the caller is responsible for deleting |old_contents|.
-  void SwapTabContents(content::WebContents* old_contents,
-                       content::WebContents* new_contents,
-                       bool did_start_load,
-                       bool did_finish_load) override;
+  std::unique_ptr<content::WebContents> SwapTabContents(
+      content::WebContents* old_contents,
+      std::unique_ptr<content::WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load) override;
   bool CanReloadContents(content::WebContents* web_contents) const override;
   bool CanSaveContents(content::WebContents* web_contents) const override;
 
@@ -994,7 +1001,12 @@ class Browser : public TabStripModelObserver,
 
   std::unique_ptr<chrome::BrowserCommandController> command_controller_;
 
-  std::unique_ptr<PictureInPictureWindowController> pip_window_controller_;
+  // |pip_window_controller_| is held as a SupportsUserData attachment on the
+  // content::WebContents, and thus scoped to the lifetime of the initiator
+  // content::WebContents.
+  // The current active Picture-in-Picture controller is held in case of
+  // updates to the relevant viz::SurfaceId.
+  content::PictureInPictureWindowController* pip_window_controller_ = nullptr;
 
   // True if the browser window has been shown at least once.
   bool window_has_shown_;

@@ -27,28 +27,9 @@ using sessions::SerializedNavigationEntry;
 // The maximum number of navigations in each direction we care to sync.
 const int kMaxSyncNavigationCount = 6;
 
-// Ensure that the tab id is not invalid.
-bool ShouldSyncTabId(SessionID::id_type tab_id) {
-  if (tab_id == kInvalidTabID) {
-    return false;
-  }
-  return true;
-}
-
 bool IsWindowSyncable(const SyncedWindowDelegate& window_delegate) {
   return window_delegate.ShouldSync() && window_delegate.GetTabCount() &&
          window_delegate.HasWindow();
-}
-
-sync_pb::SessionSpecifics SessionTabToSpecifics(
-    const sessions::SessionTab& session_tab,
-    const std::string& local_tag,
-    int tab_node_id) {
-  sync_pb::SessionSpecifics specifics;
-  session_tab.ToSyncData().Swap(specifics.mutable_tab());
-  specifics.set_session_tag(local_tag);
-  specifics.set_tab_node_id(tab_node_id);
-  return specifics;
 }
 
 // Each sync id should only ever be used once. Previously there existed a race
@@ -122,11 +103,10 @@ LocalSessionEventHandlerImpl::LocalSessionEventHandlerImpl(
 
 LocalSessionEventHandlerImpl::~LocalSessionEventHandlerImpl() {}
 
-void LocalSessionEventHandlerImpl::SetSessionTabFromDelegateForTest(
-    const SyncedTabDelegate& tab_delegate,
-    base::Time mtime,
-    sessions::SessionTab* session_tab) {
-  SetSessionTabFromDelegate(tab_delegate, mtime, session_tab);
+sync_pb::SessionTab
+LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegateForTest(
+    const SyncedTabDelegate& tab_delegate) const {
+  return GetTabSpecificsFromDelegate(tab_delegate);
 }
 
 void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
@@ -170,7 +150,7 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
     for (auto& win_iter : current_session->windows) {
       for (auto& tab : win_iter.second->wrapped_window.tabs) {
         int sync_id = TabNodePool::kInvalidTabNodeID;
-        if (!session_tracker_->GetTabNodeFromLocalTabId(tab->tab_id.id(),
+        if (!session_tracker_->GetTabNodeFromLocalTabId(tab->tab_id,
                                                         &sync_id) ||
             sync_id == TabNodePool::kInvalidTabNodeID) {
           continue;
@@ -199,18 +179,18 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
       continue;
     }
 
-    SessionID::id_type window_id = window_delegate->GetSessionId();
-    DVLOG(1) << "Associating window " << window_id << " with "
+    SessionID window_id = window_delegate->GetSessionId();
+    DVLOG(1) << "Associating window " << window_id.id() << " with "
              << window_delegate->GetTabCount() << " tabs.";
 
     bool found_tabs = false;
     for (int j = 0; j < window_delegate->GetTabCount(); ++j) {
-      SessionID::id_type tab_id = window_delegate->GetTabIdAt(j);
+      SessionID tab_id = window_delegate->GetTabIdAt(j);
       SyncedTabDelegate* synced_tab = window_delegate->GetTabAt(j);
 
       // GetTabAt can return a null tab; in that case just skip it. Similarly,
       // if for some reason the tab id is invalid, skip it.
-      if (!synced_tab || !ShouldSyncTabId(tab_id)) {
+      if (!synced_tab || !tab_id.is_valid()) {
         continue;
       }
 
@@ -242,7 +222,7 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
           AssociateRestoredPlaceholderTab(*synced_tab, tab_id, window_id,
                                           batch);
         } else {
-          DVLOG(1) << "Placeholder tab " << tab_id << " has no sync id.";
+          DVLOG(1) << "Placeholder tab " << tab_id.id() << " has no sync id.";
         }
       } else if (RELOAD_TABS == option) {
         AssociateTab(synced_tab, has_tabbed_window, batch);
@@ -253,9 +233,9 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
       // the OnLocalTabModified method invoking AssociateTab directly.
       // Therefore, we can key whether this window has valid tabs based on
       // the tab's presence in the tracker.
-      const sessions::SessionTab* tab = nullptr;
-      if (session_tracker_->LookupSessionTab(current_session_tag_, tab_id,
-                                             &tab)) {
+      const sessions::SessionTab* tab =
+          session_tracker_->LookupSessionTab(current_session_tag_, tab_id);
+      if (tab) {
         found_tabs = true;
 
         // Update this window's representation in the synced session tracker.
@@ -321,9 +301,9 @@ void LocalSessionEventHandlerImpl::AssociateTab(
     return;
   }
 
-  SessionID::id_type tab_id = tab_delegate->GetSessionId();
-  DVLOG(1) << "Syncing tab " << tab_id << " from window "
-           << tab_delegate->GetWindowId();
+  SessionID tab_id = tab_delegate->GetSessionId();
+  DVLOG(1) << "Syncing tab " << tab_id.id() << " from window "
+           << tab_delegate->GetWindowId().id();
 
   int tab_node_id = TabNodePool::kInvalidTabNodeID;
   bool existing_tab_node = true;
@@ -346,25 +326,29 @@ void LocalSessionEventHandlerImpl::AssociateTab(
     return;
   }
 
+  // Get the previously synced url.
   sessions::SessionTab* session_tab =
       session_tracker_->GetTab(current_session_tag_, tab_id);
-
-  // Get the previously synced url.
   int old_index = session_tab->normalized_navigation_index();
   GURL old_url;
   if (session_tab->navigations.size() > static_cast<size_t>(old_index))
     old_url = session_tab->navigations[old_index].virtual_url();
 
-  // Update the tracker's session representation.
-  SetSessionTabFromDelegate(*tab_delegate, base::Time::Now(), session_tab);
-  session_tracker_->GetSession(current_session_tag_)->modified_time =
-      base::Time::Now();
+  // Produce the specifics.
+  auto specifics = std::make_unique<sync_pb::SessionSpecifics>();
+  specifics->set_session_tag(current_session_tag_);
+  specifics->set_tab_node_id(tab_node_id);
+  GetTabSpecificsFromDelegate(*tab_delegate).Swap(specifics->mutable_tab());
+  WriteTasksIntoSpecifics(specifics->mutable_tab());
+
+  // Update the tracker's session representation. Timestamp will be overwriten,
+  // so we set a null time first to prevent the update from being ignored, if
+  // the local clock is skewed.
+  session_tab->timestamp = base::Time();
+  UpdateTrackerWithSpecifics(*specifics, base::Time::Now(), session_tracker_);
+  DCHECK(!session_tab->timestamp.is_null());
 
   // Write to the sync model itself.
-  auto specifics = std::make_unique<sync_pb::SessionSpecifics>();
-  SessionTabToSpecifics(*session_tab, current_session_tag_, tab_node_id)
-      .Swap(specifics.get());
-  WriteTasksIntoSpecifics(specifics->mutable_tab());
   if (existing_tab_node) {
     batch->Update(std::move(specifics));
   } else {
@@ -400,8 +384,9 @@ void LocalSessionEventHandlerImpl::UpdateTaskTracker(
 
 void LocalSessionEventHandlerImpl::WriteTasksIntoSpecifics(
     sync_pb::SessionTab* tab_specifics) {
-  TabTasks* tab_tasks =
-      task_tracker_.GetTabTasks(tab_specifics->tab_id(), kInvalidTabID);
+  TabTasks* tab_tasks = task_tracker_.GetTabTasks(
+      SessionID::FromSerializedValue(tab_specifics->tab_id()),
+      /*parent_tab_id=*/SessionID::InvalidValue());
   for (int i = 0; i < tab_specifics->navigation_size(); i++) {
     // Excluding blocked navigations, which are appended at tail.
     if (tab_specifics->navigation(i).blocked_state() ==
@@ -458,8 +443,8 @@ void LocalSessionEventHandlerImpl::OnFaviconsChanged(
 
 void LocalSessionEventHandlerImpl::AssociateRestoredPlaceholderTab(
     const SyncedTabDelegate& tab_delegate,
-    SessionID::id_type new_tab_id,
-    SessionID::id_type new_window_id,
+    SessionID new_tab_id,
+    SessionID new_window_id,
     WriteBatch* batch) {
   DCHECK_NE(tab_delegate.GetSyncId(), TabNodePool::kInvalidTabNodeID);
 
@@ -479,7 +464,7 @@ void LocalSessionEventHandlerImpl::AssociateRestoredPlaceholderTab(
   // Update the window id on the SessionTab itself.
   sessions::SessionTab* local_tab =
       session_tracker_->GetTab(current_session_tag_, new_tab_id);
-  local_tab->window_id.set_id(new_window_id);
+  local_tab->window_id = new_window_id;
 
   AppendChangeForExistingTab(tab_delegate.GetSyncId(), *local_tab, batch);
 }
@@ -491,35 +476,31 @@ void LocalSessionEventHandlerImpl::AppendChangeForExistingTab(
   // Rewrite the specifics based on the reassociated SessionTab to preserve
   // the new tab and window ids.
   auto specifics = std::make_unique<sync_pb::SessionSpecifics>();
-  SessionTabToSpecifics(tab, current_session_tag_, sync_id)
-      .Swap(specifics.get());
+  tab.ToSyncData().Swap(specifics->mutable_tab());
+  specifics->set_session_tag(current_session_tag_);
+  specifics->set_tab_node_id(sync_id);
   batch->Update(std::move(specifics));
 }
 
-void LocalSessionEventHandlerImpl::SetSessionTabFromDelegate(
-    const SyncedTabDelegate& tab_delegate,
-    base::Time mtime,
-    sessions::SessionTab* session_tab) const {
-  DCHECK(session_tab);
-  session_tab->window_id.set_id(tab_delegate.GetWindowId());
-  session_tab->tab_id.set_id(tab_delegate.GetSessionId());
-  session_tab->tab_visual_index = 0;
+sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
+    const SyncedTabDelegate& tab_delegate) const {
+  sync_pb::SessionTab specifics;
+  specifics.set_window_id(tab_delegate.GetWindowId().id());
+  specifics.set_tab_id(tab_delegate.GetSessionId().id());
+  specifics.set_tab_visual_index(0);
   // Use -1 to indicate that the index hasn't been set properly yet.
-  session_tab->current_navigation_index = -1;
+  specifics.set_current_navigation_index(-1);
   const SyncedWindowDelegate* window_delegate =
       sessions_client_->GetSyncedWindowDelegatesGetter()->FindById(
           tab_delegate.GetWindowId());
-  session_tab->pinned =
-      window_delegate ? window_delegate->IsTabPinned(&tab_delegate) : false;
-  session_tab->extension_app_id = tab_delegate.GetExtensionAppId();
-  session_tab->user_agent_override.clear();
-  session_tab->timestamp = mtime;
+  specifics.set_pinned(
+      window_delegate ? window_delegate->IsTabPinned(&tab_delegate) : false);
+  specifics.set_extension_app_id(tab_delegate.GetExtensionAppId());
   const int current_index = tab_delegate.GetCurrentEntryIndex();
   const int min_index = std::max(0, current_index - kMaxSyncNavigationCount);
   const int max_index = std::min(current_index + kMaxSyncNavigationCount,
                                  tab_delegate.GetEntryCount());
   bool is_supervised = tab_delegate.ProfileIsSupervised();
-  session_tab->navigations.clear();
 
   for (int i = min_index; i < max_index; ++i) {
     if (!tab_delegate.GetVirtualURLAtIndex(i).is_valid()) {
@@ -530,34 +511,36 @@ void LocalSessionEventHandlerImpl::SetSessionTabFromDelegate(
 
     // Set current_navigation_index to the index in navigations.
     if (i == current_index)
-      session_tab->current_navigation_index = session_tab->navigations.size();
+      specifics.set_current_navigation_index(specifics.navigation_size());
 
-    session_tab->navigations.push_back(serialized_entry);
+    sync_pb::TabNavigation* navigation = specifics.add_navigation();
+    serialized_entry.ToSyncData().Swap(navigation);
+
     if (is_supervised) {
-      session_tab->navigations.back().set_blocked_state(
-          SerializedNavigationEntry::STATE_ALLOWED);
+      navigation->set_blocked_state(
+          sync_pb::TabNavigation_BlockedState_STATE_ALLOWED);
     }
   }
 
   // If the current navigation is invalid, set the index to the end of the
   // navigation array.
-  if (session_tab->current_navigation_index < 0) {
-    session_tab->current_navigation_index = session_tab->navigations.size() - 1;
+  if (specifics.current_navigation_index() < 0) {
+    specifics.set_current_navigation_index(specifics.navigation_size() - 1);
   }
 
   if (is_supervised) {
-    int offset = session_tab->navigations.size();
     const std::vector<std::unique_ptr<const SerializedNavigationEntry>>&
         blocked_navigations = *tab_delegate.GetBlockedNavigations();
     for (size_t i = 0; i < blocked_navigations.size(); ++i) {
-      session_tab->navigations.push_back(*blocked_navigations[i]);
-      session_tab->navigations.back().set_index(offset + i);
-      session_tab->navigations.back().set_blocked_state(
-          SerializedNavigationEntry::STATE_BLOCKED);
+      sync_pb::TabNavigation* navigation = specifics.add_navigation();
+      blocked_navigations[i]->ToSyncData().Swap(navigation);
+      navigation->set_blocked_state(
+          sync_pb::TabNavigation_BlockedState_STATE_BLOCKED);
       // TODO(bauerb): Add categories
     }
   }
-  session_tab->session_storage_persistent_id.clear();
+
+  return specifics;
 }
 
 bool LocalSessionEventHandlerImpl::ScanForTabbedWindow() {

@@ -15,7 +15,6 @@
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -229,6 +228,9 @@ RenderViewHostImpl::RenderViewHostImpl(
   // make their way to the new renderer once its restarted.
   GetProcess()->EnableSendQueue();
 
+  if (!is_active_)
+    GetWidget()->UpdatePriority();
+
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -334,17 +336,14 @@ bool RenderViewHostImpl::CreateRenderView(
     params->has_committed_real_load =
         main_rfh->frame_tree_node()->has_committed_real_load();
   }
-  params->enable_auto_resize = GetWidget()->auto_resize_enabled();
-  params->min_size = GetWidget()->min_size_for_auto_resize();
-  params->max_size = GetWidget()->max_size_for_auto_resize();
   params->page_zoom_level = delegate_->GetPendingPageZoomLevel();
   params->devtools_main_frame_token = devtools_frame_token;
   // GuestViews in the same StoragePartition need to find each other's frames.
   params->renderer_wide_named_frame_lookup =
       GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme);
 
-  GetWidget()->GetResizeParams(&params->initial_size);
-  GetWidget()->SetInitialRenderSizeParams(params->initial_size);
+  GetWidget()->GetVisualProperties(&params->visual_properties);
+  GetWidget()->SetInitialVisualProperties(params->visual_properties);
 
   GetProcess()->GetRendererInterface()->CreateView(std::move(params));
 
@@ -359,6 +358,13 @@ bool RenderViewHostImpl::CreateRenderView(
   PostRenderViewReady();
 
   return true;
+}
+
+void RenderViewHostImpl::SetIsActive(bool is_active) {
+  if (is_active_ == is_active)
+    return;
+  is_active_ = is_active;
+  GetWidget()->UpdatePriority();
 }
 
 bool RenderViewHostImpl::IsRenderViewLive() const {
@@ -625,14 +631,14 @@ void RenderViewHostImpl::ClosePageIgnoringUnloadEvents() {
   delegate_->Close(this);
 }
 
-void RenderViewHostImpl::RenderProcessExited(RenderProcessHost* host,
-                                             base::TerminationStatus status,
-                                             int exit_code) {
+void RenderViewHostImpl::RenderProcessExited(
+    RenderProcessHost* host,
+    const ChildProcessTerminationInfo& info) {
   if (!GetWidget()->renderer_initialized())
     return;
 
-  GetWidget()->RendererExited(status, exit_code);
-  delegate_->RenderViewTerminated(this, status, exit_code);
+  GetWidget()->RendererExited(info.status, info.exit_code);
+  delegate_->RenderViewTerminated(this, info.status, info.exit_code);
 }
 
 bool RenderViewHostImpl::Send(IPC::Message* msg) {
@@ -908,6 +914,10 @@ bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
   return true;
 }
 
+bool RenderViewHostImpl::ShouldContributePriorityToProcess() {
+  return is_active_;
+}
+
 WebPreferences RenderViewHostImpl::GetWebkitPreferences() {
   if (!web_preferences_.get()) {
     OnWebkitPreferencesChanged();
@@ -940,23 +950,6 @@ void RenderViewHostImpl::DisableScrollbarsForThreshold(const gfx::Size& size) {
 
 void RenderViewHostImpl::EnablePreferredSizeMode() {
   Send(new ViewMsg_EnablePreferredSizeChangedMode(GetRoutingID()));
-}
-
-void RenderViewHostImpl::EnableAutoResize(const gfx::Size& min_size,
-                                          const gfx::Size& max_size) {
-  GetWidget()->SetAutoResize(true, min_size, max_size);
-  Send(new ViewMsg_EnableAutoResize(GetRoutingID(), min_size, max_size));
-}
-
-void RenderViewHostImpl::DisableAutoResize(const gfx::Size& new_size) {
-  GetWidget()->SetAutoResize(false, gfx::Size(), gfx::Size());
-  Send(new ViewMsg_DisableAutoResize(GetRoutingID(), new_size));
-  if (!new_size.IsEmpty())
-    GetWidget()->GetView()->SetSize(new_size);
-  // This clears the cached value in the WebContents, so that OOPIFs will
-  // stop using it.
-  if (GetWidget()->delegate())
-    GetWidget()->delegate()->ResetAutoResizeSize();
 }
 
 void RenderViewHostImpl::ExecuteMediaPlayerActionAtLocation(

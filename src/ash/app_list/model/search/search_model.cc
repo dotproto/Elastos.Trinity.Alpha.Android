@@ -28,9 +28,12 @@ SearchModel::SearchModel()
 
 SearchModel::~SearchModel() {}
 
-void SearchModel::SetTabletMode(bool started) {
-  is_tablet_mode_ = started;
-  search_box_->SetTabletMode(started);
+void SearchModel::SetTabletMode(bool is_tablet_mode) {
+  search_box_->SetTabletMode(is_tablet_mode);
+}
+
+void SearchModel::SetSearchEngineIsGoogle(bool is_google) {
+  search_box_->SetSearchEngineIsGoogle(is_google);
 }
 
 std::vector<SearchResult*> SearchModel::FilterSearchResultsByDisplayType(
@@ -75,7 +78,7 @@ void SearchModel::PublishResults(
       // Update and use the old result if it exists.
       std::unique_ptr<SearchResult> ui_result = std::move(ui_result_it->second);
       UpdateResult(new_result.get(), ui_result.get());
-      ui_result->set_relevance(new_result->relevance());
+      ui_result->set_display_score(new_result->display_score());
 
       results_->Add(std::move(ui_result));
 

@@ -15,8 +15,8 @@
 #include "content/public/common/file_chooser_params.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/WebKit/public/mojom/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/web_sudden_termination_disabler_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
@@ -272,15 +272,6 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns a bitwise OR of bindings types that have been enabled for this
   // RenderFrame. See BindingsPolicy for details.
   virtual int GetEnabledBindings() const = 0;
-
-  // Causes all new requests for the root RenderFrameHost and its children to
-  // be blocked (not being started) until ResumeBlockedRequestsForFrame is
-  // called.
-  virtual void BlockRequestsForFrame() = 0;
-
-  // Resumes any blocked request for the specified root RenderFrameHost and
-  // child frame hosts.
-  virtual void ResumeBlockedRequestsForFrame() = 0;
 
 #if defined(OS_ANDROID)
   // Returns an InterfaceProvider for Java-implemented interfaces that are

@@ -4,12 +4,16 @@
 
 package org.chromium.chrome.browser.ntp;
 
+import static android.support.test.espresso.Espresso.onView;
+import static android.support.test.espresso.action.ViewActions.click;
+import static android.support.test.espresso.matcher.ViewMatchers.withId;
+
 import android.graphics.Canvas;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.text.TextUtils;
+import android.support.v7.widget.RecyclerView;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,6 +30,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.params.MethodParamAnnotationRule;
 import org.chromium.base.test.params.ParameterAnnotations;
+import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
@@ -35,21 +40,25 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
+import org.chromium.chrome.browser.ntp.cards.SuggestionsSection;
+import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
+import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.suggestions.TileSectionType;
 import org.chromium.chrome.browser.suggestions.TileSource;
 import org.chromium.chrome.browser.suggestions.TileTitleSource;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -59,6 +68,7 @@ import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.chrome.test.util.browser.ChromeModernDesign;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
@@ -79,9 +89,9 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Tests for the native android New Tab Page.
@@ -89,7 +99,7 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
-@DisableFeatures("NetworkPrediction")
+@DisableFeatures({"NetworkPrediction", ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER})
 @RetryOnFailure
 public class NewTabPageTest {
     @Rule
@@ -110,10 +120,13 @@ public class NewTabPageTest {
     @Rule
     public TestRule mFeatureRule = new Features.InstrumentationProcessor();
 
-    @ParameterAnnotations.MethodParameter("Modern")
-    private static List<ParameterSet> sMethodParamModern =
-            Arrays.asList(new ParameterSet().value(false).name("DisableChromeModern"),
+    public static class ModernParams implements ParameterProvider {
+        @Override
+        public Iterable<ParameterSet> getParameters() {
+            return Arrays.asList(new ParameterSet().value(false).name("DisableChromeModern"),
                     new ParameterSet().value(true).name("EnableChromeModern"));
+        }
+    }
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
 
@@ -125,14 +138,14 @@ public class NewTabPageTest {
     private EmbeddedTestServer mTestServer;
     private List<SiteSuggestion> mSiteSuggestions;
 
-    @ParameterAnnotations.UseMethodParameterBefore("Modern")
+    @ParameterAnnotations.UseMethodParameterBefore(ModernParams.class)
     public void setupModernDesign(boolean enabled) {
         mChromeModernProcessor.setPrefs(enabled);
 
         if (enabled) mRenderTestRule.setVariantPrefix("modern");
     }
 
-    @ParameterAnnotations.UseMethodParameterAfter("Modern")
+    @ParameterAnnotations.UseMethodParameterAfter(ModernParams.class)
     public void teardownModernDesign(boolean enabled) {
         mChromeModernProcessor.clearTestState();
     }
@@ -193,7 +206,7 @@ public class NewTabPageTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage", "RenderTest"})
-    @ParameterAnnotations.UseMethodParameter("Modern")
+    @ParameterAnnotations.UseMethodParameter(ModernParams.class)
     public void testRender(boolean modern) throws IOException {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         RenderTestRule.sanitize(mNtp.getView());
@@ -319,9 +332,10 @@ public class NewTabPageTest {
     @DisabledTest // Flaked on the try bot. http://crbug.com/543138
     @SmallTest
     @Feature({"NewTabPage"})
-    public void testOpenMostVisitedItemInNewTab() throws InterruptedException {
-        invokeContextMenuAndOpenInANewTab(mTileGridLayout.getChildAt(0),
-                ContextMenuManager.ID_OPEN_IN_NEW_TAB, false, mSiteSuggestions.get(0).url);
+    public void testOpenMostVisitedItemInNewTab() throws InterruptedException, ExecutionException {
+        ChromeTabUtils.invokeContextMenuAndOpenInANewTab(mActivityTestRule,
+                mTileGridLayout.getChildAt(0), ContextMenuManager.ID_OPEN_IN_NEW_TAB, false,
+                mSiteSuggestions.get(0).url);
     }
 
     /**
@@ -330,9 +344,11 @@ public class NewTabPageTest {
     @Test
     @SmallTest
     @Feature({"NewTabPage"})
-    public void testOpenMostVisitedItemInIncognitoTab() throws InterruptedException {
-        invokeContextMenuAndOpenInANewTab(mTileGridLayout.getChildAt(0),
-                ContextMenuManager.ID_OPEN_IN_INCOGNITO_TAB, true, mSiteSuggestions.get(0).url);
+    public void testOpenMostVisitedItemInIncognitoTab()
+            throws InterruptedException, ExecutionException {
+        ChromeTabUtils.invokeContextMenuAndOpenInANewTab(mActivityTestRule,
+                mTileGridLayout.getChildAt(0), ContextMenuManager.ID_OPEN_IN_INCOGNITO_TAB, true,
+                mSiteSuggestions.get(0).url);
     }
 
     /**
@@ -341,14 +357,15 @@ public class NewTabPageTest {
     @Test
     @SmallTest
     @Feature({"NewTabPage"})
-    public void testRemoveMostVisitedItem() {
+    public void testRemoveMostVisitedItem() throws ExecutionException {
         SiteSuggestion testSite = mSiteSuggestions.get(0);
         View mostVisitedItem = mTileGridLayout.getChildAt(0);
         ArrayList<View> views = new ArrayList<>();
         mTileGridLayout.findViewsWithText(views, testSite.title, View.FIND_VIEWS_WITH_TEXT);
         Assert.assertEquals(1, views.size());
 
-        TestTouchUtils.longClickView(InstrumentationRegistry.getInstrumentation(), mostVisitedItem);
+        TestTouchUtils.performLongClickOnMainSync(
+                InstrumentationRegistry.getInstrumentation(), mostVisitedItem);
         Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
                 mActivityTestRule.getActivity(), ContextMenuManager.ID_REMOVE, 0));
 
@@ -565,6 +582,69 @@ public class NewTabPageTest {
                 mNtp.getManagerForTesting().getSuggestionsSource().areRemoteSuggestionsEnabled());
     }
 
+    @Test
+    @SmallTest
+    @Feature({"NewTabPage"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testArticleExpandableHeaderOnMultipleTabs() throws Exception {
+        // Open a new tab.
+        SuggestionsSection firstSection = getArticleSectionOnNewTab();
+        SectionHeader firstHeader = firstSection.getHeaderItemForTesting();
+        int firstTabId = mActivityTestRule.getActivity().getActivityTab().getId();
+        // Check header is expanded.
+        Assert.assertTrue(firstHeader.isExpandable() && firstHeader.isExpanded());
+        Assert.assertTrue(firstSection.getItemCount() > 1);
+        Assert.assertTrue(getPreferenceForExpandableHeader());
+        // Toggle header on the current tab.
+        onView(withId(R.id.header_title)).perform(click());
+        // Check header is collapsed.
+        Assert.assertTrue(firstHeader.isExpandable() && !firstHeader.isExpanded());
+        Assert.assertEquals(1, firstSection.getItemCount());
+        Assert.assertFalse(getPreferenceForExpandableHeader());
+
+        // Open a second new tab.
+        SuggestionsSection secondSection = getArticleSectionOnNewTab();
+        SectionHeader secondHeader = secondSection.getHeaderItemForTesting();
+        // Check header on the second tab is collapsed.
+        Assert.assertTrue(secondHeader.isExpandable() && !secondHeader.isExpanded());
+        Assert.assertEquals(1, secondSection.getItemCount());
+        Assert.assertFalse(getPreferenceForExpandableHeader());
+
+        // Toggle header on the second tab.
+        onView(withId(R.id.header_title)).perform(click());
+        // Check header on the second tab is expanded.
+        Assert.assertTrue(secondHeader.isExpandable() && secondHeader.isExpanded());
+        Assert.assertTrue(secondSection.getItemCount() > 1);
+        Assert.assertTrue(getPreferenceForExpandableHeader());
+        // Go back to the first tab and check header is expanded.
+        ChromeTabUtils.switchTabInCurrentTabModel(mActivityTestRule.getActivity(), firstTabId);
+        Assert.assertTrue(firstHeader.isExpandable() && firstHeader.isExpanded());
+        Assert.assertTrue(firstSection.getItemCount() > 1);
+        Assert.assertTrue(getPreferenceForExpandableHeader());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"NewTabPage", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testArticleExpandableHeaderAppearance() throws Exception {
+        NewTabPage ntp =
+                (NewTabPage) mActivityTestRule.getActivity().getActivityTab().getNativePage();
+        RecyclerView recyclerView = ntp.getNewTabPageView().getRecyclerView();
+        NewTabPageAdapter adapter = (NewTabPageAdapter) recyclerView.getAdapter();
+        RecyclerViewTestUtils.waitForStableRecyclerView(recyclerView);
+        View view = ThreadUtils.runOnUiThreadBlocking(
+                () -> recyclerView.findViewHolderForAdapterPosition(
+                        adapter.getFirstHeaderPosition()).itemView);
+
+        // Check header is expanded.
+        mRenderTestRule.render(view, "expandable_header_expanded");
+        // Toggle header on the current tab.
+        onView(withId(R.id.header_title)).perform(click());
+        // Check header is collapsed.
+        mRenderTestRule.render(view, "expandable_header_collapsed");
+    }
+
     private void assertThumbnailInvalidAndRecapture() {
         Assert.assertTrue(mNtp.shouldCaptureThumbnail());
         captureThumbnail();
@@ -648,45 +728,16 @@ public class NewTabPageTest {
         }));
     }
 
-    /**
-     * Long presses the view, selects an item from the context menu, and
-     * asserts that a new tab is opened and is incognito if expectIncognito is true.
-     * @param view The View to long press.
-     * @param contextMenuItemId The context menu item to select on the view.
-     * @param expectIncognito Whether the opened tab is expected to be incognito.
-     * @param expectedUrl The expected url for the new tab.
-     */
-    private void invokeContextMenuAndOpenInANewTab(View view, int contextMenuItemId,
-            boolean expectIncognito, final String expectedUrl) throws InterruptedException {
-        final CallbackHelper createdCallback = new CallbackHelper();
-        final TabModel tabModel =
-                mActivityTestRule.getActivity().getTabModelSelector().getModel(expectIncognito);
-        tabModel.addObserver(new EmptyTabModelObserver() {
-            @Override
-            public void didAddTab(Tab tab, TabLaunchType type) {
-                if (TextUtils.equals(expectedUrl, tab.getUrl())) {
-                    createdCallback.notifyCalled();
-                    tabModel.removeObserver(this);
-                }
-            }
-        });
+    private SuggestionsSection getArticleSectionOnNewTab() throws Exception {
+        Tab tab = mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL);
+        NewTabPage ntp = (NewTabPage) tab.getNativePage();
+        NewTabPageAdapter adapter =
+                (NewTabPageAdapter) ntp.getNewTabPageView().getRecyclerView().getAdapter();
+        return adapter.getSectionListForTesting().getSection(KnownCategories.ARTICLES);
+    }
 
-        TestTouchUtils.longClickView(InstrumentationRegistry.getInstrumentation(), view);
-        Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
-                mActivityTestRule.getActivity(), contextMenuItemId, 0));
-
-        try {
-            createdCallback.waitForCallback(0);
-        } catch (TimeoutException e) {
-            Assert.fail("Never received tab creation event");
-        }
-
-        if (expectIncognito) {
-            Assert.assertTrue(
-                    mActivityTestRule.getActivity().getTabModelSelector().isIncognitoSelected());
-        } else {
-            Assert.assertFalse(
-                    mActivityTestRule.getActivity().getTabModelSelector().isIncognitoSelected());
-        }
+    private boolean getPreferenceForExpandableHeader() throws Exception {
+        return ThreadUtils.runOnUiThreadBlocking(
+                () -> PrefServiceBridge.getInstance().getBoolean(Pref.NTP_ARTICLES_LIST_VISIBLE));
     }
 }

@@ -133,6 +133,10 @@ void FakeSyncManager::UpdateCredentials(const SyncCredentials& credentials) {
   NOTIMPLEMENTED();
 }
 
+void FakeSyncManager::InvalidateCredentials() {
+  NOTIMPLEMENTED();
+}
+
 void FakeSyncManager::StartSyncingNormally(base::Time last_poll_time) {
   // Do nothing.
 }
@@ -214,7 +218,7 @@ bool FakeSyncManager::ReceivedExperiment(Experiments* experiments) {
   return false;
 }
 
-bool FakeSyncManager::HasUnsyncedItems() {
+bool FakeSyncManager::HasUnsyncedItemsForTest() {
   NOTIMPLEMENTED();
   return false;
 }

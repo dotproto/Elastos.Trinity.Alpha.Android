@@ -6,9 +6,10 @@
 
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chromeos/arc/icon_decode_request.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
-#include "chrome/browser/ui/app_list/search/arc/icon_decode_request.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "ui/gfx/canvas.h"
@@ -81,19 +82,32 @@ ArcAppDataSearchResult::ArcAppDataSearchResult(
       profile_(profile),
       list_controller_(list_controller),
       weak_ptr_factory_(this) {
-  set_title(base::UTF8ToUTF16(label()));
+  set_title(base::UTF8ToUTF16(data_->label));
   set_id(kAppDataSearchPrefix + launch_intent_uri());
-  set_display_type(ash::SearchResultDisplayType::kTile);
 
-  icon_decode_request_ = std::make_unique<IconDecodeRequest>(
-      base::BindOnce(&ArcAppDataSearchResult::SetIconToAvatarIcon,
-                     weak_ptr_factory_.GetWeakPtr()));
-  icon_decode_request_->StartWithOptions(icon_png_data());
+  if (data_->type == arc::mojom::AppDataResultType::PERSON) {
+    set_display_type(ash::SearchResultDisplayType::kTile);
+  } else if (data_->type == arc::mojom::AppDataResultType::NOTE_DOCUMENT) {
+    set_details(base::UTF8ToUTF16(data_->text));
+    set_display_type(ash::SearchResultDisplayType::kList);
+  }
+
+  // TODO(warx): set default images when icon_png_data() is not available.
+  if (!icon_png_data()) {
+    SetIcon(gfx::ImageSkia());
+    return;
+  }
+
+  icon_decode_request_ = std::make_unique<arc::IconDecodeRequest>(
+      base::BindOnce(&ArcAppDataSearchResult::ApplyIcon,
+                     weak_ptr_factory_.GetWeakPtr()),
+      kGridIconDimension);
+  icon_decode_request_->StartWithOptions(icon_png_data().value());
 }
 
 ArcAppDataSearchResult::~ArcAppDataSearchResult() = default;
 
-std::unique_ptr<SearchResult> ArcAppDataSearchResult::Duplicate() const {
+std::unique_ptr<ChromeSearchResult> ArcAppDataSearchResult::Duplicate() const {
   std::unique_ptr<ArcAppDataSearchResult> result =
       std::make_unique<ArcAppDataSearchResult>(data_.Clone(), profile_,
                                                list_controller_);
@@ -101,18 +115,24 @@ std::unique_ptr<SearchResult> ArcAppDataSearchResult::Duplicate() const {
   return result;
 }
 
-ui::MenuModel* ArcAppDataSearchResult::GetContextMenuModel() {
+void ArcAppDataSearchResult::GetContextMenuModel(
+    GetMenuModelCallback callback) {
   // TODO(warx): Enable Context Menu.
-  return nullptr;
+  std::move(callback).Run(nullptr);
 }
 
 void ArcAppDataSearchResult::Open(int event_flags) {
   LaunchIntent(launch_intent_uri(), list_controller_->GetAppListDisplayId());
 }
 
-void ArcAppDataSearchResult::SetIconToAvatarIcon(const gfx::ImageSkia& icon) {
-  SetIcon(gfx::ImageSkia(std::make_unique<AvatarImageSource>(icon, kAvatarSize),
-                         gfx::Size(kAvatarSize, kAvatarSize)));
+void ArcAppDataSearchResult::ApplyIcon(const gfx::ImageSkia& icon) {
+  if (data_->type == arc::mojom::AppDataResultType::PERSON) {
+    SetIcon(
+        gfx::ImageSkia(std::make_unique<AvatarImageSource>(icon, kAvatarSize),
+                       gfx::Size(kAvatarSize, kAvatarSize)));
+    return;
+  }
+  SetIcon(icon);
 }
 
 }  // namespace app_list

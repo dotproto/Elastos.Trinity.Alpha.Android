@@ -5,7 +5,6 @@
 #include "ui/aura/test/aura_test_base.h"
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/mus/property_utils.h"
@@ -246,7 +245,7 @@ void AuraTestBase::OnWmDisplayModified(const display::Display& display) {}
 ui::mojom::EventResult AuraTestBase::OnAccelerator(
     uint32_t id,
     const ui::Event& event,
-    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
+    base::flat_map<std::string, std::vector<uint8_t>>* properties) {
   return ui::mojom::EventResult::HANDLED;
 }
 

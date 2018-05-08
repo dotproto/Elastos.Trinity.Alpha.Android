@@ -5,7 +5,9 @@
 #include "services/network/cross_origin_read_blocking.h"
 
 #include <stddef.h>
+
 #include <string>
+#include <unordered_set>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
@@ -14,11 +16,16 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "net/base/mime_sniffer.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_response_headers.h"
+#include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/resource_response_info.h"
 
 using base::StringPiece;
+using MimeType = network::CrossOriginReadBlocking::MimeType;
+using SniffingResult = network::CrossOriginReadBlocking::SniffingResult;
 
 namespace network {
 
@@ -31,8 +38,10 @@ const char kAppXml[] = "application/xml";
 const char kAppJson[] = "application/json";
 const char kImageSvg[] = "image/svg+xml";
 const char kTextJson[] = "text/json";
-const char kTextXjson[] = "text/x-json";
 const char kTextPlain[] = "text/plain";
+// TODO(lukasza): Remove kJsonProtobuf once this MIME type is not used in
+// practice.  See also https://crbug.com/826756#c3
+const char kJsonProtobuf[] = "application/json+protobuf";
 
 // MIME type suffixes
 const char kJsonSuffix[] = "+json";
@@ -53,11 +62,10 @@ void AdvancePastWhitespace(StringPiece* data) {
 // |signatures|, and kNo otherwise.
 //
 // When kYes is returned, the matching prefix is erased from |data|.
-CrossOriginReadBlocking::Result MatchesSignature(
-    StringPiece* data,
-    const StringPiece signatures[],
-    size_t arr_size,
-    base::CompareCase compare_case) {
+SniffingResult MatchesSignature(StringPiece* data,
+                                const StringPiece signatures[],
+                                size_t arr_size,
+                                base::CompareCase compare_case) {
   for (size_t i = 0; i < arr_size; ++i) {
     if (signatures[i].length() <= data->length()) {
       if (base::StartsWith(*data, signatures[i], compare_case)) {
@@ -77,73 +85,85 @@ CrossOriginReadBlocking::Result MatchesSignature(
   return CrossOriginReadBlocking::kNo;
 }
 
-// Returns true if |mime_type == prefix| or if |mime_type| starts with
-// |prefix + '+'|.  Returns false otherwise.
+// Headers from
+// https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
 //
-// For example:
-// - MatchesMimeTypePrefix("application/json", "application/json") -> true
-// - MatchesMimeTypePrefix("application/json+foo", "application/json") -> true
-// - MatchesMimeTypePrefix("application/jsonp", "application/json") -> false
-// - MatchesMimeTypePrefix("application/foo", "application/json") -> false
-bool MatchesMimeTypePrefix(base::StringPiece mime_type,
-                           base::StringPiece prefix) {
-  constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
-  if (!base::StartsWith(mime_type, prefix, kCaseInsensitive))
-    return false;
-  DCHECK_GE(mime_type.length(), prefix.length());
+// Note that XSDB doesn't block responses allowed through CORS - this means
+// that the list of allowed headers below doesn't have to consider header
+// names listed in the Access-Control-Expose-Headers header.
+const char* const kCorsSafelistedHeaders[] = {
+    "cache-control", "content-language", "content-type",
+    "expires",       "last-modified",    "pragma",
+};
 
-  if (mime_type.length() == prefix.length()) {
-    // Given StartsWith results above, the above condition is our O(1) check if
-    // |base::LowerCaseEqualsASCII(mime_type, prefix)|.
-    DCHECK(base::LowerCaseEqualsASCII(mime_type, prefix));
-    return true;
+// Removes headers that should be blocked in cross-origin case.
+// See https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
+void BlockResponseHeaders(
+    const scoped_refptr<net::HttpResponseHeaders>& headers) {
+  DCHECK(headers);
+  std::unordered_set<std::string> names_of_headers_to_remove;
+
+  size_t it = 0;
+  std::string name;
+  std::string value;
+  while (headers->EnumerateHeaderLines(&it, &name, &value)) {
+    // Don't remove CORS headers - doing so would lead to incorrect error
+    // messages for CORS-blocked responses (e.g. Blink would say "[...] No
+    // 'Access-Control-Allow-Origin' header is present [...]" instead of saying
+    // something like "[...] Access-Control-Allow-Origin' header has a value
+    // 'http://www2.localhost:8000' that is not equal to the supplied origin
+    // [...]").
+    if (base::StartsWith(name, "Access-Control-",
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      continue;
+    }
+
+    // Remove all other headers (but note the final exclusion below).
+    names_of_headers_to_remove.insert(base::ToLowerASCII(name));
   }
 
-  if (mime_type[prefix.length()] == '+') {
-    // Given StartsWith results above, the above condition is our O(1) check if
-    // |base::StartsWith(mime_type, prefix + '+', kCaseInsensitive)|.
-    DCHECK(base::StartsWith(mime_type, prefix.as_string() + '+',
-                            kCaseInsensitive));
-    return true;
-  }
+  // Exclude from removals headers from
+  // https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
+  for (const char* header : kCorsSafelistedHeaders)
+    names_of_headers_to_remove.erase(header);
 
-  return false;
+  headers->RemoveHeaders(names_of_headers_to_remove);
 }
 
 }  // namespace
 
-CrossOriginReadBlocking::MimeType CrossOriginReadBlocking::GetCanonicalMimeType(
+MimeType CrossOriginReadBlocking::GetCanonicalMimeType(
     base::StringPiece mime_type) {
   // Checking for image/svg+xml early ensures that it won't get classified as
-  // CrossOriginReadBlocking::MimeType::kXml by the presence of the "+xml"
+  // MimeType::kXml by the presence of the "+xml"
   // suffix.
   if (base::LowerCaseEqualsASCII(mime_type, kImageSvg))
-    return CrossOriginReadBlocking::MimeType::kOthers;
+    return MimeType::kOthers;
 
+  // See also https://mimesniff.spec.whatwg.org/#html-mime-type
   if (base::LowerCaseEqualsASCII(mime_type, kTextHtml))
-    return CrossOriginReadBlocking::MimeType::kHtml;
+    return MimeType::kHtml;
+
+  // See also https://mimesniff.spec.whatwg.org/#json-mime-type
+  constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
+  if (base::LowerCaseEqualsASCII(mime_type, kAppJson) ||
+      base::LowerCaseEqualsASCII(mime_type, kTextJson) ||
+      base::LowerCaseEqualsASCII(mime_type, kJsonProtobuf) ||
+      base::EndsWith(mime_type, kJsonSuffix, kCaseInsensitive)) {
+    return MimeType::kJson;
+  }
+
+  // See also https://mimesniff.spec.whatwg.org/#xml-mime-type
+  if (base::LowerCaseEqualsASCII(mime_type, kAppXml) ||
+      base::LowerCaseEqualsASCII(mime_type, kTextXml) ||
+      base::EndsWith(mime_type, kXmlSuffix, kCaseInsensitive)) {
+    return MimeType::kXml;
+  }
 
   if (base::LowerCaseEqualsASCII(mime_type, kTextPlain))
-    return CrossOriginReadBlocking::MimeType::kPlain;
+    return MimeType::kPlain;
 
-  // StartsWith rather than LowerCaseEqualsASCII is used to account both for
-  // mime types similar to 1) application/json and to 2)
-  // application/json+protobuf.
-  constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
-  if (MatchesMimeTypePrefix(mime_type, kAppJson) ||
-      MatchesMimeTypePrefix(mime_type, kTextJson) ||
-      MatchesMimeTypePrefix(mime_type, kTextXjson) ||
-      base::EndsWith(mime_type, kJsonSuffix, kCaseInsensitive)) {
-    return CrossOriginReadBlocking::MimeType::kJson;
-  }
-
-  if (MatchesMimeTypePrefix(mime_type, kAppXml) ||
-      MatchesMimeTypePrefix(mime_type, kTextXml) ||
-      base::EndsWith(mime_type, kXmlSuffix, kCaseInsensitive)) {
-    return CrossOriginReadBlocking::MimeType::kXml;
-  }
-
-  return CrossOriginReadBlocking::MimeType::kOthers;
+  return MimeType::kOthers;
 }
 
 bool CrossOriginReadBlocking::IsBlockableScheme(const GURL& url) {
@@ -177,8 +197,7 @@ bool CrossOriginReadBlocking::IsValidCorsHeaderSet(
 }
 
 // This function is a slight modification of |net::SniffForHTML|.
-CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForHTML(
-    StringPiece data) {
+SniffingResult CrossOriginReadBlocking::SniffForHTML(StringPiece data) {
   // The content sniffers used by Chrome and Firefox are using "<!--" as one of
   // the HTML signatures, but it also appears in valid JavaScript, considered as
   // well-formed JS by the browser.  Since we do not want to block any JS, we
@@ -213,7 +232,7 @@ CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForHTML(
   while (data.length() > 0) {
     AdvancePastWhitespace(&data);
 
-    Result signature_match =
+    SniffingResult signature_match =
         MatchesSignature(&data, kHtmlSignatures, arraysize(kHtmlSignatures),
                          base::CompareCase::INSENSITIVE_ASCII);
     if (signature_match != kNo)
@@ -222,9 +241,9 @@ CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForHTML(
     // "<!--" (the HTML comment syntax) is a special case, since it's valid JS
     // as well. Skip over them.
     static const StringPiece kBeginCommentSignature[] = {"<!--"};
-    Result comment_match = MatchesSignature(&data, kBeginCommentSignature,
-                                            arraysize(kBeginCommentSignature),
-                                            base::CompareCase::SENSITIVE);
+    SniffingResult comment_match = MatchesSignature(
+        &data, kBeginCommentSignature, arraysize(kBeginCommentSignature),
+        base::CompareCase::SENSITIVE);
     if (comment_match != kYes)
       return comment_match;
 
@@ -240,8 +259,7 @@ CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForHTML(
   return kMaybe;
 }
 
-CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForXML(
-    base::StringPiece data) {
+SniffingResult CrossOriginReadBlocking::SniffForXML(base::StringPiece data) {
   // TODO(dsjang): Once CrossOriginReadBlocking is moved into the browser
   // process, we should do single-thread checking here for the static
   // initializer.
@@ -251,8 +269,7 @@ CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForXML(
                           base::CompareCase::SENSITIVE);
 }
 
-CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForJSON(
-    base::StringPiece data) {
+SniffingResult CrossOriginReadBlocking::SniffForJSON(base::StringPiece data) {
   // Currently this function looks for an opening brace ('{'), followed by a
   // double-quoted string literal, followed by a colon. Importantly, such a
   // sequence is a Javascript syntax error: although the JSON object syntax is
@@ -316,8 +333,8 @@ CrossOriginReadBlocking::Result CrossOriginReadBlocking::SniffForJSON(
   return kMaybe;
 }
 
-CrossOriginReadBlocking::Result
-CrossOriginReadBlocking::SniffForFetchOnlyResource(base::StringPiece data) {
+SniffingResult CrossOriginReadBlocking::SniffForFetchOnlyResource(
+    base::StringPiece data) {
   // kScriptBreakingPrefixes contains prefixes that are conventionally used to
   // prevent a JSON response from becoming a valid Javascript program (an attack
   // vector known as XSSI). The presence of such a prefix is a strong signal
@@ -352,7 +369,7 @@ CrossOriginReadBlocking::SniffForFetchOnlyResource(base::StringPiece data) {
       StringPiece("while(1);"), StringPiece("for (;;);"),
       StringPiece("while (1);"),
   };
-  Result has_parser_breaker = MatchesSignature(
+  SniffingResult has_parser_breaker = MatchesSignature(
       &data, kScriptBreakingPrefixes, arraysize(kScriptBreakingPrefixes),
       base::CompareCase::SENSITIVE);
   if (has_parser_breaker != kNo)
@@ -360,6 +377,421 @@ CrossOriginReadBlocking::SniffForFetchOnlyResource(base::StringPiece data) {
 
   // A non-empty JSON object also effectively introduces a JS syntax error.
   return SniffForJSON(data);
+}
+
+// static
+void CrossOriginReadBlocking::SanitizeBlockedResponse(
+    const scoped_refptr<network::ResourceResponse>& response) {
+  DCHECK(response);
+  response->head.content_length = 0;
+  if (response->head.headers)
+    BlockResponseHeaders(response->head.headers);
+}
+
+// static
+std::vector<std::string>
+CrossOriginReadBlocking::GetCorsSafelistedHeadersForTesting() {
+  return std::vector<std::string>(
+      kCorsSafelistedHeaders,
+      kCorsSafelistedHeaders + arraysize(kCorsSafelistedHeaders));
+}
+
+// static
+void CrossOriginReadBlocking::LogAction(Action action) {
+  UMA_HISTOGRAM_ENUMERATION("SiteIsolation.XSD.Browser.Action", action);
+}
+
+// An interface to enable incremental content sniffing. These are instantiated
+// for each each request; thus they can be stateful.
+class CrossOriginReadBlocking::ResponseAnalyzer::ConfirmationSniffer {
+ public:
+  virtual ~ConfirmationSniffer() = default;
+
+  // Called after data is read from the network. |sniffing_buffer| contains the
+  // entire response body delivered thus far. To support streaming,
+  // |new_data_offset| gives the offset into |sniffing_buffer| at which new data
+  // was appended since the last read.
+  virtual void OnDataAvailable(base::StringPiece sniffing_buffer,
+                               size_t new_data_offset) = 0;
+
+  // Returns true if the return value of IsConfirmedContentType() might change
+  // with the addition of more data. Returns false if a final decision is
+  // available.
+  virtual bool WantsMoreData() const = 0;
+
+  // Returns true if the data has been confirmed to be of the CORB-protected
+  // content type that this sniffer is intended to detect.
+  virtual bool IsConfirmedContentType() const = 0;
+
+  // Helper for reporting the right UMA.
+  virtual bool IsParserBreakerSniffer() const = 0;
+};
+
+// A ConfirmationSniffer that wraps one of the sniffing functions from
+// network::CrossOriginReadBlocking.
+class CrossOriginReadBlocking::ResponseAnalyzer::SimpleConfirmationSniffer
+    : public CrossOriginReadBlocking::ResponseAnalyzer::ConfirmationSniffer {
+ public:
+  // The function pointer type corresponding to one of the available sniffing
+  // functions from network::CrossOriginReadBlocking.
+  using SnifferFunction =
+      decltype(&network::CrossOriginReadBlocking::SniffForHTML);
+
+  explicit SimpleConfirmationSniffer(SnifferFunction sniffer_function)
+      : sniffer_function_(sniffer_function) {}
+  ~SimpleConfirmationSniffer() override = default;
+
+  void OnDataAvailable(base::StringPiece sniffing_buffer,
+                       size_t new_data_offset) final {
+    DCHECK_LE(new_data_offset, sniffing_buffer.length());
+    if (new_data_offset == sniffing_buffer.length()) {
+      // No new data -- do nothing. This happens at end-of-stream.
+      return;
+    }
+    // The sniffing functions don't support streaming, so with each new chunk of
+    // data, call the sniffer on the whole buffer.
+    last_sniff_result_ = (*sniffer_function_)(sniffing_buffer);
+  }
+
+  bool WantsMoreData() const final {
+    // kNo and kYes results are final, meaning that sniffing can stop once they
+    // occur. A kMaybe result corresponds to an indeterminate state, that could
+    // change to kYes or kNo with more data.
+    return last_sniff_result_ == SniffingResult::kMaybe;
+  }
+
+  bool IsConfirmedContentType() const final {
+    // Only confirm the mime type if an affirmative pattern (e.g. an HTML tag,
+    // if using the HTML sniffer) was detected.
+    //
+    // Note that if the stream ends (or net::kMaxBytesToSniff has been reached)
+    // and |last_sniff_result_| is kMaybe, the response is allowed to go
+    // through.
+    return last_sniff_result_ == SniffingResult::kYes;
+  }
+
+  bool IsParserBreakerSniffer() const override { return false; }
+
+ private:
+  // The function that actually knows how to sniff for a content type.
+  SnifferFunction sniffer_function_;
+
+  // Result of sniffing the data available thus far.
+  SniffingResult last_sniff_result_ = SniffingResult::kMaybe;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleConfirmationSniffer);
+};
+
+// A ConfirmationSniffer for parser breakers (fetch-only resources). This logs
+// to an UMA histogram whenever it is the reason for a response being blocked.
+class CrossOriginReadBlocking::ResponseAnalyzer::FetchOnlyResourceSniffer
+    : public CrossOriginReadBlocking::ResponseAnalyzer::
+          SimpleConfirmationSniffer {
+ public:
+  FetchOnlyResourceSniffer()
+      : SimpleConfirmationSniffer(
+            &network::CrossOriginReadBlocking::SniffForFetchOnlyResource) {}
+
+  bool IsParserBreakerSniffer() const override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FetchOnlyResourceSniffer);
+};
+
+CrossOriginReadBlocking::ResponseAnalyzer::ResponseAnalyzer(
+    const net::URLRequest& request,
+    const ResourceResponse& response) {
+  content_length_ = response.head.content_length;
+  should_block_based_on_headers_ = ShouldBlockBasedOnHeaders(request, response);
+  if (should_block_based_on_headers_ == kNeedToSniffMore)
+    CreateSniffers();
+}
+
+CrossOriginReadBlocking::ResponseAnalyzer::~ResponseAnalyzer() = default;
+
+CrossOriginReadBlocking::ResponseAnalyzer::BlockingDecision
+CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
+    const net::URLRequest& request,
+    const ResourceResponse& response) {
+  // The checks in this method are ordered to rule out blocking in most cases as
+  // quickly as possible.  Checks that are likely to lead to returning false or
+  // that are inexpensive should be near the top.
+  url::Origin target_origin = url::Origin::Create(request.url());
+
+  // Treat a missing initiator as an empty origin to be safe, though we don't
+  // expect this to happen.  Unfortunately, this requires a copy.
+  url::Origin initiator;
+  if (request.initiator().has_value())
+    initiator = request.initiator().value();
+
+  // Don't block same-origin documents.
+  if (initiator.IsSameOriginWith(target_origin))
+    return kAllow;
+
+  // Only block documents from HTTP(S) schemes.  Checking the scheme of
+  // |target_origin| ensures that we also protect content of blob: and
+  // filesystem: URLs if their nested origins have a HTTP(S) scheme.
+  if (!IsBlockableScheme(target_origin.GetURL()))
+    return kAllow;
+
+  // Allow requests from file:// URLs for now.
+  // TODO(creis): Limit this to when the allow_universal_access_from_file_urls
+  // preference is set.  See https://crbug.com/789781.
+  if (initiator.scheme() == url::kFileScheme)
+    return kAllow;
+
+  // Allow the response through if it has valid CORS headers.
+  std::string cors_header;
+  response.head.headers->GetNormalizedHeader("access-control-allow-origin",
+                                             &cors_header);
+  if (IsValidCorsHeaderSet(initiator, cors_header)) {
+    return kAllow;
+  }
+
+  // Requests from foo.example.com will consult foo.example.com's service worker
+  // first (if one has been registered).  The service worker can handle requests
+  // initiated by foo.example.com even if they are cross-origin (e.g. requests
+  // for bar.example.com).  This is okay and should not be blocked by CORB,
+  // unless the initiator opted out of CORS / opted into receiving an opaque
+  // response.  See also https://crbug.com/803672.
+  if (response.head.was_fetched_via_service_worker) {
+    switch (response.head.response_type_via_service_worker) {
+      case network::mojom::FetchResponseType::kBasic:
+      case network::mojom::FetchResponseType::kCORS:
+      case network::mojom::FetchResponseType::kDefault:
+      case network::mojom::FetchResponseType::kError:
+        // Non-opaque responses shouldn't be blocked.
+        return kAllow;
+      case network::mojom::FetchResponseType::kOpaque:
+      case network::mojom::FetchResponseType::kOpaqueRedirect:
+        // Opaque responses are eligible for blocking. Continue on...
+        break;
+    }
+  }
+
+  // We intend to block the response at this point.  However, we will usually
+  // sniff the contents to confirm the MIME type, to avoid blocking incorrectly
+  // labeled JavaScript, JSONP, etc files.
+  //
+  // Note: if there is a nosniff header, it means we should honor the response
+  // mime type without trying to confirm it.
+  std::string nosniff_header;
+  response.head.headers->GetNormalizedHeader("x-content-type-options",
+                                             &nosniff_header);
+  bool has_nosniff_header =
+      base::LowerCaseEqualsASCII(nosniff_header, "nosniff");
+
+  // CORB should look directly at the Content-Type header if one has been
+  // received from the network.  Ignoring |response.head.mime_type| helps avoid
+  // breaking legitimate websites (which might happen more often when blocking
+  // would be based on the mime type sniffed by MimeSniffingResourceHandler).
+  //
+  // TODO(nick): What if the mime type is omitted? Should that be treated the
+  // same as text/plain? https://crbug.com/795971
+  std::string mime_type;
+  if (response.head.headers)
+    response.head.headers->GetMimeType(&mime_type);
+  // Canonicalize the MIME type.  Note that even if it doesn't claim to be a
+  // blockable type (i.e., HTML, XML, JSON, or plain text), it may still fail
+  // the checks during the SniffForFetchOnlyResource() phase.
+  canonical_mime_type_ =
+      network::CrossOriginReadBlocking::GetCanonicalMimeType(mime_type);
+
+  // If this is a partial response, sniffing is not possible, so allow the
+  // response if it's not a protected mime type.
+  std::string range_header;
+  response.head.headers->GetNormalizedHeader("content-range", &range_header);
+  bool has_range_header = !range_header.empty();
+  if (has_range_header) {
+    switch (canonical_mime_type_) {
+      case MimeType::kOthers:
+      case MimeType::kPlain:  // See also https://crbug.com/801709
+        return kAllow;
+      case MimeType::kHtml:
+      case MimeType::kJson:
+      case MimeType::kXml:
+        return kBlock;
+      case MimeType::kMax:
+        NOTREACHED();
+        return kBlock;
+    }
+  }
+
+  // Decide whether to block based on the MIME type.
+  switch (canonical_mime_type_) {
+    case MimeType::kHtml:
+    case MimeType::kXml:
+    case MimeType::kJson:
+    case MimeType::kPlain:
+      if (has_nosniff_header)
+        return kBlock;
+      else
+        return kNeedToSniffMore;
+      break;
+
+    case MimeType::kOthers:
+      // Stylesheets shouldn't be sniffed for JSON parser breakers - see
+      // https://crbug.com/809259.
+      if (base::LowerCaseEqualsASCII(response.head.mime_type, "text/css"))
+        return kAllow;
+      else
+        return kNeedToSniffMore;
+      break;
+
+    case MimeType::kInvalidMimeType:
+      NOTREACHED();
+      return kBlock;
+  }
+  NOTREACHED();
+  return kBlock;
+}
+
+void CrossOriginReadBlocking::ResponseAnalyzer::CreateSniffers() {
+  // Create one or more |sniffers_| to confirm that the body is actually the
+  // MIME type advertised in the Content-Type header.
+  DCHECK_EQ(kNeedToSniffMore, should_block_based_on_headers_);
+  DCHECK(sniffers_.empty());
+
+  // When the MIME type is "text/plain", create sniffers for HTML, XML and
+  // JSON. If any of these sniffers match, the response will be blocked.
+  const bool use_all = canonical_mime_type() == MimeType::kPlain;
+
+  // HTML sniffer.
+  if (use_all || canonical_mime_type() == MimeType::kHtml) {
+    sniffers_.push_back(std::make_unique<SimpleConfirmationSniffer>(
+        &network::CrossOriginReadBlocking::SniffForHTML));
+  }
+
+  // XML sniffer.
+  if (use_all || canonical_mime_type() == MimeType::kXml) {
+    sniffers_.push_back(std::make_unique<SimpleConfirmationSniffer>(
+        &network::CrossOriginReadBlocking::SniffForXML));
+  }
+
+  // JSON sniffer.
+  if (use_all || canonical_mime_type() == MimeType::kJson) {
+    sniffers_.push_back(std::make_unique<SimpleConfirmationSniffer>(
+        &network::CrossOriginReadBlocking::SniffForJSON));
+  }
+
+  // Parser-breaker sniffer.
+  //
+  // Because these prefixes are an XSSI-defeating mechanism, CORB considers
+  // them distinctive enough to be worth blocking no matter the Content-Type
+  // header. So this sniffer is created unconditionally.
+  //
+  // For MimeType::kOthers, this will be the only sniffer that's active.
+  sniffers_.push_back(std::make_unique<FetchOnlyResourceSniffer>());
+}
+
+void CrossOriginReadBlocking::ResponseAnalyzer::SniffResponseBody(
+    base::StringPiece data,
+    size_t new_data_offset) {
+  DCHECK_EQ(kNeedToSniffMore, should_block_based_on_headers_);
+  DCHECK(!sniffers_.empty());
+  DCHECK(!found_blockable_content_);
+
+  DCHECK_LE(bytes_read_for_sniffing_, static_cast<int>(data.size()));
+  bytes_read_for_sniffing_ = static_cast<int>(data.size());
+
+  DCHECK_LE(data.size(), static_cast<size_t>(net::kMaxBytesToSniff));
+  DCHECK_LE(new_data_offset, data.size());
+  bool has_new_data = (new_data_offset < data.size());
+
+  for (size_t i = 0; i < sniffers_.size();) {
+    if (has_new_data)
+      sniffers_[i]->OnDataAvailable(data, new_data_offset);
+
+    if (sniffers_[i]->WantsMoreData()) {
+      i++;
+      continue;
+    }
+
+    if (sniffers_[i]->IsConfirmedContentType()) {
+      if (sniffers_[i]->IsParserBreakerSniffer())
+        found_parser_breaker_ = true;
+
+      found_blockable_content_ = true;
+      sniffers_.clear();
+      break;
+    } else {
+      // This response is CORB-exempt as far as this sniffer is concerned;
+      // remove it from the list.
+      sniffers_.erase(sniffers_.begin() + i);
+    }
+  }
+}
+
+bool CrossOriginReadBlocking::ResponseAnalyzer::should_allow() const {
+  switch (should_block_based_on_headers_) {
+    case kAllow:
+      return true;
+    case kNeedToSniffMore:
+      return sniffers_.empty() && !found_blockable_content_;
+    case kBlock:
+      return false;
+  }
+}
+
+bool CrossOriginReadBlocking::ResponseAnalyzer::should_block() const {
+  switch (should_block_based_on_headers_) {
+    case kAllow:
+      return false;
+    case kNeedToSniffMore:
+      return sniffers_.empty() && found_blockable_content_;
+    case kBlock:
+      return true;
+  }
+}
+
+void CrossOriginReadBlocking::ResponseAnalyzer::LogBytesReadForSniffing() {
+  if (bytes_read_for_sniffing_ >= 0) {
+    UMA_HISTOGRAM_COUNTS("SiteIsolation.XSD.Browser.BytesReadForSniffing",
+                         bytes_read_for_sniffing_);
+  }
+}
+
+void CrossOriginReadBlocking::ResponseAnalyzer::LogAllowedResponse() {
+  // Note that if a response is allowed because of hitting EOF or
+  // kMaxBytesToSniff, then |sniffers_| are not emptied and consequently
+  // should_allow doesn't start returning true.  This means that we can't
+  // DCHECK(should_allow()) or DCHECK(sniffers_.empty()) here - the decision to
+  // allow the response could have been made in the
+  // CrossSiteDocumentResourceHandler layer without CrossOriginReadBlocking
+  // realizing that it has hit EOF or kMaxBytesToSniff.
+
+  // Note that the response might be allowed even if should_block() returns true
+  // - for example to allow responses to requests initiated by content scripts.
+  // This means that we cannot DCHECK(!should_block()) here.
+
+  CrossOriginReadBlocking::LogAction(
+      needs_sniffing()
+          ? network::CrossOriginReadBlocking::Action::kAllowedAfterSniffing
+          : network::CrossOriginReadBlocking::Action::kAllowedWithoutSniffing);
+
+  LogBytesReadForSniffing();
+}
+
+void CrossOriginReadBlocking::ResponseAnalyzer::LogBlockedResponse() {
+  DCHECK(!should_allow());
+  DCHECK(should_block());
+  DCHECK(sniffers_.empty());
+
+  CrossOriginReadBlocking::LogAction(
+      needs_sniffing()
+          ? network::CrossOriginReadBlocking::Action::kBlockedAfterSniffing
+          : network::CrossOriginReadBlocking::Action::kBlockedWithoutSniffing);
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "SiteIsolation.XSD.Browser.Blocked.ContentLength.WasAvailable",
+      content_length() >= 0);
+  if (content_length() >= 0) {
+    UMA_HISTOGRAM_COUNTS_10000(
+        "SiteIsolation.XSD.Browser.Blocked.ContentLength.ValueIfAvailable",
+        content_length());
+  }
+
+  LogBytesReadForSniffing();
 }
 
 }  // namespace network

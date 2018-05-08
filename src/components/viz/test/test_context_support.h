@@ -37,15 +37,17 @@ class TestContextSupport : public gpu::ContextSupport {
                    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
                        callback) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
-  void Swap() override;
-  void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
-  void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
-  void CommitOverlayPlanes() override;
+  void Swap(uint32_t flags) override;
+  void SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                      uint32_t flags) override;
+  void PartialSwapBuffers(const gfx::Rect& sub_buffer, uint32_t flags) override;
+  void CommitOverlayPlanes(uint32_t flags) override;
   void ScheduleOverlayPlane(int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             unsigned overlay_texture_id,
                             const gfx::Rect& display_bounds,
-                            const gfx::RectF& uv_rect) override;
+                            const gfx::RectF& uv_rect,
+                            bool enable_blend) override;
   uint64_t ShareGroupTracingGUID() const override;
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t)> callback) override;

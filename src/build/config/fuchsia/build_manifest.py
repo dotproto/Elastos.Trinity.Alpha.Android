@@ -18,12 +18,9 @@ Arguments:
 
 import json
 import os
+import re
 import sys
 import tempfile
-
-
-# Path to file describing the services to be made available to the process.
-SANDBOX_POLICY_PATH = 'build/config/fuchsia/sandbox_policy'
 
 
 def MakePackagePath(file_path, roots):
@@ -59,10 +56,8 @@ def MakePackagePath(file_path, roots):
     if file_path.startswith(next_root):
       relative_path = file_path[len(next_root):]
 
-      # TODO(fuchsia): The requirements for finding/loading .so are in flux, so
-      # this ought to be reconsidered at some point.
-      # See https://crbug.com/732897.
-      if file_path.endswith('.so'):
+      # Move all dynamic libraries (ending in .so or .so.<number>) to lib/.
+      if re.search('.*\.so(\.\d+)?$', file_path):
         relative_path = 'lib/' + os.path.basename(relative_path)
 
       return relative_path
@@ -74,8 +69,10 @@ def _GetStrippedPath(bin_path):
   """Finds the stripped version of the binary |bin_path| in the build
   output directory."""
 
+  # Skip the resolution step for binaries that don't have stripped counterparts,
+  # like system libraries or other libraries built outside the Chromium build.
   if not '.unstripped' in bin_path:
-    raise Exception('File "%s" is not in an .unstripped directory.' % bin_path)
+    return bin_path
 
   return os.path.normpath(os.path.join(bin_path,
                                        os.path.pardir,
@@ -93,7 +90,7 @@ def _IsBinary(path):
 
 
 def BuildManifest(root_dir, out_dir, app_name, app_filename,
-                  runtime_deps_file, output_path):
+                  sandbox_policy_path, runtime_deps_file, output_path):
   with open(output_path, 'w') as output:
     # Process the runtime deps file for file paths, recursively walking
     # directories as needed.
@@ -104,20 +101,21 @@ def BuildManifest(root_dir, out_dir, app_name, app_filename,
       next_path = next_path.strip()
       if os.path.isdir(next_path):
         for root, _, files in os.walk(next_path):
-          for next_file in files:
-            if next_file.startswith('.'):
+          for current_file in files:
+            if current_file.startswith('.'):
               continue
-            expanded_files.add(os.path.abspath(os.path.join(root, next_file)))
+            expanded_files.add(os.path.abspath(
+                os.path.join(root, current_file)))
       else:
         expanded_files.add(os.path.abspath(next_path))
 
     # Format and write out the manifest contents.
     app_found = False
-    for next_file in expanded_files:
-      if _IsBinary(next_file):
-        next_file = _GetStrippedPath(next_file)
+    for current_file in expanded_files:
+      if _IsBinary(current_file):
+        current_file = _GetStrippedPath(current_file)
 
-      in_package_path = MakePackagePath(os.path.join(out_dir, next_file),
+      in_package_path = MakePackagePath(os.path.join(out_dir, current_file),
                                         [root_dir, out_dir])
       if in_package_path == app_filename:
         in_package_path = 'bin/app'
@@ -127,7 +125,14 @@ def BuildManifest(root_dir, out_dir, app_name, app_filename,
       # environments with differing parent directory structures,
       # e.g. builder bots and swarming clients.
       output.write('%s=%s\n' % (in_package_path,
-                                os.path.relpath(next_file, out_dir)))
+                                os.path.relpath(current_file, out_dir)))
+
+      # Use libc.so's dynamic linker by aliasing libc.so to ld.so.1.
+      # Fuchsia always looks for the linker implementation in ld.so.1.
+      if os.path.basename(in_package_path) == 'libc.so':
+        output.write('%s=%s\n' % (os.path.dirname(in_package_path) + '/ld.so.1',
+                                  os.path.relpath(current_file, out_dir)))
+
     if not app_found:
       raise Exception('Could not locate executable inside runtime_deps.')
 
@@ -138,7 +143,7 @@ def BuildManifest(root_dir, out_dir, app_name, app_filename,
                    os.path.relpath(package_json.name, out_dir))
 
     output.write('meta/sandbox=%s\n' %
-                 os.path.relpath(os.path.join(root_dir, SANDBOX_POLICY_PATH),
+                 os.path.relpath(os.path.join(root_dir, sandbox_policy_path),
                                  out_dir))
 
   return 0

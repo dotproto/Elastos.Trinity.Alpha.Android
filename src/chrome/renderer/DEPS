@@ -20,6 +20,7 @@ include_rules = [
   "+components/nacl/renderer",
   "+components/network_hints/renderer",
   "+components/network_session_configurator/common",
+  "+components/offline_pages/buildflags",
   "+components/password_manager/content/renderer",
   "+components/password_manager/core/common",
   "+components/pdf/renderer",
@@ -33,8 +34,9 @@ include_rules = [
   "+components/spellcheck",
   "+components/startup_metric_utils/common",
   "+components/strings/grit",
+  "+components/subresource_filter/content/common",
   "+components/subresource_filter/content/renderer",
-  "+components/task_scheduler_util/common",
+  "+components/task_scheduler_util",
   "+components/translate/content/common",
   "+components/translate/content/renderer",
   "+components/translate/core/common",
@@ -57,8 +59,7 @@ include_rules = [
   "+services/service_manager/public/cpp",
   "+skia",
   "+storage/common",
-  "+third_party/WebKit/public/common",
-  "+third_party/WebKit/public/mojom",
+  "+third_party/blink/public/mojom",
   "+third_party/metrics_proto",
   "-components/spellcheck/browser",  # Allow all spellcheck but browser.
 ]

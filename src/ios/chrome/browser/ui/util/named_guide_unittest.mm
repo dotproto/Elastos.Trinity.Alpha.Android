@@ -12,6 +12,15 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+// Tests that |guide|'s layoutFrame is equal to |frame|.
+void VerifyLayoutFrame(UILayoutGuide* guide, CGRect frame) {
+  [guide.owningView setNeedsLayout];
+  [guide.owningView layoutIfNeeded];
+  EXPECT_TRUE(CGRectEqualToRect(guide.layoutFrame, frame));
+}
+}  // namespace
+
 using NamedGuideTest = PlatformTest;
 
 // Tests that guides are reachable after being added to a view.
@@ -64,7 +73,7 @@ TEST_F(NamedGuideTest, TestGuideOnAncestor) {
 }
 
 // Tests that resetting the constrained view updates the guide.
-TEST_F(NamedGuideTest, TestConstrainedViewUpdate) {
+TEST_F(NamedGuideTest, TestConstrainedView) {
   GuideName* test_guide = @"NamedGuideTest";
 
   UIWindow* window =
@@ -76,13 +85,96 @@ TEST_F(NamedGuideTest, TestConstrainedViewUpdate) {
 
   NamedGuide* guide = [[NamedGuide alloc] initWithName:test_guide];
   [view addLayoutGuide:guide];
+  ASSERT_FALSE(guide.constrained);
 
   // Set the constrained view to the subviews and verify that the layout frame
   // is updated.
   for (UIView* subview in view.subviews) {
+    guide.constrainedView = nil;
+    EXPECT_FALSE(guide.constrained);
     guide.constrainedView = subview;
-    [view setNeedsLayout];
-    [view layoutIfNeeded];
-    EXPECT_TRUE(CGRectEqualToRect(guide.layoutFrame, subview.frame));
+    EXPECT_TRUE(guide.constrained);
+    VerifyLayoutFrame(guide, subview.frame);
   }
+}
+
+// Tests that resetting the constrained frame updates the guide.
+TEST_F(NamedGuideTest, TestConstrainedFrame) {
+  GuideName* test_guide = @"NamedGuideTest";
+
+  UIWindow* window =
+      [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 200, 200)];
+  UIView* view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [window addSubview:view];
+
+  NamedGuide* guide = [[NamedGuide alloc] initWithName:test_guide];
+  [view addLayoutGuide:guide];
+  ASSERT_FALSE(guide.constrained);
+
+  // Test updating the guide's |constrainedFrame| to the lower left corner.
+  const CGRect kLowerLeftCorner = CGRectMake(0, 50, 50, 50);
+  guide.constrainedFrame = kLowerLeftCorner;
+  VerifyLayoutFrame(guide, kLowerLeftCorner);
+  EXPECT_TRUE(guide.constrained);
+
+  // Tests that updating the view's size stretches the layout frame such that
+  // it remains the lower left quadrant.
+  guide.autoresizingMask =
+      (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight |
+       UIViewAutoresizingFlexibleTopMargin |
+       UIViewAutoresizingFlexibleRightMargin);
+  view.frame = CGRectMake(0, 0, 200, 200);
+  const CGRect kNewLowerLeftCorner = CGRectMake(0, 100, 100, 100);
+  VerifyLayoutFrame(guide, kNewLowerLeftCorner);
+}
+
+// Tests that setting the |constrainedView| and |contstrainedFrame| correctly
+// nullify other properties.
+TEST_F(NamedGuideTest, TestConstrainedViewFrameMutex) {
+  GuideName* test_guide = @"NamedGuideTest";
+  UIWindow* window =
+      [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  UIView* view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [window addSubview:view];
+  UIView* childView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 50, 100)];
+  [view addSubview:childView];
+  NamedGuide* guide = [[NamedGuide alloc] initWithName:test_guide];
+  [view addLayoutGuide:guide];
+  guide.constrainedView = childView;
+
+  // Set the guide's |constrainedFrame| and verify that |constrainedView| is
+  // reset to nil.
+  const CGRect kConstrainedFrame = CGRectMake(0, 0, 50, 50);
+  guide.constrainedFrame = kConstrainedFrame;
+  EXPECT_FALSE(guide.constrainedView);
+  VerifyLayoutFrame(guide, kConstrainedFrame);
+
+  // Set the guide's |constrainedView| and verify that |constrainedFrame| is
+  // reset to CGRectNull.
+  guide.constrainedView = childView;
+  EXPECT_TRUE(CGRectIsNull(guide.constrainedFrame));
+  VerifyLayoutFrame(guide, childView.frame);
+}
+
+// Tests that a NamedGuide resets its constraints if its constrained view is
+// removed from its owning view's hierarchy.
+TEST_F(NamedGuideTest, TestRemoveConstrainedView) {
+  GuideName* test_guide = @"NamedGuideTest";
+
+  UIWindow* window =
+      [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  UIView* view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [window addSubview:view];
+  UIView* subview = [[UIView alloc] initWithFrame:view.bounds];
+  [view addSubview:subview];
+
+  NamedGuide* guide = [[NamedGuide alloc] initWithName:test_guide];
+  [view addLayoutGuide:guide];
+  ASSERT_FALSE(guide.constrained);
+
+  guide.constrainedView = subview;
+  EXPECT_TRUE(guide.constrained);
+  [subview removeFromSuperview];
+  EXPECT_FALSE(guide.constrained);
+  EXPECT_FALSE(guide.constrainedView);
 }

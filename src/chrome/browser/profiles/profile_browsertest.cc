@@ -14,8 +14,8 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/waitable_event.h"
@@ -50,7 +50,7 @@
 #include "extensions/common/value_builder.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/net_features.h"
+#include "net/net_buildflags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -881,4 +881,12 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, SendHPKPReportServerHangs) {
   ui_test_utils::NavigateToURL(browser(),
                                hpkp_test_server.GetURL("localhost", "/"));
   wait_for_report_loop.Run();
+}
+
+// Verifies the last selected directory has a default value.
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, LastSelectedDirectory) {
+  ProfileImpl* profile_impl = static_cast<ProfileImpl*>(browser()->profile());
+  base::FilePath home;
+  PathService::Get(base::DIR_HOME, &home);
+  ASSERT_EQ(profile_impl->last_selected_directory(), home);
 }

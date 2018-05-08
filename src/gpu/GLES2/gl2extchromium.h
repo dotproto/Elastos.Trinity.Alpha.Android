@@ -181,8 +181,11 @@ typedef void (GL_APIENTRYP PFNGLREQUESTEXTENSIONCHROMIUMPROC) (
 #ifndef GL_CHROMIUM_post_sub_buffer
 #define GL_CHROMIUM_post_sub_buffer 1
 #ifdef GL_GLEXT_PROTOTYPES
-GL_APICALL void GL_APIENTRY glPostSubBufferCHROMIUM(
-    GLint x, GLint y, GLint width, GLint height);
+GL_APICALL void GL_APIENTRY glPostSubBufferCHROMIUM(GLint x,
+                                                    GLint y,
+                                                    GLint width,
+                                                    GLint height,
+                                                    GLbitfield flags);
 #endif
 typedef void (GL_APIENTRYP PFNGLPOSTSUBBUFFERCHROMIUMPROC) (
     GLint x, GLint y, GLint width, GLint height);
@@ -721,17 +724,18 @@ typedef void (GL_APIENTRYP PFNGLWAITSYNCTOKENCHROMIUM) (
 
 #ifdef GL_GLEXT_PROTOTYPES
 GL_APICALL void GL_APIENTRY
-    glScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
-                                   GLenum plane_transform,
-                                   GLuint overlay_texture_id,
-                                   GLint bounds_x,
-                                   GLint bounds_y,
-                                   GLint bounds_width,
-                                   GLint bounds_height,
-                                   GLfloat uv_x,
-                                   GLfloat uv_y,
-                                   GLfloat uv_width,
-                                   GLfloat uv_height);
+glScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
+                               GLenum plane_transform,
+                               GLuint overlay_texture_id,
+                               GLint bounds_x,
+                               GLint bounds_y,
+                               GLint bounds_width,
+                               GLint bounds_height,
+                               GLfloat uv_x,
+                               GLfloat uv_y,
+                               GLfloat uv_width,
+                               GLfloat uv_height,
+                               GLboolean enable_blend);
 #endif
 typedef void(GL_APIENTRYP PFNGLSCHEDULEOVERLAYPLANECHROMIUMPROC)(
     GLint plane_z_order,
@@ -744,7 +748,8 @@ typedef void(GL_APIENTRYP PFNGLSCHEDULEOVERLAYPLANECHROMIUMPROC)(
     GLfloat uv_x,
     GLfloat uv_y,
     GLfloat uv_width,
-    GLfloat uv_height);
+    GLfloat uv_height,
+    GLboolean enable_blend);
 #endif /* GL_CHROMIUM_schedule_overlay_plane */
 
 #ifndef GL_CHROMIUM_schedule_ca_layer

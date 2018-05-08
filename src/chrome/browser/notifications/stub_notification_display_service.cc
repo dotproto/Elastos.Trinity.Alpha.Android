@@ -86,17 +86,8 @@ void StubNotificationDisplayService::SimulateClick(
     DCHECK(!handler);
 
     auto* delegate = iter->notification.delegate();
-    if (!delegate)
-      return;
-
-    if (reply.has_value()) {
-      DCHECK(action_index.has_value());
-      delegate->ButtonClickWithReply(action_index.value(), reply.value());
-    } else if (action_index.has_value()) {
-      delegate->ButtonClick(action_index.value());
-    } else {
-      delegate->Click();
-    }
+    if (delegate)
+      delegate->Click(action_index, reply);
     return;
   }
 
@@ -205,8 +196,12 @@ void StubNotificationDisplayService::Display(
 void StubNotificationDisplayService::Close(
     NotificationHandler::Type notification_type,
     const std::string& notification_id) {
-  RemoveNotification(notification_type, notification_id, false /* by_user */,
-                     false /* silent */);
+  // Close the notification silently only for non-transient notifications,
+  // because some tests of transient (non-web/extension) notifications rely on
+  // the close event being dispatched, e.g. tests in WebUsbDetectorTest.
+  RemoveNotification(
+      notification_type, notification_id, false /* by_user */,
+      notification_type != NotificationHandler::Type::TRANSIENT /* silent */);
 }
 
 void StubNotificationDisplayService::GetDisplayed(

@@ -7,25 +7,25 @@
 
 #include <functional>
 #include <map>
-#include <set>
 #include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url.h"
 
 // Holds the host to template url mappings for the search providers. WARNING:
 // This class does not own any TemplateURLs passed to it and it is up to the
 // caller to ensure the right lifetime of them.
 class SearchHostToURLsMap {
  public:
-  typedef std::set<TemplateURL*> TemplateURLSet;
+  using TemplateURLSet = base::flat_set<TemplateURL*>;
 
   SearchHostToURLsMap();
   ~SearchHostToURLsMap();
 
   // Initializes the map.
-  void Init(const TemplateURLService::OwnedTemplateURLVector& template_urls,
+  void Init(const TemplateURL::OwnedTemplateURLVector& template_urls,
             const SearchTermsData& search_terms_data);
 
   // Adds a new TemplateURL to the map. Since |template_url| is owned
@@ -50,7 +50,7 @@ class SearchHostToURLsMap {
   typedef std::map<std::string, TemplateURLSet, std::less<>> HostToURLsMap;
 
   // Adds many URLs to the map.
-  void Add(const TemplateURLService::OwnedTemplateURLVector& template_urls,
+  void Add(const TemplateURL::OwnedTemplateURLVector& template_urls,
            const SearchTermsData& search_terms_data);
 
   // Maps from host to set of TemplateURLs whose search url host is host.

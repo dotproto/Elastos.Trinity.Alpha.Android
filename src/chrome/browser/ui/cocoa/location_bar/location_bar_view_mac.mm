@@ -42,6 +42,7 @@
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
+#include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
@@ -82,6 +83,11 @@ const int kMinURLWidth = 120;
 // Color of the vector graphic icons when the location bar is dark.
 // SkColorSetARGB(0xCC, 0xFF, 0xFF 0xFF);
 const SkColor kMaterialDarkVectorIconColor = SK_ColorWHITE;
+
+void NotReached(const gfx::Image& image) {
+  // Mac Cocoa version should not receive asynchronously delivered favicons.
+  NOTREACHED();
+}
 
 }  // namespace
 
@@ -329,10 +335,6 @@ NSPoint LocationBarViewMac::GetPageInfoBubblePoint() const {
   return [field_ bubblePointForDecoration:page_info_decoration_.get()];
 }
 
-NSPoint LocationBarViewMac::GetInfoBarAnchorPoint() const {
-  return [field_ arrowAnchorPointForDecoration:page_info_decoration_.get()];
-}
-
 void LocationBarViewMac::OnDecorationsChanged() {
   // TODO(shess): The field-editor frame and cursor rects should not
   // change, here.
@@ -457,15 +459,17 @@ void LocationBarViewMac::UpdateWithoutTabRestore() {
 
 void LocationBarViewMac::UpdateLocationIcon() {
   SkColor vector_icon_color = GetLocationBarIconColor();
-  const gfx::VectorIcon& vector_icon_id =
-      GetPageInfoVerboseType() == PageInfoVerboseType::kEVCert
-          ? toolbar::kHttpsValidIcon
-          : omnibox_view_->GetVectorIcon();
+  gfx::ImageSkia image_skia;
+  if (GetPageInfoVerboseType() == PageInfoVerboseType::kEVCert) {
+    image_skia = gfx::CreateVectorIcon(toolbar::kHttpsValidIcon,
+                                       kDefaultIconSize, vector_icon_color);
+  } else {
+    image_skia = omnibox_view_->GetIcon(kDefaultIconSize, vector_icon_color,
+                                        base::BindOnce(&NotReached));
+  }
 
   NSImage* image = NSImageFromImageSkiaWithColorSpace(
-      gfx::CreateVectorIcon(vector_icon_id, kDefaultIconSize,
-                            vector_icon_color),
-      base::mac::GetSRGBColorSpace());
+      image_skia, base::mac::GetSRGBColorSpace());
   page_info_decoration_->SetImage(image);
   page_info_decoration_->SetLabelColor(vector_icon_color);
 

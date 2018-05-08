@@ -159,6 +159,26 @@ Status ScrollElementRegionIntoViewHelper(
     middle.Offset(region.Width() / 2, region.Height() / 2);
     status = VerifyElementClickable(
         frame, web_view, clickable_element_id, middle);
+    if (status.code() == kUnknownError &&
+        status.message().find("is not clickable") != std::string::npos) {
+      // Clicking at the target location isn't reaching the target element.
+      // One possible cause is a scroll event handler has shifted the element.
+      // Try again to get the updated location of the target element.
+      status = web_view->CallFunction(
+          frame,
+          webdriver::atoms::asString(webdriver::atoms::GET_LOCATION_IN_VIEW),
+          args, &result);
+      if (status.IsError())
+        return status;
+      if (!ParseFromValue(result.get(), &tmp_location)) {
+        return Status(kUnknownError,
+                      "failed to parse value of GET_LOCATION_IN_VIEW");
+      }
+      middle = tmp_location;
+      middle.Offset(region.Width() / 2, region.Height() / 2);
+      status =
+          VerifyElementClickable(frame, web_view, clickable_element_id, middle);
+    }
     if (status.IsError())
       return status;
   }
@@ -210,8 +230,20 @@ Status GetElementBorder(
   base::StringToInt(border_top_str, &border_top_tmp);
   if (border_left_tmp == -1 || border_top_tmp == -1)
     return Status(kUnknownError, "failed to get border width of element");
-  *border_left = border_left_tmp;
-  *border_top = border_top_tmp;
+  std::string padding_left_str;
+  status = GetElementEffectiveStyle(frame, web_view, element_id, "padding-left",
+                                    &padding_left_str);
+  int padding_left = 0;
+  if (status.IsOk())
+    base::StringToInt(padding_left_str, &padding_left);
+  std::string padding_top_str;
+  status = GetElementEffectiveStyle(frame, web_view, element_id, "padding-top",
+                                    &padding_top_str);
+  int padding_top = 0;
+  if (status.IsOk())
+    base::StringToInt(padding_top_str, &padding_top);
+  *border_left = border_left_tmp + padding_left;
+  *border_top = border_top_tmp + padding_top;
   return Status(kOk);
 }
 

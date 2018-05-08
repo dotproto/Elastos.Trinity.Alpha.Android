@@ -49,15 +49,24 @@ __gCrWeb.form.kNamelessFormIDPrefix = 'gChrome~form~';
 __gCrWeb.form.kNamelessFieldIDPrefix = 'gChrome~field~';
 
 /**
- * The interval watching for form changes.
+ * The MutationObserver tracking form related changes.
  */
-__gCrWeb.form.formWatcherInterval = null;
+__gCrWeb.form.formMutationObserver = null;
 
 /**
- * The value of the form signature last time formWatcherInterval was
- * triggerred.
+ * The form mutation message scheduled to be sent to browser.
  */
-__gCrWeb.form.lastFormSignature = {};
+__gCrWeb.form.formMutationMessageToSend = null;
+
+/**
+ * A message scheduled to be sent to host on the next runloop.
+ */
+__gCrWeb.form.messageToSend = null;
+
+/**
+ * The last HTML element that was focused by the user.
+ */
+__gCrWeb.form.lastFocusedElement = null;
 
 /**
  * Based on Element::isFormControlElement() (WebKit)
@@ -110,16 +119,22 @@ __gCrWeb.form.getFormControlElements = function(form) {
 };
 
 /**
- * Returns the form's |name| attribute if not space only; otherwise the
- * form's |id| attribute.
+ * Returns the field's |id| attribute if not space only; otherwise the
+ * form's |name| attribute if the field is part of a form. Otherwhise,
+ * generate a technical identifier
  *
- * It is the name that should be used for the specified |element| when
- * storing Autofill data. Various attributes are used to attempt to identify
- * the element, beginning with 'name' and 'id' attributes. If both name and id
- * are empty and the field is in a form, returns
- * __gCrWeb.form.kNamelessFieldIDPrefix + index of the field in the form.
- * Providing a uniquely reversible identifier for any element is a non-trivial
- * problem; this solution attempts to satisfy the majority of cases.
+ * It is the identifier that should be used for the specified |element| when
+ * storing Autofill data. This identifier will be used when filling the field
+ * to lookup this field. The pair (getFormIdentifier, getFieldIdentifier) must
+ * be unique on the page.
+ * The following elements are considered to generate the identifier:
+ * - the id of the element
+ * - the name of the element if the element is part of a form
+ * - the order of the element in the form if the element is part of the form.
+ * - generate a xpath to the element and use it as an ID.
+ *
+ * Note: if this method returns '', the field will not be accessible and
+ * cannot be autofilled.
  *
  * It aims to provide the logic in
  *     WebString nameForAutofill() const;
@@ -134,6 +149,77 @@ __gCrWeb.form.getFieldIdentifier = function(element) {
   if (!element) {
     return '';
   }
+  var trimmedIdentifier = element.id;
+  if (trimmedIdentifier) {
+    return __gCrWeb.common.trim(trimmedIdentifier);
+  }
+  if (element.form) {
+    // The name of an element is only relevant as an identifier if the element
+    // is part of a form.
+    trimmedIdentifier = element.name;
+    if (trimmedIdentifier) {
+      trimmedIdentifier = __gCrWeb.common.trim(trimmedIdentifier);
+      if (trimmedIdentifier.length > 0) {
+        return trimmedIdentifier;
+      }
+    }
+
+    var elements = __gCrWeb.form.getFormControlElements(element.form);
+    for (var index = 0; index < elements.length; index++) {
+      if (elements[index] === element) {
+        return __gCrWeb.form.kNamelessFieldIDPrefix + index;
+      }
+    }
+  }
+  // Element is not part of a form and has no name or id, or usable attribute.
+  // As best effort, try to find the closest ancestor with an id, then
+  // check the index of the element in the descendants of the ancestors with
+  // the same type.
+  var ancestor = element.parentNode;
+  while (!!ancestor && ancestor.nodeType == Node.ELEMENT_NODE &&
+         (!ancestor.hasAttribute('id') ||
+          __gCrWeb.common.trim(ancestor.id) == '')) {
+    ancestor = ancestor.parentNode;
+  }
+  var query = element.tagName;
+  var ancestor_id = '';
+  if (!ancestor || ancestor.nodeType != Node.ELEMENT_NODE) {
+    ancestor = document.body;
+  }
+  if (ancestor.hasAttribute('id')) {
+    ancestor_id = '#' + __gCrWeb.common.trim(ancestor.id);
+  }
+  var descendants = ancestor.querySelectorAll(element.tagName);
+  var i = 0;
+  for (i = 0; i < descendants.length; i++) {
+    if (descendants[i] === element) {
+      return __gCrWeb.form.kNamelessFieldIDPrefix + ancestor_id + '~' +
+          element.tagName + '~' + i;
+    }
+  }
+
+  return '';
+};
+
+/**
+ * Returns the field's |name| attribute if not space only; otherwise the
+ * field's |id| attribute.
+ *
+ * The name will be used as a hint to infer the autofill type of the field.
+ *
+ * It aims to provide the logic in
+ *     WebString nameForAutofill() const;
+ * in chromium/src/third_party/WebKit/Source/WebKit/chromium/public/
+ *  WebFormControlElement.h
+ *
+ * @param {Element} element An element of which the name for Autofill will be
+ *     returned.
+ * @return {string} the name for Autofill.
+ */
+__gCrWeb.form.getFieldName = function(element) {
+  if (!element) {
+    return '';
+  }
   var trimmedName = element.name;
   if (trimmedName) {
     trimmedName = __gCrWeb.common.trim(trimmedName);
@@ -145,17 +231,8 @@ __gCrWeb.form.getFieldIdentifier = function(element) {
   if (trimmedName) {
     return __gCrWeb.common.trim(trimmedName);
   }
-  if (element.form) {
-    var elements = __gCrWeb.form.getFormControlElements(element.form);
-    for (var index = 0; index < elements.length; index++) {
-      if (elements[index] === element) {
-        return __gCrWeb.form.kNamelessFieldIDPrefix + index;
-      }
-    }
-  }
   return '';
 };
-
 
 /**
  * Returns the form's |name| attribute if non-empty; otherwise the form's |id|
@@ -220,30 +297,55 @@ __gCrWeb.form.getFormElementFromIdentifier = function(name) {
   return null;
 };
 
-
+/**
+ * Schedule |mesg| to be sent on next runloop.
+ * If called multiple times on the same runloop, only the last message is really
+ * sent.
+ */
+var sendMessageOnNextLoop_ = function(mesg) {
+  if (!__gCrWeb.form.messageToSend) {
+    setTimeout(function() {
+      __gCrWeb.message.invokeOnHost(__gCrWeb.form.messageToSend);
+      __gCrWeb.form.messageToSend = null;
+    }, 0);
+  }
+  __gCrWeb.form.messageToSend = mesg;
+}
 
 /**
- * Focus and input events for form elements are messaged to the main
- * application for broadcast to WebStateObservers.
+ * Focus, input, change, keyup and blur events for form elements (form and input
+ * elements) are messaged to the main application for broadcast to
+ * WebStateObservers.
+ * Events will be included in a message to be sent in a future runloop (without
+ * delay). If an event is already scheduled to be sent, it is replaced by |evt|.
+ * Notably, 'blur' event will not be transmitted to the main application if they
+ * are triggered by the focus of another element as the 'focus' event will
+ * replace it.
+ * Only the events targetting the active element (or the previously active in
+ * case of 'blur') are sent to the main application.
  * This is done with a single event handler for each type being added to the
  * main document element which checks the source element of the event; this
  * is much easier to manage than adding handlers to individual elements.
  * @private
  */
 var formActivity_ = function(evt) {
-  var srcElement = evt.srcElement;
-  var value = srcElement.value || '';
-  var fieldType = srcElement.type || '';
-
+  var target = evt.target;
+  var value = target.value || '';
+  var fieldType = target.type || '';
+  if (evt.type != 'blur') {
+    __gCrWeb.form.lastFocusedElement = document.activeElement;
+  }
+  if (target != __gCrWeb.form.lastFocusedElement) return;
   var msg = {
     'command': 'form.activity',
-    'formName': __gCrWeb.form.getFormIdentifier(evt.srcElement.form),
-    'fieldName': __gCrWeb.form.getFieldIdentifier(srcElement),
+    'formName': __gCrWeb.form.getFormIdentifier(evt.target.form),
+    'fieldName': __gCrWeb.form.getFieldName(target),
+    'fieldIdentifier': __gCrWeb.form.getFieldIdentifier(target),
     'fieldType': fieldType,
     'type': evt.type,
     'value': value
   };
-  __gCrWeb.message.invokeOnHost(msg);
+  sendMessageOnNextLoop_(msg);
 };
 
 /**
@@ -291,47 +393,74 @@ var getFullyQualifiedUrl_ = function(originalURL) {
   return anchor.href;
 };
 
-  /**
-   * Returns a simple signature of the form content of the page. Must be fast
-   * as it is called regularly.
-   */
-  var getFormSignature_ = function() {
-    return {
-      forms: document.forms.length,
-      input: document.getElementsByTagName('input').length
-    };
-  };
+/**
+ * Schedules |msg| to be sent after |delay|. Until |msg| is sent, further calls
+ * to this function are ignored.
+ */
+var sendFormMutationMessageAfterDelay_ = function(msg, delay) {
+  if (__gCrWeb.form.formMutationMessageToSend)
+    return;
 
-  /**
-   * Install a watcher to check the form changes. Delay is the interval between
-   * checks in milliseconds.
-   */
-  __gCrWeb.form['trackFormUpdates'] = function(delay) {
-    if (__gCrWeb.form.formWatcherInterval) {
-      clearInterval(__gCrWeb.form.formWatcherInterval);
-      __gCrWeb.form.formWatcherInterval = null;
-    }
-    if (delay) {
-      __gCrWeb.form.lastFormSignature = getFormSignature_();
-      __gCrWeb.form.formWatcherInterval = setInterval(function() {
-        var signature = getFormSignature_();
-        var old_signature = __gCrWeb.form.lastFormSignature;
-        if (signature.forms != old_signature.forms ||
-            signature.input != old_signature.input) {
-          var msg = {
-            'command': 'form.activity',
-            'formName': '',
-            'fieldName': '',
-            'fieldType': '',
-            'type': 'form_changed',
-            'value': ''
-          };
-          __gCrWeb.form.lastFormSignature = signature;
-          __gCrWeb.message.invokeOnHost(msg);
+  __gCrWeb.form.formMutationMessageToSend = msg;
+  setTimeout(function() {
+    __gCrWeb.message.invokeOnHost(__gCrWeb.form.formMutationMessageToSend);
+    __gCrWeb.form.formMutationMessageToSend = null;
+  }, delay);
+};
+
+/**
+ * Installs a MutationObserver to track form related changes. Waits |delay|
+ * milliseconds before sending a message to browser. A delay is used because
+ * form mutations are likely to come in batches. An undefined or zero value for
+ * |delay| would stop the MutationObserver, if any.
+ * @suppress {checkTypes} Required for for...of loop on mutations.
+ */
+__gCrWeb.form['trackFormMutations'] = function(delay) {
+  if (__gCrWeb.form.formMutationObserver) {
+    __gCrWeb.form.formMutationObserver.disconnect();
+    __gCrWeb.form.formMutationObserver = null;
+  }
+
+  if (!delay)
+    return;
+
+  __gCrWeb.form.formMutationObserver =
+      new MutationObserver(function(mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var mutation = mutations[i];
+          // Only process mutations to the tree of nodes.
+          if (mutation.type != 'childList')
+            continue;
+          var addedElements = [];
+          for (var j = 0; j < mutation.addedNodes.length; j++) {
+            var node = mutation.addedNodes[j];
+            // Ignore non-element nodes.
+            if (node.nodeType != Node.ELEMENT_NODE)
+              continue;
+            addedElements.push(node);
+            [].push.apply(
+                addedElements, [].slice.call(node.getElementsByTagName('*')));
+          }
+          var form_changed = addedElements.find(function(element) {
+            return element.tagName.match(/(FORM|INPUT|SELECT|OPTION)/);
+          });
+          if (form_changed) {
+            var msg = {
+              'command': 'form.activity',
+              'formName': '',
+              'fieldName': '',
+              'fieldIdentifier': '',
+              'fieldType': '',
+              'type': 'form_changed',
+              'value': ''
+            };
+            return sendFormMutationMessageAfterDelay_(msg, delay);
+          }
         }
-      }, delay);
-    }
-  };
+      });
+  __gCrWeb.form.formMutationObserver.observe(
+      document, {childList: true, subtree: true});
+};
 
 /** Flush the message queue. */
 if (__gCrWeb.message) {

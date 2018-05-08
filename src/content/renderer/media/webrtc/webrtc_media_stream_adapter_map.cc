@@ -77,8 +77,8 @@ WebRtcMediaStreamAdapterMap::WebRtcMediaStreamAdapterMap(
 }
 
 WebRtcMediaStreamAdapterMap::~WebRtcMediaStreamAdapterMap() {
-  DCHECK(main_thread_->BelongsToCurrentThread());
   DCHECK(local_stream_adapters_.empty());
+  DCHECK(remote_stream_adapters_.empty());
 }
 
 std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>
@@ -199,8 +199,8 @@ WebRtcMediaStreamAdapterMap::GetOrCreateRemoteStreamAdapter(
         base::BindOnce(
             &WebRtcMediaStreamAdapterMap::OnRemoteStreamAdapterInitialized,
             this,
-            base::Passed(base::WrapUnique(new AdapterRef(
-                this, AdapterRef::Type::kRemote, adapter_entry)))));
+            base::WrapUnique(new AdapterRef(this, AdapterRef::Type::kRemote,
+                                            adapter_entry))));
   }
   return base::WrapUnique(
       new AdapterRef(this, AdapterRef::Type::kRemote, adapter_entry));

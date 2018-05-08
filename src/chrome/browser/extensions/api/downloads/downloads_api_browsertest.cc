@@ -10,12 +10,11 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
@@ -24,6 +23,7 @@
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_test_file_activity_observer.h"
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #include "chrome/browser/extensions/api/downloads_internal/downloads_internal_api.h"
@@ -71,8 +71,8 @@
 
 using content::BrowserContext;
 using content::BrowserThread;
-using download::DownloadItem;
 using content::DownloadManager;
+using download::DownloadItem;
 
 namespace errors = download_extension_errors;
 
@@ -85,6 +85,8 @@ const char kFirstDownloadUrl[] = "/download1";
 const char kSecondDownloadUrl[] = "/download2";
 const int kDownloadSize = 1024 * 10;
 
+void OnFileDeleted(bool success) {}
+
 // Comparator that orders download items by their ID. Can be used with
 // std::sort.
 struct DownloadIdComparator {
@@ -92,6 +94,10 @@ struct DownloadIdComparator {
     return first->GetId() < second->GetId();
   }
 };
+
+bool IsDownloadExternallyRemoved(download::DownloadItem* item) {
+  return item->GetFileExternallyRemoved();
+}
 
 class DownloadsEventsListener : public content::NotificationObserver {
  public:
@@ -241,6 +247,8 @@ class DownloadsEventsListener : public content::NotificationObserver {
     return success;
   }
 
+  base::circular_deque<std::unique_ptr<Event>>* events() { return &events_; }
+
  private:
   bool waiting_;
   base::Time last_wait_;
@@ -323,7 +331,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
     GoOnTheRecord();
-    CreateAndSetDownloadsDirectory();
     current_browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
     events_listener_.reset(new DownloadsEventsListener());
@@ -388,8 +395,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   }
 
   std::string GetFilename(const char* path) {
-    std::string result =
-        downloads_directory_.GetPath().AppendASCII(path).AsUTF8Unsafe();
+    std::string result = downloads_directory().AppendASCII(path).AsUTF8Unsafe();
 #if defined(OS_WIN)
     for (std::string::size_type next = result.find("\\");
          next != std::string::npos;
@@ -592,8 +598,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
     return base::StringPrintf("[%d]", download_item->GetId());
   }
 
-  const base::FilePath& downloads_directory() {
-    return downloads_directory_.GetPath();
+  base::FilePath downloads_directory() {
+    return DownloadPrefs(browser()->profile()).DownloadPath();
   }
 
   DownloadsEventsListener* events_listener() { return events_listener_.get(); }
@@ -611,13 +617,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
     }
   }
 
-  void CreateAndSetDownloadsDirectory() {
-    ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
-    current_browser()->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory, downloads_directory_.GetPath());
-  }
-
-  base::ScopedTempDir downloads_directory_;
   const Extension* extension_;
   Browser* incognito_browser_;
   Browser* current_browser_;
@@ -1111,6 +1110,31 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   base::ListValue* result_list = NULL;
   ASSERT_TRUE(result->GetAsList(&result_list));
   ASSERT_EQ(1UL, result_list->GetSize());
+}
+
+// Test that file existence check should be performed after search.
+IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, FileExistenceCheckAfterSearch) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  DownloadItem* download_item = CreateFirstSlowTestDownload();
+  ASSERT_TRUE(download_item);
+  ASSERT_FALSE(download_item->GetTargetFilePath().empty());
+
+  // Finish the download and try again.
+  FinishFirstSlowDownloads();
+  base::DeleteFile(download_item->GetTargetFilePath(), false);
+
+  ASSERT_FALSE(download_item->GetFileExternallyRemoved());
+  std::unique_ptr<base::Value> result(
+      RunFunctionAndReturnResult(new DownloadsSearchFunction(), "[{}]"));
+  ASSERT_TRUE(result.get());
+  base::ListValue* result_list = nullptr;
+  ASSERT_TRUE(result->GetAsList(&result_list));
+  ASSERT_EQ(1UL, result_list->GetSize());
+  // Check file removal update will eventually come. WaitForEvent() will
+  // immediately return if the file is already removed.
+  content::DownloadUpdatedObserver(
+      download_item, base::BindRepeating(&IsDownloadExternallyRemoved))
+      .WaitForEvent();
 }
 
 #if !defined(OS_CHROMEOS)
@@ -1698,7 +1722,7 @@ class CustomResponse : public net::test_server::HttpResponse {
 
     if (first_request_) {
       *callback_ = std::move(done);
-      *task_runner_ = base::MessageLoop::current()->task_runner().get();
+      *task_runner_ = base::MessageLoopCurrent::Get()->task_runner().get();
       send.Run(response, base::BindRepeating([]() {}));
     } else {
       send.Run(response, std::move(done));
@@ -4323,6 +4347,52 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       &callback);
   BrowserActionTestUtil::Create(browser())->Press(0);
   observer->WaitForFinished();
+}
+
+// Test that file deletion event is correctly generated after download
+// completion.
+IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
+                       DownloadExtensionTest_DeleteFileAfterCompletion) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  GoOnTheRecord();
+  LoadExtension("downloads_split");
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
+
+  // Start downloading a file.
+  std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\"}]", download_url.c_str())));
+  ASSERT_TRUE(result.get());
+  int result_id = -1;
+  ASSERT_TRUE(result->GetAsInteger(&result_id));
+  DownloadItem* item = GetCurrentManager()->GetDownload(result_id);
+  ASSERT_TRUE(item);
+  ScopedCancellingItem canceller(item);
+  ASSERT_EQ(download_url, item->GetOriginalUrl().spec());
+
+  ASSERT_TRUE(WaitFor(downloads::OnCreated::kEventName,
+                      base::StringPrintf(R"([{"danger": "safe",)"
+                                         R"(  "incognito": false,)"
+                                         R"(  "id": %d,)"
+                                         R"(  "mime": "text/plain",)"
+                                         R"(  "paused": false,)"
+                                         R"(  "url": "%s"}])",
+                                         result_id, download_url.c_str())));
+  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
+                      base::StringPrintf(R"([{"id": %d,)"
+                                         R"(  "state": {)"
+                                         R"(    "previous": "in_progress",)"
+                                         R"(    "current": "complete"}}])",
+                                         result_id)));
+
+  item->DeleteFile(base::BindRepeating(OnFileDeleted));
+
+  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
+                      base::StringPrintf(R"([{"id": %d,)"
+                                         R"(  "exists": {)"
+                                         R"(    "previous": true,)"
+                                         R"(    "current": false}}])",
+                                         result_id)));
 }
 
 class DownloadsApiTest : public ExtensionApiTest {

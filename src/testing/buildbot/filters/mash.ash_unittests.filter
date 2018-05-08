@@ -1,6 +1,10 @@
 # Keep alphabetized. When adding new exclusions file a bug with the reason and
 # include a link. If a test should never run on mash, add an early exit to the
 # code instead of listing here. See Shell::GetAshConfig().
+#
+# Most new features are expected to work with mash, see //ash/README.md.
+# If you need to disable more than ~10 tests, please contact someone on
+# mustash-team@ to discuss.
 
 # TODO: mash screenshot support: https://crbug.com/557397.
 -AccessibilityHighlightControllerTest.TestCaretRingDrawsBluePixels
@@ -39,14 +43,24 @@
 -DisplayManagerTest.SoftwareMirrorModeBasics
 -DisplayManagerTest.UpdateMouseCursorAfterRotateZoom
 -DisplayManagerTestDisableMultiMirroring.SoftwareMirroringWithCompositingCursor
+-DisplayManagerTest.SoftwareMirrorRotationForTablet
+-DisplayManagerTest.SoftwareMirrorRotationForNonTablet
 
 # TODO: Docked magnifier needs reflector to work in mash.
 # https://crbug.com/814481.
+-AccessibilityControllerSigninTest.EnableOnLoginScreenAndLogin/0
+-AccessibilityControllerSigninTest.EnableOnLoginScreenAndLogin/1
+-AccessibilityControllerSigninTest.EnableOnLoginScreenAndLogin/2
 -DockedMagnifierTest.AddRemoveDisplays
 -DockedMagnifierTest.DisplaysWorkAreas
+-DockedMagnifierTest.FocusChangeEvents
 -DockedMagnifierTest.HighContrastMode
+-DockedMagnifierTest.MutuallyExclusiveMagnifiers
+-DockedMagnifierTest.TestEnableAndDisable
+-DockedMagnifierTest.TestOutsidePrefsUpdates
 -DockedMagnifierTest.TextInputFieldEvents
 -DockedMagnifierTest.TransformSimple
+-MagnifiersAcceleratorsTester.TestToggleMagnifiers
 
 # TODO: CursorManagerTestApi. http://crbug.com/780637
 -DragWindowResizerTest.CursorDeviceScaleFactor
@@ -160,6 +174,9 @@
 -NativeCursorManagerAshTest.SetDeviceScaleFactorAndRotation
 -NativeCursorManagerAshTest.UIScaleShouldNotChangeCursor
 
+# TODO: NightLight and mirror mode in mash. https://crbug.com/836368
+-NightLightTest.TestNightLightWithDisplayConfigurationChanges
+
 # TODO: Maybe due to dragging across displays. http://crbug.com/698888
 -NormalPanelPopup/PanelWindowResizerTransientTest.PanelWithTransientChild/0
 
@@ -206,6 +223,10 @@
 
 # TODO: Probably event filter problem. http://crbug.com/695758
 -ShellTest.TestPreTargetHandlerOrder
+
+# TODO: ShellPortMash::CreateTabletModeEventHandler. http://crbug.com/698093
+-SplitViewWindowSelectorTest.DragToClose
+-SplitViewWindowSelectorTest.FlingToClose
 
 # Focus traversal problem. http://crbug.com/814019
 -StatusAreaWidgetFocusTest.FocusOutObserver
@@ -277,6 +298,7 @@
 
 # TODO: Crashes in bounds_animator.cc. http://crbug.com/730759
 -WindowSelectorTest.MultipleDisplays
+-WindowSelectorTest.OverviewNoWindowsIndicatorMultiDisplay
 -WindowSelectorTest.RemoveDisplay
 -WindowSelectorTest.RemoveDisplayWithAnimation
 
@@ -285,6 +307,7 @@
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange_2ndOnLeft
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange_PrimaryDisconnected
+-WindowTreeHostManagerTest.UpdateNonVisibleMouseLocationAfterDisplayChange_PrimaryDisconnected
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange_SwapPrimary
 
 # TODO: Panel focus is broken. http://crbug.com/780936

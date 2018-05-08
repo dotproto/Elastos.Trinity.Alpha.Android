@@ -15,6 +15,7 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/display_util.h"
+#include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_base.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -43,19 +44,20 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase(RenderWidgetHost* host)
     : host_(RenderWidgetHostImpl::From(host)),
       is_fullscreen_(false),
       popup_type_(blink::kWebPopupTypeNone),
-      mouse_locked_(false),
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
       text_input_manager_(nullptr),
       wheel_scroll_latching_enabled_(base::FeatureList::IsEnabled(
           features::kTouchpadAndWheelScrollLatching)),
       web_contents_accessibility_(nullptr),
+      is_currently_scrolling_viewport_(false),
       renderer_frame_number_(0),
       weak_factory_(this) {
   host_->render_frame_metadata_provider()->AddObserver(this);
 }
 
 RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {
+  DCHECK(!keyboard_locked_);
   DCHECK(!mouse_locked_);
   // We call this here to guarantee that observers are notified before we go
   // away. However, some subclasses may wish to call this earlier in their
@@ -92,11 +94,19 @@ void RenderWidgetHostViewBase::NotifyObserversAboutShutdown() {
   DCHECK(!observers_.might_have_observers());
 }
 
+MouseWheelPhaseHandler* RenderWidgetHostViewBase::GetMouseWheelPhaseHandler() {
+  return nullptr;
+}
+
 bool RenderWidgetHostViewBase::OnMessageReceived(const IPC::Message& msg){
   return false;
 }
 
-void RenderWidgetHostViewBase::OnRenderFrameMetadataChanged() {}
+void RenderWidgetHostViewBase::OnRenderFrameMetadataChanged() {
+  is_scroll_offset_at_top_ = host_->render_frame_metadata_provider()
+                                 ->LastRenderFrameMetadata()
+                                 .is_scroll_offset_at_top;
+}
 
 void RenderWidgetHostViewBase::OnRenderFrameSubmission() {}
 
@@ -149,13 +159,19 @@ gfx::Size RenderWidgetHostViewBase::GetRequestedRendererSize() const {
   return GetViewBounds().size();
 }
 
+uint32_t RenderWidgetHostViewBase::GetCaptureSequenceNumber() const {
+  // TODO(vmpstr): Implement this for overrides other than aura and child frame.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return 0u;
+}
+
 ui::TextInputClient* RenderWidgetHostViewBase::GetTextInputClient() {
   NOTREACHED();
   return nullptr;
 }
 
 void RenderWidgetHostViewBase::SetIsInVR(bool is_in_vr) {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 bool RenderWidgetHostViewBase::IsInVR() const {
@@ -174,7 +190,7 @@ void RenderWidgetHostViewBase::CopyFromSurface(
     const gfx::Rect& src_rect,
     const gfx::Size& output_size,
     base::OnceCallback<void(const SkBitmap&)> callback) {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   std::move(callback).Run(SkBitmap());
 }
 
@@ -195,6 +211,20 @@ base::string16 RenderWidgetHostViewBase::GetSelectedText() {
 
 bool RenderWidgetHostViewBase::IsMouseLocked() {
   return mouse_locked_;
+}
+
+bool RenderWidgetHostViewBase::LockKeyboard(
+    base::Optional<base::flat_set<int>> keys) {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
+void RenderWidgetHostViewBase::UnlockKeyboard() {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+bool RenderWidgetHostViewBase::IsKeyboardLocked() {
+  return keyboard_locked_;
 }
 
 InputEventAckState RenderWidgetHostViewBase::FilterInputEvent(
@@ -254,6 +284,10 @@ gfx::NativeViewAccessible
   return nullptr;
 }
 
+bool RenderWidgetHostViewBase::RequestRepaintForTesting() {
+  return false;
+}
+
 void RenderWidgetHostViewBase::UpdateScreenInfo(gfx::NativeView view) {
   if (host() && host()->delegate())
     host()->delegate()->SendScreenRects();
@@ -288,17 +322,33 @@ void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(
   text_input_manager_ = nullptr;
 }
 
+void RenderWidgetHostViewBase::EnableAutoResize(const gfx::Size& min_size,
+                                                const gfx::Size& max_size) {
+  host()->SetAutoResize(true, min_size, max_size);
+  host()->SynchronizeVisualProperties();
+}
+
+void RenderWidgetHostViewBase::DisableAutoResize(const gfx::Size& new_size) {
+  if (!new_size.IsEmpty())
+    SetSize(new_size);
+  // This clears the cached value in the WebContents, so that OOPIFs will
+  // stop using it.
+  if (host()->delegate())
+    host()->delegate()->ResetAutoResizeSize();
+  host()->SetAutoResize(false, gfx::Size(), gfx::Size());
+  host()->SynchronizeVisualProperties();
+}
+
+bool RenderWidgetHostViewBase::IsScrollOffsetAtTop() const {
+  return is_scroll_offset_at_top_;
+}
+
 viz::ScopedSurfaceIdAllocator RenderWidgetHostViewBase::ResizeDueToAutoResize(
     const gfx::Size& new_size,
-    uint64_t sequence_number) {
-  // TODO(cblume): This doesn't currently suppress allocation.
-  // It maintains existing behavior while using the suppression style.
-  // This will be addressed in a follow-up patch.
-  // See https://crbug.com/805073
-  base::OnceCallback<void()> allocation_task =
-      base::BindOnce(&RenderWidgetHostViewBase::OnResizeDueToAutoResizeComplete,
-                     weak_factory_.GetWeakPtr(), sequence_number);
-  return viz::ScopedSurfaceIdAllocator(std::move(allocation_task));
+    const viz::LocalSurfaceId& local_surface_id) {
+  // This doesn't suppress allocation. Derived classes that need suppression
+  // should override this function.
+  return viz::ScopedSurfaceIdAllocator(base::DoNothing());
 }
 
 bool RenderWidgetHostViewBase::IsLocalSurfaceIdAllocationSuppressed() const {
@@ -341,7 +391,15 @@ void RenderWidgetHostViewBase::DidReceiveRendererFrame() {
 void RenderWidgetHostViewBase::ShowDisambiguationPopup(
     const gfx::Rect& rect_pixels,
     const SkBitmap& zoomed_bitmap) {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+void RenderWidgetHostViewBase::OnAutoscrollStart() {
+  if (!GetMouseWheelPhaseHandler())
+    return;
+
+  // End the current scrolling seqeunce when autoscrolling starts.
+  GetMouseWheelPhaseHandler()->DispatchPendingWheelEndEvent();
 }
 
 gfx::Size RenderWidgetHostViewBase::GetVisibleViewportSize() const {
@@ -349,7 +407,7 @@ gfx::Size RenderWidgetHostViewBase::GetVisibleViewportSize() const {
 }
 
 void RenderWidgetHostViewBase::SetInsets(const gfx::Insets& insets) {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 void RenderWidgetHostViewBase::DisplayCursor(const WebCursor& cursor) {
@@ -596,16 +654,15 @@ RenderWidgetHostViewBase::GetWindowTreeClientFromRenderer() {
 
 #endif
 
-void RenderWidgetHostViewBase::OnResizeDueToAutoResizeComplete(
-    uint64_t sequence_number) {
-  if (host())
-    host()->DidAllocateLocalSurfaceIdForAutoResize(sequence_number);
-}
-
 #if defined(OS_MACOSX)
 bool RenderWidgetHostViewBase::ShouldContinueToPauseForFrame() {
   return false;
 }
 #endif
+
+void RenderWidgetHostViewBase::DidNavigate() {
+  if (host())
+    host()->SynchronizeVisualProperties();
+}
 
 }  // namespace content

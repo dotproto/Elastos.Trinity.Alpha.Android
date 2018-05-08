@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -680,7 +679,7 @@ void LocalStorageContextMojo::InitiateConnection(bool in_memory_only) {
     // We were not given a subdirectory. Use a memory backed database.
     connector_->BindInterface(file::mojom::kServiceName, &leveldb_service_);
     leveldb_service_->OpenInMemory(
-        memory_dump_id_, MakeRequest(&database_),
+        memory_dump_id_, "local-storage", MakeRequest(&database_),
         base::BindOnce(&LocalStorageContextMojo::OnDatabaseOpened,
                        weak_ptr_factory_.GetWeakPtr(), true));
   }

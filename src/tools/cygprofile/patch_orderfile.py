@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env vpython
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -383,8 +383,6 @@ def GeneratePatchedOrderfile(unpatched_orderfile, native_lib_filename,
     # Make sure the anchor functions are located in the right place, here and
     # after everything else.
     # See the comment in //base/android/library_loader/anchor_functions.cc.
-    for prefix in _PREFIXES:
-      f.write(prefix + 'dummy_function_to_anchor_text\n')
     for prefix in _PREFIXES:
       f.write(prefix + 'dummy_function_start_of_ordered_text\n')
 

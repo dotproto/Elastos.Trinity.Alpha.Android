@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Iniciador</translation>
 <translation id="1525508553941733066">IGNORAR</translation>
+<translation id="1537254971476575106">Lupa de ecrã inteiro</translation>
 <translation id="15373452373711364">Cursor do rato grande</translation>
 <translation id="1550523713251050646">Clicar para obter mais opções</translation>
 <translation id="1567387640189251553">Foi ligado um teclado diferente desde a última vez que introduziu a palavra-passe. É possível que esteja a tentar roubar os seus toques de teclas.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Lamentamos, mas ainda não foi possível validar a sua palavra-passe. Nota: se alterou a palavra-passe recentemente, a nova palavra-passe será aplicada quando terminar sessão. Utilize a palavra-passe antiga aqui.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> restante(s)</translation>
 <translation id="1698760176351776263">Endereço IPv6: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">O administrador do dispositivo pode conseguir monitorizar a sua atividade.</translation>
 <translation id="1734367976349034509">Este dispositivo é gerido pela empresa</translation>
 <translation id="1746730358044914197">Os métodos de introdução são configurados pelo gestor.</translation>
 <translation id="1747827819627189109">Teclado no ecrã ativado</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Botão de sobrecarga</translation>
 <translation id="1951012854035635156">Assistente</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Definir o idioma</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Desligar</translation>
 <translation id="2012624427112548395">Ctrl + Pesquisa + H</translation>
 <translation id="2049639323467105390">Este aparelho é gerido por <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Vertical</translation>
 <translation id="2067602449040652523">Brilho do teclado</translation>
+<translation id="2081529251031312395">$1 pode iniciar sessão mais tarde.</translation>
 <translation id="2122028596993374965">Parar a transmissão de <ph name="TAB_NAME" /> para <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Carregador de baixo consumo</translation>
+<translation id="2135456203358955318">Lupa ancorada</translation>
 <translation id="2144487987174258011">Reinicie para atualizar o Adobe Flash Player</translation>
-<translation id="2191905770366256395">O teclado amovível necessita de uma atualização crítica</translation>
 <translation id="2208323208084708176">Modo de ambiente de trabalho unificado</translation>
 <translation id="2220572644011485463">PIN ou palavra-passe</translation>
 <translation id="225680501294068881">A procurar dispositivos...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Escala de apresentação</translation>
 <translation id="2303600792989757991">Ativar/desativar vista geral das janelas</translation>
 <translation id="2338501278241028356">Ativar o Bluetooth para detetar dispositivos próximos</translation>
+<translation id="2339073806695260576">Toque no botão da caneta stylus na prateleira para tirar uma nota, criar uma captura de ecrã, utilizar o ponteiro de laser ou a lupa.</translation>
 <translation id="2351266942280602854">Idioma e introdução</translation>
 <translation id="2352467521400612932">Definições da caneta stylus</translation>
 <translation id="2354174487190027830">A ativar <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Submeter</translation>
 <translation id="2675319268637823299">Um administrador não permitiu o início de sessão integrado para <ph name="USER_EMAIL" />.
     Todos os utilizadores têm de terminar sessão para continuar.</translation>
+<translation id="2696763960464195425">As suas informações serão removidas quando terminar sessão. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Definir o teclado</translation>
 <translation id="2718395828230677721">Luz noturna</translation>
 <translation id="2727977024730340865">Ligado a um carregador de baixo consumo. O carregamento da bateria pode não ser fiável.</translation>
 <translation id="2761704814324807722">Tabuleiro do estado, hora <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -168,7 +175,7 @@
 <translation id="4804818685124855865">Desligar</translation>
 <translation id="4849058404725798627">Realçar objeto com foco do teclado</translation>
 <translation id="4872237917498892622">Alt + Pesquisar ou Shift</translation>
-<translation id="4890187583552566966">O Assistente do Google foi desativado pelo administrador.</translation>
+<translation id="4890187583552566966">O Assistente Google foi desativado pelo administrador.</translation>
 <translation id="4895488851634969361">A bateria está carregada.</translation>
 <translation id="4905614135390995787">O atalho para ativar/desativar o Modo de alto contraste foi alterado. Utilize <ph name="NEW_SHORTCUT" /> em vez de <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Aceitar</translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Entrada de escrita manual</translation>
 <translation id="6528179044667508675">Não incomodar</translation>
 <translation id="6537270692134705506">Capturar ecrã</translation>
-<translation id="6580955892089546165">Esta funcionalidade permite-lhe aceder rapidamente a qualquer utilizador com a sessão iniciada sem ser necessária uma palavra-passe.
-
-Utilize esta funcionalidade apenas com contas fidedignas.</translation>
 <translation id="6585808820553845416">A sessão termina em <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Pesquisar+Shift+K</translation>
 <translation id="6650933572246256093">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" necessita de autorização para sincronizar. Introduza esta chave nesse dispositivo: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Palavra-passe</translation>
 <translation id="6691659475504239918">Pesquisa + Shift + H</translation>
+<translation id="6696025732084565524">O teclado amovível necessita de uma atualização crítica</translation>
 <translation id="6700713906295497288">Botão de menu IME</translation>
 <translation id="6713285437468012787">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" foi sincronizado e está agora disponível para todos os utilizadores. Pode remover esta sincronização através das Definições.</translation>
 <translation id="6715542151869432661">Não foram encontrados dispositivos móveis.</translation>
@@ -260,7 +265,6 @@ Utilize esta funcionalidade apenas com contas fidedignas.</translation>
 <translation id="7029814467594812963">Sair da sessão</translation>
 <translation id="7034339000180558234">A transmitir <ph name="TAB_NAME" /> para <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Definir imagem de fundo...</translation>
-<translation id="7054808953701320293">Entendido, não voltar a mostrar esta mensagem.</translation>
 <translation id="7066646422045619941">Esta rede foi desativada pelo gestor.</translation>
 <translation id="7067196344162293536">Rotação automática</translation>
 <translation id="7098389117866926363">Dispositivo USB-C (porta traseira esquerda)</translation>
@@ -287,20 +291,18 @@ Utilize esta funcionalidade apenas com contas fidedignas.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7692480393933218409">A carregar os dispositivos USB-C ligados</translation>
 <translation id="776344839111254542">Clique para ver os detalhes da atualização</translation>
-<translation id="7796353162336583443">Toque no botão da caneta stylus na prateleira para tirar uma nota, criar uma captura de ecrã ou utilizar o Assistente do Google, o ponteiro de laser ou a lupa.</translation>
+<translation id="7796353162336583443">Toque no botão da caneta stylus na prateleira para tirar uma nota, criar uma captura de ecrã ou utilizar o Assistente Google, o ponteiro de laser ou a lupa.</translation>
 <translation id="7798302898096527229">Prima Pesquisar ou Shift para cancelar.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> e <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Sinal forte</translation>
 <translation id="7904094684485781019">O gestor desta conta removeu a permissão de início de sessão integrado.</translation>
-<translation id="7933084174919150729">O Assistente do Google está disponível apenas no perfil principal.</translation>
+<translation id="7933084174919150729">O Assistente Google está disponível apenas no perfil principal.</translation>
 <translation id="79341161159229895">Conta gerida por <ph name="FIRST_PARENT_EMAIL" /> e <ph name="SECOND_PARENT_EMAIL" />.</translation>
 <translation id="7977927628060636163">A pesquisar redes móveis...</translation>
 <translation id="7982789257301363584">Rede</translation>
 <translation id="7994370417837006925">Início de sessão integrado</translation>
 <translation id="8000066093800657092">Sem rede</translation>
 <translation id="8054466585765276473">A calcular tempo da bateria.</translation>
-<translation id="8056430285089645882">Entendido, não voltar a mostrar esta mensagem.</translation>
-<translation id="8088137642766812908">Tenha cuidado, esta funcionalidade pode criar problemas</translation>
 <translation id="8098591350844501178">Parar a transmissão do ecrã para <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Ligado a <ph name="NAME" /></translation>
 <translation id="813913629614996137">A inicializar...</translation>
@@ -326,17 +328,15 @@ Utilize esta funcionalidade apenas com contas fidedignas.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Carregador de baixo consumo ligado</translation>
 <translation id="8734991477317290293">É possível que esteja a tentar roubar os seus toques de teclas.</translation>
+<translation id="8809737090443522491">Introduza o nome de uma aplicação ou de um documento.</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">A movimentação de janelas para outro ambiente de trabalho pode provocar um comportamento inesperado.
-
-É possível dividir as notificações, as janelas e as caixas de diálogo subsequentes entre ambientes de trabalho.</translation>
 <translation id="8825534185036233643">O espelhamento com mais do que dois ecrãs não é suportado.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Botão Anterior</translation>
 <translation id="8850991929411075241">Pesquisa+Esc</translation>
 <translation id="8870509716567206129">A aplicação não é compatível com o ecrã dividido.</translation>
 <translation id="8878886163241303700">Ecrã alargado</translation>
-<translation id="8921624153894383499">O Assistente do Google não fala este idioma.</translation>
+<translation id="8921624153894383499">O Assistente Google não fala este idioma.</translation>
 <translation id="8938800817013097409">Dispositivo USB-C (porta traseira direita)</translation>
 <translation id="8940956008527784070">Bateria fraca (<ph name="PERCENTAGE" />%)</translation>
 <translation id="8995603266996330174">Gerido por <ph name="DOMAIN" /></translation>

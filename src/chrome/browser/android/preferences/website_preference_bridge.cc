@@ -45,7 +45,7 @@
 #include "jni/WebsitePreferenceBridge_jni.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
 
@@ -258,6 +258,18 @@ void JNI_WebsitePreferenceBridge_SetSettingForOrigin(
       ->SetContentSettingDefaultScope(origin_url, embedder_url, content_type,
                                       std::string(), setting);
   WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
+}
+
+ChooserContextBase* GetChooserContext(ContentSettingsType type) {
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+
+  switch (type) {
+    case CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA:
+      return UsbChooserContextFactory::GetForProfile(profile);
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
 }
 
 }  // anonymous namespace
@@ -533,12 +545,13 @@ static jboolean JNI_WebsitePreferenceBridge_UrlMatchesContentSettingsPattern(
   return pattern.Matches(GURL(ConvertJavaStringToUTF8(env, jurl)));
 }
 
-static void JNI_WebsitePreferenceBridge_GetUsbOrigins(
+static void JNI_WebsitePreferenceBridge_GetChosenObjects(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
+    jint content_settings_type,
     const JavaParamRef<jobject>& list) {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  UsbChooserContext* context = UsbChooserContextFactory::GetForProfile(profile);
+  ChooserContextBase* context = GetChooserContext(
+      static_cast<ContentSettingsType>(content_settings_type));
   for (const auto& object : context->GetAllGrantedObjects()) {
     // Remove the trailing slash so that origins are matched correctly in
     // SingleWebsitePreferences.mergePermissionInfoForTopLevelOrigin.
@@ -554,10 +567,8 @@ static void JNI_WebsitePreferenceBridge_GetUsbOrigins(
     if (embedder != origin)
       jembedder = ConvertUTF8ToJavaString(env, embedder);
 
-    std::string name;
-    bool found = object->object.GetString("name", &name);
-    DCHECK(found);
-    ScopedJavaLocalRef<jstring> jname = ConvertUTF8ToJavaString(env, name);
+    ScopedJavaLocalRef<jstring> jname =
+        ConvertUTF8ToJavaString(env, context->GetObjectName(object->object));
 
     std::string serialized;
     bool written = base::JSONWriter::Write(object->object, &serialized);
@@ -565,19 +576,19 @@ static void JNI_WebsitePreferenceBridge_GetUsbOrigins(
     ScopedJavaLocalRef<jstring> jserialized =
         ConvertUTF8ToJavaString(env, serialized);
 
-    Java_WebsitePreferenceBridge_insertUsbInfoIntoList(
-        env, list, jorigin, jembedder, jname, jserialized);
+    Java_WebsitePreferenceBridge_insertChosenObjectInfoIntoList(
+        env, list, content_settings_type, jorigin, jembedder, jname,
+        jserialized);
   }
 }
 
-static void JNI_WebsitePreferenceBridge_RevokeUsbPermission(
+static void JNI_WebsitePreferenceBridge_RevokeObjectPermission(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
+    jint content_settings_type,
     const JavaParamRef<jstring>& jorigin,
     const JavaParamRef<jstring>& jembedder,
     const JavaParamRef<jstring>& jobject) {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  UsbChooserContext* context = UsbChooserContextFactory::GetForProfile(profile);
   GURL origin(ConvertJavaStringToUTF8(env, jorigin));
   DCHECK(origin.is_valid());
   // If embedder == origin above then a null embedder was sent to Java instead
@@ -588,6 +599,8 @@ static void JNI_WebsitePreferenceBridge_RevokeUsbPermission(
   std::unique_ptr<base::DictionaryValue> object = base::DictionaryValue::From(
       base::JSONReader::Read(ConvertJavaStringToUTF8(env, jobject)));
   DCHECK(object);
+  ChooserContextBase* context = GetChooserContext(
+      static_cast<ContentSettingsType>(content_settings_type));
   context->RevokeObjectPermission(origin, embedder, *object);
 }
 

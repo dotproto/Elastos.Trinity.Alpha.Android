@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/input_method_keyboard_controller.h"
 
 namespace chromeos {
 namespace input_method {
@@ -14,7 +15,9 @@ class InputMethodUtil;
 class ImeKeyboard;
 
 // The mock InputMethodManager for testing.
-class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
+class UI_BASE_IME_EXPORT MockInputMethodManager
+    : public InputMethodManager,
+      public ui::InputMethodKeyboardController {
  public:
  public:
   class State : public InputMethodManager::State {
@@ -109,10 +112,21 @@ class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
       const std::string& engine_id,
       const std::vector<InputMethodManager::MenuItem>& items) override;
   void MaybeNotifyImeMenuActivationChanged() override;
-  void OverrideKeyboardUrlRef(const std::string& keyset) override;
+  void OverrideKeyboardKeyset(mojom::ImeKeyset keyset) override;
   void SetImeMenuFeatureEnabled(ImeMenuFeature feature, bool enabled) override;
   bool GetImeMenuFeatureEnabled(ImeMenuFeature feature) const override;
   void NotifyObserversImeExtraInputStateChange() override;
+  ui::InputMethodKeyboardController* GetInputMethodKeyboardController()
+      override;
+
+  // ui::InputMethodKeyboardController overrides.
+  bool DisplayVirtualKeyboard() override;
+  void DismissVirtualKeyboard() override;
+  void AddObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override;
+  void RemoveObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override;
+  bool IsKeyboardVisible() const override;
 
  private:
   uint32_t features_enabled_state_;

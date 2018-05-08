@@ -16,13 +16,14 @@ import java.lang.reflect.Proxy;
  */
 public class BoundaryInterfaceReflectionUtil {
     /**
-     * Utility method for fetching a method from the current classloader, with the same signature
+     * Utility method for fetching a method from {@param delegateLoader}, with the same signature
      * (package + class + method name + parameters) as a given method defined in another
      * classloader.
      */
-    public static Method dupeMethod(Method method)
+    public static Method dupeMethod(Method method, ClassLoader delegateLoader)
             throws ClassNotFoundException, NoSuchMethodException {
-        Class<?> declaringClass = Class.forName(method.getDeclaringClass().getName());
+        Class<?> declaringClass =
+                Class.forName(method.getDeclaringClass().getName(), true, delegateLoader);
         Class[] otherSideParameterClasses = method.getParameterTypes();
         Class[] parameterClasses = new Class[otherSideParameterClasses.length];
         for (int n = 0; n < parameterClasses.length; n++) {
@@ -30,7 +31,9 @@ public class BoundaryInterfaceReflectionUtil {
             // Primitive classes are shared between the classloaders - so we can use the same
             // primitive class declarations on either side. Non-primitive classes must be looked up
             // by name.
-            parameterClasses[n] = clazz.isPrimitive() ? clazz : Class.forName(clazz.getName());
+            parameterClasses[n] = clazz.isPrimitive()
+                    ? clazz
+                    : Class.forName(clazz.getName(), true, delegateLoader);
         }
         return declaringClass.getDeclaredMethod(method.getName(), parameterClasses);
     }
@@ -53,18 +56,59 @@ public class BoundaryInterfaceReflectionUtil {
      */
     @TargetApi(Build.VERSION_CODES.KITKAT)
     public static InvocationHandler createInvocationHandlerFor(final Object delegate) {
-        return new InvocationHandler() {
-            @Override
-            public Object invoke(Object o, Method method, Object[] objects) throws Throwable {
-                try {
-                    return dupeMethod(method).invoke(delegate, objects);
-                } catch (InvocationTargetException e) {
-                    // If something went wrong, ensure we throw the original exception.
-                    throw e.getTargetException();
-                } catch (ReflectiveOperationException e) {
-                    throw new RuntimeException("Reflection failed for method " + method, e);
-                }
+        return new InvocationHandlerWithDelegateGetter(delegate);
+    }
+
+    /**
+     * Assuming that the given InvocationHandler was created in the current classloader and is an
+     * InvocationHandlerWithDelegateGetter, return the object the InvocationHandler delegates its
+     * method calls to.
+     */
+    public static Object getDelegateFromInvocationHandler(InvocationHandler invocationHandler) {
+        InvocationHandlerWithDelegateGetter objectHolder =
+                (InvocationHandlerWithDelegateGetter) invocationHandler;
+        return objectHolder.getDelegate();
+    }
+
+    /**
+     * An InvocationHandler storing the original object that method calls are delegated to.
+     * This allows us to pass InvocationHandlers across the support library boundary and later
+     * unwrap the objects used as delegates within those InvocationHandlers.
+     */
+    @TargetApi(Build.VERSION_CODES.KITKAT)
+    private static class InvocationHandlerWithDelegateGetter implements InvocationHandler {
+        private final Object mDelegate;
+
+        public InvocationHandlerWithDelegateGetter(final Object delegate) {
+            mDelegate = delegate;
+        }
+
+        @Override
+        public Object invoke(Object o, Method method, Object[] objects) throws Throwable {
+            final ClassLoader delegateLoader = mDelegate.getClass().getClassLoader();
+            try {
+                return dupeMethod(method, delegateLoader).invoke(mDelegate, objects);
+            } catch (InvocationTargetException e) {
+                // If something went wrong, ensure we throw the original exception.
+                throw e.getTargetException();
+            } catch (ReflectiveOperationException e) {
+                throw new RuntimeException("Reflection failed for method " + method, e);
             }
-        };
+        }
+
+        public Object getDelegate() {
+            return mDelegate;
+        }
+    }
+
+    /**
+     * Check whether a set of features {@param features} contains a certain feature {@param
+     * soughtFeature}.
+     */
+    public static boolean containsFeature(String[] features, String soughtFeature) {
+        for (String feature : features) {
+            if (feature.equals(soughtFeature)) return true;
+        }
+        return false;
     }
 }

@@ -739,8 +739,8 @@ IN_PROC_BROWSER_TEST_F(CrashReporterTest, MAYBE_GenerateMinidump) {
   // Check that one minidump got created.
   {
 #if defined(OS_MACOSX)
-    // Mac outputs dumps in the 'completed' directory.
-    crash_dumps_dir_ = crash_dumps_dir_.Append("completed");
+    // Mac outputs dumps in the 'pending' directory.
+    crash_dumps_dir_ = crash_dumps_dir_.Append("pending");
 #endif
     base::ThreadRestrictions::SetIOAllowed(true);
     base::FileEnumerator it(crash_dumps_dir_, /* recursive */ false,
@@ -969,6 +969,25 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestAppendCommandLineFlags,
 
   // Used only for lifetime.
   (void)web_contents;
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, ServerWantsClientCertificate) {
+  net::SpawnedTestServer::SSLOptions ssl_options;
+  ssl_options.request_client_certificate = true;
+
+  net::SpawnedTestServer server(
+      net::SpawnedTestServer::TYPE_HTTPS, ssl_options,
+      base::FilePath(FILE_PATH_LITERAL("headless/test/data")));
+  EXPECT_TRUE(server.Start());
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  HeadlessWebContents* web_contents =
+      browser_context->CreateWebContentsBuilder()
+          .SetInitialURL(server.GetURL("/hello.html"))
+          .Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
 }  // namespace headless

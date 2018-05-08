@@ -96,6 +96,45 @@ class GLES2ImplementationWithGrContextSupport
 
   // Calls that invalidate kVertex_GrGLBackendState
   void BindVertexArrayOES(GLuint array) override;
+  void DeleteVertexArraysOES(GLsizei n, const GLuint* arrays) override;
+  void VertexAttribDivisorANGLE(GLuint index, GLuint divisor) override;
+  void DisableVertexAttribArray(GLuint index) override;
+  void EnableVertexAttribArray(GLuint index) override;
+  void VertexAttrib1f(GLuint indx, GLfloat x) override;
+  void VertexAttrib1fv(GLuint indx, const GLfloat* values) override;
+  void VertexAttrib2f(GLuint indx, GLfloat x, GLfloat y) override;
+  void VertexAttrib2fv(GLuint indx, const GLfloat* values) override;
+  void VertexAttrib3f(GLuint indx, GLfloat x, GLfloat y, GLfloat z) override;
+  void VertexAttrib3fv(GLuint indx, const GLfloat* values) override;
+  void VertexAttrib4f(GLuint indx,
+                      GLfloat x,
+                      GLfloat y,
+                      GLfloat z,
+                      GLfloat w) override;
+  void VertexAttrib4fv(GLuint indx, const GLfloat* values) override;
+  void VertexAttribI4i(GLuint indx,
+                       GLint x,
+                       GLint y,
+                       GLint z,
+                       GLint w) override;
+  void VertexAttribI4iv(GLuint indx, const GLint* values) override;
+  void VertexAttribI4ui(GLuint indx,
+                        GLuint x,
+                        GLuint y,
+                        GLuint z,
+                        GLuint w) override;
+  void VertexAttribI4uiv(GLuint indx, const GLuint* values) override;
+  void VertexAttribIPointer(GLuint indx,
+                            GLint size,
+                            GLenum type,
+                            GLsizei stride,
+                            const void* ptr) override;
+  void VertexAttribPointer(GLuint indx,
+                           GLint size,
+                           GLenum type,
+                           GLboolean normalized,
+                           GLsizei stride,
+                           const void* ptr) override;
 
   // Calls that invalidate kStencil_GrGLBackendState
   void StencilFunc(GLenum func, GLint ref, GLuint mask) override;
@@ -139,6 +178,7 @@ class GLES2ImplementationWithGrContextSupport
                        GLuint buffer,
                        GLintptr offset,
                        GLsizeiptr size) override;
+  void DeleteBuffers(GLsizei n, const GLuint* buffers) override;
   void Disable(GLenum cap) override;
   void Enable(GLenum cap) override;
 

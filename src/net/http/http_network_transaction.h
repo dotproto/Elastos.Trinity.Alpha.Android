@@ -15,14 +15,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "crypto/ec_private_key.h"
+#include "net/base/completion_repeating_callback.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
-#include "net/base/network_throttle_manager.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_stream_factory.h"
+#include "net/http/http_stream_request.h"
 #include "net/http/http_transaction.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
@@ -41,7 +42,6 @@ class BidirectionalStreamImpl;
 class HttpAuthController;
 class HttpNetworkSession;
 class HttpStream;
-class HttpStreamRequest;
 class IOBuffer;
 class ProxyInfo;
 class SSLPrivateKey;
@@ -49,8 +49,7 @@ struct HttpRequestInfo;
 
 class NET_EXPORT_PRIVATE HttpNetworkTransaction
     : public HttpTransaction,
-      public HttpStreamRequest::Delegate,
-      public NetworkThrottleManager::ThrottleDelegate {
+      public HttpStreamRequest::Delegate {
  public:
   HttpNetworkTransaction(RequestPriority priority,
                          HttpNetworkSession* session);
@@ -127,11 +126,11 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void OnQuicBroken() override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
 
-  // NetworkThrottleManager::Delegate methods:
-  void OnThrottleUnblocked(NetworkThrottleManager::Throttle* throttle) override;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, ResetStateForRestart);
+  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest,
+                           CreateWebSocketHandshakeStream);
+  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionSSLTest, ChannelID);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateReceived);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateSent);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateOverflow);
@@ -142,8 +141,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
                            FlowControlNegativeSendWindowSize);
 
   enum State {
-    STATE_THROTTLE,
-    STATE_THROTTLE_COMPLETE,
     STATE_NOTIFY_BEFORE_CREATE_STREAM,
     STATE_CREATE_STREAM,
     STATE_CREATE_STREAM_COMPLETE,
@@ -190,8 +187,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // argument receive the result from the previous state.  If a method returns
   // ERR_IO_PENDING, then the result from OnIOComplete will be passed to the
   // next state method as the result arg.
-  int DoThrottle();
-  int DoThrottleComplete();
   int DoNotifyBeforeCreateStream();
   int DoCreateStream();
   int DoCreateStreamComplete(int result);
@@ -253,6 +248,10 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // HTTP2 or QUIC network errors, and no further retries should be attempted.
   bool HasExceededMaxRetries() const;
 
+  // Increments the number of restarts and returns true if the restart may
+  // proceed.
+  bool CheckMaxRestarts();
+
   // Resets the connection and the request headers for resend.  Called when
   // ShouldResendRequest() is true.
   void ResetConnectionAndRequestForResend();
@@ -296,8 +295,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // Returns true if this transaction is for a WebSocket handshake
   bool ForWebSocketHandshake() const;
 
-  void SetStream(HttpStream* stream);
-
   void CopyConnectionAttemptsFromStreamRequest();
 
   // Returns true if response "Content-Encoding" headers respect
@@ -312,7 +309,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // cleared by RestartWithAuth().
   HttpAuth::Target pending_auth_target_;
 
-  CompletionCallback io_callback_;
+  CompletionRepeatingCallback io_callback_;
   CompletionCallback callback_;
 
   HttpNetworkSession* session_;
@@ -343,6 +340,13 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // SSLClientAuthCache, rather than provided externally by the caller.
   bool server_ssl_client_cert_was_cached_;
 
+  // SSL configuration used for the server and proxy, respectively. Note
+  // |server_ssl_config_| may be updated from the HttpStreamFactory, which will
+  // be applied on retry.
+  //
+  // TODO(davidben): Mutating it is weird and relies on HttpStreamFactory
+  // modifications being idempotent. Address this as part of other work to make
+  // sense of SSLConfig (related to https://crbug.com/488043).
   SSLConfig server_ssl_config_;
   SSLConfig proxy_ssl_config_;
 
@@ -410,10 +414,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // Network error details for this transaction.
   NetErrorDetails net_error_details_;
 
-  // Communicate lifetime of transaction to the throttler, and
-  // throttled state to the transaction.
-  std::unique_ptr<NetworkThrottleManager::Throttle> throttle_;
-
   // Number of retries made for network errors like ERR_SPDY_PING_FAILED,
   // ERR_SPDY_SERVER_REFUSED_STREAM, ERR_QUIC_HANDSHAKE_FAILED and
   // ERR_QUIC_PROTOCOL_ERROR. Currently we stop after 3 tries
@@ -422,6 +422,13 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // behaved server may time those out and thus the number
   // of times we can retry a request on reused sockets is limited.
   size_t retry_attempts_;
+
+  // Number of times the transaction was restarted via a RestartWith* call.
+  size_t num_restarts_;
+
+  // The net::Error which triggered a TLS 1.3 version interference probe, or OK
+  // if none was triggered.
+  int ssl_version_interference_error_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpNetworkTransaction);
 };

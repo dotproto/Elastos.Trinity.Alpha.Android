@@ -22,6 +22,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
@@ -41,6 +42,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Instrumentation tests for {@link OfflinePageUtils}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -59,6 +61,10 @@ public class OfflinePageUtilsTest {
     private static final ClientId ASYNC_ID =
             new ClientId(OfflinePageBridge.ASYNC_NAMESPACE, "5678");
     private static final String SHARED_URI = "http://127.0.0.1/chrome/test/data/android/about.html";
+    private static final String CONTENT_URI = "content://chromium/some-content-id";
+    private static final String FILE_URI = "file://some-dir/some-file.mhtml";
+    private static final String INVALID_URI = "This is not a uri.";
+    private static final String EMPTY_URI = "";
     private static final String EMPTY_PATH = "";
     private static final String CACHE_SUBDIR = "/Offline Pages/archives";
     private static final String NEW_FILE = "/newfile.mhtml";
@@ -305,7 +311,7 @@ public class OfflinePageUtilsTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({"enable-features=OfflinePagesSharing"})
-    public void testSharePrivateOfflinePage() throws Exception {
+    public void testShareTemporaryOfflinePage() throws Exception {
         loadOfflinePage(BOOKMARK_ID);
         final Semaphore semaphore = new Semaphore(0);
         final TestShareCallback shareCallback = new TestShareCallback(semaphore);
@@ -316,25 +322,25 @@ public class OfflinePageUtilsTest {
                 boolean shared =
                         OfflinePageUtils.maybeShareOfflinePage(mActivityTestRule.getActivity(),
                                 mActivityTestRule.getActivity().getActivityTab(), shareCallback);
-                // The attempt to share a page from our private internal directory should fail.
+                // The attempt to share a temporary page should fall back to sharing the URL.
                 Assert.assertFalse(shared);
             }
         });
     }
 
     // Checks on the UI thread if an offline path corresponds to a sharable file.
-    private void checkIfOfflinePageIsSharable(final String filePath, boolean sharable) {
+    private void checkIfOfflinePageIsSharable(
+            final String filePath, final String uriPath, final String namespace, boolean sharable) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                OfflinePageItem privateOfflinePageItem = new OfflinePageItem(SHARED_URI, OFFLINE_ID,
-                        OfflinePageBridge.ASYNC_NAMESPACE, PAGE_ID, TITLE, filePath, FILE_SIZE, 0,
-                        0, 0, REQUEST_ORIGIN);
+                OfflinePageItem privateOfflinePageItem = new OfflinePageItem(uriPath, OFFLINE_ID,
+                        namespace, PAGE_ID, TITLE, filePath, FILE_SIZE, 0, 0, 0, REQUEST_ORIGIN);
                 OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(
                         mActivityTestRule.getActivity().getActivityTab().getProfile());
 
                 boolean isSharable = OfflinePageUtils.isOfflinePageShareable(
-                        offlinePageBridge, privateOfflinePageItem);
+                        offlinePageBridge, privateOfflinePageItem, uriPath);
                 Assert.assertEquals(sharable, isSharable);
             }
         });
@@ -347,17 +353,58 @@ public class OfflinePageUtilsTest {
         // default.
         final String privatePath = activity().getApplicationContext().getCacheDir().getPath();
         final String publicPath = Environment.getExternalStorageDirectory().getPath();
+        final String async = OfflinePageBridge.ASYNC_NAMESPACE;
 
-        // Check that an offline page item in the private directory is not sharable.
+        // Check that an offline page item in the private directory is sharable, since we can
+        // upgrade it.
         final String fullPrivatePath = privatePath + CACHE_SUBDIR + NEW_FILE;
-        checkIfOfflinePageIsSharable(fullPrivatePath, false);
+        checkIfOfflinePageIsSharable(fullPrivatePath, SHARED_URI, async, true);
 
         // Check that an offline page item with no file path is not sharable.
-        checkIfOfflinePageIsSharable("", false);
+        checkIfOfflinePageIsSharable(EMPTY_PATH, SHARED_URI, async, false);
 
         // Check that a public offline page item with a file path is sharable.
         final String fullPublicPath = publicPath + NEW_FILE;
-        checkIfOfflinePageIsSharable(fullPublicPath, true);
+        checkIfOfflinePageIsSharable(fullPublicPath, SHARED_URI, async, true);
+
+        // Check that a page with a content URI and no file path is sharable.
+        checkIfOfflinePageIsSharable(EMPTY_PATH, CONTENT_URI, async, true);
+
+        // Check that a page with a file URI and no file path is sharable.
+        checkIfOfflinePageIsSharable(EMPTY_PATH, FILE_URI, async, true);
+
+        // Check that a malformed URI is not sharable.
+        checkIfOfflinePageIsSharable(EMPTY_PATH, INVALID_URI, async, false);
+
+        // Check that an empty URL is not sharable.
+        checkIfOfflinePageIsSharable(fullPublicPath, EMPTY_URI, async, false);
+
+        // Check that pages with temporary namespaces are not sharable.
+        checkIfOfflinePageIsSharable(
+                fullPrivatePath, SHARED_URI, OfflinePageBridge.BOOKMARK_NAMESPACE, false);
+        checkIfOfflinePageIsSharable(
+                fullPrivatePath, SHARED_URI, OfflinePageBridge.LAST_N_NAMESPACE, false);
+        checkIfOfflinePageIsSharable(
+                fullPrivatePath, SHARED_URI, OfflinePageBridge.CCT_NAMESPACE, false);
+        checkIfOfflinePageIsSharable(
+                fullPrivatePath, SHARED_URI, OfflinePageBridge.SUGGESTED_ARTICLES_NAMESPACE, false);
+    }
+
+    @Test
+    @SmallTest
+    public void testMhtmlPropertiesFromRenderer() throws Exception {
+        // This gets a file:// URL which should result in an untrusted offline page.
+        String testUrl = UrlUtils.getTestFileUrl("offline_pages/hello.mhtml");
+        mActivityTestRule.loadUrl(testUrl);
+
+        final AtomicReference<OfflinePageItem> offlinePageItem = new AtomicReference<>();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            offlinePageItem.set(OfflinePageUtils.getOfflinePage(
+                    mActivityTestRule.getActivity().getActivityTab()));
+        });
+
+        Assert.assertEquals("http://www.example.com/", offlinePageItem.get().getUrl());
+        Assert.assertEquals(1321901946000L, offlinePageItem.get().getCreationTimeMs());
     }
 
     private void loadPageAndSave(ClientId clientId) throws Exception {
@@ -395,8 +442,7 @@ public class OfflinePageUtilsTest {
             @Override
             public void run() {
                 mOfflinePageBridge.savePage(
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents(), clientId,
-                        new SavePageCallback() {
+                        mActivityTestRule.getWebContents(), clientId, new SavePageCallback() {
                             @Override
                             public void onSavePageDone(
                                     int savePageResult, String url, long offlineId) {

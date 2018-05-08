@@ -6,39 +6,27 @@
 
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/toolbar_commands.h"
-#import "ios/chrome/browser/ui/history_popup/requirements/tab_history_ui_updater.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive/toolbar_coordinatee.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_menu_coordinator.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface ToolbarCoordinatorAdaptor ()<TabHistoryUIUpdater, ToolbarCommands>
+@interface ToolbarCoordinatorAdaptor ()<ToolbarCommands>
 @property(nonatomic, strong)
     NSMutableArray<id<NewTabPageControllerDelegate, ToolbarCommands>>*
         coordinators;
-// Coordinator for the toolsMenu.
-@property(nonatomic, strong) ToolsMenuCoordinator* toolsMenuCoordinator;
 @end
 
 @implementation ToolbarCoordinatorAdaptor
 
 @synthesize coordinators = _coordinators;
-@synthesize toolsMenuCoordinator = _toolsMenuCoordinator;
 
 #pragma mark - Public
 
-- (instancetype)initWithToolsMenuConfigurationProvider:
-                    (id<ToolsMenuConfigurationProvider>)configurationProvider
-                                            dispatcher:
-                                                (CommandDispatcher*)dispatcher {
+- (instancetype)initWithDispatcher:(CommandDispatcher*)dispatcher {
   self = [super init];
   if (self) {
-    _toolsMenuCoordinator = [[ToolsMenuCoordinator alloc] init];
-    _toolsMenuCoordinator.dispatcher = dispatcher;
-    _toolsMenuCoordinator.configurationProvider = configurationProvider;
-    [_toolsMenuCoordinator start];
     [dispatcher startDispatchingToTarget:self
                              forProtocol:@protocol(ToolbarCommands)];
     _coordinators = [NSMutableArray array];
@@ -73,12 +61,6 @@
   }
 }
 
-#pragma mark - ToolsMenuPresentationStateProvider
-
-- (BOOL)isShowingToolsMenu {
-  return [self.toolsMenuCoordinator isShowingToolsMenu];
-}
-
 #pragma mark - SideSwipeToolbarInteracting
 
 - (BOOL)isInsideToolbar:(CGPoint)point {
@@ -94,28 +76,17 @@
   return NO;
 }
 
-#pragma mark - ToolbarCoordinating
+#pragma mark - PopupMenuUIUpdating
 
-- (void)updateToolsMenu {
-  [self.toolsMenuCoordinator updateConfiguration];
-}
-
-- (id<TabHistoryUIUpdater>)tabHistoryUIUpdater {
-  return self;
-}
-
-#pragma mark - TabHistoryUIUpdater
-
-- (void)updateUIForTabHistoryPresentationFrom:(ToolbarButtonType)button {
+- (void)updateUIForMenuDisplayed:(PopupMenuType)popupType {
   for (id<ToolbarCoordinatee> coordinator in self.coordinators) {
-    [coordinator.tabHistoryUIUpdater
-        updateUIForTabHistoryPresentationFrom:button];
+    [coordinator.popupMenuUIUpdater updateUIForMenuDisplayed:popupType];
   }
 }
 
-- (void)updateUIForTabHistoryWasDismissed {
+- (void)updateUIForMenuDismissed {
   for (id<ToolbarCoordinatee> coordinator in self.coordinators) {
-    [coordinator.tabHistoryUIUpdater updateUIForTabHistoryWasDismissed];
+    [coordinator.popupMenuUIUpdater updateUIForMenuDismissed];
   }
 }
 

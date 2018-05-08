@@ -19,14 +19,13 @@
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_metrics.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_screenlock_state_handler.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_types.h"
+#include "chromeos/components/proximity_auth/screenlock_state.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/proximity_auth/screenlock_state.h"
 
 class AccountId;
 
 namespace base {
-class DictionaryValue;
 class ListValue;
 }  // namespace base
 
@@ -78,9 +77,6 @@ class EasyUnlockService : public KeyedService {
   // Removes the hardlock state for the given user.
   static void ResetLocalStateForUser(const AccountId& account_id);
 
-  // Returns the identifier for the device.
-  static std::string GetDeviceId();
-
   // Returns the ProximityAuthPrefManager, responsible for managing all
   // EasyUnlock preferences.
   virtual proximity_auth::ProximityAuthPrefManager*
@@ -96,14 +92,11 @@ class EasyUnlockService : public KeyedService {
   virtual void LaunchSetup() = 0;
 
   // Gets/Sets/Clears the permit access for the local device.
-  virtual const base::DictionaryValue* GetPermitAccess() const = 0;
-  virtual void SetPermitAccess(const base::DictionaryValue& permit) = 0;
   virtual void ClearPermitAccess() = 0;
 
   // Gets/Sets the remote devices list.
   virtual const base::ListValue* GetRemoteDevices() const = 0;
   virtual void SetRemoteDevices(const base::ListValue& devices) = 0;
-  virtual void SetRemoteBleDevices(const base::ListValue& devices) = 0;
 
   // Runs the flow for turning Easy unlock off.
   virtual void RunTurnOffFlow() = 0;
@@ -130,14 +123,6 @@ class EasyUnlockService : public KeyedService {
 
   // Records metrics for password based flow for the given user.
   virtual void RecordPasswordLoginEvent(const AccountId& account_id) const = 0;
-
-  // Starts auto pairing.
-  typedef base::Callback<void(bool success, const std::string& error)>
-      AutoPairingResultCallback;
-  virtual void StartAutoPairing(const AutoPairingResultCallback& callback) = 0;
-
-  // Sets auto pairing result.
-  virtual void SetAutoPairingResult(bool success, const std::string& error) = 0;
 
   // Sets the service up and schedules service initialization.
   void Initialize(std::unique_ptr<EasyUnlockAppManager> app_manager);
@@ -170,19 +155,9 @@ class EasyUnlockService : public KeyedService {
   // the service to reflect the provided screenlock state.
   bool UpdateScreenlockState(proximity_auth::ScreenlockState state);
 
-  // Returns the screenlock state if it is available. Otherwise STATE_INACTIVE
-  // is returned.
-  proximity_auth::ScreenlockState GetScreenlockState();
-
   // Starts an auth attempt for the user associated with the service. The
   // attempt type (unlock vs. signin) will depend on the service type.
   void AttemptAuth(const AccountId& account_id);
-
-  // Similar to above but a callback is invoked after the auth attempt is
-  // finalized instead of default unlock/sign-in.
-  typedef EasyUnlockAuthAttempt::FinalizedCallback AttemptAuthCallback;
-  void AttemptAuth(const AccountId& account_id,
-                   const AttemptAuthCallback& callback);
 
   // Finalizes the previously started auth attempt for easy unlock. If called on
   // signin profile service, it will cancel the current auth attempt if one
@@ -211,7 +186,7 @@ class EasyUnlockService : public KeyedService {
 
   // Called when the user reauths (e.g. in chrome://settings) so we can cache
   // the user context for the setup flow.
-  virtual void HandleUserReauth(const chromeos::UserContext& user_context);
+  virtual void HandleUserReauth(const UserContext& user_context);
 
   void AddObserver(EasyUnlockServiceObserver* observer);
   void RemoveObserver(EasyUnlockServiceObserver* observer);
@@ -255,10 +230,6 @@ class EasyUnlockService : public KeyedService {
   // Opens an Easy Unlock Setup app window.
   void OpenSetupApp();
 
-  // Reloads the Easy unlock component app if it's loaded and resets the lock
-  // screen state.
-  void ReloadAppAndLockScreen();
-
   // Checks whether Easy unlock should be running and updates app state.
   void UpdateAppState();
 
@@ -268,9 +239,6 @@ class EasyUnlockService : public KeyedService {
   // is imminent and the app can be safely unloaded, but, for esthetic reasons,
   // the lock screen UI should remain unchanged until the screen unlocks.
   void DisableAppWithoutResettingScreenlockState();
-
-  // Notifies the easy unlock app that the user state has been updated.
-  void NotifyUserUpdated();
 
   // Notifies observers that the turn off flow status changed.
   void NotifyTurnOffOperationStatusChanged();
@@ -320,7 +288,7 @@ class EasyUnlockService : public KeyedService {
       const AccountId& account_id,
       const std::set<std::string> paired_devices,
       bool success,
-      const chromeos::EasyUnlockDeviceKeyDataList& key_data_list);
+      const EasyUnlockDeviceKeyDataList& key_data_list);
 
   // Updates the service to state for handling system suspend.
   void PrepareForSuspend();

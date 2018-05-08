@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -87,6 +86,11 @@ void SingleRequestURLLoaderFactory::CreateLoaderAndStart(
     network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   state_->HandleRequest(std::move(loader), std::move(client));
+}
+
+void SingleRequestURLLoaderFactory::Clone(
+    network::mojom::URLLoaderFactoryRequest request) {
+  NOTREACHED();
 }
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>

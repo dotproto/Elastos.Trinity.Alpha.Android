@@ -31,22 +31,28 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AttestationObject {
 
   ~AttestationObject();
 
-  // Replaces the attestation statement with a “none” attestation, as
-  // specified for step 20.3 in
-  // https://w3c.github.io/webauthn/#createCredential. (This does not,
-  // currently, erase the AAGUID (in AttestedCredentialData in
-  // |authenticator_data_|) because it is already always zero for U2F devices.
-  // If CTAP2 is supported in the future, that will need to be taken into
-  // account.)
-  //
-  // TODO(https://crbug.com/780078): erase AAGUID when CTAP2 is supported.
+  std::vector<uint8_t> GetCredentialId() const;
+
+  // Replaces the attestation statement with a “none” attestation and replaces
+  // device AAGUID with zero bytes as specified for step 20.3 in
+  // https://w3c.github.io/webauthn/#createCredential.
   void EraseAttestationStatement();
+
+  // Returns true if the attestation certificate is known to be inappropriately
+  // identifying. Some tokens return unique attestation certificates even when
+  // the bit to request that is not set. (Normal attestation certificates are
+  // not indended to be trackable.)
+  bool IsAttestationCertificateInappropriatelyIdentifying();
 
   // Produces a CBOR-encoded byte-array in the following format:
   // {"authData": authenticator data bytes,
   //  "fmt": attestation format name,
   //  "attStmt": attestation statement bytes }
   std::vector<uint8_t> SerializeToCBOREncodedBytes() const;
+
+  const std::vector<uint8_t>& rp_id_hash() const {
+    return authenticator_data_.application_parameter();
+  }
 
  private:
   AuthenticatorData authenticator_data_;

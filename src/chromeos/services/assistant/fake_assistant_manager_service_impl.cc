@@ -11,8 +11,12 @@ FakeAssistantManagerServiceImpl::FakeAssistantManagerServiceImpl() = default;
 
 FakeAssistantManagerServiceImpl::~FakeAssistantManagerServiceImpl() = default;
 
-void FakeAssistantManagerServiceImpl::Start(const std::string& access_token) {
-  running_ = true;
+void FakeAssistantManagerServiceImpl::Start(const std::string& access_token,
+                                            base::OnceClosure callback) {
+  state_ = State::RUNNING;
+
+  if (callback)
+    std::move(callback).Run();
 }
 
 void FakeAssistantManagerServiceImpl::SetAccessToken(
@@ -20,9 +24,23 @@ void FakeAssistantManagerServiceImpl::SetAccessToken(
 
 void FakeAssistantManagerServiceImpl::EnableListening(bool enable) {}
 
-bool FakeAssistantManagerServiceImpl::IsRunning() const {
-  return running_;
+AssistantManagerService::State FakeAssistantManagerServiceImpl::GetState()
+    const {
+  return state_;
 }
+
+AssistantSettingsManager*
+FakeAssistantManagerServiceImpl::GetAssistantSettingsManager() {
+  return nullptr;
+}
+
+void FakeAssistantManagerServiceImpl::SendGetSettingsUiRequest(
+    const std::string& selector,
+    GetSettingsUiResponseCallback callback) {}
+
+void FakeAssistantManagerServiceImpl::SendUpdateSettingsUiRequest(
+    const std::string& update,
+    UpdateSettingsUiResponseCallback callback) {}
 
 void FakeAssistantManagerServiceImpl::SendTextQuery(const std::string& query) {}
 

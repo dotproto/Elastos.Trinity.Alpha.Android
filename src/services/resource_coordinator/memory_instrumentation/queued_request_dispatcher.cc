@@ -81,38 +81,6 @@ memory_instrumentation::mojom::OSMemDumpPtr CreatePublicOSDump(
   return os_dump;
 }
 
-uint32_t GetDumpsSumKb(const std::string& pattern,
-                       const base::trace_event::ProcessMemoryDump& pmd) {
-  uint64_t sum = 0;
-  for (const auto& kv : pmd.allocator_dumps()) {
-    if (base::MatchPattern(kv.first /* name */, pattern))
-      sum += kv.second->GetSizeInternal();
-  }
-  return sum / 1024;
-}
-
-mojom::ChromeMemDumpPtr CreateDumpSummary(
-    const base::trace_event::ProcessMemoryDump& process_memory_dump) {
-  mojom::ChromeMemDumpPtr result = mojom::ChromeMemDump::New();
-  result->malloc_total_kb = GetDumpsSumKb("malloc", process_memory_dump);
-  result->v8_total_kb = GetDumpsSumKb("v8/*", process_memory_dump);
-  result->command_buffer_total_kb =
-      GetDumpsSumKb("gpu/gl/textures/*", process_memory_dump);
-  result->command_buffer_total_kb +=
-      GetDumpsSumKb("gpu/gl/buffers/*", process_memory_dump);
-  result->command_buffer_total_kb +=
-      GetDumpsSumKb("gpu/gl/renderbuffers/*", process_memory_dump);
-
-  // partition_alloc reports sizes for both allocated_objects and
-  // partitions. The memory allocated_objects uses is a subset of
-  // the partitions memory so to avoid double counting we only
-  // count partitions memory.
-  result->partition_alloc_total_kb =
-      GetDumpsSumKb("partition_alloc/partitions/*", process_memory_dump);
-  result->blink_gc_total_kb = GetDumpsSumKb("blink_gc", process_memory_dump);
-  return result;
-}
-
 void NodeAsValueIntoRecursively(const GlobalDumpGraph::Node& node,
                                 TracedValue* value,
                                 std::vector<base::StringPiece>* path) {
@@ -219,10 +187,6 @@ void QueuedRequestDispatcher::SetUpAndDispatch(
   DCHECK(!request->dump_in_progress);
   request->dump_in_progress = true;
 
-  // A request must be either !VM_REGIONS_ONLY or, in the special case of the
-  // heap profiler, must be of DETAILED type.
-  DCHECK(request->wants_chrome_dumps() || request->wants_mmaps());
-
   request->start_time = base::Time::Now();
 
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN2(
@@ -254,18 +218,24 @@ void QueuedRequestDispatcher::SetUpAndDispatch(
 
     // Don't request a chrome memory dump at all if the client wants only the
     // processes' vm regions, which are retrieved via RequestOSMemoryDump().
-    if (request->wants_chrome_dumps()) {
-      request->pending_responses.insert({client, ResponseType::kChromeDump});
-      client->RequestChromeMemoryDump(request->GetRequestArgs(),
-                                      base::Bind(chrome_callback, client));
-    }
+    //
+    // This must occur before the call to RequestOSMemoryDump, as
+    // ClientProcessImpl will [for macOS], delay the calculations for the
+    // OSMemoryDump until the Chrome memory dump is finished. See
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=812346#c16 for more
+    // details.
+    request->pending_responses.insert({client, ResponseType::kChromeDump});
+    client->RequestChromeMemoryDump(
+        request->GetRequestArgs(),
+        base::BindOnce(std::move(chrome_callback), client));
 
 // On most platforms each process can dump data about their own process
 // so ask each process to do so Linux is special see below.
 #if !defined(OS_LINUX)
     request->pending_responses.insert({client, ResponseType::kOSDump});
-    client->RequestOSMemoryDump(request->wants_mmaps(), {base::kNullProcessId},
-                                base::Bind(os_callback, client));
+    client->RequestOSMemoryDump(request->memory_map_option(),
+                                {base::kNullProcessId},
+                                base::BindOnce(os_callback, client));
 #endif  // !defined(OS_LINUX)
 
     // If we are in the single pid case, then we've already found the only
@@ -294,8 +264,9 @@ void QueuedRequestDispatcher::SetUpAndDispatch(
   }
   if (browser_client && pids.size() > 0) {
     request->pending_responses.insert({browser_client, ResponseType::kOSDump});
-    const auto callback = base::Bind(os_callback, browser_client);
-    browser_client->RequestOSMemoryDump(request->wants_mmaps(), pids, callback);
+    auto callback = base::BindOnce(os_callback, browser_client);
+    browser_client->RequestOSMemoryDump(request->memory_map_option(), pids,
+                                        std::move(callback));
   }
 #endif  // defined(OS_LINUX)
 
@@ -334,9 +305,9 @@ void QueuedRequestDispatcher::SetUpAndDispatchVmRegionRequest(
 
   request->pending_responses.insert(browser_client);
   request->responses[browser_client].process_id = browser_client_pid;
-  const auto callback = base::Bind(os_callback, browser_client);
-  browser_client->RequestOSMemoryDump(true /* wants_mmaps */, desired_pids,
-                                      callback);
+  auto callback = base::BindOnce(os_callback, browser_client);
+  browser_client->RequestOSMemoryDump(mojom::MemoryMapOption::MODULES,
+                                      desired_pids, std::move(callback));
 #else
   for (const auto& client_info : clients) {
     if (std::find(desired_pids.begin(), desired_pids.end(), client_info.pid) !=
@@ -344,9 +315,9 @@ void QueuedRequestDispatcher::SetUpAndDispatchVmRegionRequest(
       mojom::ClientProcess* client = client_info.client;
       request->pending_responses.insert(client);
       request->responses[client].process_id = client_info.pid;
-      client->RequestOSMemoryDump(true /* wants_mmaps */,
+      client->RequestOSMemoryDump(mojom::MemoryMapOption::MODULES,
                                   {base::kNullProcessId},
-                                  base::Bind(os_callback, client));
+                                  base::BindOnce(os_callback, client));
     }
   }
 #endif  // defined(OS_LINUX)
@@ -460,24 +431,6 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
   std::map<base::ProcessId, uint64_t> shared_footprints =
       GraphProcessor::ComputeSharedFootprintFromGraph(*global_graph);
 
-  // On non-macOS platforms, the entries in pid_to_shared_resident_kb will be
-  // default constructed when they are first accessed in the call to
-  // CreatePublicOSDump(). This has a small amount of overhead, but seems
-  // cleaner than plumbing through platform-specific if-defs.
-  std::map<base::ProcessId, uint32_t>* pid_to_shared_resident_kb = nullptr;
-#if defined(OS_MACOSX)
-  // The resident, anonymous shared memory for each process is only relevant on
-  // macOS.
-  std::map<base::ProcessId, uint32_t> pid_to_shared_resident_kb_actual;
-  for (const auto& pair : pid_to_pmd) {
-    if (pair.second) {
-      pid_to_shared_resident_kb_actual[pair.first] =
-          GetDumpsSumKb("shared_memory/*", *pair.second);
-    }
-  }
-  pid_to_shared_resident_kb = &pid_to_shared_resident_kb_actual;
-#endif
-
   // Perform the rest of the computation on the graph.
   GraphProcessor::AddOverheadsAndPropogateEntries(global_graph.get());
   GraphProcessor::CalculateSizesForGraph(global_graph.get());
@@ -503,9 +456,24 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
     // If the raw dump exists, create a summarised version of it.
     mojom::OSMemDumpPtr os_dump = nullptr;
     if (raw_os_dump) {
-      os_dump = CreatePublicOSDump(
-          *raw_os_dump,
-          pid_to_shared_resident_kb ? (*pid_to_shared_resident_kb)[pid] : 0);
+      uint64_t shared_resident_kb = 0;
+#if defined(OS_MACOSX)
+      // The resident, anonymous shared memory for each process is only relevant
+      // on macOS.
+      const auto process_graph_it =
+          global_graph->process_dump_graphs().find(pid);
+      if (process_graph_it != global_graph->process_dump_graphs().end()) {
+        const auto& process_graph = process_graph_it->second;
+        auto* node = process_graph->FindNode("shared_memory");
+        if (node) {
+          const auto& entry =
+              node->entries()->find(MemoryAllocatorDump::kNameSize);
+          if (entry != node->entries()->end())
+            shared_resident_kb = entry->second.value_uint64 / 1024;
+        }
+      }
+#endif
+      os_dump = CreatePublicOSDump(*raw_os_dump, shared_resident_kb);
       os_dump->shared_footprint_kb = shared_footprints[pid] / 1024;
     }
 
@@ -529,19 +497,18 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
     }
 
     // Ignore incomplete results (can happen if the client crashes/disconnects).
-    const bool valid = raw_os_dump &&
-                       (!request->wants_chrome_dumps() || raw_chrome_dump) &&
-                       (!request->wants_mmaps() ||
-                        (raw_os_dump && !raw_os_dump->memory_maps.empty()));
+    const bool valid =
+        raw_os_dump && raw_chrome_dump &&
+        (request->memory_map_option() == mojom::MemoryMapOption::NONE ||
+         (raw_os_dump && !raw_os_dump->memory_maps.empty()));
 
     if (!valid)
       continue;
 
-    // TODO(hjd): not sure we need an empty instance for the !SUMMARY_ONLY
-    // requests. Check and make the else branch a nullptr otherwise.
-    mojom::ChromeMemDumpPtr chrome_dump =
-        request->should_return_summaries() ? CreateDumpSummary(*raw_chrome_dump)
-                                           : mojom::ChromeMemDump::New();
+    mojom::ProcessMemoryDumpPtr pmd = mojom::ProcessMemoryDump::New();
+    pmd->pid = pid;
+    pmd->process_type = pid_to_process_type[pid];
+    pmd->os_dump = std::move(os_dump);
 
     // If we have to return a summary, add all entries for the requested
     // allocator dumps.
@@ -553,21 +520,16 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
         // Silently ignore any missing node in the process graph.
         if (!node)
           continue;
-        std::unordered_map<std::string, uint64_t> numeric_entries;
+        base::flat_map<std::string, uint64_t> numeric_entries;
         for (const auto& entry : *node->entries()) {
           if (entry.second.type == Node::Entry::Type::kUInt64)
             numeric_entries.emplace(entry.first, entry.second.value_uint64);
         }
-        chrome_dump->entries_for_allocator_dumps.emplace(
+        pmd->chrome_allocator_dumps.emplace(
             name, mojom::AllocatorMemDump::New(std::move(numeric_entries)));
       }
     }
 
-    mojom::ProcessMemoryDumpPtr pmd = mojom::ProcessMemoryDump::New();
-    pmd->pid = pid;
-    pmd->process_type = pid_to_process_type[pid];
-    pmd->os_dump = std::move(os_dump);
-    pmd->chrome_dump = std::move(chrome_dump);
     global_dump->process_dumps.push_back(std::move(pmd));
   }
 
@@ -578,8 +540,9 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
   if (request->args.pid != base::kNullProcessId && !global_success) {
     global_dump = nullptr;
   }
-  const auto& callback = request->callback;
-  callback.Run(global_success, request->dump_guid, std::move(global_dump));
+  auto& callback = request->callback;
+  std::move(callback).Run(global_success, request->dump_guid,
+                          std::move(global_dump));
   UMA_HISTOGRAM_MEDIUM_TIMES("Memory.Experimental.Debug.GlobalDumpDuration",
                              base::Time::Now() - request->start_time);
   UMA_HISTOGRAM_COUNTS_1000(

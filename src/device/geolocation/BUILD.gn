@@ -173,6 +173,7 @@ source_set("unittests") {
     "wifi_data_provider_common_unittest.cc",
     "wifi_data_provider_linux_unittest.cc",
     "wifi_data_provider_win_unittest.cc",
+    "wifi_polling_policy_unittest.cc",
   ]
   public_deps = [
     ":geolocation",

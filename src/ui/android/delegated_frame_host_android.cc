@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "components/viz/common/features.h"
@@ -26,17 +25,21 @@ namespace ui {
 
 namespace {
 
+constexpr viz::LocalSurfaceId kInvalidLocalSurfaceId;
+
 scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
-    viz::SurfaceInfo surface_info,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& size_in_pixels,
     bool surface_opaque) {
   // manager must outlive compositors using it.
   auto layer = cc::SurfaceLayer::Create();
-  layer->SetPrimarySurfaceId(surface_info.id(),
+  layer->SetPrimarySurfaceId(surface_id,
                              cc::DeadlinePolicy::UseDefaultDeadline());
-  layer->SetFallbackSurfaceId(surface_info.id());
-  layer->SetBounds(surface_info.size_in_pixels());
+  layer->SetFallbackSurfaceId(surface_id);
+  layer->SetBounds(size_in_pixels);
   layer->SetIsDrawable(true);
   layer->SetContentsOpaque(surface_opaque);
+  layer->SetHitTestable(true);
 
   return layer;
 }
@@ -89,7 +92,8 @@ void DelegatedFrameHostAndroid::SubmitCompositorFrame(
                                     std::move(hit_test_region_list));
 
     content_layer_ =
-        CreateSurfaceLayer(surface_info_, !has_transparent_background_);
+        CreateSurfaceLayer(surface_info_.id(), surface_info_.size_in_pixels(),
+                           !has_transparent_background_);
     view_->GetLayer()->AddChild(content_layer_);
   } else {
     support_->SubmitCompositorFrame(local_surface_id, std::move(frame),
@@ -111,27 +115,28 @@ void DelegatedFrameHostAndroid::CopyFromCompositingSurface(
     const gfx::Rect& src_subrect,
     const gfx::Size& output_size,
     base::OnceCallback<void(const SkBitmap&)> callback) {
+  // TODO(vmpstr): We should defer this request until such time that this
+  // returns true. https://crbug.com/826097.
   if (!CanCopyFromCompositingSurface()) {
     std::move(callback).Run(SkBitmap());
     return;
   }
 
-  scoped_refptr<cc::Layer> readback_layer =
-      CreateSurfaceLayer(surface_info_, !has_transparent_background_);
-  readback_layer->SetHideLayerAndSubtree(true);
-  view_->GetWindowAndroid()->GetCompositor()->AttachLayerForReadback(
-      readback_layer);
+  WindowAndroidCompositor* compositor =
+      view_->GetWindowAndroid()->GetCompositor();
+  compositor->IncrementReadbackRequestCount();
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
           viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(
               [](base::OnceCallback<void(const SkBitmap&)> callback,
-                 scoped_refptr<cc::Layer> readback_layer,
+                 base::WeakPtr<WindowAndroidCompositor> compositor_weak_ptr,
                  std::unique_ptr<viz::CopyOutputResult> result) {
-                readback_layer->RemoveFromParent();
+                if (compositor_weak_ptr)
+                  compositor_weak_ptr->DecrementReadbackRequestCount();
                 std::move(callback).Run(result->AsSkBitmap());
               },
-              std::move(callback), std::move(readback_layer)));
+              std::move(callback), compositor->GetWeakPtr()));
 
   if (src_subrect.IsEmpty()) {
     request->set_area(gfx::Rect(surface_info_.size_in_pixels()));
@@ -146,8 +151,7 @@ void DelegatedFrameHostAndroid::CopyFromCompositingSurface(
         gfx::Vector2d(request->area().width(), request->area().height()),
         gfx::Vector2d(output_size.width(), output_size.height()));
   }
-
-  support_->RequestCopyOfOutput(std::move(request));
+  support_->RequestCopyOfOutput(kInvalidLocalSurfaceId, std::move(request));
 }
 
 bool DelegatedFrameHostAndroid::CanCopyFromCompositingSurface() const {
@@ -156,15 +160,17 @@ bool DelegatedFrameHostAndroid::CanCopyFromCompositingSurface() const {
 }
 
 void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
-  if (!surface_info_.is_valid())
-    return;
+  // TakeFallbackContentFrom() can populate |content_layer_| when
+  // |surface_info_| is invalid.
+  if (content_layer_) {
+    content_layer_->RemoveFromParent();
+    content_layer_ = nullptr;
+  }
 
-  DCHECK(content_layer_);
-
-  content_layer_->RemoveFromParent();
-  content_layer_ = nullptr;
-  support_->EvictLastActivatedSurface();
-  surface_info_ = viz::SurfaceInfo();
+  if (surface_info_.is_valid()) {
+    support_->EvictLastActivatedSurface();
+    surface_info_ = viz::SurfaceInfo();
+  }
 }
 
 bool DelegatedFrameHostAndroid::HasDelegatedContent() const {
@@ -208,14 +214,11 @@ void DelegatedFrameHostAndroid::DetachFromCompositor() {
   registered_parent_compositor_ = nullptr;
 }
 
-void DelegatedFrameHostAndroid::WasResized() {
-  if (enable_surface_synchronization_) {
-    local_surface_id_ = local_surface_id_allocator_.GenerateId();
-
-    // TODO(ericrk): We should handle updating our surface layer with the new
-    // ID. See similar behavior in delegated_frame_host.cc.
-    // https://crbug.com/801350
-  }
+void DelegatedFrameHostAndroid::SynchronizeVisualProperties() {
+  local_surface_id_allocator_.GenerateId();
+  // TODO(ericrk): We should handle updating our surface layer with the new
+  // ID if surface synchronization is enabled. See similar behavior in
+  // delegated_frame_host.cc. https://crbug.com/801350
 }
 
 void DelegatedFrameHostAndroid::DidReceiveCompositorFrameAck(
@@ -280,7 +283,18 @@ const viz::SurfaceId& DelegatedFrameHostAndroid::SurfaceId() const {
 
 const viz::LocalSurfaceId& DelegatedFrameHostAndroid::GetLocalSurfaceId()
     const {
-  return local_surface_id_;
+  return local_surface_id_allocator_.GetCurrentLocalSurfaceId();
+}
+
+void DelegatedFrameHostAndroid::TakeFallbackContentFrom(
+    DelegatedFrameHostAndroid* other) {
+  if (content_layer_ || !other->content_layer_)
+    return;
+  content_layer_ =
+      CreateSurfaceLayer(other->content_layer_->fallback_surface_id(),
+                         other->content_layer_->bounds(),
+                         other->content_layer_->contents_opaque());
+  view_->GetLayer()->AddChild(content_layer_);
 }
 
 }  // namespace ui

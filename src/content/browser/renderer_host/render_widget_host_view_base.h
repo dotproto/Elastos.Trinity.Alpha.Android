@@ -9,7 +9,6 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -30,9 +29,9 @@
 #include "ipc/ipc_listener.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
-#include "third_party/WebKit/public/web/WebPopupType.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
+#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
+#include "third_party/blink/public/web/web_popup_type.h"
+#include "third_party/blink/public/web/web_text_direction.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/base/ime/text_input_mode.h"
@@ -79,6 +78,7 @@ namespace content {
 class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
 class CursorManager;
+class MouseWheelPhaseHandler;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
 class SyntheticGestureTarget;
@@ -115,6 +115,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void SetIsInVR(bool is_in_vr) override;
   base::string16 GetSelectedText() override;
   bool IsMouseLocked() override;
+  bool LockKeyboard(base::Optional<base::flat_set<int>> keys) override;
+  void UnlockKeyboard() override;
+  bool IsKeyboardLocked() override;
   gfx::Size GetVisibleViewportSize() const override;
   void SetInsets(const gfx::Insets& insets) override;
   bool IsSurfaceAvailableForCopy() const override;
@@ -125,6 +128,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   viz::mojom::FrameSinkVideoCapturerPtr CreateVideoCapturer() override;
   void FocusedNodeTouched(bool editable) override;
   void GetScreenInfo(ScreenInfo* screen_info) const override;
+  void EnableAutoResize(const gfx::Size& min_size,
+                        const gfx::Size& max_size) override;
+  void DisableAutoResize(const gfx::Size& new_size) override;
+  bool IsScrollOffsetAtTop() const override;
   float GetDeviceScaleFactor() const final;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
@@ -172,7 +179,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // resize is enabled.
   virtual viz::ScopedSurfaceIdAllocator ResizeDueToAutoResize(
       const gfx::Size& new_size,
-      uint64_t sequence_number);
+      const viz::LocalSurfaceId& local_surface_id);
 
   virtual bool IsLocalSurfaceIdAllocationSuppressed() const;
 
@@ -189,6 +196,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // The requested size of the renderer. May differ from GetViewBounds().size()
   // when the view requires additional throttling.
   virtual gfx::Size GetRequestedRendererSize() const;
+
+  // Returns the current capture sequence number.
+  virtual uint32_t GetCaptureSequenceNumber() const;
 
   // The size of the view's backing surface in non-DPI-adjusted pixels.
   virtual gfx::Size GetCompositorViewportPixelSize() const;
@@ -274,6 +284,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // page has been loaded, to prevent the displayed URL from being out of sync
   // with what is visible on screen.
   virtual void ClearCompositorFrame() = 0;
+
+  // Requests a new CompositorFrame from the renderer. This is done by
+  // allocating a new viz::LocalSurfaceId which forces a commit and draw.
+  virtual bool RequestRepaintForTesting();
 
   // Because the associated remote WebKit instance can asynchronously
   // prevent-default on a dispatched touch event, the touch events are queued in
@@ -442,6 +456,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // the page has changed.
   virtual void SetTooltipText(const base::string16& tooltip_text) = 0;
 
+  // Displays the requested tooltip on the screen.
+  virtual void DisplayTooltipText(const base::string16& tooltip_text) {}
+
   // Returns the offset of the view from the origin of the browser compositor's
   // surface. This is in DIP.
   virtual gfx::Vector2d GetOffsetFromRootSurface() = 0;
@@ -462,6 +479,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // of context menu. The view can then perform platform specific tasks and
   // changes.
   virtual void SetShowingContextMenu(bool showing) {}
+
+  virtual void OnAutoscrollStart();
 
   // Returns the associated RenderWidgetHostImpl.
   RenderWidgetHostImpl* host() const { return host_; }
@@ -497,6 +516,14 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
     web_contents_accessibility_ = wcax;
   }
 
+  void set_is_currently_scrolling_viewport(
+      bool is_currently_scrolling_viewport) {
+    is_currently_scrolling_viewport_ = is_currently_scrolling_viewport;
+  }
+
+  bool is_currently_scrolling_viewport() {
+    return is_currently_scrolling_viewport_;
+  }
 #if defined(USE_AURA)
   void EmbedChildFrameRendererWindowTreeClient(
       RenderWidgetHostViewBase* root_view,
@@ -511,7 +538,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual bool ShouldContinueToPauseForFrame();
 #endif
 
-  virtual void DidNavigate() {}
+  virtual void DidNavigate();
 
   // Called when the RenderWidgetHostImpl has be initialized.
   virtual void OnRenderWidgetInit() {}
@@ -520,6 +547,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   explicit RenderWidgetHostViewBase(RenderWidgetHost* host);
 
   void NotifyObserversAboutShutdown();
+
+  virtual MouseWheelPhaseHandler* GetMouseWheelPhaseHandler();
 
 #if defined(USE_AURA)
   virtual void ScheduleEmbed(
@@ -540,12 +569,19 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // autofill...).
   blink::WebPopupType popup_type_;
 
+  // Indicates whether keyboard lock is active for this view.
+  bool keyboard_locked_ = false;
+
   // While the mouse is locked, the cursor is hidden from the user. Mouse events
   // are still generated. However, the position they report is the last known
   // mouse position just as mouse lock was entered; the movement they report
   // indicates what the change in position of the mouse would be had it not been
   // locked.
-  bool mouse_locked_;
+  bool mouse_locked_ = false;
+
+  // Indicates whether the scroll offset of the root layer is at top, i.e.,
+  // whether scroll_offset.y() == 0.
+  bool is_scroll_offset_at_top_ = true;
 
   // The scale factor of the display the renderer is currently on.
   float current_device_scale_factor_;
@@ -566,6 +602,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
 
   WebContentsAccessibility* web_contents_accessibility_;
 
+  bool is_currently_scrolling_viewport_;
+
  private:
 #if defined(USE_AURA)
   void OnDidScheduleEmbed(int routing_id,
@@ -578,8 +616,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // RenderWidgetHostImpl in order to allow the view to allocate a new
   // LocalSurfaceId.
   virtual void OnSynchronizedDisplayPropertiesChanged() {}
-
-  void OnResizeDueToAutoResizeComplete(uint64_t sequence_number);
 
   gfx::Rect current_display_area_;
 

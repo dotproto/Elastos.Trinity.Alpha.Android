@@ -12,7 +12,6 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "components/user_manager/user_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -188,6 +187,9 @@ class AshTestBase : public testing::Test,
   // Simulates a user sign-in. It creates a new user session, adds it to
   // existing user sessions and makes it the active user session.
   void SimulateUserLogin(const std::string& user_email);
+
+  // Simular to SimulateUserLogin but for a newly created user first ever login.
+  void SimulateNewUserFirstLogin(const std::string& user_email);
 
   // Similar to SimulateUserLogin but for a guest user.
   void SimulateGuestLogin();

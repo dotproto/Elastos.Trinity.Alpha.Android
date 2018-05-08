@@ -30,6 +30,7 @@
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_sleep.h"
 #include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/platform/api/quic_string.h"
@@ -275,13 +276,11 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
         server_hostname_("test.example.com"),
         client_writer_(nullptr),
         server_writer_(nullptr),
-        server_started_(false),
         negotiated_version_(PROTOCOL_UNSUPPORTED, QUIC_VERSION_UNSUPPORTED),
         chlo_multiplier_(0),
         stream_factory_(nullptr),
         support_server_push_(false) {
     FLAGS_quic_supports_tls_handshake = true;
-    FLAGS_quic_reloadable_flag_quic_store_version_before_signalling = true;
     client_supported_versions_ = GetParam().client_supported_versions;
     server_supported_versions_ = GetParam().server_supported_versions;
     negotiated_version_ = GetParam().negotiated_version;
@@ -434,6 +433,7 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
   void StartServer() {
     SetQuicReloadableFlag(quic_use_cheap_stateless_rejects,
                           GetParam().use_cheap_stateless_reject);
+    SetQuicReloadableFlag(quic_respect_ietf_header, true);
 
     auto* test_server = new QuicTestServer(
         crypto_test_utils::ProofSourceForTesting(), server_config_,
@@ -462,12 +462,9 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
     }
 
     server_thread_->Start();
-    server_started_ = true;
   }
 
   void StopServer() {
-    if (!server_started_)
-      return;
     if (server_thread_) {
       server_thread_->Quit();
       server_thread_->Join();
@@ -522,7 +519,14 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
     if (!BothSidesSupportStatelessRejects()) {
       EXPECT_EQ(0u, client_stats.packets_dropped);
     }
-    EXPECT_EQ(client_stats.packets_received, client_stats.packets_processed);
+    if (!ClientSupportsIetfQuicNotSupportedByServer()) {
+      // In this case, if client sends 0-RTT POST with v99, receives IETF
+      // version negotiation packet and speaks a GQUIC version. Server processes
+      // this connection in time wait list and keeps sending IETF version
+      // negotiation packet for incoming packets. But these version negotiation
+      // packets cannot be processed by the client speaking GQUIC.
+      EXPECT_EQ(client_stats.packets_received, client_stats.packets_processed);
+    }
 
     const int num_expected_stateless_rejects =
         (BothSidesSupportStatelessRejects() &&
@@ -553,6 +557,14 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
             GetParam().client_supports_stateless_rejects);
   }
 
+  // Client supports IETF QUIC, while it is not supported by server.
+  bool ClientSupportsIetfQuicNotSupportedByServer() {
+    return GetParam().client_supported_versions[0].transport_version ==
+               QUIC_VERSION_99 &&
+           FilterSupportedVersions(GetParam().server_supported_versions)[0]
+                   .transport_version != QUIC_VERSION_99;
+  }
+
   void ExpectFlowControlsSynced(QuicFlowController* client,
                                 QuicFlowController* server) {
     EXPECT_EQ(QuicFlowControllerPeer::SendWindowSize(client),
@@ -576,23 +588,6 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
         *client_->client()->client_session(), n);
   }
 
-  void WaitForDelayedAcks() {
-    // kWaitDuration is a period of time that is long enough for all delayed
-    // acks to be sent and received on the other end.
-    const QuicTime::Delta kWaitDuration =
-        4 * QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs);
-
-    const QuicClock* clock =
-        client_->client()->client_session()->connection()->clock();
-
-    QuicTime wait_until = clock->ApproximateNow() + kWaitDuration;
-    while (clock->ApproximateNow() < wait_until) {
-      QUIC_LOG_EVERY_N_SEC(INFO, 0.01) << "Waiting for delayed acks...";
-      // This waits for up to 50 ms.
-      client_->client()->WaitForEvents();
-    }
-  }
-
   bool initialized_;
   QuicSocketAddress server_address_;
   QuicString server_hostname_;
@@ -601,7 +596,6 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
   std::unique_ptr<QuicTestClient> client_;
   PacketDroppingTestWriter* client_writer_;
   PacketDroppingTestWriter* server_writer_;
-  bool server_started_;
   QuicConfig client_config_;
   QuicConfig server_config_;
   ParsedQuicVersionVector client_supported_versions_;
@@ -616,7 +610,7 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
 class EndToEndTestWithTls : public EndToEndTest {
  protected:
   EndToEndTestWithTls() : EndToEndTest() {
-    FLAGS_quic_reloadable_flag_delay_quic_server_handshaker_construction = true;
+    SetQuicReloadableFlag(quic_server_early_version_negotiation, true);
   }
 };
 
@@ -1185,8 +1179,8 @@ TEST_P(EndToEndTestWithTls,
   EXPECT_FALSE(resume_writes_alarm->IsSet());
 }
 
-// TODO(fkastenholz): this test seems to cause net_unittests timeouts
-// reverted from EndToEndTestWithTls to EndToEndTest
+// TODO(nharper): Needs to get turned back to EndToEndTestWithTls
+// when we figure out why the test doesn't work on chrome.
 TEST_P(EndToEndTest, InvalidStream) {
   ASSERT_TRUE(Initialize());
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
@@ -1271,8 +1265,8 @@ TEST_P(EndToEndTestWithTls, DISABLED_MultipleTermination) {
   EXPECT_QUIC_BUG(client_->SendData("eep", true), "Fin already buffered");
 }
 
-// TODO(fkastenholz): this test seems to cause net_unittests timeouts
-// reverted from EndToEndTestWithTls to EndToEndTest
+// TODO(nharper): Needs to get turned back to EndToEndTestWithTls
+// when we figure out why the test doesn't work on chrome.
 TEST_P(EndToEndTest, Timeout) {
   client_config_.SetIdleNetworkTimeout(QuicTime::Delta::FromMicroseconds(500),
                                        QuicTime::Delta::FromMicroseconds(500));
@@ -1509,8 +1503,8 @@ TEST_P(EndToEndTestWithTls, ResetConnection) {
   EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
-// TODO(fkastenholz): this test seems to cause net_unittests timeouts
-// reverted from EndToEndTestWithTls to EndToEndTest
+// TODO(nharper): Needs to get turned back to EndToEndTestWithTls
+// when we figure out why the test doesn't work on chrome.
 TEST_P(EndToEndTest, MaxStreamsUberTest) {
   if (!BothSidesSupportStatelessRejects()) {
     // Connect with lower fake packet loss than we'd like to test.  Until
@@ -1640,6 +1634,26 @@ TEST_P(EndToEndTest, ConnectionMigrationClientPortChanged) {
       client_->client()->network_helper()->GetLatestClientAddress();
   EXPECT_EQ(old_address.host(), new_address.host());
   EXPECT_NE(old_address.port(), new_address.port());
+}
+
+TEST_P(EndToEndTest, NegotiatedInitialCongestionWindow) {
+  SetQuicReloadableFlag(quic_unified_iw_options, true);
+  client_extra_copts_.push_back(kIW03);
+
+  ASSERT_TRUE(Initialize());
+
+  // Values are exchanged during crypto handshake, so wait for that to finish.
+  EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
+  server_thread_->WaitForCryptoHandshakeConfirmed();
+  server_thread_->Pause();
+
+  QuicDispatcher* dispatcher =
+      QuicServerPeer::GetDispatcher(server_thread_->server());
+  QuicSession* session = dispatcher->session_map().begin()->second.get();
+  QuicConnection* server_connection = session->connection();
+  QuicPacketCount cwnd =
+      server_connection->sent_packet_manager().initial_congestion_window();
+  EXPECT_EQ(3u, cwnd);
 }
 
 TEST_P(EndToEndTest, DifferentFlowControlWindows) {
@@ -2073,14 +2087,17 @@ TEST_P(EndToEndTestWithTls,
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
 
   // Send the version negotiation packet.
+  QuicConnection* client_connection =
+      client_->client()->client_session()->connection();
   QuicConnectionId incorrect_connection_id =
-      client_->client()->client_session()->connection()->connection_id() + 1;
+      client_connection->connection_id() + 1;
   std::unique_ptr<QuicEncryptedPacket> packet(
-      QuicFramer::BuildVersionNegotiationPacket(incorrect_connection_id,
-                                                server_supported_versions_));
+      QuicFramer::BuildVersionNegotiationPacket(
+          incorrect_connection_id,
+          client_connection->transport_version() == QUIC_VERSION_99,
+          server_supported_versions_));
   testing::NiceMock<MockQuicConnectionDebugVisitor> visitor;
-  client_->client()->client_session()->connection()->set_debug_visitor(
-      &visitor);
+  client_connection->set_debug_visitor(&visitor);
   EXPECT_CALL(visitor, OnIncorrectConnectionId(incorrect_connection_id))
       .Times(1);
   // We must pause the server's thread in order to call WritePacket without
@@ -2095,7 +2112,7 @@ TEST_P(EndToEndTestWithTls,
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
   EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
-  client_->client()->client_session()->connection()->set_debug_visitor(nullptr);
+  client_connection->set_debug_visitor(nullptr);
 }
 
 // A bad header shouldn't tear down the connection, because the receiver can't
@@ -2117,7 +2134,7 @@ TEST_P(EndToEndTestWithTls, BadPacketHeaderTruncated) {
       client_->client()->network_helper()->GetLatestClientAddress().host(),
       server_address_, nullptr);
   // Give the server time to process the packet.
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100));
+  QuicSleep(QuicTime::Delta::FromMilliseconds(100));
   // Pause the server so we can access the server's internals without races.
   server_thread_->Pause();
   QuicDispatcher* dispatcher =
@@ -2168,7 +2185,7 @@ TEST_P(EndToEndTestWithTls, BadPacketHeaderFlags) {
       client_->client()->network_helper()->GetLatestClientAddress().host(),
       server_address_, nullptr);
   // Give the server time to process the packet.
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100));
+  QuicSleep(QuicTime::Delta::FromMilliseconds(100));
   // Pause the server so we can access the server's internals without races.
   server_thread_->Pause();
   QuicDispatcher* dispatcher =
@@ -2194,7 +2211,7 @@ TEST_P(EndToEndTestWithTls, BadEncryptedData) {
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
       client_->client()->client_session()->connection()->connection_id(), false,
       false, 1, "At least 20 characters.", PACKET_8BYTE_CONNECTION_ID,
-      PACKET_6BYTE_PACKET_NUMBER));
+      PACKET_4BYTE_PACKET_NUMBER));
   // Damage the encrypted data.
   QuicString damaged_packet(packet->data(), packet->length());
   damaged_packet[30] ^= 0x01;
@@ -2204,7 +2221,7 @@ TEST_P(EndToEndTestWithTls, BadEncryptedData) {
       client_->client()->network_helper()->GetLatestClientAddress().host(),
       server_address_, nullptr);
   // Give the server time to process the packet.
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100));
+  QuicSleep(QuicTime::Delta::FromMilliseconds(100));
   // This error is sent to the connection's OnError (which ignores it), so the
   // dispatcher doesn't see it.
   // Pause the server so we can access the server's internals without races.
@@ -3045,7 +3062,7 @@ TEST_P(EndToEndTest, LastPacketSentIsConnectivityProbing) {
   EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Wait for the client's ACK (of the response) to be received by the server.
-  WaitForDelayedAcks();
+  client_->WaitForDelayedAcks();
 
   // We are sending a connectivity probing packet from an unchanged client
   // address, so the server will not respond to us with a connectivity probing
@@ -3053,7 +3070,7 @@ TEST_P(EndToEndTest, LastPacketSentIsConnectivityProbing) {
   client_->SendConnectivityProbing();
 
   // Wait for the server's last ACK to be received by the client.
-  WaitForDelayedAcks();
+  client_->WaitForDelayedAcks();
 }
 
 class EndToEndBufferedPacketsTest : public EndToEndTest {

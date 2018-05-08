@@ -16,6 +16,8 @@
 #include "ash/system/ime/tray_ime_chromeos.h"
 #include "ash/system/network/network_feature_pod_controller.h"
 #include "ash/system/network/tray_network.h"
+#include "ash/system/network/tray_vpn.h"
+#include "ash/system/network/vpn_feature_pod_controller.h"
 #include "ash/system/night_light/night_light_feature_pod_controller.h"
 #include "ash/system/rotation/rotation_lock_feature_pod_controller.h"
 #include "ash/system/tray/system_tray.h"
@@ -24,30 +26,55 @@
 #include "ash/system/unified/accessibility_feature_pod_controller.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
 #include "ash/system/unified/quiet_mode_feature_pod_controller.h"
+#include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/wm/lock_state_controller.h"
+#include "base/numerics/ranges.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "ui/gfx/animation/slide_animation.h"
 
 namespace ash {
 
-UnifiedSystemTrayController::UnifiedSystemTrayController(
-    SystemTray* system_tray)
-    : system_tray_(system_tray) {}
+namespace {
 
-UnifiedSystemTrayController::~UnifiedSystemTrayController() = default;
+// Animation duration to collapse / expand the view in milliseconds.
+const int kExpandAnimationDurationMs = 500;
+// Threshold in pixel that fully collapses / expands the view through gesture.
+const int kDragThreshold = 200;
+
+}  // namespace
+
+UnifiedSystemTrayController::UnifiedSystemTrayController(
+    UnifiedSystemTrayModel* model,
+    SystemTray* system_tray)
+    : model_(model),
+      system_tray_(system_tray),
+      animation_(std::make_unique<gfx::SlideAnimation>(this)) {
+  animation_->Reset(model->expanded_on_open() ? 1.0 : 0.0);
+  animation_->SetSlideDuration(kExpandAnimationDurationMs);
+  animation_->SetTweenType(gfx::Tween::EASE_IN_OUT);
+}
+
+UnifiedSystemTrayController::~UnifiedSystemTrayController() {
+  if (detailed_view_item_)
+    detailed_view_item_->OnDetailedViewDestroyed();
+}
 
 UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
   DCHECK(!unified_view_);
-  unified_view_ = new UnifiedSystemTrayView(this);
+  unified_view_ = new UnifiedSystemTrayView(this, model_->expanded_on_open());
   InitFeaturePods();
 
   volume_slider_controller_ = std::make_unique<UnifiedVolumeSliderController>();
   unified_view_->AddSliderView(volume_slider_controller_->CreateView());
 
   brightness_slider_controller_ =
-      std::make_unique<UnifiedBrightnessSliderController>();
+      std::make_unique<UnifiedBrightnessSliderController>(model_);
   unified_view_->AddSliderView(brightness_slider_controller_->CreateView());
+
+  time_to_click_recorder_ = std::make_unique<TimeToClickRecorder>(system_tray_);
+  unified_view_->AddPreTargetHandler(time_to_click_recorder_.get());
 
   return unified_view_;
 }
@@ -76,50 +103,73 @@ void UnifiedSystemTrayController::HandlePowerAction() {
 }
 
 void UnifiedSystemTrayController::ToggleExpanded() {
-  // TODO(tetsui): Implement.
+  if (animation_->IsShowing())
+    animation_->Hide();
+  else
+    animation_->Show();
+}
+
+void UnifiedSystemTrayController::BeginDrag(const gfx::Point& location) {
+  drag_init_point_ = location;
+  was_expanded_ = animation_->IsShowing();
+}
+
+void UnifiedSystemTrayController::UpdateDrag(const gfx::Point& location) {
+  animation_->Reset(GetDragExpandedAmount(location));
+  UpdateExpandedAmount();
+}
+
+void UnifiedSystemTrayController::EndDrag(const gfx::Point& location) {
+  // If dragging is finished, animate to closer state.
+  if (GetDragExpandedAmount(location) > 0.5) {
+    animation_->Show();
+  } else {
+    // To animate to hidden state, first set SlideAnimation::IsShowing() to
+    // true.
+    animation_->Show();
+    animation_->Hide();
+  }
 }
 
 void UnifiedSystemTrayController::ShowNetworkDetailedView() {
   // TODO(tetsui): Implement UnifiedSystemTray's Network detailed view.
-
-  // Initially create default view to set |default_bubble_height_|.
-  system_tray_->ShowDefaultView(BubbleCreationType::BUBBLE_CREATE_NEW,
-                                true /* show_by_click */);
-  system_tray_->ShowDetailedView(system_tray_->GetTrayNetwork(),
-                                 0 /* close_delay_in_seconds */,
-                                 BubbleCreationType::BUBBLE_USE_EXISTING);
+  ShowSystemTrayDetailedView(system_tray_->GetTrayNetwork());
 }
 
 void UnifiedSystemTrayController::ShowBluetoothDetailedView() {
   // TODO(tetsui): Implement UnifiedSystemTray's Bluetooth detailed view.
-
-  // Initially create default view to set |default_bubble_height_|.
-  system_tray_->ShowDefaultView(BubbleCreationType::BUBBLE_CREATE_NEW,
-                                true /* show_by_click */);
-  system_tray_->ShowDetailedView(system_tray_->GetTrayBluetooth(),
-                                 0 /* close_delay_in_seconds */,
-                                 BubbleCreationType::BUBBLE_USE_EXISTING);
+  ShowSystemTrayDetailedView(system_tray_->GetTrayBluetooth());
 }
 
 void UnifiedSystemTrayController::ShowAccessibilityDetailedView() {
   // TODO(tetsui): Implement UnifiedSystemTray's Accessibility detailed view.
+  ShowSystemTrayDetailedView(system_tray_->GetTrayAccessibility());
+}
 
-  // Initially create default view to set |default_bubble_height_|.
-  system_tray_->ShowDefaultView(BubbleCreationType::BUBBLE_CREATE_NEW,
-                                true /* show_by_click */);
-  system_tray_->ShowDetailedView(system_tray_->GetTrayAccessibility(),
-                                 0 /* close_delay_in_seconds */,
-                                 BubbleCreationType::BUBBLE_USE_EXISTING);
+void UnifiedSystemTrayController::ShowVPNDetailedView() {
+  // TODO(tetsui): Implement UnifiedSystemTray's VPN detailed view.
+  ShowSystemTrayDetailedView(system_tray_->GetTrayVPN());
 }
 
 void UnifiedSystemTrayController::ShowIMEDetailedView() {
   // TODO(tetsui): Implement UnifiedSystemTray's IME detailed view.
-  // Initially create default view to set |default_bubble_height_|.
-  system_tray_->ShowDefaultView(BubbleCreationType::BUBBLE_CREATE_NEW,
-                                true /* show_by_click */);
-  system_tray_->ShowDetailedView(system_tray_->GetTrayIME(),
-                                 0 /* close_delay_in_seconds */,
-                                 BubbleCreationType::BUBBLE_USE_EXISTING);
+  ShowSystemTrayDetailedView(system_tray_->GetTrayIME());
+}
+
+void UnifiedSystemTrayController::AnimationEnded(
+    const gfx::Animation* animation) {
+  UpdateExpandedAmount();
+}
+
+void UnifiedSystemTrayController::AnimationProgressed(
+    const gfx::Animation* animation) {
+  UpdateExpandedAmount();
+}
+
+void UnifiedSystemTrayController::AnimationCanceled(
+    const gfx::Animation* animation) {
+  animation_->Reset(std::round(animation_->GetCurrentValue()));
+  UpdateExpandedAmount();
 }
 
 void UnifiedSystemTrayController::InitFeaturePods() {
@@ -129,6 +179,7 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
   AddFeaturePodItem(std::make_unique<NightLightFeaturePodController>());
   AddFeaturePodItem(std::make_unique<AccessibilityFeaturePodController>(this));
+  AddFeaturePodItem(std::make_unique<VPNFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<IMEFeaturePodController>(this));
 
   // If you want to add a new feature pod item, add here.
@@ -140,6 +191,36 @@ void UnifiedSystemTrayController::AddFeaturePodItem(
   DCHECK(unified_view_);
   unified_view_->AddFeaturePodButton(controller->CreateButton());
   feature_pod_controllers_.push_back(std::move(controller));
+}
+
+void UnifiedSystemTrayController::ShowSystemTrayDetailedView(
+    SystemTrayItem* system_tray_item) {
+  LoginStatus login_status = Shell::Get()->session_controller()->login_status();
+  unified_view_->SetDetailedView(
+      system_tray_item->CreateDetailedView(login_status));
+  detailed_view_item_ = system_tray_item;
+}
+
+void UnifiedSystemTrayController::UpdateExpandedAmount() {
+  double expanded_amount = animation_->GetCurrentValue();
+  unified_view_->SetExpandedAmount(expanded_amount);
+  if (expanded_amount == 0.0 || expanded_amount == 1.0)
+    model_->set_expanded_on_open(expanded_amount == 1.0);
+}
+
+double UnifiedSystemTrayController::GetDragExpandedAmount(
+    const gfx::Point& location) const {
+  double y_diff = (location - drag_init_point_).y();
+
+  // If already expanded, only consider swiping down. Otherwise, only consider
+  // swiping up.
+  if (was_expanded_) {
+    return base::ClampToRange(1.0 - std::max(0.0, y_diff) / kDragThreshold, 0.0,
+                              1.0);
+  } else {
+    return base::ClampToRange(std::max(0.0, -y_diff) / kDragThreshold, 0.0,
+                              1.0);
+  }
 }
 
 }  // namespace ash

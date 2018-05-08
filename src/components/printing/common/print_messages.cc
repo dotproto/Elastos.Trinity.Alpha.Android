@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/strings/string16.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/gfx/geometry/size.h"
 
 // Generating implementations for all aspects of the IPC message
@@ -96,7 +96,8 @@ PrintMsg_Print_Params::PrintMsg_Print_Params()
       footer_template(),
       should_print_backgrounds(false),
       printed_doc_type(printing::SkiaDocumentType::PDF),
-      prefer_css_page_size(false) {}
+      prefer_css_page_size(false),
+      num_pages_per_sheet(1) {}
 
 PrintMsg_Print_Params::PrintMsg_Print_Params(
     const PrintMsg_Print_Params& other) = default;
@@ -128,6 +129,7 @@ void PrintMsg_Print_Params::Reset() {
   should_print_backgrounds = false;
   printed_doc_type = printing::SkiaDocumentType::PDF;
   prefer_css_page_size = false;
+  num_pages_per_sheet = 1;
 }
 
 PrintMsg_PrintPages_Params::PrintMsg_PrintPages_Params()

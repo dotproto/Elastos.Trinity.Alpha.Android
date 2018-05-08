@@ -26,6 +26,7 @@ content::WebUIDataSource* CreatePolicyToolUIHtmlSource() {
   source->AddLocalizedString("noPoliciesSet", IDS_POLICY_NO_POLICIES_SET);
   source->AddLocalizedString("showExpandedValue",
                              IDS_POLICY_SHOW_EXPANDED_VALUE);
+  source->AddLocalizedString("exportLinux", IDS_EXPORT_POLICIES_LINUX);
   source->AddLocalizedString("hideExpandedValue",
                              IDS_POLICY_HIDE_EXPANDED_VALUE);
   source->AddLocalizedString("loadSession", IDS_POLICY_TOOL_LOAD_SESSION);
@@ -46,6 +47,7 @@ content::WebUIDataSource* CreatePolicyToolUIHtmlSource() {
   source->AddLocalizedString("errorFileCorrupted",
                              IDS_POLICY_TOOL_CORRUPTED_FILE);
   source->AddLocalizedString("enableEditing", IDS_POLICY_TOOL_ENABLE_EDITING);
+  source->AddLocalizedString("errorInvalidType", IDS_POLICY_TOOL_INVALID_TYPE);
   source->AddLocalizedString("errorRenameFailed",
                              IDS_POLICY_TOOL_RENAME_FAILED);
   source->AddLocalizedString("errorSessionExist",

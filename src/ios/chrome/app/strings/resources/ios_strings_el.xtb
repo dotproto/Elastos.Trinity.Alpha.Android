@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">Διεύθυνση 1</translation>
 <translation id="1545749641540134597">Σάρωση κωδικού QR</translation>
 <translation id="1580783302095112590">Το μήνυμα εστάλη.</translation>
+<translation id="1582732959743469162">Αυτό θα σταματήσει όλη την πρόοδο για την τρέχουσα λήψη.</translation>
 <translation id="1612730193129642006">Εμφάνιση πλέγματος καρτελών</translation>
 <translation id="1644574205037202324">Ιστορικό</translation>
 <translation id="1646446875146297738">Η ενεργοποίηση της επιλογής "Χωρίς εντοπισμό" συνεπάγεται ότι θα περιλαμβάνεται ένα αίτημα με την επισκεψιμότητα περιηγήσής σας. Τυχόν αποτελέσματα σχετίζονται με το εάν ένας ιστότοπος ανταποκρίνεται στο αίτημα και με τον τόπο ερμηνείας του αιτήματος.
@@ -136,6 +137,7 @@
 <translation id="3393920035788932672">Επιτρέπ. τα αναδυόμ.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> λεπτά</translation>
 <translation id="3448016392200048164">Προβολή διαχωρισμού οθόνης</translation>
+<translation id="3469166899695866866">Διακοπή λήψης;</translation>
 <translation id="3474624961160222204">Συνέχεια <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Οι φόρμες συμπληρώθηκαν.</translation>
 <translation id="3478058380795961209">Μήνας λήξης</translation>
@@ -149,6 +151,7 @@
 <translation id="3588820906588687999">Άνοιγμα εικόνας σε νέα καρτέλα</translation>
 <translation id="3603009562372709545">Αντιγραφή διεύθυνσης URL συνδέσμου</translation>
 <translation id="3607167657931203000">Δεδομένα Αυτόματης συμπλήρωσης</translation>
+<translation id="3609785682760573515">Συγχρονισμός…</translation>
 <translation id="3628119975092896051">Η λίστα ανάγνωσης είναι διαθέσιμη εκτός σύνδεσης. Για να προσθέσετε μια σελίδα στη λίστα ανάγνωσης, πατήστε το εικονίδιο <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Προφόρτ. ιστοσελίδων</translation>
 <translation id="3691593122358196899">Ο σελιδοδείκτης είναι στο "<ph name="FOLDER_TITLE" />"</translation>
@@ -158,6 +161,7 @@
 <translation id="3789841737615482174">Εγκατάσταση</translation>
 <translation id="385051799172605136">Πίσω</translation>
 <translation id="3897092660631435901">Μενού</translation>
+<translation id="3915450441834151894">Πληροφορίες ιστοτόπου</translation>
 <translation id="3928666092801078803">Συνδυασμός των δεδομένων μου</translation>
 <translation id="3950820424414687140">Σύνδεση</translation>
 <translation id="3963231839620026525">Νέα καρτέλα ανώνυμης περιήγησης</translation>
@@ -166,6 +170,7 @@
 <translation id="4002066346123236978">Τίτλος</translation>
 <translation id="4038354071007134711">Καμία εφαρμογή στη συσκευή για άνοιγμα αρχείου.</translation>
 <translation id="4049507953662678203">Βεβαιωθείτε ότι έχετε μια σύνδεση δικτύου και δοκιμάστε ξανά.</translation>
+<translation id="4084682180776658562">Σελιδοδείκτης</translation>
 <translation id="411254640334432676">Αποτυχία λήψης.</translation>
 <translation id="4121993058175073134">Για αποστ. δεδομ.εξαγ.δικτ.,διαμορφ. το email σας στην εφ. "Ρυθμίσεις"</translation>
 <translation id="4124987746317609294">Χρονικό εύρος</translation>
@@ -221,6 +226,7 @@
 <translation id="5197255632782567636">Internet</translation>
 <translation id="5228579091201413441">Ενεργοποίηση συγχρονισμού</translation>
 <translation id="5244474230056479698">Συγχρονισμός με <ph name="EMAIL" /></translation>
+<translation id="527973086555161537">Ανοίξτε μια καρτέλα για ιδιωτική περιήγηση στον ιστό.</translation>
 <translation id="5300589172476337783">Εμφάνιση</translation>
 <translation id="5317780077021120954">Αποθήκευση</translation>
 <translation id="5327248766486351172">Όνομα</translation>
@@ -284,6 +290,7 @@
 <translation id="633809752005859102">Κάτι δεν πήγε καλά. Θα προσπαθήσουμε να το επιδιορθώσουμε.</translation>
 <translation id="6342069812937806050">Πριν λίγο</translation>
 <translation id="6344783595350022745">Διαγραφή κειμένου</translation>
+<translation id="6346549652287021269">Να ξεκινήσει νέα λήψη;</translation>
 <translation id="6362362396625799311">Δεν υπάρχουν καρτέλες ανώνυμης περιήγησης</translation>
 <translation id="6374469231428023295">Δοκιμάστε ξανά</translation>
 <translation id="6380866119319257197">Εάν ξεχάσετε τη φράση πρόσβασής σας ή θέλετε να αλλάξετε αυτήν τη ρύθμιση, <ph name="BEGIN_LINK" />επαναφέρετε το συγχρονισμό<ph name="END_LINK" /></translation>
@@ -325,12 +332,14 @@
 <translation id="7031882061095297553">Συγχρονισμός με</translation>
 <translation id="7053983685419859001">Αποκλεισμός</translation>
 <translation id="7062545763355031412">Αποδοχή και εναλλαγή λογαριασμών</translation>
+<translation id="7102005569666697658">Λήψη… <ph name="FILE_SIZE" /></translation>
 <translation id="7108338896283013870">Απόκρυψη</translation>
 <translation id="7133798577887235672">Ονοματεπώνυμο</translation>
 <translation id="7136892417564438900">Η κάμερα δεν είναι διαθέσιμη</translation>
 <translation id="7159472599653637159">Αίτηση ιστότ. για κινητά</translation>
 <translation id="7167621057293532233">Τύποι δεδομένων</translation>
 <translation id="7175593937868963913">Σύνταξη μηνύματος ηλεκτρονικού ταχυδρομείου</translation>
+<translation id="7180611975245234373">Ανανέωση</translation>
 <translation id="7189598951263744875">Μοιραστείτε…</translation>
 <translation id="7203585745079012652">Εκφώνηση απαντήσεων</translation>
 <translation id="722055596168483966">Εξατομίκευση υπηρεσιών Google</translation>
@@ -349,6 +358,7 @@
 <translation id="750493650310597496">0 στοιχεία επιλεγμένα</translation>
 <translation id="7514365320538308">Λήψη</translation>
 <translation id="7537586195939242955">Δεν είναι δυνατή η εγκατάσταση του πάσου σας στο Passbook.</translation>
+<translation id="7554791636758816595">Νέα καρτέλα</translation>
 <translation id="7561196759112975576">Πάντα</translation>
 <translation id="7603852183842204213">Αποκλεισμ. αναδ. (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Ο συγχρονισμός δεν λειτουργεί</translation>
@@ -360,6 +370,7 @@
 <translation id="7769602470925380267">Αποδοχή και αποσύνδεση</translation>
 <translation id="7772032839648071052">Επιβεβαίωση φράσης πρόσβασης</translation>
 <translation id="780301667611848630">Όχι, ευχαριστώ</translation>
+<translation id="7856733331829174190">Δεν ήταν δυνατή η λήψη</translation>
 <translation id="7859704718976024901">Ιστορικό περιήγησης</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Εξαγωγή κωδικών πρόσβασης…</translation>
@@ -372,8 +383,10 @@
 <translation id="8023878949384262191">Ανάπτυξη ενότητας.</translation>
 <translation id="8059533439631660104">Σύμπτυξη ενότητας.</translation>
 <translation id="806745655614357130">Διατήρηση των δεδομένων μου ξεχωριστά</translation>
+<translation id="8073670137947914548">Η λήψη ολοκληρώθηκε</translation>
 <translation id="8076014560081431679">Οι αποθηκευμένες ρυθμίσεις ιστότοπου δεν θα διαγραφούν και ενδέχεται να υποδεικνύουν τις συνήθειες περιήγησής σας. <ph name="BEGIN_LINK" />Μάθετε περισσότερα<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Κλείσ. όλων των καρτελών</translation>
+<translation id="8114753159095730575">Η λήψη του αρχείου είναι διαθέσιμη. Οι διαθέσιμες επιλογές βρίσκονται κοντά στο κάτω μέρος της οθόνης.</translation>
 <translation id="8205564605687841303">Ακύρωση</translation>
 <translation id="8225985093977202398">Εικόνες και αρχεία στην κρυφή μνήμη</translation>
 <translation id="8261506727792406068">Διαγραφή</translation>

@@ -231,6 +231,8 @@
   self.NTPMediator = nil;
   self.contentSuggestionsMediator = nil;
   self.headerController = nil;
+  [self.primaryToolbarMediator disconnect];
+  self.primaryToolbarMediator = nil;
   _visible = NO;
 }
 
@@ -290,7 +292,16 @@
 }
 
 - (CGFloat)overscrollHeaderHeight {
-  return [self.headerController toolBarView].bounds.size.height;
+  CGFloat height = [self.headerController toolBarView].bounds.size.height;
+  CGFloat topInset = 0.0;
+  if (@available(iOS 11, *)) {
+    topInset = self.suggestionsViewController.view.safeAreaInsets.top;
+  } else if (IsUIRefreshPhase1Enabled()) {
+    // TODO(crbug.com/826369) Replace this when the NTP is contained by the
+    // BVC with |self.suggestionsViewController.topLayoutGuide.length|.
+    topInset = StatusBarHeight();
+  }
+  return height + topInset;
 }
 
 #pragma mark - NewTabPagePanelProtocol

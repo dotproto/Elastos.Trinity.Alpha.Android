@@ -23,10 +23,6 @@
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/size_f.h"
 
-namespace IPC {
-class Message;
-}
-
 namespace ui {
 class WindowAndroid;
 struct DidOverscrollParams;
@@ -37,8 +33,6 @@ namespace content {
 class RenderProcessHost;
 class RenderWidgetHostViewAndroid;
 class SynchronousCompositorClient;
-class SynchronousCompositorBrowserFilter;
-class SynchronousCompositorLegacyChromeIPC;
 class SynchronousCompositorSyncCallBridge;
 struct SyncCompositorCommonRendererParams;
 
@@ -69,24 +63,25 @@ class SynchronousCompositorHost : public SynchronousCompositor,
   void BeginFrame(ui::WindowAndroid* window_android,
                   const viz::BeginFrameArgs& args);
   void SetBeginFramePaused(bool paused);
-  bool OnMessageReceived(const IPC::Message& message);
 
   // Called by SynchronousCompositorSyncCallBridge.
   int routing_id() const { return routing_id_; }
-  void UpdateFrameMetaData(viz::CompositorFrameMetadata frame_metadata);
+  void UpdateFrameMetaData(uint32_t version,
+                           viz::CompositorFrameMetadata frame_metadata);
 
   // Called when the mojo channel should be created.
   void InitMojo();
 
   SynchronousCompositorClient* client() { return client_; }
 
-  SynchronousCompositorBrowserFilter* GetFilter();
   RenderProcessHost* GetRenderProcessHost();
 
   // mojom::SynchronousCompositorHost overrides.
   void LayerTreeFrameSinkCreated() override;
   void UpdateState(const SyncCompositorCommonRendererParams& params) override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
+
+  bool on_compute_scroll_called() { return on_compute_scroll_called_; }
 
  private:
   class ScopedSendZeroMemory;
@@ -112,9 +107,7 @@ class SynchronousCompositorHost : public SynchronousCompositor,
   SynchronousCompositorClient* const client_;
   const int process_id_;
   const int routing_id_;
-  const bool use_mojo_;
   const bool use_in_process_zero_copy_software_draw_;
-  std::unique_ptr<SynchronousCompositorLegacyChromeIPC> legacy_compositor_;
   mojom::SynchronousCompositorAssociatedPtr sync_compositor_;
   mojo::AssociatedBinding<mojom::SynchronousCompositorHost> host_binding_;
 
@@ -139,11 +132,17 @@ class SynchronousCompositorHost : public SynchronousCompositor,
   // Updated by both renderer and browser.
   gfx::ScrollOffset root_scroll_offset_;
 
+  // Indicates that whether OnComputeScroll is called or overridden. The
+  // fling_controller should advance the fling only when OnComputeScroll is not
+  // overridden.
+  bool on_compute_scroll_called_ = false;
+
   // From renderer.
   uint32_t renderer_param_version_;
   bool need_animate_scroll_;
   uint32_t need_invalidate_count_;
   uint32_t did_activate_pending_tree_count_;
+  uint32_t frame_metadata_version_ = 0u;
 
   scoped_refptr<SynchronousCompositorSyncCallBridge> bridge_;
 

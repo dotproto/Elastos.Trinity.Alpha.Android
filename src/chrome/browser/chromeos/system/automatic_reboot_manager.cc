@@ -21,7 +21,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
@@ -141,11 +140,10 @@ AutomaticRebootManager::SystemEventTimes::SystemEventTimes(
   has_update_reboot_needed_time = true;
 }
 
-AutomaticRebootManager::AutomaticRebootManager(
-    std::unique_ptr<base::TickClock> clock)
+AutomaticRebootManager::AutomaticRebootManager(const base::TickClock* clock)
     : initialized_(base::WaitableEvent::ResetPolicy::MANUAL,
                    base::WaitableEvent::InitialState::NOT_SIGNALED),
-      clock_(std::move(clock)),
+      clock_(clock),
       have_boot_time_(false),
       have_update_reboot_needed_time_(false),
       reboot_reason_(AutomaticRebootManagerObserver::REBOOT_REASON_UNKNOWN),

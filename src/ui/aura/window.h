@@ -217,11 +217,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // LayoutManager may adjust the bounds.
   void SetBounds(const gfx::Rect& new_bounds);
 
-  // Explicitly set a device scale factor for the window. Note that the
-  // window's device scale factor is also set when adding its ui::Layer to the
-  // layer tree of a ui::Compositor.
-  void SetDeviceScaleFactor(float device_scale_factor);
-
   // Changes the bounds of the window in the screen coordinates.
   // If present, the window's parent's LayoutManager may adjust the bounds.
   void SetBoundsInScreen(const gfx::Rect& new_bounds_in_screen_coords,
@@ -401,6 +396,13 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   // Gets the current viz::LocalSurfaceId.
   const viz::LocalSurfaceId& GetLocalSurfaceId() const;
+
+  // Sets the current viz::LocalSurfaceId, in cases where the embedded client
+  // has allocated one. Also sets child sequence number component of the
+  // viz::LocalSurfaceId allocator.
+  void UpdateLocalSurfaceIdFromEmbeddedClient(
+      const base::Optional<viz::LocalSurfaceId>&
+          embedded_client_local_surface_id);
 
   // Returns the FrameSinkId. In LOCAL mode, this returns a valid FrameSinkId
   // only if a LayerTreeFrameSink has been created. In MUS mode, this always

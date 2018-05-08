@@ -72,9 +72,6 @@ class AppWindowContents {
   // native window is closed before AppWindowCreateFunction responds.
   virtual void NativeWindowClosed(bool send_onclosed) = 0;
 
-  // Called when the renderer notifies the browser that the window is ready.
-  virtual void OnWindowReady() = 0;
-
   virtual content::WebContents* GetWebContents() const = 0;
 
   virtual extensions::WindowController* GetWindowController() const = 0;
@@ -314,6 +311,8 @@ class AppWindow : public content::WebContentsDelegate,
   // HTML API request.
   bool IsHtmlApiFullscreen() const;
 
+  bool IsOsFullscreen() const;
+
   // Transitions window into fullscreen, maximized, minimized or restores based
   // on chrome.app.window API.
   void Fullscreen();
@@ -408,8 +407,10 @@ class AppWindow : public content::WebContentsDelegate,
                     const gfx::Rect& pos) override;
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
-  void EnterFullscreenModeForTab(content::WebContents* source,
-                                 const GURL& origin) override;
+  void EnterFullscreenModeForTab(
+      content::WebContents* source,
+      const GURL& origin,
+      const blink::WebFullscreenOptions& options) override;
   void ExitFullscreenModeForTab(content::WebContents* source) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* source) const override;
@@ -426,7 +427,7 @@ class AppWindow : public content::WebContentsDelegate,
       content::WebContents* source,
       const content::OpenURLParams& params) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,

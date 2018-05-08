@@ -14,13 +14,18 @@
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
-namespace network {
-class SimpleURLLoader;
-}
-
 namespace content {
 class BrowserContext;
 }
+
+namespace net {
+struct RedirectInfo;
+}
+
+namespace network {
+class SimpleURLLoader;
+struct ResourceResponseHead;
+}  // namespace network
 
 namespace customtabs {
 
@@ -29,6 +34,8 @@ namespace customtabs {
 //
 // It is intended to provide "detached" request capabilities from the browser
 // process, that is like <a ping> or <link rel="prefetch">.
+//
+// DO NOT USE for anything that would end up in the content area.
 //
 // This is a UI thread class.
 class DetachedResourceRequest {
@@ -54,6 +61,8 @@ class DetachedResourceRequest {
 
   static void Start(std::unique_ptr<DetachedResourceRequest> request,
                     content::BrowserContext* browser_context);
+  void OnRedirectCallback(const net::RedirectInfo& redirect_info,
+                          const network::ResourceResponseHead& response_head);
   void OnResponseCallback(std::unique_ptr<std::string> response_body);
 
   const GURL url_;
@@ -61,6 +70,7 @@ class DetachedResourceRequest {
   base::TimeTicks start_time_;
   OnResultCallback cb_;
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
+  int redirects_;
 
   DISALLOW_COPY_AND_ASSIGN(DetachedResourceRequest);
 };

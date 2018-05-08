@@ -7,7 +7,6 @@
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive/adaptive_toolbar_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive/adaptive_toolbar_view_controller.h"
@@ -57,8 +56,6 @@
   self.started = YES;
 
   self.mediator = [[ToolbarMediator alloc] init];
-  self.mediator.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState);
   self.mediator.consumer = self.viewController;
   self.mediator.webStateList = self.webStateList;
   self.mediator.bookmarkModel =
@@ -69,6 +66,13 @@
       initWithModel:ReadingListModelFactory::GetForBrowserState(
                         self.browserState)
       toolbarButton:self.viewController.toolsMenuButton];
+}
+
+- (void)stop {
+  [super stop];
+  self.toolsMenuButtonObserverBridge = nil;
+  [self.mediator disconnect];
+  self.mediator = nil;
 }
 
 #pragma mark - SideSwipeToolbarSnapshotProviding
@@ -103,7 +107,7 @@
 
 #pragma mark - ToolbarCoordinatee
 
-- (id<TabHistoryUIUpdater>)tabHistoryUIUpdater {
+- (id<PopupMenuUIUpdating>)popupMenuUIUpdater {
   return self.viewController;
 }
 

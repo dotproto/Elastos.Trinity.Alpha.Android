@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/numerics/safe_conversions.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -28,6 +29,7 @@
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
+#include "components/viz/common/resources/platform_color.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "skia/ext/platform_canvas.h"
@@ -205,16 +207,19 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
   if (in_flight_resource_)
     pool_->ReleaseResource(std::move(in_flight_resource_));
 
-  ResourcePool::InUsePoolResource pool_resource = pool_->AcquireResource(
-      internal_content_bounds_, resource_provider->best_render_buffer_format(),
-      gfx::ColorSpace());
-
   // Allocate a backing for the resource if needed, either for gpu or software
   // compositing.
+  ResourcePool::InUsePoolResource pool_resource;
   if (draw_mode == DRAW_MODE_HARDWARE) {
     viz::ContextProvider* context_provider =
         layer_tree_impl()->context_provider();
     DCHECK(context_provider);
+
+    viz::ResourceFormat format =
+        viz::PlatformColor::BestSupportedRenderBufferFormat(
+            context_provider->ContextCapabilities());
+    pool_resource = pool_->AcquireResource(internal_content_bounds_, format,
+                                           gfx::ColorSpace());
 
     if (!pool_resource.gpu_backing()) {
       auto backing = std::make_unique<HudGpuBacking>();
@@ -244,6 +249,9 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     }
   } else {
     DCHECK_EQ(draw_mode, DRAW_MODE_SOFTWARE);
+
+    pool_resource = pool_->AcquireResource(internal_content_bounds_,
+                                           viz::RGBA_8888, gfx::ColorSpace());
 
     if (!pool_resource.software_backing()) {
       auto backing = std::make_unique<HudSoftwareBacking>();
@@ -278,8 +286,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       LayerTreeResourceProvider::ScopedSkSurface scoped_surface(
           context_provider->GrContext(), backing->texture_id,
           backing->texture_target, pool_resource.size(), pool_resource.format(),
-          false /* use_distance_field_text */, false /* can_use_lcd_text */,
-          0 /* msaa_sample_count */);
+          false /* can_use_lcd_text */, 0 /* msaa_sample_count */);
       SkSurface* surface = scoped_surface.surface();
       if (!surface) {
         pool_->ReleaseResource(std::move(pool_resource));

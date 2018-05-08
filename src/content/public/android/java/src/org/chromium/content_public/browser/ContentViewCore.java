@@ -9,9 +9,7 @@ import android.content.res.Configuration;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.content.browser.ContentViewCoreImpl;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
@@ -80,27 +78,7 @@ public interface ContentViewCore {
          * @see View#onScrollChanged(int, int, int, int)
          */
         void onScrollChanged(int lPix, int tPix, int oldlPix, int oldtPix);
-
-        /**
-         * @see View#awakenScrollBars(int, boolean)
-         */
-        boolean super_awakenScrollBars(int startDelay, boolean invalidate);
     }
-
-    /**
-     * @return The ViewGroup that all view actions of this ContentViewCore should interact with.
-     */
-    ViewGroup getContainerView();
-
-    /**
-     * @return The WebContents currently being rendered.
-     */
-    WebContents getWebContents();
-
-    /**
-     * @return The WindowAndroid associated with this ContentViewCore.
-     */
-    WindowAndroid getWindowAndroid();
 
     /**
      * Updates the native {@link ContentViewCore} with a new window. This moves the NativeView and
@@ -108,26 +86,6 @@ public interface ContentViewCore {
      * @param windowAndroid The new {@link WindowAndroid} for this {@link ContentViewCore}.
      */
     void updateWindowAndroid(WindowAndroid windowAndroid);
-
-    /**
-     * Sets a new container view for this {@link ContentViewCore}.
-     *
-     * <p>WARNING: This method can also be used to replace the existing container view,
-     * but you should only do it if you have a very good reason to. Replacing the
-     * container view has been designed to support fullscreen in the Webview so it
-     * might not be appropriate for other use cases.
-     *
-     * <p>This method only performs a small part of replacing the container view and
-     * embedders are responsible for:
-     * <ul>
-     *     <li>Disconnecting the old container view from this ContentViewCore</li>
-     *     <li>Updating the InternalAccessDelegate</li>
-     *     <li>Reconciling the state of this ContentViewCore with the new container view</li>
-     *     <li>Tearing down and recreating the native GL rendering where appropriate</li>
-     *     <li>etc.</li>
-     * </ul>
-     */
-    void setContainerView(ViewGroup containerView);
 
     /**
      * Set the Container view Internals.
@@ -155,26 +113,6 @@ public interface ContentViewCore {
     boolean isAlive();
 
     /**
-     * @return Whether a scroll targeting web content is in progress.
-     */
-    boolean isScrollInProgress();
-
-    /**
-     * To be called when the ContentView is shown.
-     */
-    void onShow();
-
-    /**
-     * To be called when the ContentView is hidden.
-     */
-    void onHide();
-
-    /**
-     * Whether or not the associated ContentView is currently attached to a window.
-     */
-    boolean isAttachedToWindow();
-
-    /**
      * @see View#onAttachedToWindow()
      */
     void onAttachedToWindow();
@@ -193,16 +131,6 @@ public interface ContentViewCore {
      * @see View#onGenericMotionEvent(MotionEvent)
      */
     boolean onGenericMotionEvent(MotionEvent event);
-
-    /**
-     * @see View#onKeyUp(int, KeyEvent)
-     */
-    boolean onKeyUp(int keyCode, KeyEvent event);
-
-    /**
-     * @see View#dispatchKeyEvent(KeyEvent)
-     */
-    boolean dispatchKeyEvent(KeyEvent event);
 
     /**
      * @see View#onWindowFocusChanged(boolean)
@@ -229,11 +157,16 @@ public interface ContentViewCore {
     void onResume();
 
     /**
-     * Called when keyboard/IME focus has changed.
+     * Called when view-level focus for the container view has changed.
      * @param gainFocus {@code true} if the focus is gained, otherwise {@code false}.
+     */
+    void onViewFocusChanged(boolean gainFocus);
+
+    /**
+     * Sets whether the keyboard should be hidden when losing input focus.
      * @param hideKeyboardOnBlur {@code true} if we should hide soft keyboard when losing focus.
      */
-    void onFocusChanged(boolean gainFocus, boolean hideKeyboardOnBlur);
+    void setHideKeyboardOnBlur(boolean hideKeyboardOnBlur);
 
     /**
      * @see View#scrollBy(int, int)
@@ -243,66 +176,4 @@ public interface ContentViewCore {
      * (0, 0). This is critical for drawing ContentView correctly.
      */
     void scrollBy(float dxPix, float dyPix);
-
-    /**
-     * @see View#computeHorizontalScrollOffset()
-     */
-    int computeHorizontalScrollOffset();
-
-    /**
-     * @see View#computeVerticalScrollOffset()
-     */
-    int computeVerticalScrollOffset();
-
-    /**
-     * @see View#computeHorizontalScrollRange()
-     */
-    int computeHorizontalScrollRange();
-
-    /**
-     * @see View#computeVerticalScrollExtent()
-     */
-    int computeVerticalScrollRange();
-
-    /**
-     * @see View#computeHorizontalScrollExtent()
-     */
-    int computeHorizontalScrollExtent();
-
-    /**
-     * @see View#computeVerticalScrollExtent()
-     */
-    int computeVerticalScrollExtent();
-
-    /**
-     * @see View#awakenScrollBars(int, boolean)
-     */
-    boolean awakenScrollBars(int startDelay, boolean invalidate);
-
-    /**
-     * Enable or disable multi-touch zoom support.
-     * @param supportsMultiTouchZoom {@code true} if the feature is enabled.
-     */
-    void updateMultiTouchZoomSupport(boolean supportsMultiTouchZoom);
-
-    /**
-     * Enable or disable double tap support.
-     * @param supportsDoubleTap {@code true} if the feature is enabled.
-     */
-    void updateDoubleTapSupport(boolean supportsDoubleTap);
-
-    // Test-only methods
-
-    /**
-     * @return The amount of the top controls height if controls are in the state
-     *    of shrinking Blink's view size, otherwise 0.
-     */
-    @VisibleForTesting
-    int getTopControlsShrinkBlinkHeightForTesting();
-
-    /**
-     * @return {@code true} if select popup is being shown.
-     */
-    @VisibleForTesting
-    boolean isSelectPopupVisibleForTest();
 }

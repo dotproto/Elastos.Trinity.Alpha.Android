@@ -57,8 +57,6 @@ Still reading?
     <ignore regexp="clank"/>
     <ignore regexp="com/android/tv"/>
     <ignore regexp="org/chromium/chrome/browser/payments/PaymentRequestMetricsTest.class"/>
-    <ignore regexp="org/chromium/chrome/browser/preferences/website/UsbChooserPreferences"/>
-    <ignore regexp="org/chromium/chrome/browser/preferences/website/UsbDevicePreferences"/>
     <ignore regexp="third_party/cacheinvalidation/src/java/com/google/ipc/invalidation/external/client/contrib/AndroidListenerState.java"/>
   </issue>
   <!-- TODO(crbug.com/635567): Fix this properly. -->
@@ -264,12 +262,11 @@ Still reading?
   <issue id="ResourceType" severity="Error">
     <ignore regexp="/javatests/"/>
   </issue>
+  <!-- TODO(crbug.com/831774): Play Services starts complaining about RestrictedApi. Needs investigation -->
+  <issue id="RestrictedApi" severity="ignore"/>
   <issue id="RtlCompat" severity="ignore"/>
   <issue id="RtlEnabled" severity="ignore"/>
   <issue id="RtlSymmetry" severity="ignore"/>
-  <issue id="SdCardPath">
-    <ignore regexp="content/public/android/java/src/org/chromium/content/browser/MediaResourceGetter.java"/>
-  </issue>
   <issue id="SetJavaScriptEnabled" severity="ignore"/>
   <issue id="SignatureOrSystemPermissions" severity="ignore"/>
   <issue id="SpUsage" severity="Error">

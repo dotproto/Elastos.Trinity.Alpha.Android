@@ -13,7 +13,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/string_util.h"
@@ -190,11 +189,6 @@ bool CanShowDebuggingFeatures() {
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              chromeos::switches::kLoginManager) &&
          !session_manager::SessionManager::Get()->IsSessionStarted();
-}
-
-bool DemoModeEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableDemoMode);
 }
 
 void RecordPasswordChangeFlow(LoginPasswordChangeFlow flow) {
@@ -693,11 +687,6 @@ void ExistingUserController::OnStartEnableDebuggingScreen() {
     ShowEnableDebuggingScreen();
 }
 
-void ExistingUserController::OnStartDemoModeSetupScreen() {
-  if (DemoModeEnabled())
-    ShowDemoModeSetupScreen();
-}
-
 void ExistingUserController::OnStartKioskEnableScreen() {
   KioskAppManager::Get()->GetConsumerKioskAutoLaunchStatus(base::Bind(
       &ExistingUserController::OnConsumerKioskAutoLaunchCheckCompleted,
@@ -781,10 +770,6 @@ void ExistingUserController::ShowEnrollmentScreen() {
 
 void ExistingUserController::ShowEnableDebuggingScreen() {
   host_->StartWizard(OobeScreen::SCREEN_OOBE_ENABLE_DEBUGGING);
-}
-
-void ExistingUserController::ShowDemoModeSetupScreen() {
-  host_->StartWizard(OobeScreen::SCREEN_OOBE_DEMO_SETUP);
 }
 
 void ExistingUserController::ShowKioskEnableScreen() {
@@ -1095,8 +1080,9 @@ void ExistingUserController::OnOldEncryptionDetected(
       DBusThreadManager::Get()->GetSessionManagerClient(),
       std::move(cloud_policy_client), IsActiveDirectoryManaged(),
       user_context.GetAccountId(),
-      cryptohome::KeyDefinition(user_context.GetKey()->GetSecret(),
-                                std::string(), cryptohome::PRIV_DEFAULT));
+      cryptohome::KeyDefinition::CreateForPassword(
+          user_context.GetKey()->GetSecret(), std::string(),
+          cryptohome::PRIV_DEFAULT));
   pre_signin_policy_fetcher_->FetchPolicy(
       base::BindOnce(&ExistingUserController::OnPolicyFetchResult,
                      weak_factory_.GetWeakPtr(), user_context));

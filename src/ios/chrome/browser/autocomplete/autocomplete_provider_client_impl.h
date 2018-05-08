@@ -41,7 +41,6 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override;
   std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
       KeywordProvider* keyword_provider) override;
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
   std::string GetAcceptLanguages() const override;
   std::string GetEmbedderRepresentationOfAboutScheme() override;
   std::vector<base::string16> GetBuiltinURLs() override;
@@ -51,7 +50,7 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   base::Time GetCurrentVisitTimestamp() const override;
   bool IsOffTheRecord() const override;
   bool SearchSuggestEnabled() const override;
-  bool TabSyncEnabledAndUnencrypted() const override;
+  bool IsTabUploadToGoogleActive() const override;
   bool IsAuthenticated() const override;
   void Classify(
       const base::string16& text,

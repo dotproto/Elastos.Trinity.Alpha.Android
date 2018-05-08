@@ -25,8 +25,12 @@ class CredentialsFilter {
       std::vector<std::unique_ptr<autofill::PasswordForm>> results) const = 0;
 
   // Should |form| be offered to be saved?
-  virtual bool ShouldSave(const autofill::PasswordForm& form,
-                          const GURL& main_frame_url) const = 0;
+  virtual bool ShouldSave(const autofill::PasswordForm& form) const = 0;
+
+  // Returns true if the hash of |form.password_value| should be saved for
+  // password reuse checking.
+  virtual bool ShouldSavePasswordHash(
+      const autofill::PasswordForm& form) const = 0;
 
   // Call this if the form associated with |form_manager| was filled, and the
   // subsequent sign-in looked like a success.

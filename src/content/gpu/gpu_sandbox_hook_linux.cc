@@ -18,7 +18,7 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "content/public/common/content_switches.h"
-#include "media/gpu/features.h"
+#include "media/gpu/buildflags.h"
 #include "sandbox/linux/bpf_dsl/policy.h"
 #include "sandbox/linux/syscall_broker/broker_command.h"
 #include "sandbox/linux/syscall_broker/broker_file_permission.h"
@@ -153,6 +153,7 @@ void AddStandardGpuWhiteList(std::vector<BrokerFilePermission>* permissions) {
   static const char kDriCardBasePath[] = "/dev/dri/card";
   static const char kNvidiaCtlPath[] = "/dev/nvidiactl";
   static const char kNvidiaDeviceBasePath[] = "/dev/nvidia";
+  static const char kNvidiaDeviceModeSetPath[] = "/dev/nvidia-modeset";
   static const char kNvidiaParamsPath[] = "/proc/driver/nvidia/params";
   static const char kDevShm[] = "/dev/shm/";
 
@@ -172,6 +173,8 @@ void AddStandardGpuWhiteList(std::vector<BrokerFilePermission>* permissions) {
     permissions->push_back(BrokerFilePermission::ReadWrite(
         base::StringPrintf("%s%d", kNvidiaDeviceBasePath, i)));
   }
+  permissions->push_back(
+      BrokerFilePermission::ReadWrite(kNvidiaDeviceModeSetPath));
   permissions->push_back(BrokerFilePermission::ReadOnly(kNvidiaParamsPath));
 }
 
@@ -262,9 +265,9 @@ sandbox::syscall_broker::BrokerCommandSet CommandSetForGPU(
   sandbox::syscall_broker::BrokerCommandSet command_set;
   command_set.set(sandbox::syscall_broker::COMMAND_ACCESS);
   command_set.set(sandbox::syscall_broker::COMMAND_OPEN);
+  command_set.set(sandbox::syscall_broker::COMMAND_STAT);
   if (IsChromeOS() && options.use_amd_specific_policies) {
     command_set.set(sandbox::syscall_broker::COMMAND_READLINK);
-    command_set.set(sandbox::syscall_broker::COMMAND_STAT);
   }
   return command_set;
 }

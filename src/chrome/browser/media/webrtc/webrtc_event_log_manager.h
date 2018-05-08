@@ -16,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/time/clock.h"
+#include "base/time/time.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_common.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_local.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_remote.h"
@@ -27,13 +28,15 @@ class BrowserContext;
 };
 
 // This is a singleton class running in the browser UI thread (ownership of
-// the only instance lies in BrowserContext).  It is in charge of writing WebRTC
+// the only instance lies in BrowserContext). It is in charge of writing WebRTC
 // event logs to temporary files, then uploading those files to remote servers,
 // as well as of writing the logs to files which were manually indicated by the
 // user from the WebRTCIntenals. (A log may simulatenously be written to both,
 // either, or none.)
-// This needs to be final, so that posting |base::Unretained(this)| to the
-// internal task runner would not be a problem during destruction.
+// The only instance of this class is owned by BrowserProcessImpl. It is
+// destroyed from ~BrowserProcessImpl(), at which point any tasks posted to the
+// internal SequencedTaskRunner, or coming from another thread, would no longer
+// execute.
 class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
                                     public content::WebRtcEventLogger,
                                     public WebRtcLocalEventLogsObserver,
@@ -67,11 +70,14 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   static BrowserContextId GetBrowserContextId(int render_process_id);
 
   // Ensures that no previous instantiation of the class was performed, then
-  // instantiates the class and returns the object. Subsequent calls to
-  // GetInstance() will return this object.
-  static WebRtcEventLogManager* CreateSingletonInstance();
+  // instantiates the class and returns the object (ownership is transfered to
+  // the caller). Subsequent calls to GetInstance() will return this object,
+  // until it is destructed, at which pointer nullptr will be returned by
+  // subsequent calls.
+  static std::unique_ptr<WebRtcEventLogManager> CreateSingletonInstance();
 
-  // Returns the object previously constructed using CreateSingletonInstance().
+  // Returns the object previously constructed using CreateSingletonInstance(),
+  // if it was constructed and was not yet destroyed; nullptr otherwise.
   static WebRtcEventLogManager* GetInstance();
 
   ~WebRtcEventLogManager() override;
@@ -136,8 +142,19 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       int render_process_id,
       const std::string& peer_connection_id,
       size_t max_file_size_bytes,
-      const std::string& metadata = "",
-      base::OnceCallback<void(bool)> reply = base::OnceCallback<void(bool)>());
+      const std::string& metadata,
+      base::OnceCallback<void(bool, const std::string&)> reply =
+          base::OnceCallback<void(bool, const std::string&)>());
+
+  // Clear WebRTC event logs associated with a given browser context, in a given
+  // time range (|delete_begin| inclusive, |delete_end| exclusive), then
+  // post |reply| back to the thread from which the method was originally
+  // invoked (which can be any thread).
+  void ClearCacheForBrowserContext(
+      const content::BrowserContext* browser_context,
+      const base::Time& delete_begin,
+      const base::Time& delete_end,
+      base::OnceClosure reply);
 
   // Set (or unset) an observer that will be informed whenever a local log file
   // is started/stopped. The observer needs to be able to either run from
@@ -160,6 +177,7 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
                              base::OnceClosure reply = base::OnceClosure());
 
  private:
+  friend class SigninManagerAndroidTest;       // Calls *ForTesting() methods.
   friend class WebRtcEventLogManagerTestBase;  // Calls *ForTesting() methods.
 
   using PeerConnectionKey = WebRtcEventLogPeerConnectionKey;
@@ -175,10 +193,13 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
 
   WebRtcEventLogManager();
 
+  // Checks whether remote-bound logging is enabled.
+  bool IsRemoteLoggingEnabled() const;
+
   // RenderProcessHostObserver implementation.
-  void RenderProcessExited(content::RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override;
+  void RenderProcessExited(
+      content::RenderProcessHost* host,
+      const content::ChildProcessTerminationInfo& info) override;
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
 
   // RenderProcessExited() and RenderProcessHostDestroyed() treated similarly
@@ -222,13 +243,18 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       const std::string& message,
       base::OnceCallback<void(std::pair<bool, bool>)> reply);
 
-  void StartRemoteLoggingInternal(int render_process_id,
-                                  BrowserContextId browser_context_id,
-                                  const std::string& peer_connection_id,
-                                  const base::FilePath& browser_context_dir,
-                                  size_t max_file_size_bytes,
-                                  const std::string& metadata,
-                                  base::OnceCallback<void(bool)> reply);
+  void StartRemoteLoggingInternal(
+      int render_process_id,
+      BrowserContextId browser_context_id,
+      const std::string& peer_connection_id,
+      const base::FilePath& browser_context_dir,
+      size_t max_file_size_bytes,
+      const std::string& metadata,
+      base::OnceCallback<void(bool, const std::string&)> reply);
+
+  void ClearCacheForBrowserContextInternal(BrowserContextId browser_context_id,
+                                           const base::Time& delete_begin,
+                                           const base::Time& delete_end);
 
   void RenderProcessExitedInternal(int render_process_id);
 
@@ -241,6 +267,9 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   // Non-empty replies get posted to BrowserThread::UI.
   void MaybeReply(base::OnceClosure reply);
   void MaybeReply(base::OnceCallback<void(bool)> reply, bool value);
+  void MaybeReply(base::OnceCallback<void(bool, const std::string&)> reply,
+                  bool bool_val,
+                  const std::string& str_val);
   void MaybeReply(base::OnceCallback<void(std::pair<bool, bool>)> reply,
                   bool first,
                   bool second);
@@ -266,7 +295,10 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
 
   // This allows unit tests that do not wish to change the task runner to still
   // check when certain operations are finished.
+  // TODO(crbug.com/775415): Remove this and use PostNullTaskForTesting instead.
   scoped_refptr<base::SequencedTaskRunner>& GetTaskRunnerForTesting();
+
+  void PostNullTaskForTesting(base::OnceClosure reply) override;
 
   static WebRtcEventLogManager* g_webrtc_event_log_manager;
 

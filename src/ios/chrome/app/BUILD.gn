@@ -6,6 +6,7 @@ import("//build/config/ios/rules.gni")
 import("//build/config/mac/base_rules.gni")
 import("//build/mac/tweak_info_plist.gni")
 import("//ios/build/chrome_build.gni")
+import("//ios/build/config.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
 import("//services/service_manager/public/service_manifest.gni")
 
@@ -139,8 +140,10 @@ source_set("app_internal") {
     "//components/keyed_service/ios",
     "//components/metrics",
     "//components/ntp_snippets",
+    "//components/password_manager/core/common",
     "//components/payments/core",
     "//components/prefs",
+    "//components/prefs/ios",
     "//components/proxy_config",
     "//components/signin/core/browser",
     "//components/suggestions",
@@ -175,9 +178,9 @@ source_set("app_internal") {
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/omaha",
+    "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/payments",
     "//ios/chrome/browser/payments:constants",
-    "//ios/chrome/browser/prefs",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/share_extension",
@@ -202,6 +205,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/tab_grid",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
     "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tab_switcher:modes",
     "//ios/chrome/browser/ui/tabs",
     "//ios/chrome/browser/ui/toolbar/clean:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
@@ -308,6 +312,8 @@ ios_app_bundle("chrome") {
     extra_substitutions += [ "ENCRYPTION_EXPORT_COMPLIANCE_CODE=" +
                              ios_encryption_export_compliance_code ]
   }
+
+  assert_no_deps = ios_assert_no_deps + ios_chrome_extra_assert_no_deps
 }
 
 if (current_toolchain == default_toolchain) {

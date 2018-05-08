@@ -159,6 +159,8 @@ class ASH_EXPORT ScopedTransformOverviewWindow
     return window_selector_bounds_;
   }
 
+  gfx::Rect GetMaskBoundsForTesting() const;
+
   // Closes the transient root of the window managed by |this|.
   void Close();
 
@@ -239,8 +241,6 @@ class ASH_EXPORT ScopedTransformOverviewWindow
 
   // The original mask layer of the window before entering overview mode.
   ui::Layer* original_mask_layer_ = nullptr;
-
-  int original_shadow_elevation_ = 0;
 
   base::WeakPtrFactory<ScopedTransformOverviewWindow> weak_ptr_factory_;
 

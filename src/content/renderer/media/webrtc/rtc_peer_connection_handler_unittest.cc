@@ -39,25 +39,24 @@
 #include "content/renderer/media/webrtc/rtc_stats.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaConstraints.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebRTCConfiguration.h"
-#include "third_party/WebKit/public/platform/WebRTCDTMFSenderHandler.h"
-#include "third_party/WebKit/public/platform/WebRTCDataChannelHandler.h"
-#include "third_party/WebKit/public/platform/WebRTCDataChannelInit.h"
-#include "third_party/WebKit/public/platform/WebRTCError.h"
-#include "third_party/WebKit/public/platform/WebRTCICECandidate.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandlerClient.h"
-#include "third_party/WebKit/public/platform/WebRTCRtpReceiver.h"
-#include "third_party/WebKit/public/platform/WebRTCSessionDescription.h"
-#include "third_party/WebKit/public/platform/WebRTCSessionDescriptionRequest.h"
-#include "third_party/WebKit/public/platform/WebRTCStatsRequest.h"
-#include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_constraints.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_rtc_configuration.h"
+#include "third_party/blink/public/platform/web_rtc_data_channel_handler.h"
+#include "third_party/blink/public/platform/web_rtc_data_channel_init.h"
+#include "third_party/blink/public/platform/web_rtc_dtmf_sender_handler.h"
+#include "third_party/blink/public/platform/web_rtc_ice_candidate.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler_client.h"
+#include "third_party/blink/public/platform/web_rtc_rtp_receiver.h"
+#include "third_party/blink/public/platform/web_rtc_session_description.h"
+#include "third_party/blink/public/platform/web_rtc_session_description_request.h"
+#include "third_party/blink/public/platform/web_rtc_stats_request.h"
+#include "third_party/blink/public/platform/web_rtc_void_request.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_heap.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/api/rtpreceiverinterface.h"
 #include "third_party/webrtc/stats/test/rtcteststats.h"
@@ -335,7 +334,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
         static_cast<size_t>(1));
     audio_tracks[0].Initialize(blink_audio_source.Id(), blink_audio_source);
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(),
-                Initialize(_, _, -1));
+                Initialize(_, _));
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(),
                 SetAutomaticGainControl(true));
     EXPECT_CALL(*mock_audio_device_factory_.mock_capturer_source(), Start());
@@ -769,8 +768,7 @@ TEST_F(RTCPeerConnectionHandlerTest, setConfiguration) {
   // TODO(perkj): Test that the parameters in |config| can be translated when a
   // WebRTCConfiguration can be constructed. It's WebKit class and can't be
   // initialized from a test.
-  EXPECT_EQ(blink::WebRTCErrorType::kNone,
-            pc_handler_->SetConfiguration(config));
+  EXPECT_EQ(webrtc::RTCErrorType::NONE, pc_handler_->SetConfiguration(config));
 }
 
 // Test that when an error occurs in SetConfiguration, it's converted to a
@@ -782,7 +780,7 @@ TEST_F(RTCPeerConnectionHandlerTest, setConfigurationError) {
       webrtc::RTCErrorType::INVALID_MODIFICATION);
   EXPECT_CALL(*mock_tracker_.get(),
               TrackSetConfiguration(pc_handler_.get(), _));
-  EXPECT_EQ(blink::WebRTCErrorType::kInvalidModification,
+  EXPECT_EQ(webrtc::RTCErrorType::INVALID_MODIFICATION,
             pc_handler_->SetConfiguration(config));
 }
 

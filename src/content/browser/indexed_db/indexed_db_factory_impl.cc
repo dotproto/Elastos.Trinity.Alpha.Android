@@ -12,7 +12,6 @@
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
@@ -27,7 +26,7 @@
 #include "content/browser/indexed_db/indexed_db_tombstone_sweeper.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/indexed_db_transaction_coordinator.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
 using base::ASCIIToUTF16;
@@ -77,6 +76,32 @@ base::Time GenerateNextGlobalSweepTime(base::Time now) {
   int64_t rand_millis = kMinEarliestGlobalSweepFromNow.InMilliseconds() +
                         static_cast<int64_t>(base::RandGenerator(range));
   return now + base::TimeDelta::FromMilliseconds(rand_millis);
+}
+
+leveldb::Status GetDBSizeFromEnv(leveldb::Env* env,
+                                 const std::string& path,
+                                 int64_t* total_size_out) {
+  *total_size_out = 0;
+  // Root path should be /, but in MemEnv, a path name is not tailed with '/'
+  DCHECK_EQ(path.back(), '/');
+  const std::string path_without_slash = path.substr(0, path.length() - 1);
+
+  // This assumes that leveldb will not put a subdirectory into the directory
+  std::vector<std::string> file_names;
+  leveldb::Status s = env->GetChildren(path_without_slash, &file_names);
+  if (!s.ok())
+    return s;
+
+  for (std::string& file_name : file_names) {
+    file_name.insert(0, path);
+    uint64_t file_size;
+    s = env->GetFileSize(file_name, &file_size);
+    if (!s.ok())
+      return s;
+    else
+      *total_size_out += static_cast<int64_t>(file_size);
+  }
+  return s;
 }
 
 }  // namespace
@@ -714,6 +739,29 @@ size_t IndexedDBFactoryImpl::GetConnectionCount(const Origin& origin) const {
     count += it->second->ConnectionCount();
 
   return count;
+}
+
+int64_t IndexedDBFactoryImpl::GetInMemoryDBSize(const Origin& origin) const {
+  const auto& it = backing_store_map_.find(origin);
+  DCHECK(it != backing_store_map_.end());
+
+  const scoped_refptr<IndexedDBBackingStore>& backing_store = it->second;
+  int64_t level_db_size = 0;
+  leveldb::Status s =
+      GetDBSizeFromEnv(backing_store->db()->env(), "/", &level_db_size);
+  if (!s.ok())
+    LOG(ERROR) << "Failed to GetDBSizeFromEnv: " << s.ToString();
+
+  return backing_store->GetInMemoryBlobSize() + level_db_size;
+}
+
+base::Time IndexedDBFactoryImpl::GetLastModified(
+    const url::Origin& origin) const {
+  const auto& it = backing_store_map_.find(origin);
+  DCHECK(it != backing_store_map_.end());
+
+  const scoped_refptr<IndexedDBBackingStore>& backing_store = it->second;
+  return backing_store->db()->LastModified();
 }
 
 void IndexedDBFactoryImpl::NotifyIndexedDBContentChanged(

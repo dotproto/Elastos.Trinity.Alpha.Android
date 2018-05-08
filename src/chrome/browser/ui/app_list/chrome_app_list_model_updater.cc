@@ -8,12 +8,34 @@
 #include <utility>
 
 #include "ash/app_list/model/search/search_model.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/app_list/app_list_service_impl.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "extensions/common/constants.h"
 #include "ui/base/models/menu_model.h"
+
+namespace {
+
+// TODO(hejq): Get rid of these after refactoring ChromeSearchResult.
+ChromeSearchResult* ConvertToChromeSearchResult(
+    app_list::SearchResult* result) {
+  return static_cast<ChromeSearchResult*>(result);
+}
+
+std::vector<std::unique_ptr<app_list::SearchResult>> ConvertToSearchResults(
+    std::vector<std::unique_ptr<ChromeSearchResult>> results) {
+  std::vector<std::unique_ptr<app_list::SearchResult>> ash_results;
+  for (auto& result : results) {
+    ash_results.push_back(
+        base::WrapUnique<app_list::SearchResult>(result.release()));
+  }
+  return ash_results;
+}
+
+}  // namespace
 
 ChromeAppListModelUpdater::ChromeAppListModelUpdater(Profile* profile)
     : profile_(profile), weak_ptr_factory_(this) {
@@ -139,9 +161,11 @@ void ChromeAppListModelUpdater::UpdateSearchBox(const base::string16& text,
 }
 
 void ChromeAppListModelUpdater::PublishSearchResults(
-    std::vector<std::unique_ptr<app_list::SearchResult>> results) {
+    std::vector<std::unique_ptr<ChromeSearchResult>> results) {
+  for (auto& result : results)
+    result->set_model_updater(this);
   if (!ash_util::IsRunningInMash())
-    search_model_->PublishResults(std::move(results));
+    search_model_->PublishResults(ConvertToSearchResults(std::move(results)));
 }
 
 void ChromeAppListModelUpdater::ActivateChromeItem(const std::string& id,
@@ -302,7 +326,7 @@ void ChromeAppListModelUpdater::GetIdToAppListIndexMap(
     return;
   app_list_controller_->GetIdToAppListIndexMap(base::BindOnce(
       [](GetIdToAppListIndexMapCallback callback,
-         const std::unordered_map<std::string, uint16_t>& indexes) {
+         const base::flat_map<std::string, uint16_t>& indexes) {
         std::move(callback).Run(indexes);
       },
       std::move(callback)));
@@ -317,14 +341,17 @@ size_t ChromeAppListModelUpdater::BadgedItemCount() {
   return count;
 }
 
-ui::MenuModel* ChromeAppListModelUpdater::GetContextMenuModel(
-    const std::string& id) {
+void ChromeAppListModelUpdater::GetContextMenuModel(
+    const std::string& id,
+    GetMenuModelCallback callback) {
   ChromeAppListItem* item = FindItem(id);
   // TODO(stevenjb/jennyz): Implement this for folder items.
   // TODO(newcomer): Add histograms for folder items.
-  if (!item || item->is_folder())
-    return nullptr;
-  return item->GetContextMenuModel();
+  if (!item || item->is_folder()) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  item->GetContextMenuModel(std::move(callback));
 }
 
 void ChromeAppListModelUpdater::ContextMenuItemSelected(const std::string& id,
@@ -335,12 +362,22 @@ void ChromeAppListModelUpdater::ContextMenuItemSelected(const std::string& id,
     chrome_item->ContextMenuItemSelected(command_id, event_flags);
 }
 
-app_list::SearchResult* ChromeAppListModelUpdater::FindSearchResult(
-    const std::string& result_id) {
-  return search_model_ ? search_model_->FindSearchResult(result_id) : nullptr;
+void ChromeAppListModelUpdater::GetSearchResultContextMenuModel(
+    const std::string& result_id,
+    GetMenuModelCallback callback) {
+  ChromeSearchResult* search_result = FindSearchResult(result_id);
+  if (search_result)
+    search_result->GetContextMenuModel(std::move(callback));
 }
 
-app_list::SearchResult* ChromeAppListModelUpdater::GetResultByTitle(
+ChromeSearchResult* ChromeAppListModelUpdater::FindSearchResult(
+    const std::string& result_id) {
+  return search_model_ ? ConvertToChromeSearchResult(
+                             search_model_->FindSearchResult(result_id))
+                       : nullptr;
+}
+
+ChromeSearchResult* ChromeAppListModelUpdater::GetResultByTitle(
     const std::string& title) {
   if (!search_model_)
     return nullptr;
@@ -354,7 +391,7 @@ app_list::SearchResult* ChromeAppListModelUpdater::GetResultByTitle(
         result->result_type() == ash::SearchResultType::kInstalledApp &&
         result->display_type() !=
             ash::SearchResultDisplayType::kRecommendation) {
-      return result.get();
+      return ConvertToChromeSearchResult(result.get());
     }
   }
   return nullptr;
@@ -419,7 +456,7 @@ void ChromeAppListModelUpdater::AddItemToOemFolder(
     ChromeAppListItem* oem_folder = FindFolderItem(oem_folder_id);
     if (!oem_folder) {
       std::unique_ptr<ChromeAppListItem> new_oem_folder =
-          std::make_unique<ChromeAppListItem>(profile_, oem_folder_id);
+          std::make_unique<ChromeAppListItem>(profile_, oem_folder_id, this);
       oem_folder = AddChromeItem(std::move(new_oem_folder));
       oem_folder->SetChromeIsFolder(true);
     }
@@ -439,7 +476,8 @@ void ChromeAppListModelUpdater::UpdateAppItemFromSyncItem(
 
   VLOG(2) << this << " UpdateAppItemFromSyncItem: " << sync_item->ToString();
   if (sync_item->item_ordinal.IsValid() &&
-      !chrome_item->position().Equals(sync_item->item_ordinal)) {
+      (!chrome_item->position().IsValid() ||
+       !chrome_item->position().Equals(sync_item->item_ordinal))) {
     // This updates the position in both chrome and ash:
     chrome_item->SetPosition(sync_item->item_ordinal);
   }
@@ -474,9 +512,10 @@ void ChromeAppListModelUpdater::OnFolderCreated(
   // Otherwise, we detect an item is created in Ash which is not added into our
   // Chrome list yet. This only happens when a folder is created.
   std::unique_ptr<ChromeAppListItem> new_item =
-      std::make_unique<ChromeAppListItem>(profile_, item->id);
+      std::make_unique<ChromeAppListItem>(profile_, item->id, this);
   chrome_item = AddChromeItem(std::move(new_item));
   chrome_item->SetMetadata(std::move(item));
+
   if (delegate_)
     delegate_->OnAppListItemAdded(chrome_item);
 }

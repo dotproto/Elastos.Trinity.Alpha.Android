@@ -9,6 +9,8 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
+#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -28,6 +30,7 @@
 
 using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::RecentTabsMenuButton;
+using chrome_test_util::SettingsDoneButton;
 
 // Test cases to verify that keyboard commands are and are not registered when
 // expected.
@@ -105,7 +108,7 @@ using chrome_test_util::RecentTabsMenuButton;
 
   [self verifyNoKeyboardCommandsAreRegistered];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -116,6 +119,12 @@ using chrome_test_util::RecentTabsMenuButton;
   BOOL success = chrome_test_util::ClearBookmarks();
   GREYAssert(success, @"Not all bookmarks were removed.");
 
+  // Load a webpage because the NTP is not always bookmarkable.
+  web::test::SetUpFileBasedHttpServer();
+  GURL URL = web::test::HttpServer::MakeUrl(
+      "http://ios/testing/data/http_server_files/pony.html");
+  [ChromeEarlGrey loadURL:URL];
+
   // Bookmark page
   if (IsIPadIdiom()) {
     id<GREYMatcher> bookmarkMatcher =
@@ -124,7 +133,10 @@ using chrome_test_util::RecentTabsMenuButton;
         performAction:grey_tap()];
   } else {
     [ChromeEarlGreyUI openToolsMenu];
-    id<GREYMatcher> bookmarkMatcher = grey_accessibilityLabel(@"Add Bookmark");
+    id<GREYMatcher> bookmarkMatcher =
+        IsUIRefreshPhase1Enabled()
+            ? grey_accessibilityID(kToolsMenuAddToBookmarks)
+            : grey_accessibilityLabel(@"Add Bookmark");
     [[EarlGrey selectElementWithMatcher:bookmarkMatcher]
         performAction:grey_tap()];
   }
@@ -148,6 +160,7 @@ using chrome_test_util::RecentTabsMenuButton;
   // Open Bookmarks
   [ChromeEarlGreyUI openToolsMenu];
   [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   [self verifyNoKeyboardCommandsAreRegistered];
 
@@ -156,20 +169,24 @@ using chrome_test_util::RecentTabsMenuButton;
 }
 
 // Tests that keyboard commands are not registered when the Recent Tabs UI is
-// shown on iPhone and registered on iPad.
+// shown.
 - (void)testKeyboardCommands_RecentTabsPresented {
   // Open Recent Tabs
   [ChromeEarlGreyUI openToolsMenu];
   [ChromeEarlGreyUI tapToolsMenuButton:RecentTabsMenuButton()];
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
-  if (IsIPadIdiom()) {
-    [self verifyKeyboardCommandsAreRegistered];
+  [self verifyNoKeyboardCommandsAreRegistered];
+
+  // Clean up by dismissing the recent tabs UI before ending the test. The
+  // a11y ID for the dismiss button depends on the UIRefresh experiment.
+  id<GREYMatcher> exitMatcher = nil;
+  if (IsUIRefreshPhase1Enabled()) {
+    exitMatcher = grey_accessibilityID(kTableViewNavigationDismissButtonId);
   } else {
-    [self verifyNoKeyboardCommandsAreRegistered];
-
-    id<GREYMatcher> exit = grey_accessibilityID(@"Exit");
-    [[EarlGrey selectElementWithMatcher:exit] performAction:grey_tap()];
+    exitMatcher = grey_accessibilityID(@"Exit");
   }
+  [[EarlGrey selectElementWithMatcher:exitMatcher] performAction:grey_tap()];
 }
 
 // Tests that when the app is opened on a web page and a key is pressed, the

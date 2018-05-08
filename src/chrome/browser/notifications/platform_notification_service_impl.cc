@@ -52,6 +52,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/message_center/public/cpp/features.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
@@ -82,18 +83,6 @@ namespace {
 // Invalid id for a renderer process. Used in cases where we need to check for
 // permission without having an associated renderer process yet.
 const int kInvalidRenderProcessId = -1;
-
-void ReportNotificationImageOnIOThread(
-    scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service,
-    Profile* profile,
-    const GURL& origin,
-    const SkBitmap& image) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!safe_browsing_service || !safe_browsing_service->enabled())
-    return;
-  safe_browsing_service->ping_manager()->ReportNotificationImage(
-      profile, safe_browsing_service->database_manager(), origin, image);
-}
 
 // Whether a web notification should be displayed when chrome is in full
 // screen mode.
@@ -512,12 +501,15 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
     notification.set_image(
         gfx::Image::CreateFrom1xBitmap(notification_resources.image));
     // n.b. this should only be posted once per notification.
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(
-            &ReportNotificationImageOnIOThread,
-            base::WrapRefCounted(g_browser_process->safe_browsing_service()),
-            profile, origin, notification_resources.image));
+    if (g_browser_process->safe_browsing_service() &&
+        g_browser_process->safe_browsing_service()->enabled_by_prefs()) {
+      g_browser_process->safe_browsing_service()
+          ->ping_manager()
+          ->ReportNotificationImage(
+              profile,
+              g_browser_process->safe_browsing_service()->database_manager(),
+              origin, notification_resources.image);
+    }
   }
 
   // Badges are only supported on Android, primarily because it's the only

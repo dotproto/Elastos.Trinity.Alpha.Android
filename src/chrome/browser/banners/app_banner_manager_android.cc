@@ -130,7 +130,7 @@ void AppBannerManagerAndroid::SendBannerDismissed() {
 
   // If we are dismissing the banner, the site can't be installed.
   if (IsExperimentalAppBannersEnabled())
-    ShowAmbientBadge(false /* is_installed */);
+    ShowAmbientBadge();
 }
 
 void AppBannerManagerAndroid::AddToHomescreenFromBadge() {
@@ -155,8 +155,8 @@ std::string AppBannerManagerAndroid::GetBannerType() {
 
 bool AppBannerManagerAndroid::CheckIfInstalled() {
   bool is_installed = AppBannerManager::CheckIfInstalled();
-  if (IsExperimentalAppBannersEnabled())
-    ShowAmbientBadge(is_installed);
+  if (IsExperimentalAppBannersEnabled() && !is_installed)
+    ShowAmbientBadge();
 
   return is_installed;
 }
@@ -242,7 +242,7 @@ void AppBannerManagerAndroid::OnAppIconFetched(const SkBitmap& bitmap) {
   // We will not reach this point if the app is already installed since querying
   // for native app details will return nothing.
   if (IsExperimentalAppBannersEnabled())
-    ShowAmbientBadge(false /*is_installed*/);
+    ShowAmbientBadge();
 
   // If we triggered the installability check on page load, then it's possible
   // we don't have enough engagement yet. If that's the case, return here but
@@ -360,8 +360,7 @@ InstallableStatusCode AppBannerManagerAndroid::QueryNativeApp(
   return NO_ERROR_DETECTED;
 }
 
-const base::string16 AppBannerManagerAndroid::GetAppNameForAmbientBadge()
-    const {
+base::string16 AppBannerManagerAndroid::GetAppName() const {
   if (native_app_data_.is_null()) {
     // Prefer the short name if it's available. It's guaranteed that at least
     // one of these is non-empty.
@@ -373,13 +372,13 @@ const base::string16 AppBannerManagerAndroid::GetAppNameForAmbientBadge()
   return native_app_title_;
 }
 
-void AppBannerManagerAndroid::ShowAmbientBadge(bool is_installed) {
+void AppBannerManagerAndroid::ShowAmbientBadge() {
   InfoBarService* infobar_service =
       InfoBarService::FromWebContents(web_contents());
   if (GetVisibleAmbientBadgeInfoBar(infobar_service) == nullptr) {
-    InstallableAmbientBadgeInfoBarDelegate::Create(
-        web_contents(), GetWeakPtr(), GetAppNameForAmbientBadge(),
-        primary_icon_, manifest_.start_url, is_installed);
+    InstallableAmbientBadgeInfoBarDelegate::Create(web_contents(), GetWeakPtr(),
+                                                   GetAppName(), primary_icon_,
+                                                   manifest_.start_url);
   }
 }
 
@@ -391,6 +390,12 @@ void AppBannerManagerAndroid::HideAmbientBadge() {
 
   if (ambient_badge_infobar)
     infobar_service->RemoveInfoBar(ambient_badge_infobar);
+}
+
+// static
+AppBannerManager* AppBannerManager::FromWebContents(
+    content::WebContents* web_contents) {
+  return AppBannerManagerAndroid::FromWebContents(web_contents);
 }
 
 // static

@@ -23,13 +23,15 @@ namespace device {
 class COMPONENT_EXPORT(DEVICE_FIDO) PublicKeyCredentialParams {
  public:
   struct CredentialInfo {
-    std::string type;
+    CredentialType type = CredentialType::kPublicKey;
     int algorithm = base::strict_cast<int>(CoseAlgorithmIdentifier::kCoseEs256);
   };
 
   explicit PublicKeyCredentialParams(
       std::vector<CredentialInfo> credential_params);
+  PublicKeyCredentialParams(const PublicKeyCredentialParams& other);
   PublicKeyCredentialParams(PublicKeyCredentialParams&& other);
+  PublicKeyCredentialParams& operator=(const PublicKeyCredentialParams& other);
   PublicKeyCredentialParams& operator=(PublicKeyCredentialParams&& other);
   ~PublicKeyCredentialParams();
 
@@ -40,8 +42,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) PublicKeyCredentialParams {
 
  private:
   std::vector<CredentialInfo> public_key_credential_params_;
-
-  DISALLOW_COPY_AND_ASSIGN(PublicKeyCredentialParams);
 };
 
 }  // namespace device

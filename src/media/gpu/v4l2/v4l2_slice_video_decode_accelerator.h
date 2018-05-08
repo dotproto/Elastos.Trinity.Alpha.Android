@@ -15,7 +15,6 @@
 
 #include "base/containers/queue.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
@@ -84,13 +83,13 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   // Record for output buffers.
   struct OutputRecord {
     OutputRecord();
-    OutputRecord(OutputRecord&&) = default;
+    OutputRecord(OutputRecord&&);
+    ~OutputRecord();
     bool at_device;
     bool at_client;
     int32_t picture_id;
     GLuint client_texture_id;
     GLuint texture_id;
-    scoped_refptr<gl::GLImage> gl_image;
     EGLSyncKHR egl_sync;
     std::vector<base::ScopedFD> dmabuf_fds;
     bool cleared;
@@ -269,13 +268,12 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
       const gfx::Size& size,
       uint32_t fourcc);
 
-  // Take the GLImage |gl_image|, created for |picture_buffer_id|, and use it
+  // Take the dmabuf |passed_dmabuf_fds|, for |picture_buffer_id|, and use it
   // for OutputRecord at |buffer_index|. The buffer is backed by
   // |passed_dmabuf_fds|, and the OutputRecord takes ownership of them.
-  void AssignGLImage(
+  void AssignDmaBufs(
       size_t buffer_index,
       int32_t picture_buffer_id,
-      scoped_refptr<gl::GLImage> gl_image,
       // TODO(posciak): (https://crbug.com/561749) we should normally be able to
       // pass the vector by itself via std::move, but it's not possible to do
       // this if this method is used as a callback.
@@ -416,7 +414,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
 
   struct BitstreamBufferRef;
   // Input queue of stream buffers coming from the client.
-  base::queue<linked_ptr<BitstreamBufferRef>> decoder_input_queue_;
+  base::queue<std::unique_ptr<BitstreamBufferRef>> decoder_input_queue_;
   // BitstreamBuffer currently being processed.
   std::unique_ptr<BitstreamBufferRef> decoder_current_bitstream_buffer_;
 

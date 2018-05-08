@@ -113,7 +113,8 @@ Layer::Layer()
       device_scale_factor_(1.0f),
       cache_render_surface_requests_(0),
       deferred_paint_requests_(0),
-      trilinear_filtering_request_(0) {
+      trilinear_filtering_request_(0),
+      weak_ptr_factory_(this) {
   CreateCcLayer();
 }
 
@@ -140,7 +141,8 @@ Layer::Layer(LayerType type)
       device_scale_factor_(1.0f),
       cache_render_surface_requests_(0),
       deferred_paint_requests_(0),
-      trilinear_filtering_request_(0) {
+      trilinear_filtering_request_(0),
+      weak_ptr_factory_(this) {
   CreateCcLayer();
 }
 
@@ -628,7 +630,7 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
     DCHECK(child->cc_layer_);
     cc_layer_->AddChild(child->cc_layer_);
   }
-  cc_layer_->SetLayerClient(this);
+  cc_layer_->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(fills_bounds_opaquely_);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
@@ -712,6 +714,14 @@ bool Layer::StretchContentToFillBounds() const {
   return surface_layer_->stretch_content_to_fill_bounds();
 }
 
+void Layer::SetSurfaceSize(gfx::Size surface_size_in_dip) {
+  DCHECK(surface_layer_);
+  if (frame_size_in_dip_ == surface_size_in_dip)
+    return;
+  frame_size_in_dip_ = surface_size_in_dip;
+  RecomputeDrawsContentAndUVRect();
+}
+
 void Layer::SetTransferableResource(
     const viz::TransferableResource& resource,
     std::unique_ptr<viz::SingleReleaseCallback> release_callback,
@@ -719,6 +729,7 @@ void Layer::SetTransferableResource(
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
   DCHECK(!resource.mailbox_holder.mailbox.IsZero());
   DCHECK(release_callback);
+  DCHECK(!resource.is_software);
   if (!texture_layer_.get()) {
     scoped_refptr<cc::TextureLayer> new_layer =
         cc::TextureLayer::CreateForMailbox(this);
@@ -764,6 +775,7 @@ void Layer::SetShowPrimarySurface(const viz::SurfaceId& surface_id,
 
   if (!surface_layer_) {
     scoped_refptr<cc::SurfaceLayer> new_layer = cc::SurfaceLayer::Create();
+    new_layer->SetHitTestable(true);
     SwitchToLayer(new_layer);
     surface_layer_ = new_layer;
   }
@@ -1023,6 +1035,7 @@ size_t Layer::GetApproximateUnsharedMemoryUsage() const {
 }
 
 bool Layer::PrepareTransferableResource(
+    cc::SharedBitmapIdRegistrar* bitmap_registar,
     viz::TransferableResource* resource,
     std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
   if (!transfer_release_callback_)
@@ -1210,7 +1223,6 @@ float Layer::GetGrayscaleForAnimation() const {
 }
 
 SkColor Layer::GetColorForAnimation() const {
-  // WebColor is equivalent to SkColor, per WebColor.h.
   // The NULL check is here since this is invoked regardless of whether we have
   // been configured as LAYER_SOLID_COLOR.
   return solid_color_layer_.get() ?
@@ -1263,7 +1275,7 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(true);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
-  cc_layer_->SetLayerClient(this);
+  cc_layer_->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
   cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
   RecomputePosition();
 }

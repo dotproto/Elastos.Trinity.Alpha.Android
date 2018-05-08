@@ -9,7 +9,7 @@ import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//ppapi/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
@@ -19,10 +19,9 @@ if (is_android) {
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
   import("//build/mac/tweak_info_plist.gni")
+  import("//ui/gl/features.gni")
   import("//third_party/icu/config.gni")
   import("//v8/gni/v8.gni")
-} else if (is_win) {
-  import("//build/win/syzygy/syzygy.gni")
 }
 
 declare_args() {
@@ -44,6 +43,14 @@ source_set("android_shell_descriptors") {
   ]
   public_deps = [
     "//content/public/common:content_descriptors",
+  ]
+}
+
+source_set("layout_test_switches") {
+  testonly = true
+  sources = [
+    "common/layout_test/layout_test_switches.cc",
+    "common/layout_test/layout_test_switches.h",
   ]
 }
 
@@ -103,6 +110,8 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_push_messaging_service.h",
     "browser/layout_test/layout_test_url_request_context_getter.cc",
     "browser/layout_test/layout_test_url_request_context_getter.h",
+    "browser/layout_test/leak_detector.cc",
+    "browser/layout_test/leak_detector.h",
     "browser/layout_test/mojo_layout_test_helper.cc",
     "browser/layout_test/mojo_layout_test_helper.h",
     "browser/layout_test/secondary_test_window_observer.cc",
@@ -166,9 +175,6 @@ static_library("content_shell_lib") {
     "common/layout_test/layout_test_content_client.h",
     "common/layout_test/layout_test_messages.cc",
     "common/layout_test/layout_test_messages.h",
-    "common/layout_test/layout_test_switches.cc",
-    "common/layout_test/layout_test_switches.h",
-    "common/leak_detection_result.h",
     "common/power_monitor_test_impl.cc",
     "common/power_monitor_test_impl.h",
     "common/shell_content_client.cc",
@@ -191,14 +197,12 @@ static_library("content_shell_lib") {
     "renderer/layout_test/layout_test_render_frame_observer.h",
     "renderer/layout_test/layout_test_render_thread_observer.cc",
     "renderer/layout_test/layout_test_render_thread_observer.h",
-    "renderer/layout_test/leak_detector.cc",
-    "renderer/layout_test/leak_detector.h",
     "renderer/layout_test/test_media_stream_renderer_factory.cc",
     "renderer/layout_test/test_media_stream_renderer_factory.h",
     "renderer/layout_test/test_media_stream_video_renderer.cc",
     "renderer/layout_test/test_media_stream_video_renderer.h",
-    "renderer/layout_test/test_websocket_handshake_throttle.cc",
-    "renderer/layout_test/test_websocket_handshake_throttle.h",
+    "renderer/layout_test/test_websocket_handshake_throttle_provider.cc",
+    "renderer/layout_test/test_websocket_handshake_throttle_provider.h",
     "renderer/shell_content_renderer_client.cc",
     "renderer/shell_content_renderer_client.h",
     "renderer/shell_render_view_observer.cc",
@@ -233,6 +237,7 @@ static_library("content_shell_lib") {
   ]
   deps = [
     ":content_shell_packaged_services_manifest_overlay",
+    ":layout_test_switches",
     ":mojo_bindings",
     ":resources",
     "//base",
@@ -269,11 +274,11 @@ static_library("content_shell_lib") {
     "//gpu",
     "//media",
     "//media/capture",
-    "//media/mojo:features",
+    "//media/mojo:buildflags",
     "//net",
     "//net:net_resources",
     "//net:test_support",
-    "//ppapi/features",
+    "//ppapi/buildflags",
     "//sandbox",
     "//services/device/public/mojom",
     "//services/network/public/cpp",
@@ -284,11 +289,11 @@ static_library("content_shell_lib") {
     "//storage/browser",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
-    "//third_party/WebKit/public:features",
-    "//third_party/WebKit/public:image_resources",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:test_support",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public:buildflags",
+    "//third_party/blink/public:image_resources",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:test_support",
     "//third_party/icu",
     "//ui/base",
     "//ui/base/ime",
@@ -463,8 +468,6 @@ group("resources") {
 
 repack("pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_resources.pak",
-    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
@@ -472,6 +475,8 @@ repack("pak") {
     "$root_gen_dir/content/shell/shell_resources.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
@@ -486,8 +491,8 @@ repack("pak") {
     "//content/browser/tracing:resources",
     "//mojo/public/js:resources",
     "//net:net_resources",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:scaled_resources_100_percent",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -616,19 +621,6 @@ if (is_android) {
   }
 }
 
-if (is_win) {
-  if (is_syzyasan) {
-    syzygy_asan("content_shell_syzyasan") {
-      binary_name = "content_shell.exe"
-      dest_dir = "$root_out_dir/syzygy"
-      deps = [
-        "//content/shell:content_shell",
-      ]
-      testonly = true
-    }
-  }
-}
-
 if (is_mac) {
   bundle_data("content_shell_framework_helpers") {
     testonly = true
@@ -740,9 +732,11 @@ if (is_mac) {
       ":content_shell_lib",
     ]
     deps = [
+      ":content_shell_angle_library",
       ":content_shell_framework_helpers",
       ":content_shell_framework_resources",
       ":content_shell_framework_xibs",
+      ":content_shell_swiftshader_library",
       "//third_party/icu:icudata",
     ]
 
@@ -831,6 +825,52 @@ if (is_mac) {
       "{{bundle_resources_dir}}/{{source_file_part}}",
     ]
   }
+
+  if (use_egl) {
+    # Add the ANGLE .dylibs in the MODULE_DIR of Chromium.app
+    bundle_data("content_shell_angle_binaries") {
+      sources = [
+        "$root_out_dir/egl_intermediates/libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libGLESv2.dylib",
+      ]
+      outputs = [
+        "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//ui/gl:angle_library_copy",
+      ]
+    }
+
+    # Add the SwiftShader .dylibs in the MODULE_DIR of Chromium.app
+    bundle_data("content_shell_swiftshader_binaries") {
+      sources = [
+        "$root_out_dir/egl_intermediates/libswiftshader_libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libswiftshader_libGLESv2.dylib",
+      ]
+      outputs = [
+        "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//ui/gl:swiftshader_library_copy",
+      ]
+    }
+  }
+
+  group("content_shell_angle_library") {
+    if (use_egl) {
+      deps = [
+        ":content_shell_angle_binaries",
+      ]
+    }
+  }
+
+  group("content_shell_swiftshader_library") {
+    if (use_egl) {
+      deps = [
+        ":content_shell_swiftshader_binaries",
+      ]
+    }
+  }
 }
 
 mojom("mojo_bindings") {
@@ -842,6 +882,7 @@ mojom("mojo_bindings") {
   ]
   public_deps = [
     "//mojo/public/mojom/base",
+    "//skia/public/interfaces",
     "//ui/gfx/geometry/mojo",
     "//url/mojom:url_mojom_gurl",
   ]

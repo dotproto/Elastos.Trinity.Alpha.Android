@@ -15,7 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_info.h"
 #include "base/stl_util.h"
@@ -35,7 +34,7 @@
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -259,16 +258,12 @@ bool InstallSigner::VerifySignature(const InstallSignature& signature) {
     return false;
 
   crypto::SignatureVerifier verifier;
-  if (!verifier.VerifyInit(
-          crypto::SignatureVerifier::RSA_PKCS1_SHA1,
-          reinterpret_cast<const uint8_t*>(signature.signature.data()),
-          signature.signature.size(),
-          reinterpret_cast<const uint8_t*>(public_key.data()),
-          public_key.size()))
+  if (!verifier.VerifyInit(crypto::SignatureVerifier::RSA_PKCS1_SHA1,
+                           base::as_bytes(base::make_span(signature.signature)),
+                           base::as_bytes(base::make_span(public_key))))
     return false;
 
-  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(signed_data.data()),
-                        signed_data.size());
+  verifier.VerifyUpdate(base::as_bytes(base::make_span(signed_data)));
   return verifier.VerifyFinal();
 }
 

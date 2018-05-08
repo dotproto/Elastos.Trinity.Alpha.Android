@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
@@ -35,11 +34,11 @@ namespace ui {
 // InputMethodChromeOS implementation -----------------------------------------
 InputMethodChromeOS::InputMethodChromeOS(
     internal::InputMethodDelegate* delegate)
-    : composing_text_(false),
+    : InputMethodBase(delegate),
+      composing_text_(false),
       composition_changed_(false),
       handling_key_event_(false),
       weak_ptr_factory_(this) {
-  SetDelegate(delegate);
   ui::IMEBridge::Get()->SetInputContextHandler(this);
 
   UpdateContextFocusState();
@@ -105,8 +104,7 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
         // TODO(shuchen): Eventually, the language input keys should be handed
         // over to the IME extension to process. And IMF can handle if the IME
         // extension didn't handle.
-        return DispatchKeyEventPostIME(
-            event, std::make_unique<AckCallback>(std::move(ack_callback)));
+        return DispatchKeyEventPostIME(event, std::move(ack_callback));
       }
     }
   }
@@ -121,15 +119,12 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
       if (ExecuteCharacterComposer(*event)) {
         // Treating as PostIME event if character composer handles key event and
         // generates some IME event,
-        return ProcessKeyEventPostIME(
-            event, std::make_unique<AckCallback>(std::move(ack_callback)),
-            false, true);
+        return ProcessKeyEventPostIME(event, std::move(ack_callback), false,
+                                      true);
       }
-      return ProcessUnfilteredKeyPressEvent(
-          event, std::make_unique<AckCallback>(std::move(ack_callback)));
+      return ProcessUnfilteredKeyPressEvent(event, std::move(ack_callback));
     }
-    return DispatchKeyEventPostIME(
-        event, std::make_unique<AckCallback>(std::move(ack_callback)));
+    return DispatchKeyEventPostIME(event, std::move(ack_callback));
   }
 
   handling_key_event_ = true;
@@ -144,12 +139,6 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
     return ui::EventDispatchDetails();
   }
   return ProcessKeyEventDone(event, std::move(ack_callback), false);
-}
-
-bool InputMethodChromeOS::OnUntranslatedIMEMessage(
-    const base::NativeEvent& event,
-    NativeEventResult* result) {
-  return false;
 }
 
 void InputMethodChromeOS::KeyEventDoneCallback(ui::KeyEvent* event,
@@ -177,9 +166,8 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventDone(
   }
   ui::EventDispatchDetails details;
   if (event->type() == ET_KEY_PRESSED || event->type() == ET_KEY_RELEASED) {
-    details = ProcessKeyEventPostIME(
-        event, std::make_unique<AckCallback>(std::move(ack_callback)), false,
-        is_handled);
+    details = ProcessKeyEventPostIME(event, std::move(ack_callback), false,
+                                     is_handled);
   }
   handling_key_event_ = false;
   return details;
@@ -290,6 +278,17 @@ bool InputMethodChromeOS::IsCandidatePopupOpen() const {
   return false;
 }
 
+InputMethodKeyboardController*
+InputMethodChromeOS::GetInputMethodKeyboardController() {
+  chromeos::input_method::InputMethodManager* manager =
+      chromeos::input_method::InputMethodManager::Get();
+  if (manager) {
+    if (auto* controller = manager->GetInputMethodKeyboardController())
+      return controller;
+  }
+  return InputMethodBase::GetInputMethodKeyboardController();
+}
+
 void InputMethodChromeOS::OnWillChangeFocusedClient(
     TextInputClient* focused_before,
     TextInputClient* focused) {
@@ -362,7 +361,7 @@ void InputMethodChromeOS::UpdateContextFocusState() {
 
 ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventPostIME(
     ui::KeyEvent* event,
-    std::unique_ptr<AckCallback> ack_callback,
+    AckCallback ack_callback,
     bool skip_process_filtered,
     bool handled) {
   TextInputClient* client = GetTextInputClient();
@@ -379,8 +378,8 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventPostIME(
   // In case the focus was changed by the key event. The |context_| should have
   // been reset when the focused window changed.
   if (client != GetTextInputClient()) {
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(false);
+    if (ack_callback)
+      std::move(ack_callback).Run(false);
     return dispatch_details;
   }
   if (HasInputMethodResult())
@@ -389,14 +388,14 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventPostIME(
   // In case the focus was changed when sending input method results to the
   // focused window.
   if (client != GetTextInputClient()) {
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(false);
+    if (ack_callback)
+      std::move(ack_callback).Run(false);
     return dispatch_details;
   }
 
   if (handled) {
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(true);
+    if (ack_callback)
+      std::move(ack_callback).Run(true);
     return dispatch_details;  // IME handled the key event. do not forward.
   }
 
@@ -410,11 +409,11 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventPostIME(
 
 ui::EventDispatchDetails InputMethodChromeOS::ProcessFilteredKeyPressEvent(
     ui::KeyEvent* event,
-    std::unique_ptr<AckCallback> ack_callback) {
-  auto callback = std::make_unique<AckCallback>(base::Bind(
+    AckCallback ack_callback) {
+  auto callback = base::Bind(
       &InputMethodChromeOS::PostProcessFilteredKeyPressEvent,
       weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
-      GetTextInputClient(), Passed(&ack_callback)));
+      GetTextInputClient(), Passed(&ack_callback));
 
   if (NeedInsertChar())
     return DispatchKeyEventPostIME(event, std::move(callback));
@@ -435,7 +434,7 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessFilteredKeyPressEvent(
 void InputMethodChromeOS::PostProcessFilteredKeyPressEvent(
     ui::KeyEvent* event,
     TextInputClient* prev_client,
-    std::unique_ptr<AckCallback> ack_callback,
+    AckCallback ack_callback,
     bool stopped_propagation) {
   // In case the focus was changed by the key event.
   if (GetTextInputClient() != prev_client)
@@ -443,8 +442,8 @@ void InputMethodChromeOS::PostProcessFilteredKeyPressEvent(
 
   if (stopped_propagation) {
     ResetContext();
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(true);
+    if (ack_callback)
+      std::move(ack_callback).Run(true);
     return;
   }
   ignore_result(
@@ -453,24 +452,24 @@ void InputMethodChromeOS::PostProcessFilteredKeyPressEvent(
 
 ui::EventDispatchDetails InputMethodChromeOS::ProcessUnfilteredKeyPressEvent(
     ui::KeyEvent* event,
-    std::unique_ptr<AckCallback> ack_callback) {
+    AckCallback ack_callback) {
   return DispatchKeyEventPostIME(
       event,
-      std::make_unique<AckCallback>(base::Bind(
-          &InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent,
-          weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
-          GetTextInputClient(), Passed(&ack_callback))));
+      base::BindOnce(&InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::Owned(new ui::KeyEvent(*event)),
+                     GetTextInputClient(), std::move(ack_callback)));
 }
 
 void InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent(
     ui::KeyEvent* event,
     TextInputClient* prev_client,
-    std::unique_ptr<AckCallback> ack_callback,
+    AckCallback ack_callback,
     bool stopped_propagation) {
   if (stopped_propagation) {
     ResetContext();
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(false);
+    if (ack_callback)
+      std::move(ack_callback).Run(false);
     return;
   }
 
@@ -483,8 +482,8 @@ void InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent(
   // We should return here not to send the Tab key event to RWHV.
   TextInputClient* client = GetTextInputClient();
   if (!client || client != prev_client) {
-    if (ack_callback && !ack_callback->is_null())
-      std::move(*ack_callback).Run(false);
+    if (ack_callback)
+      std::move(ack_callback).Run(false);
     return;
   }
 
@@ -495,8 +494,8 @@ void InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent(
   if (ch)
     client->InsertChar(*event);
 
-  if (ack_callback && !ack_callback->is_null())
-    std::move(*ack_callback).Run(false);
+  if (ack_callback)
+    std::move(ack_callback).Run(false);
 }
 
 void InputMethodChromeOS::ProcessInputMethodResult(ui::KeyEvent* event,
@@ -704,9 +703,9 @@ void InputMethodChromeOS::ExtractCompositionText(
         continue;
       ImeTextSpan ime_text_span(ui::ImeTextSpan::Type::kComposition,
                                 char16_offsets[start], char16_offsets[end],
-                                text_ime_text_spans[i].underline_color,
                                 text_ime_text_spans[i].thickness,
                                 text_ime_text_spans[i].background_color);
+      ime_text_span.underline_color = text_ime_text_spans[i].underline_color;
       out_composition->ime_text_spans.push_back(ime_text_span);
     }
   }
@@ -717,7 +716,7 @@ void InputMethodChromeOS::ExtractCompositionText(
     const uint32_t end = text.selection.end();
     ImeTextSpan ime_text_span(ui::ImeTextSpan::Type::kComposition,
                               char16_offsets[start], char16_offsets[end],
-                              SK_ColorBLACK, ui::ImeTextSpan::Thickness::kThick,
+                              ui::ImeTextSpan::Thickness::kThick,
                               SK_ColorTRANSPARENT);
     out_composition->ime_text_spans.push_back(ime_text_span);
 
@@ -733,11 +732,11 @@ void InputMethodChromeOS::ExtractCompositionText(
     }
   }
 
-  // Use a black thin underline by default.
+  // Use a thin underline with text color by default.
   if (out_composition->ime_text_spans.empty()) {
-    out_composition->ime_text_spans.push_back(ImeTextSpan(
-        ui::ImeTextSpan::Type::kComposition, 0, length, SK_ColorBLACK,
-        ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT));
+    out_composition->ime_text_spans.push_back(
+        ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, length,
+                    ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT));
   }
 }
 

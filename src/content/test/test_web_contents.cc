@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/no_destructor.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/debug_urls.h"
@@ -15,6 +16,7 @@
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/navigator_impl.h"
+#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
@@ -35,11 +37,29 @@
 
 namespace content {
 
+namespace {
+
+const RenderProcessHostFactory* GetMockProcessFactory() {
+  static base::NoDestructor<MockRenderProcessHostFactory> factory;
+  return factory.get();
+}
+
+}  // namespace
+
 TestWebContents::TestWebContents(BrowserContext* browser_context)
     : WebContentsImpl(browser_context),
       delegate_view_override_(nullptr),
       expect_set_history_offset_and_length_(false),
-      expect_set_history_offset_and_length_history_length_(0) {}
+      expect_set_history_offset_and_length_history_length_(0) {
+  if (!RenderProcessHostImpl::get_render_process_host_factory_for_testing()) {
+    // Most unit tests should prefer to create a generic MockRenderProcessHost
+    // (instead of a real RenderProcessHostImpl).  Tests that need to use a
+    // specific, custom RenderProcessHostFactory should set it before creating
+    // the first TestWebContents.
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(
+        GetMockProcessFactory());
+  }
+}
 
 TestWebContents* TestWebContents::Create(BrowserContext* browser_context,
                                          scoped_refptr<SiteInstance> instance) {
@@ -77,11 +97,11 @@ int TestWebContents::DownloadImage(const GURL& url,
                                    bool is_favicon,
                                    uint32_t max_bitmap_size,
                                    bool bypass_cache,
-                                   const ImageDownloadCallback& callback) {
+                                   ImageDownloadCallback callback) {
   static int g_next_image_download_id = 0;
   ++g_next_image_download_id;
   pending_image_downloads_[url].emplace_back(g_next_image_download_id,
-                                             callback);
+                                             std::move(callback));
   return g_next_image_download_id;
 }
 
@@ -181,7 +201,8 @@ bool TestWebContents::TestDidDownloadImage(
   if (!HasPendingDownloadImage(url))
     return false;
   int id = pending_image_downloads_[url].front().first;
-  ImageDownloadCallback callback = pending_image_downloads_[url].front().second;
+  ImageDownloadCallback callback =
+      std::move(pending_image_downloads_[url].front().second);
   pending_image_downloads_[url].pop_front();
   std::move(callback).Run(id, http_status_code, url, bitmaps,
                           original_bitmap_sizes);
@@ -190,6 +211,37 @@ bool TestWebContents::TestDidDownloadImage(
 
 void TestWebContents::SetLastCommittedURL(const GURL& url) {
   last_committed_url_ = url;
+}
+
+void TestWebContents::SetMainFrameMimeType(const std::string& mime_type) {
+  WebContentsImpl::SetMainFrameMimeType(mime_type);
+}
+
+void TestWebContents::SetWasRecentlyAudible(bool audible) {
+  audio_stream_monitor()->set_was_recently_audible_for_testing(audible);
+}
+
+void TestWebContents::SetIsCurrentlyAudible(bool audible) {
+  audio_stream_monitor()->set_is_currently_audible_for_testing(audible);
+}
+
+void TestWebContents::TestDidReceiveInputEvent(
+    blink::WebInputEvent::Type type) {
+  // Use the first RenderWidgetHost from the frame tree to make sure that the
+  // interaction doesn't get ignored.
+  DCHECK(frame_tree_.Nodes().begin() != frame_tree_.Nodes().end());
+  RenderWidgetHostImpl* render_widget_host = (*frame_tree_.Nodes().begin())
+                                                 ->current_frame_host()
+                                                 ->GetRenderWidgetHost();
+  DidReceiveInputEvent(render_widget_host, type);
+}
+
+void TestWebContents::TestDidFailLoadWithError(
+    const GURL& url,
+    int error_code,
+    const base::string16& error_description) {
+  FrameHostMsg_DidFailLoadWithError msg(0, url, error_code, error_description);
+  frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
@@ -295,12 +347,14 @@ void TestWebContents::SetOpener(WebContents* opener) {
       static_cast<WebContentsImpl*>(opener)->GetFrameTree()->root());
 }
 
-void TestWebContents::AddPendingContents(TestWebContents* contents) {
+void TestWebContents::AddPendingContents(
+    std::unique_ptr<WebContents> contents) {
   // This is normally only done in WebContentsImpl::CreateNewWindow.
   ProcessRoutingIdPair key(contents->GetRenderViewHost()->GetProcess()->GetID(),
                            contents->GetRenderViewHost()->GetRoutingID());
-  pending_contents_[key] = contents;
-  AddDestructionObserver(contents);
+  WebContentsImpl* raw_contents = static_cast<WebContentsImpl*>(contents.get());
+  AddDestructionObserver(raw_contents);
+  pending_contents_[key] = std::move(contents);
 }
 
 void TestWebContents::ExpectSetHistoryOffsetAndLength(int history_offset,
@@ -322,14 +376,6 @@ void TestWebContents::SetHistoryOffsetAndLength(int history_offset,
 
 void TestWebContents::TestDidFinishLoad(const GURL& url) {
   FrameHostMsg_DidFinishLoad msg(0, url);
-  frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
-}
-
-void TestWebContents::TestDidFailLoadWithError(
-    const GURL& url,
-    int error_code,
-    const base::string16& error_description) {
-  FrameHostMsg_DidFailLoadWithError msg(0, url, error_code, error_description);
   frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
 }
 
@@ -387,28 +433,6 @@ void TestWebContents::SaveFrameWithHeaders(
     const base::string16& suggested_filename) {
   save_frame_headers_ = headers;
   suggested_filename_ = suggested_filename;
-}
-
-void TestWebContents::SetMainFrameMimeType(const std::string& mime_type) {
-  WebContentsImpl::SetMainFrameMimeType(mime_type);
-}
-
-void TestWebContents::SetWasRecentlyAudible(bool audible) {
-  audio_stream_monitor()->set_was_recently_audible_for_testing(audible);
-}
-
-void TestWebContents::SetIsCurrentlyAudible(bool audible) {
-  audio_stream_monitor()->set_is_currently_audible_for_testing(audible);
-}
-
-void TestWebContents::TestOnUserInteraction(blink::WebInputEvent::Type type) {
-  // Use the first RenderWidgetHost from the frame tree to make sure that the
-  // interaction doesn't get ignored.
-  DCHECK(frame_tree_.Nodes().begin() != frame_tree_.Nodes().end());
-  RenderWidgetHostImpl* render_widget_host = (*frame_tree_.Nodes().begin())
-                                                 ->current_frame_host()
-                                                 ->GetRenderWidgetHost();
-  OnUserInteraction(render_widget_host, type);
 }
 
 }  // namespace content

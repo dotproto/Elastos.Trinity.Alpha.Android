@@ -5,6 +5,7 @@
 var AutomationEvent = chrome.automation.AutomationEvent;
 var EventType = chrome.automation.EventType;
 var RoleType = chrome.automation.RoleType;
+var SelectToSpeakState = chrome.accessibilityPrivate.SelectToSpeakState;
 
 // CrosSelectToSpeakStartSpeechMethod enums.
 // These values are persited to logs and should not be renumbered or re-used.
@@ -47,8 +48,12 @@ function getDriveAppRoot(node) {
  * @constructor
  */
 var SelectToSpeak = function() {
-  /** @private {AutomationNode} */
-  this.node_ = null;
+  /**
+   * The current state of the SelectToSpeak extension, from
+   * SelectToSpeakState.
+   * @private {!SelectToSpeakState}
+   */
+  this.state_ = SelectToSpeakState.INACTIVE;
 
   /** @private {boolean} */
   this.trackingMouse_ = false;
@@ -152,16 +157,6 @@ var SelectToSpeak = function() {
    */
   this.intervalId_;
 
-  // Enable reading selection at keystroke when experimental accessibility
-  // features are enabled.
-  // TODO(katie): When the feature is approved, remove this variable and
-  // callback. The feature will be always enabled.
-  this.readSelectionEnabled_ = false;
-  chrome.commandLinePrivate.hasSwitch(
-      'enable-experimental-accessibility-features', (result) => {
-        this.readSelectionEnabled_ = result;
-      });
-
   /** @private {Audio} */
   this.null_selection_tone_ = new Audio('earcons/null_selection.ogg');
 
@@ -198,6 +193,8 @@ SelectToSpeak.prototype = {
     // trying to highlight a selection, don't track the mouse.
     if (!this.isSearchKeyDown_ || this.isSelectionKeyDown_)
       return false;
+
+    this.onStateChanged_(SelectToSpeakState.SELECTING);
 
     this.trackingMouse_ = true;
     this.didTrackMouse_ = true;
@@ -308,8 +305,13 @@ SelectToSpeak.prototype = {
       // which is computed based on which window is the event handler for the
       // hit point, isn't the part of the tree that contains the actual
       // content. In such cases, use focus to get the root.
-      if (!findAllMatching(root, rect, nodes) && focusedNode)
+      // TODO(katie): Determine if this work-around needs to be ARC++ only. If
+      // so, look for classname exoshell on the root or root parent to confirm
+      // that a node is in ARC++.
+      if (!findAllMatching(root, rect, nodes) && focusedNode &&
+          focusedNode.root.role != RoleType.DESKTOP) {
         findAllMatching(focusedNode.root, rect, nodes);
+      }
       this.startSpeechQueue_(nodes);
       this.recordStartEvent_(START_SPEECH_METHOD_MOUSE);
     }.bind(this));
@@ -323,7 +325,7 @@ SelectToSpeak.prototype = {
         evt.keyCode == SelectToSpeak.SEARCH_KEY_CODE) {
       this.isSearchKeyDown_ = true;
     } else if (
-        this.readSelectionEnabled_ && this.keysCurrentlyDown_.size == 1 &&
+        this.keysCurrentlyDown_.size == 1 &&
         evt.keyCode == SelectToSpeak.READ_SELECTION_KEY_CODE &&
         !this.trackingMouse_) {
       // Only go into selection mode if we aren't already tracking the mouse.
@@ -569,6 +571,7 @@ SelectToSpeak.prototype = {
   stopAll_: function() {
     chrome.tts.stop();
     this.clearFocusRing_();
+    this.onStateChanged_(SelectToSpeakState.INACTIVE);
   },
 
   /**
@@ -610,6 +613,20 @@ SelectToSpeak.prototype = {
     chrome.clipboard.onClipboardDataChanged.addListener(
         this.onClipboardDataChanged_.bind(this));
     document.addEventListener('paste', this.onClipboardPaste_.bind(this));
+    chrome.accessibilityPrivate.onSelectToSpeakStateChangeRequested.addListener(
+        this.onStateChangeRequested_.bind(this));
+    // Initialize the state to SelectToSpeakState.INACTIVE.
+    chrome.accessibilityPrivate.onSelectToSpeakStateChanged(this.state_);
+  },
+
+  /**
+   * Called when Chrome OS is requesting Select-to-Speak to switch states.
+   */
+  onStateChangeRequested_: function() {
+    // TODO(katie): Switch Select-to-Speak states on request.
+    // We will need to track the current state and toggle from one state to
+    // the next when this function is called, and then call
+    // accessibilityPrivate.onSelectToSpeakStateChanged with the new state.
   },
 
   /**
@@ -623,11 +640,12 @@ SelectToSpeak.prototype = {
     let options = this.speechOptions_();
     options.onEvent = (event) => {
       if (event.type == 'start') {
+        this.onStateChanged_(SelectToSpeakState.SPEAKING);
         this.testCurrentNode_();
       } else if (
           event.type == 'end' || event.type == 'interrupted' ||
           event.type == 'cancelled') {
-        this.clearFocusRingAndNode_();
+        this.onStateChanged_(SelectToSpeakState.INACTIVE);
       }
     };
     chrome.tts.speak(text, options);
@@ -689,6 +707,7 @@ SelectToSpeak.prototype = {
       let options = this.speechOptions_();
       options.onEvent = (event) => {
         if (event.type == 'start' && nodeGroup.nodes.length > 0) {
+          this.onStateChanged_(SelectToSpeakState.SPEAKING);
           this.currentBlockParent_ = nodeGroup.blockParent;
           this.currentNodeGroupIndex_ = 0;
           this.currentNode_ = nodeGroup.nodes[this.currentNodeGroupIndex_];
@@ -706,11 +725,10 @@ SelectToSpeak.prototype = {
             this.testCurrentNode_();
           }
         } else if (event.type == 'interrupted' || event.type == 'cancelled') {
-          this.clearFocusRingAndNode_();
+          this.onStateChanged_(SelectToSpeakState.INACTIVE);
         } else if (event.type == 'end') {
-          if (isLast) {
-            this.clearFocusRingAndNode_();
-          }
+          if (isLast)
+            this.onStateChanged_(SelectToSpeakState.INACTIVE);
         } else if (event.type == 'word') {
           console.debug(nodeGroup.text + ' (index ' + event.charIndex + ')');
           console.debug('-'.repeat(event.charIndex) + '^');
@@ -757,6 +775,29 @@ SelectToSpeak.prototype = {
     this.intervalRef_ = setInterval(
         this.testCurrentNode_.bind(this),
         SelectToSpeak.NODE_STATE_TEST_INTERVAL_MS);
+  },
+
+  /**
+   * Updates the state.
+   * @param {!SelectToSpeakState} state
+   */
+  onStateChanged_: function(state) {
+    if (this.state_ != state) {
+      if (this.state_ == SelectToSpeakState.SELECTING &&
+          state == SelectToSpeakState.INACTIVE && this.trackingMouse_) {
+        // If we are tracking the mouse actively, then we have requested tts
+        // to stop speaking just before mouse tracking began, so we
+        // shouldn't transition into the inactive state now: The call to stop
+        // speaking created an async 'cancel' event from the TTS engine that
+        // is now resulting in an attempt to set the state inactive.
+        return;
+      }
+      if (state == SelectToSpeakState.INACTIVE)
+        this.clearFocusRingAndNode_();
+      // Send state change event to Chrome.
+      chrome.accessibilityPrivate.onSelectToSpeakStateChanged(state);
+      this.state_ = state;
+    }
   },
 
   /**
@@ -947,6 +988,8 @@ SelectToSpeak.prototype = {
 
           voices.sort(function(a, b) {
             function score(voice) {
+              if (voice.lang === undefined)
+                return -1;
               var lang = voice.lang.toLowerCase();
               var s = 0;
               if (lang == uiLocale)
@@ -1132,10 +1175,10 @@ SelectToSpeak.prototype = {
         opt_startIndex - this.currentNode_.startChar;
     let nodeEnd = Math.min(
         nextWordEnd - this.currentNode_.startChar,
-        this.currentNode_.node.name.length);
+        nameLength(this.currentNode_.node));
     if ((this.currentNodeWord_ == null ||
          nodeStart >= this.currentNodeWord_.end) &&
-        nodeStart < nodeEnd) {
+        nodeStart <= nodeEnd) {
       // Only update the bounds if they have increased from the
       // previous node. Because tts may send multiple callbacks
       // for the end of one word and the beginning of the next,
@@ -1183,13 +1226,4 @@ SelectToSpeak.prototype = {
   fireMockMouseUpEvent: function(event) {
     this.onMouseUp_(event);
   },
-
-  /**
-   * Overrides default setting to read selected text and enables the
-   * ability to read selected text at a keystroke. Should only be used
-   * for testing.
-   */
-  enableReadSelectedTextForTesting: function() {
-    this.readSelectionEnabled_ = true;
-  }
 };

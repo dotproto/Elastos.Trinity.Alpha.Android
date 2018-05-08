@@ -27,7 +27,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/media_download_in_product_help.mojom.h"
+#include "third_party/blink/public/platform/media_download_in_product_help.mojom.h"
 
 class GURL;
 class Profile;
@@ -45,6 +45,7 @@ class TabContentManager;
 
 namespace content {
 class DevToolsAgentHost;
+class NavigationHandle;
 class WebContents;
 }
 
@@ -119,7 +120,7 @@ class TabAndroid : public CoreTabHelperDelegate,
   void DeleteFrozenNavigationEntries(
       const WebContentsState::DeletionPredicate& predicate);
 
-  void SetWindowSessionID(SessionID::id_type window_id);
+  void SetWindowSessionID(SessionID window_id);
   void SetSyncId(int sync_id);
 
   void HandlePopupNavigation(NavigateParams* params);
@@ -127,10 +128,11 @@ class TabAndroid : public CoreTabHelperDelegate,
   bool HasPrerenderedUrl(GURL gurl);
 
   // Overridden from CoreTabHelperDelegate:
-  void SwapTabContents(content::WebContents* old_contents,
-                       content::WebContents* new_contents,
-                       bool did_start_load,
-                       bool did_finish_load) override;
+  std::unique_ptr<content::WebContents> SwapTabContents(
+      content::WebContents* old_contents,
+      std::unique_ptr<content::WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load) override;
 
   // Overridden from NotificationObserver:
   void Observe(int type,
@@ -158,6 +160,7 @@ class TabAndroid : public CoreTabHelperDelegate,
       jboolean incognito,
       jboolean is_background_tab,
       const base::android::JavaParamRef<jobject>& jweb_contents,
+      const base::android::JavaParamRef<jobject>& jparent_web_contents,
       const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
       const base::android::JavaParamRef<jobject>& jcontext_menu_populator);
   void UpdateDelegates(
@@ -298,6 +301,12 @@ class TabAndroid : public CoreTabHelperDelegate,
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void NavigationEntryChanged(
       const content::EntryChangedDetails& change_details) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+
+  bool AreRendererInputEventsIgnored(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
  private:
   class MediaDownloadInProductHelp;

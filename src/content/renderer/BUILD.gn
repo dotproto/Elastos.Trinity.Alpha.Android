@@ -9,8 +9,8 @@ import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//content/common/features.gni")
 import("//media/media_options.gni")
-import("//ppapi/features/features.gni")
-import("//printing/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//third_party/webrtc/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
@@ -27,6 +27,7 @@ target(link_target_type, "renderer") {
     ":for_content_tests",
     "//content/app:*",
     "//content/public/renderer:renderer_sources",
+    "//content/renderer:audio_decoder_fuzzer",
   ]
 
   sources = [
@@ -42,12 +43,8 @@ target(link_target_type, "renderer") {
     "android/disambiguation_popup_helper.h",
     "android/renderer_date_time_picker.cc",
     "android/renderer_date_time_picker.h",
-    "android/synchronous_compositor_filter.cc",
-    "android/synchronous_compositor_filter.h",
     "android/synchronous_compositor_proxy.cc",
     "android/synchronous_compositor_proxy.h",
-    "android/synchronous_compositor_proxy_chrome_ipc.cc",
-    "android/synchronous_compositor_proxy_chrome_ipc.h",
     "android/synchronous_compositor_proxy_mojo.cc",
     "android/synchronous_compositor_proxy_mojo.h",
     "android/synchronous_compositor_registry.h",
@@ -67,10 +64,6 @@ target(link_target_type, "renderer") {
     "browser_plugin/browser_plugin.h",
     "browser_plugin/browser_plugin_manager.cc",
     "browser_plugin/browser_plugin_manager.h",
-    "cache_storage/cache_storage_dispatcher.cc",
-    "cache_storage/cache_storage_dispatcher.h",
-    "cache_storage/cache_storage_message_filter.cc",
-    "cache_storage/cache_storage_message_filter.h",
     "cache_storage/webserviceworkercachestorage_impl.cc",
     "cache_storage/webserviceworkercachestorage_impl.h",
     "categorized_worker_pool.cc",
@@ -193,14 +186,8 @@ target(link_target_type, "renderer") {
     "indexed_db/webidbfactory_impl.h",
     "input/frame_input_handler_impl.cc",
     "input/frame_input_handler_impl.h",
-    "input/input_event_filter.cc",
-    "input/input_event_filter.h",
-    "input/input_event_filter_ipc_names.cc",
-    "input/input_handler_manager.cc",
-    "input/input_handler_manager.h",
-    "input/input_handler_manager_client.h",
-    "input/input_handler_wrapper.cc",
-    "input/input_handler_wrapper.h",
+    "input/input_event_prediction.cc",
+    "input/input_event_prediction.h",
     "input/input_target_client_impl.cc",
     "input/input_target_client_impl.h",
     "input/main_thread_event_queue.cc",
@@ -208,8 +195,6 @@ target(link_target_type, "renderer") {
     "input/main_thread_event_queue_task.h",
     "input/main_thread_event_queue_task_list.cc",
     "input/main_thread_event_queue_task_list.h",
-    "input/main_thread_input_event_filter.cc",
-    "input/main_thread_input_event_filter.h",
     "input/render_widget_input_handler.cc",
     "input/render_widget_input_handler.h",
     "input/render_widget_input_handler_delegate.h",
@@ -237,14 +222,14 @@ target(link_target_type, "renderer") {
     "loader/child_url_loader_factory_bundle.h",
     "loader/ftp_directory_listing_response_delegate.cc",
     "loader/ftp_directory_listing_response_delegate.h",
+    "loader/navigation_response_override_parameters.cc",
+    "loader/navigation_response_override_parameters.h",
     "loader/request_extra_data.cc",
     "loader/request_extra_data.h",
     "loader/resource_dispatcher.cc",
     "loader/resource_dispatcher.h",
     "loader/shared_memory_data_consumer_handle.cc",
     "loader/shared_memory_data_consumer_handle.h",
-    "loader/site_isolation_stats_gatherer.cc",
-    "loader/site_isolation_stats_gatherer.h",
     "loader/sync_load_context.cc",
     "loader/sync_load_context.h",
     "loader/sync_load_response.cc",
@@ -289,10 +274,6 @@ target(link_target_type, "renderer") {
     "media/audio_device_factory.h",
     "media/audio_input_ipc_factory.cc",
     "media/audio_input_ipc_factory.h",
-    "media/audio_input_message_filter.cc",
-    "media/audio_input_message_filter.h",
-    "media/audio_message_filter.cc",
-    "media/audio_message_filter.h",
     "media/audio_output_ipc_factory.cc",
     "media/audio_output_ipc_factory.h",
     "media/audio_renderer_mixer_manager.cc",
@@ -347,14 +328,10 @@ target(link_target_type, "renderer") {
     "notifications/notification_dispatcher.h",
     "notifications/notification_manager.cc",
     "notifications/notification_manager.h",
-    "origin_trials/web_trial_token_validator_impl.cc",
-    "origin_trials/web_trial_token_validator_impl.h",
     "p2p/network_list_manager.h",
     "pepper/fullscreen_container.h",
     "peripheral_content_heuristic.cc",
     "peripheral_content_heuristic.h",
-    "presentation/presentation_dispatcher.cc",
-    "presentation/presentation_dispatcher.h",
     "push_messaging/push_messaging_client.cc",
     "push_messaging/push_messaging_client.h",
     "push_messaging/push_provider.cc",
@@ -477,8 +454,6 @@ target(link_target_type, "renderer") {
     "web_ui_extension.h",
     "web_ui_extension_data.cc",
     "web_ui_extension_data.h",
-    "webfileutilities_impl.cc",
-    "webfileutilities_impl.h",
     "webgraphicscontext3d_provider_impl.cc",
     "webgraphicscontext3d_provider_impl.h",
     "webpublicsuffixlist_impl.cc",
@@ -491,16 +466,6 @@ target(link_target_type, "renderer") {
     "worker_thread_message_filter.h",
     "worker_thread_registry.cc",
     "worker_thread_registry.h",
-  ]
-
-  jumbo_excluded_sources = [
-    # IPC code is built with macros that redefine the default meaning
-    # of the IPC macros. When that happens in a translation unit there
-    # is no way to get the default meaning of the macros
-    # back. Therefore any code that redefines the default IPC macros
-    # need to be excluded from jumbo
-    # compilations. https://crbug.com/794176
-    "input/input_event_filter_ipc_names.cc",
   ]
 
   if (!is_component_build) {
@@ -528,7 +493,6 @@ target(link_target_type, "renderer") {
     "//cc",
     "//cc/animation",
     "//cc/blink",
-    "//cc/ipc",
     "//cc/paint",
     "//components/discardable_memory/client",
     "//components/metrics",
@@ -556,7 +520,7 @@ target(link_target_type, "renderer") {
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/client:raster_interface",
     "//media",
-    "//media:media_features",
+    "//media:media_buildflags",
     "//media/blink",
     "//media/capture",
     "//media/gpu",
@@ -564,15 +528,14 @@ target(link_target_type, "renderer") {
     "//media/gpu/ipc/common",
     "//media/midi",
     "//media/midi:mojo",
-    "//media/mojo:features",
+    "//media/mojo:buildflags",
     "//media/mojo/clients",
     "//media/mojo/interfaces",
     "//media/mojo/interfaces:remoting",
-    "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//net",
-    "//ppapi/features",
-    "//printing/features",
+    "//ppapi/buildflags",
+    "//printing/buildflags",
     "//sandbox",
     "//services/device/public/cpp/generic_sensor",
     "//services/device/public/mojom",
@@ -584,11 +547,11 @@ target(link_target_type, "renderer") {
     "//services/ui/public/cpp/gpu",
     "//skia",
     "//storage/common",
-    "//third_party/WebKit/public:blink",
-    "//third_party/WebKit/public:features",
-    "//third_party/WebKit/public:media_devices_mojo_bindings",
-    "//third_party/WebKit/public:mojo_bindings",
-    "//third_party/WebKit/public/common",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public:buildflags",
+    "//third_party/blink/public:media_devices_mojo_bindings",
+    "//third_party/blink/public:mojo_bindings",
+    "//third_party/blink/public/common",
     "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libyuv",
@@ -757,8 +720,6 @@ target(link_target_type, "renderer") {
       "media/webrtc/rtc_data_channel_handler.h",
       "media/webrtc/rtc_dtmf_sender_handler.cc",
       "media/webrtc/rtc_dtmf_sender_handler.h",
-      "media/webrtc/rtc_error.cc",
-      "media/webrtc/rtc_error.h",
       "media/webrtc/rtc_event_log_output_sink.h",
       "media/webrtc/rtc_event_log_output_sink_proxy.cc",
       "media/webrtc/rtc_event_log_output_sink_proxy.h",
@@ -1088,7 +1049,7 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (enable_basic_printing || enable_print_preview) {
+  if (enable_basic_printing) {
     deps += [ "//printing" ]
   }
 
@@ -1100,7 +1061,7 @@ target(link_target_type, "renderer") {
   }
 
   if (is_linux || is_android) {
-    deps += [ "//sandbox:sandbox_features" ]
+    deps += [ "//sandbox:sandbox_buildflags" ]
   }
 
   if (use_ozone) {
@@ -1125,4 +1086,16 @@ group("for_content_tests") {
       ":renderer",
     ]
   }
+}
+
+fuzzer_test("audio_decoder_fuzzer") {
+  sources = [
+    "media/audio_decoder_fuzzer.cpp",
+  ]
+  deps = [
+    "//content/public/renderer:renderer_sources",
+    "//content/renderer:renderer",
+    "//content/test:test_support",
+  ]
+  seed_corpus = "//media/test/data"
 }

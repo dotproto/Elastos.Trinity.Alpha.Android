@@ -149,7 +149,7 @@ FileTableColumnModel.prototype.getHitColumn = function(x) {
 
 /** @override */
 FileTableColumnModel.prototype.setVisible = function(index, visible) {
-  if (index < 0 || index > this.columns_.size -1)
+  if (index < 0 || index > this.columns_.length - 1)
     return;
 
   var column = this.columns_[index];
@@ -429,11 +429,13 @@ FileTable.decorate = function(
   self.columnModel = columnModel;
 
   self.formatter_ = new FileMetadataFormatter();
-  self.setRenderFunction(self.renderTableRow_.bind(self,
-      self.getRenderFunction()));
+
+  var selfAsTable = /** @type {!cr.ui.Table} */ (self);
+  selfAsTable.setRenderFunction(
+      self.renderTableRow_.bind(self, selfAsTable.getRenderFunction()));
 
   // Keep focus on the file list when clicking on the header.
-  self.header.addEventListener('mousedown', function(e) {
+  selfAsTable.header.addEventListener('mousedown', function(e) {
     self.list.focus();
     e.preventDefault();
   });
@@ -443,7 +445,7 @@ FileTable.decorate = function(
 
   // Override header#redraw to use FileTableSplitter.
   /** @this {cr.ui.table.TableHeader} */
-  self.header.redraw = function() {
+  selfAsTable.header.redraw = function() {
     this.__proto__.redraw.call(this);
     // Extend table splitters
     var splitters = this.querySelectorAll('.table-header-splitter');
@@ -480,7 +482,7 @@ FileTable.decorate = function(
     var currentSelection = [];
     var bottom = y + (opt_height || 0);
     for (var i = 0; i < this.selectionModel_.length; i++) {
-      var itemMetrics = this.getHeightsForIndex_(i);
+      var itemMetrics = this.getHeightsForIndex(i);
       if (itemMetrics.top < bottom && itemMetrics.top + itemMetrics.height >= y)
         currentSelection.push(i);
     }
@@ -969,7 +971,14 @@ FileTable.prototype.updateListItemsMetadata = function(type, entries) {
  */
 FileTable.prototype.renderTableRow_ = function(baseRenderFunction, entry) {
   var item = baseRenderFunction(entry, this);
+  var nameId = item.id + '-entry-name';
+  var sizeId = item.id + '-size';
+  var dateId = item.id + '-date';
   filelist.decorateListItem(item, entry, this.metadataModel_);
+  item.querySelector('.entry-name').setAttribute('id', nameId);
+  item.querySelector('.size').setAttribute('id', sizeId);
+  item.querySelector('.date').setAttribute('id', dateId);
+  item.setAttribute('aria-labelledby', nameId + ' ' + sizeId + ' ' + dateId);
   return item;
 };
 

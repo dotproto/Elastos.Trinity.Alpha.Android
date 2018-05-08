@@ -86,8 +86,8 @@
 #include "content/public/common/user_agent.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/escape.h"
-#include "printing/features/features.h"
-#include "rlz/features/features.h"
+#include "printing/buildflags/buildflags.h"
+#include "rlz/buildflags/buildflags.h"
 #include "ui/base/clipboard/clipboard_types.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -186,7 +186,7 @@ bool GetBookmarkOverrideCommand(Profile* profile,
   DCHECK(command);
 
   ui::Accelerator bookmark_page_accelerator =
-      chrome::GetPrimaryChromeAcceleratorForCommandId(IDC_BOOKMARK_PAGE);
+      chrome::GetPrimaryChromeAcceleratorForBookmarkPage();
   if (bookmark_page_accelerator.key_code() == ui::VKEY_UNKNOWN)
     return false;
 
@@ -219,25 +219,29 @@ WebContents* GetTabAndRevertIfNecessary(Browser* browser,
   switch (disposition) {
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
     case WindowOpenDisposition::NEW_BACKGROUND_TAB: {
-      WebContents* new_tab = current_tab->Clone();
+      std::unique_ptr<WebContents> new_tab =
+          base::WrapUnique(current_tab->Clone());
+      WebContents* raw_new_tab = new_tab.get();
       if (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB)
         new_tab->WasHidden();
       browser->tab_strip_model()->AddWebContents(
-          new_tab, -1, ui::PAGE_TRANSITION_LINK,
+          std::move(new_tab), -1, ui::PAGE_TRANSITION_LINK,
           (disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB)
               ? TabStripModel::ADD_ACTIVE
               : TabStripModel::ADD_NONE);
-      return new_tab;
+      return raw_new_tab;
     }
     case WindowOpenDisposition::NEW_WINDOW: {
-      WebContents* new_tab = current_tab->Clone();
+      std::unique_ptr<WebContents> new_tab =
+          base::WrapUnique(current_tab->Clone());
+      WebContents* raw_new_tab = new_tab.get();
       Browser* new_browser =
           new Browser(Browser::CreateParams(browser->profile(), true));
-      new_browser->tab_strip_model()->AddWebContents(
-          new_tab, -1, ui::PAGE_TRANSITION_LINK,
-          TabStripModel::ADD_ACTIVE);
+      new_browser->tab_strip_model()->AddWebContents(std::move(new_tab), -1,
+                                                     ui::PAGE_TRANSITION_LINK,
+                                                     TabStripModel::ADD_ACTIVE);
       new_browser->window()->Show();
-      return new_tab;
+      return raw_new_tab;
     }
     default:
       browser->window()->GetLocationBar()->Revert();
@@ -253,7 +257,7 @@ void ReloadInternal(Browser* browser,
   // Also notify RenderViewHostDelegate of the user gesture; this is
   // normally done in Browser::Navigate, but a reload bypasses Navigate.
   WebContents* new_tab = GetTabAndRevertIfNecessary(browser, disposition);
-  new_tab->UserGestureDone();
+  new_tab->NavigatedByUser();
   if (!new_tab->FocusLocationBarByDefault())
     new_tab->Focus();
 
@@ -666,7 +670,9 @@ bool CanDuplicateTab(const Browser* browser) {
 WebContents* DuplicateTabAt(Browser* browser, int index) {
   WebContents* contents = browser->tab_strip_model()->GetWebContentsAt(index);
   CHECK(contents);
-  WebContents* contents_dupe = contents->Clone();
+  std::unique_ptr<WebContents> contents_dupe =
+      base::WrapUnique(contents->Clone());
+  WebContents* raw_contents_dupe = contents_dupe.get();
 
   bool pinned = false;
   if (browser->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP)) {
@@ -678,7 +684,7 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
         TabStripModel::ADD_INHERIT_GROUP |
         (pinned ? TabStripModel::ADD_PINNED : 0);
     browser->tab_strip_model()->InsertWebContentsAt(
-        index + 1, contents_dupe, add_types);
+        index + 1, std::move(contents_dupe), add_types);
   } else {
     Browser* new_browser = NULL;
     if (browser->is_app() && !browser->is_type_popup()) {
@@ -700,17 +706,16 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
     new_browser->window()->Show();
 
     // The page transition below is only for the purpose of inserting the tab.
-    new_browser->tab_strip_model()->AddWebContents(
-        contents_dupe, -1,
-        ui::PAGE_TRANSITION_LINK,
-        TabStripModel::ADD_ACTIVE);
+    new_browser->tab_strip_model()->AddWebContents(std::move(contents_dupe), -1,
+                                                   ui::PAGE_TRANSITION_LINK,
+                                                   TabStripModel::ADD_ACTIVE);
   }
 
   SessionService* session_service =
       SessionServiceFactory::GetForProfileIfExisting(browser->profile());
   if (session_service)
-    session_service->TabRestored(contents_dupe, pinned);
-  return contents_dupe;
+    session_service->TabRestored(raw_contents_dupe, pinned);
+  return raw_contents_dupe;
 }
 
 bool CanDuplicateTabAt(const Browser* browser, int index) {
@@ -740,10 +745,10 @@ void MuteSite(Browser* browser) {
 void ConvertPopupToTabbedBrowser(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowAsTab"));
   TabStripModel* tab_strip = browser->tab_strip_model();
-  WebContents* contents =
+  std::unique_ptr<content::WebContents> contents =
       tab_strip->DetachWebContentsAt(tab_strip->active_index());
   Browser* b = new Browser(Browser::CreateParams(browser->profile(), true));
-  b->tab_strip_model()->AppendWebContents(contents, true);
+  b->tab_strip_model()->AppendWebContents(std::move(contents), true);
   b->window()->Show();
 }
 
@@ -873,7 +878,8 @@ void ManagePasswordsForPage(Browser* browser) {
 void SavePage(Browser* browser) {
   base::RecordAction(UserMetricsAction("SavePage"));
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
-  if (current_tab && current_tab->GetContentsMimeType() == "application/pdf")
+  DCHECK(current_tab);
+  if (current_tab->GetContentsMimeType() == "application/pdf")
     base::RecordAction(UserMetricsAction("PDF.SavePage"));
   current_tab->OnSavePage();
 }
@@ -917,7 +923,7 @@ bool CanPrint(Browser* browser) {
         GetContentRestrictions(browser) & CONTENT_RESTRICTION_PRINT);
 }
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 void BasicPrint(Browser* browser) {
   printing::StartBasicPrint(browser->tab_strip_model()->GetActiveWebContents());
 }
@@ -932,7 +938,7 @@ bool CanBasicPrint(Browser* browser) {
   return false;  // The print dialog is disabled.
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
 }
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 bool CanRouteMedia(Browser* browser) {
   // Do not allow user to open Media Router dialog when there is already an
@@ -1229,11 +1235,11 @@ bool CanCreateBookmarkApp(const Browser* browser) {
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if defined(OS_CHROMEOS)
-void QueryAndDisplayArcApps(
-    const Browser* browser,
-    const std::vector<arc::ArcNavigationThrottle::AppInfo>& app_info,
-    IntentPickerResponse callback) {
-  browser->window()->ShowIntentPickerBubble(app_info, callback);
+void ShowIntentPickerBubble(const Browser* browser,
+                            std::vector<chromeos::IntentPickerAppInfo> app_info,
+                            IntentPickerResponse callback) {
+  browser->window()->ShowIntentPickerBubble(std::move(app_info),
+                                            std::move(callback));
 }
 
 void SetIntentPickerViewVisibility(Browser* browser, bool visible) {

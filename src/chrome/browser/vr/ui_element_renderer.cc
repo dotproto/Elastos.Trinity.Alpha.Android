@@ -15,6 +15,7 @@
 #include "chrome/browser/vr/renderers/external_textured_quad_renderer.h"
 #include "chrome/browser/vr/renderers/gradient_quad_renderer.h"
 #include "chrome/browser/vr/renderers/textured_quad_renderer.h"
+#include "chrome/browser/vr/renderers/transparent_quad_renderer.h"
 #include "chrome/browser/vr/renderers/web_vr_renderer.h"
 #include "chrome/browser/vr/vr_gl_util.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -38,6 +39,7 @@ UiElementRenderer::~UiElementRenderer() = default;
 void UiElementRenderer::Init() {
   external_textured_quad_renderer_ =
       std::make_unique<ExternalTexturedQuadRenderer>();
+  transparent_quad_renderer_ = std::make_unique<TransparentQuadRenderer>();
   textured_quad_renderer_ = std::make_unique<TexturedQuadRenderer>();
   gradient_quad_renderer_ = std::make_unique<GradientQuadRenderer>();
   webvr_renderer_ = std::make_unique<WebVrRenderer>();
@@ -59,7 +61,8 @@ void UiElementRenderer::DrawTexturedQuad(
     const gfx::RectF& copy_rect,
     float opacity,
     const gfx::SizeF& element_size,
-    float corner_radius) {
+    float corner_radius,
+    bool blend) {
   TRACE_EVENT0("gpu", "UiElementRenderer::DrawTexturedQuad");
   // TODO(vollick): handle drawing this degenerate situation crbug.com/768922
   if (corner_radius * 2.0 > element_size.width() ||
@@ -69,10 +72,15 @@ void UiElementRenderer::DrawTexturedQuad(
   TexturedQuadRenderer* renderer = texture_location == kTextureLocationExternal
                                        ? external_textured_quad_renderer_.get()
                                        : textured_quad_renderer_.get();
+  if (!texture_data_handle && !overlay_texture_data_handle) {
+    // If we're blending, why are we even drawing a transparent quad?
+    DCHECK(!blend);
+    renderer = transparent_quad_renderer_.get();
+  }
   FlushIfNecessary(renderer);
   renderer->AddQuad(texture_data_handle, overlay_texture_data_handle,
                     model_view_proj_matrix, copy_rect, opacity, element_size,
-                    corner_radius);
+                    corner_radius, blend);
 }
 
 void UiElementRenderer::DrawGradientQuad(
@@ -126,9 +134,12 @@ void UiElementRenderer::DrawReticle(
   reticle_renderer_->Draw(opacity, model_view_proj_matrix);
 }
 
-void UiElementRenderer::DrawWebVr(int texture_data_handle) {
+void UiElementRenderer::DrawWebVr(int texture_data_handle,
+                                  const float (&uv_transform)[16],
+                                  float xborder,
+                                  float yborder) {
   FlushIfNecessary(webvr_renderer_.get());
-  webvr_renderer_->Draw(texture_data_handle);
+  webvr_renderer_->Draw(texture_data_handle, uv_transform, xborder, yborder);
 }
 
 void UiElementRenderer::DrawShadow(const gfx::Transform& model_view_proj_matrix,

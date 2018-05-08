@@ -70,7 +70,6 @@ KeyframeModel::KeyframeModel(std::unique_ptr<AnimationCurve> curve,
       fill_mode_(FillMode::BOTH),
       needs_synchronized_start_time_(false),
       received_finished_event_(false),
-      suspended_(false),
       is_controlling_instance_(false),
       is_impl_only_(false),
       affects_active_elements_(true),
@@ -83,9 +82,6 @@ KeyframeModel::~KeyframeModel() {
 
 void KeyframeModel::SetRunState(RunState run_state,
                                 base::TimeTicks monotonic_time) {
-  if (suspended_)
-    return;
-
   char name_buffer[256];
   base::snprintf(name_buffer, sizeof(name_buffer), "%s-%d-%d",
                  s_curveTypeNames[curve_->Type()], target_property_id_, group_);
@@ -122,16 +118,6 @@ void KeyframeModel::SetRunState(RunState run_state,
       TRACE_STR_COPY(name_buffer), "State", TRACE_STR_COPY(state_buffer));
 }
 
-void KeyframeModel::Suspend(base::TimeTicks monotonic_time) {
-  SetRunState(PAUSED, monotonic_time);
-  suspended_ = true;
-}
-
-void KeyframeModel::Resume(base::TimeTicks monotonic_time) {
-  suspended_ = false;
-  SetRunState(RUNNING, monotonic_time);
-}
-
 bool KeyframeModel::IsFinishedAt(base::TimeTicks monotonic_time) const {
   if (is_finished())
     return true;
@@ -152,8 +138,8 @@ bool KeyframeModel::InEffect(base::TimeTicks monotonic_time) const {
          (fill_mode_ == FillMode::BOTH || fill_mode_ == FillMode::BACKWARDS);
 }
 
-base::TimeTicks KeyframeModel::ConvertFromActiveTime(
-    base::TimeDelta active_time) const {
+base::TimeTicks KeyframeModel::ConvertLocalTimeToMonotonicTime(
+    base::TimeDelta local_time) const {
   // When waiting on receiving a start time, then our global clock is 'stuck' at
   // the initial state.
   if ((run_state_ == STARTING && !has_set_start_time()) ||
@@ -162,9 +148,9 @@ base::TimeTicks KeyframeModel::ConvertFromActiveTime(
 
   // If we're paused, time is 'stuck' at the pause time.
   if (run_state_ == PAUSED)
-    return pause_time_ - time_offset_;
+    return pause_time_;
 
-  return active_time - time_offset_ + start_time_ + total_paused_time_;
+  return local_time + start_time_ + total_paused_time_;
 }
 
 base::TimeDelta KeyframeModel::ConvertToActiveTime(

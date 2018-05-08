@@ -59,6 +59,11 @@ class SupervisedUserInterstitial : public content::InterstitialPageDelegate,
   // and replaced with separate handlers for go back and request permission.
   void CommandReceived(const std::string& command) override;
 
+  // Permission requests need to be handled separately for committed
+  // interstitials, since a callback needs to be setup so success/failure can be
+  // reported back.
+  void RequestPermission(base::OnceCallback<void(bool)> RequestCallback);
+
  private:
   SupervisedUserInterstitial(
       content::WebContents* web_contents,
@@ -96,6 +101,8 @@ class SupervisedUserInterstitial : public content::InterstitialPageDelegate,
 
   void ProceedInternal();
 
+  void DontProceedInternal();
+
   // Owns the interstitial, which owns us.
   content::WebContents* web_contents_;
 
@@ -110,6 +117,9 @@ class SupervisedUserInterstitial : public content::InterstitialPageDelegate,
   // navigation), false if it was shown over an already loaded page.
   // Interstitials behave very differently in those cases.
   bool initial_page_load_;
+
+  // True if we have already called Proceed() on the interstitial page.
+  bool proceeded_;
 
   base::Callback<void(bool)> callback_;
 

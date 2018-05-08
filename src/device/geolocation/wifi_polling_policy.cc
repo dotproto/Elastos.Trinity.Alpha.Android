@@ -7,7 +7,6 @@
 namespace device {
 
 namespace {
-// Leaks at exit.
 WifiPollingPolicy* g_wifi_polling_policy;
 }  // namespace
 

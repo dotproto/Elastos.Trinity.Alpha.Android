@@ -98,6 +98,20 @@ void QuicConnectionPeer::SetPeerAddress(QuicConnection* connection,
 }
 
 // static
+void QuicConnectionPeer::SetDirectPeerAddress(
+    QuicConnection* connection,
+    const QuicSocketAddress& direct_peer_address) {
+  connection->direct_peer_address_ = direct_peer_address;
+}
+
+// static
+void QuicConnectionPeer::SetEffectivePeerAddress(
+    QuicConnection* connection,
+    const QuicSocketAddress& effective_peer_address) {
+  connection->effective_peer_address_ = effective_peer_address;
+}
+
+// static
 bool QuicConnectionPeer::IsSilentCloseEnabled(QuicConnection* connection) {
   return connection->idle_timeout_connection_close_behavior_ ==
          ConnectionCloseBehavior::SILENT_CLOSE;
@@ -175,6 +189,12 @@ QuicAlarm* QuicConnectionPeer::GetMtuDiscoveryAlarm(
 QuicAlarm* QuicConnectionPeer::GetRetransmittableOnWireAlarm(
     QuicConnection* connection) {
   return connection->retransmittable_on_wire_alarm_.get();
+}
+
+// static
+QuicAlarm* QuicConnectionPeer::GetPathDegradingAlarm(
+    QuicConnection* connection) {
+  return connection->path_degrading_alarm_.get();
 }
 
 // static
@@ -256,6 +276,11 @@ bool QuicConnectionPeer::HasRetransmittableFrames(
     QuicPacketNumber packet_number) {
   return QuicSentPacketManagerPeer::HasRetransmittableFrames(
       GetSentPacketManager(connection), packet_number);
+}
+
+// static
+bool QuicConnectionPeer::GetNoStopWaitingFrames(QuicConnection* connection) {
+  return connection->no_stop_waiting_frames_;
 }
 
 // static

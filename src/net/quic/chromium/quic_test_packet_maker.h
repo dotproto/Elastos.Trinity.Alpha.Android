@@ -19,8 +19,8 @@
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
-#include "net/spdy/core/spdy_framer.h"
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/third_party/spdy/core/spdy_framer.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 
 namespace net {
 namespace test {
@@ -48,6 +48,10 @@ class QuicTestPacketMaker {
   ~QuicTestPacketMaker();
 
   void set_hostname(const std::string& host);
+  std::unique_ptr<QuicReceivedPacket> MakeConnectivityProbingPacket(
+      QuicPacketNumber num,
+      bool include_version,
+      QuicByteCount packet_length);
   std::unique_ptr<QuicReceivedPacket> MakePingPacket(QuicPacketNumber num,
                                                      bool include_version);
   std::unique_ptr<QuicReceivedPacket> MakeAckAndPingPacket(
@@ -296,6 +300,10 @@ class QuicTestPacketMaker {
       const std::vector<Http2StreamDependency>& priority_frames,
       QuicStreamOffset* offset);
 
+  void SetEncryptionLevel(EncryptionLevel level);
+
+  void SetLongHeaderType(QuicLongHeaderType type);
+
   SpdyHeaderBlock GetRequestHeaders(const std::string& method,
                                     const std::string& scheme,
                                     const std::string& path);
@@ -323,6 +331,10 @@ class QuicTestPacketMaker {
                                            SpdyHeaderBlock headers,
                                            QuicStreamId parent_stream_id);
 
+  bool ShouldIncludeVersion(bool include_version) const;
+
+  QuicPacketNumberLength GetPacketNumberLength() const;
+
   QuicTransportVersion version_;
   QuicConnectionId connection_id_;
   MockClock* clock_;  // Owned by QuicStreamFactory.
@@ -332,6 +344,8 @@ class QuicTestPacketMaker {
   MockRandom random_generator_;
   QuicPacketHeader header_;
   Perspective perspective_;
+  EncryptionLevel encryption_level_;
+  QuicLongHeaderType long_header_type_;
 
   // If true, generated request headers will include non-default HTTP2 stream
   // dependency info.

@@ -38,6 +38,7 @@ class BaseRenderer;
 class ExternalTexturedQuadRenderer;
 class GradientQuadRenderer;
 class TexturedQuadRenderer;
+class TransparentQuadRenderer;
 class WebVrRenderer;
 
 // An instance of this class is passed to UiElements by the UiRenderer in order
@@ -66,7 +67,8 @@ class UiElementRenderer {
       const gfx::RectF& copy_rect,
       float opacity,
       const gfx::SizeF& element_size,
-      float corner_radius);
+      float corner_radius,
+      bool blend);
   VIRTUAL_FOR_MOCKS void DrawGradientQuad(
       const gfx::Transform& model_view_proj_matrix,
       const SkColor edge_color,
@@ -94,7 +96,10 @@ class UiElementRenderer {
       float opacity,
       const gfx::Transform& model_view_proj_matrix);
 
-  VIRTUAL_FOR_MOCKS void DrawWebVr(int texture_data_handle);
+  VIRTUAL_FOR_MOCKS void DrawWebVr(int texture_data_handle,
+                                   const float (&uv_transform)[16],
+                                   float xborder,
+                                   float yborder);
 
   VIRTUAL_FOR_MOCKS void DrawShadow(
       const gfx::Transform& model_view_proj_matrix,
@@ -136,6 +141,7 @@ class UiElementRenderer {
 
   std::unique_ptr<ExternalTexturedQuadRenderer>
       external_textured_quad_renderer_;
+  std::unique_ptr<TransparentQuadRenderer> transparent_quad_renderer_;
   std::unique_ptr<TexturedQuadRenderer> textured_quad_renderer_;
   std::unique_ptr<GradientQuadRenderer> gradient_quad_renderer_;
   std::unique_ptr<WebVrRenderer> webvr_renderer_;

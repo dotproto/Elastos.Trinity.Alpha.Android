@@ -358,16 +358,32 @@ void WindowSelector::Shutdown() {
   // Stop observing split view state changes before restoring window focus.
   // Otherwise the activation of the window triggers OnSplitViewStateChanged()
   // that will call into this function again.
-  Shell::Get()->split_view_controller()->RemoveObserver(this);
+  SplitViewController* split_view_controller =
+      Shell::Get()->split_view_controller();
+  split_view_controller->RemoveObserver(this);
 
   size_t remaining_items = 0;
   for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
     if (IsNewOverviewAnimationsEnabled()) {
-      window_grid->SetWindowListAnimationStates(
-          selected_item_ && selected_item_->window_grid() == window_grid.get()
-              ? selected_item_
-              : nullptr,
-          OverviewTransition::kExit);
+      // During shutdown, do not animate all windows in overview if we need to
+      // animate the snapped window.
+      if (split_view_controller->IsSplitViewModeActive() &&
+          split_view_controller->GetDefaultSnappedWindow()->GetRootWindow() ==
+              window_grid->root_window() &&
+          split_view_controller->snapped_window_animation_observer()) {
+        // OverviewWindowAnimationObserver is used to obseve the snapped window
+        // animation. And the windows in |window_grid| will restore their
+        // transform when the snapped window completes its animation.
+        window_grid->set_window_animation_observer(
+            split_view_controller->snapped_window_animation_observer());
+        window_grid->SetWindowListNotAnimatedWhenExiting();
+      } else {
+        window_grid->SetWindowListAnimationStates(
+            selected_item_ && selected_item_->window_grid() == window_grid.get()
+                ? selected_item_
+                : nullptr,
+            OverviewTransition::kExit);
+      }
     }
     for (const auto& window_selector_item : window_grid->window_list())
       window_selector_item->RestoreWindow(/*reset_transform=*/true);
@@ -428,16 +444,42 @@ void WindowSelector::CancelSelection() {
 
 void WindowSelector::OnGridEmpty(WindowGrid* grid) {
   size_t index = 0;
-  for (auto iter = grid_list_.begin(); iter != grid_list_.end(); ++iter) {
-    if (grid == (*iter).get()) {
-      grid->Shutdown();
-      index = iter - grid_list_.begin();
-      grid_list_.erase(iter);
-      break;
+  if (IsNewOverviewUi()) {
+    // If there are no longer any items on any of the grids, shutdown,
+    // otherwise the empty grids will remain blurred but will have no items.
+    if (IsEmpty()) {
+      // Shutdown all grids if no grids have any items and split view mode is
+      // not active. Set |index| to -1 so that it does not attempt to select any
+      // items.
+      index = -1;
+      if (!Shell::Get()->IsSplitViewModeActive()) {
+        for (const auto& grid : grid_list_)
+          grid->Shutdown();
+        grid_list_.clear();
+      }
+    } else {
+      for (auto iter = grid_list_.begin(); iter != grid_list_.end(); ++iter) {
+        if (grid == (*iter).get()) {
+          index = iter - grid_list_.begin();
+          break;
+        }
+      }
+    }
+  } else {
+    for (auto iter = grid_list_.begin(); iter != grid_list_.end(); ++iter) {
+      if (grid == (*iter).get()) {
+        grid->Shutdown();
+        index = iter - grid_list_.begin();
+        grid_list_.erase(iter);
+        break;
+      }
     }
   }
   if (index > 0 && selected_grid_index_ >= index) {
-    selected_grid_index_--;
+    // If the grid closed is not the one with the selected item, we do not need
+    // to move the selected item.
+    if (!IsNewOverviewUi() || selected_grid_index_ == index)
+      --selected_grid_index_;
     // If the grid which became empty was the one with the selected window, we
     // need to select a window on the newly selected grid.
     if (selected_grid_index_ == index - 1)
@@ -445,6 +487,8 @@ void WindowSelector::OnGridEmpty(WindowGrid* grid) {
   }
   if (grid_list_.empty())
     CancelSelection();
+  else
+    PositionWindows(/*animate=*/false);
 }
 
 void WindowSelector::IncrementSelection(int increment) {
@@ -557,8 +601,6 @@ void WindowSelector::RemoveWindowSelectorItem(WindowSelectorItem* item) {
     if (grid->GetWindowSelectorItemContaining(item->GetWindow())) {
       grid->RemoveItem(item);
       --num_items_;
-      if (grid->empty())
-        OnGridEmpty(grid.get());
       break;
     }
   }
@@ -575,14 +617,14 @@ void WindowSelector::InitiateDrag(WindowSelectorItem* item,
 
 void WindowSelector::Drag(WindowSelectorItem* item,
                           const gfx::Point& location_in_screen) {
-  DCHECK(window_drag_controller_.get());
+  DCHECK(window_drag_controller_);
   DCHECK_EQ(item, window_drag_controller_->item());
   window_drag_controller_->Drag(location_in_screen);
 }
 
 void WindowSelector::CompleteDrag(WindowSelectorItem* item,
                                   const gfx::Point& location_in_screen) {
-  DCHECK(window_drag_controller_.get());
+  DCHECK(window_drag_controller_);
   DCHECK_EQ(item, window_drag_controller_->item());
   window_drag_controller_->CompleteDrag(location_in_screen);
 
@@ -590,13 +632,28 @@ void WindowSelector::CompleteDrag(WindowSelectorItem* item,
     grid->OnSelectorItemDragEnded();
 }
 
+void WindowSelector::StartSplitViewDragMode(
+    const gfx::Point& location_in_screen) {
+  window_drag_controller_->StartSplitViewDragMode(location_in_screen);
+}
+
+void WindowSelector::Fling(WindowSelectorItem* item,
+                           const gfx::Point& location_in_screen,
+                           float velocity_x,
+                           float velocity_y) {
+  // Its possible a fling event is not paired with a tap down event. Ignore
+  // these flings.
+  if (!window_drag_controller_ || item != window_drag_controller_->item())
+    return;
+
+  window_drag_controller_->Fling(location_in_screen, velocity_x, velocity_y);
+}
+
 void WindowSelector::ActivateDraggedWindow() {
-  DCHECK(window_drag_controller_.get());
   window_drag_controller_->ActivateDraggedWindow();
 }
 
 void WindowSelector::ResetDraggedWindowGesture() {
-  DCHECK(window_drag_controller_.get());
   window_drag_controller_->ResetGesture();
 }
 
@@ -609,14 +666,48 @@ bool WindowSelector::IsShuttingDown() const {
   return Shell::Get()->window_selector_controller()->is_shutting_down();
 }
 
+bool WindowSelector::ShouldAnimateWallpaper(aura::Window* root_window) {
+  // Find the grid associated with |root_window|.
+  WindowGrid* grid = nullptr;
+  for (const auto& window_grid : grid_list_) {
+    if (window_grid->root_window() == root_window) {
+      grid = window_grid.get();
+      break;
+    }
+  }
+
+  if (!grid)
+    return false;
+
+  // It is possible we leave overview mode to enter split view mode with both
+  // windows snapped. Do not animate the wallpaper in this case.
+  if (Shell::Get()->split_view_controller()->state() ==
+      SplitViewController::BOTH_SNAPPED) {
+    return false;
+  }
+
+  // If one of the windows covers the workspace, we do not need to animate.
+  for (const auto& selector_item : grid->window_list()) {
+    if (CanCoverAvailableWorkspace(selector_item->GetWindow()))
+      return false;
+  }
+
+  return true;
+}
+
+bool WindowSelector::IsWindowInOverview(const aura::Window* window) {
+  for (const std::unique_ptr<WindowGrid>& grid : grid_list_) {
+    if (grid->GetWindowSelectorItemContaining(window))
+      return true;
+  }
+  return false;
+}
+
 bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
                                     const ui::KeyEvent& key_event) {
   // Do not do anything with the events if none of the window grids have windows
   // in them.
-  bool empty_grids = true;
-  for (std::unique_ptr<WindowGrid>& grid : grid_list_)
-    empty_grids &= grid->empty();
-  if (empty_grids)
+  if (IsEmpty())
     return true;
 
   if (key_event.type() != ui::ET_KEY_PRESSED)
@@ -705,6 +796,17 @@ void WindowSelector::OnWindowHierarchyChanged(
   aura::Window* new_window = params.target;
   if (!IsSelectable(new_window))
     return;
+
+  // If the new window is added when splitscreen is active, do nothing.
+  // SplitViewController will do the right thing to snap the window or end
+  // overview mode.
+  if (Shell::Get()->IsSplitViewModeActive() &&
+      new_window->GetRootWindow() == Shell::Get()
+                                         ->split_view_controller()
+                                         ->GetDefaultSnappedWindow()
+                                         ->GetRootWindow()) {
+    return;
+  }
 
   for (size_t i = 0; i < wm::kSwitchableWindowContainerIdsLength; ++i) {
     if (new_window->parent()->id() == wm::kSwitchableWindowContainerIds[i] &&
@@ -907,6 +1009,14 @@ void WindowSelector::OnDisplayBoundsChanged() {
   RepositionTextFilterOnDisplayMetricsChange();
   if (split_view_drag_indicators_)
     split_view_drag_indicators_->OnDisplayBoundsChanged();
+}
+
+bool WindowSelector::IsEmpty() {
+  for (const auto& grid : grid_list_) {
+    if (!grid->empty())
+      return false;
+  }
+  return true;
 }
 
 }  // namespace ash

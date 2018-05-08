@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
@@ -74,9 +73,9 @@
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/models/menu_model.h"
 
 #if defined(OS_CHROMEOS)
@@ -170,12 +169,16 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     return profile_manager->GetProfile(profile_path);
   }
 
-  const extensions::Extension* InstallTestBookmarkApp(const GURL& app_url) {
+  const extensions::Extension* InstallTestBookmarkApp(
+      const GURL& app_url,
+      bool open_as_window = true) {
     WebApplicationInfo web_app_info;
     web_app_info.app_url = app_url;
     web_app_info.scope = app_url;
-    web_app_info.title = base::UTF8ToUTF16("Test app");
-    web_app_info.description = base::UTF8ToUTF16("Test description");
+    web_app_info.title = base::UTF8ToUTF16("Test app \xF0\x9F\x90\x90");
+    web_app_info.description =
+        base::UTF8ToUTF16("Test description \xF0\x9F\x90\x90");
+    web_app_info.open_as_window = open_as_window;
 
     return extensions::browsertest_util::InstallBookmarkApp(
         browser()->profile(), web_app_info);
@@ -348,6 +351,23 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kDesktopPWAWindowing);
   InstallTestBookmarkApp(GURL(kAppUrl1));
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(GURL(kAppUrl1), GURL(kAppUrl1));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+  ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                          IDC_OPEN_LINK_IN_PROFILE_LAST));
+}
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       OpenInAppPresentForURLsInScopeOfNonWindowedBookmarkApp) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDesktopPWAWindowing);
+  InstallTestBookmarkApp(GURL(kAppUrl1), false);
 
   std::unique_ptr<TestRenderViewContextMenu> menu =
       CreateContextMenuMediaTypeNone(GURL(kAppUrl1), GURL(kAppUrl1));
@@ -651,6 +671,8 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenIncognitoNoneReferrer) {
 
 // Verify that "Open link in [App Name]" opens a new App window.
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInBookmarkApp) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kDesktopPWAWindowing);
   InstallTestBookmarkApp(GURL(kAppUrl1));
 
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -686,14 +708,14 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInBookmarkApp) {
 // Check filename on clicking "Save Link As" via a "real" context menu.
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileName) {
   // Register observer.
-  ContextMenuWaiter menu_observer(content::NotificationService::AllSources());
+  ContextMenuWaiter menu_observer;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/download-anchor-same-origin.html"));
 
   // Go to a page with a link having download attribute.
   const std::string kSuggestedFilename("test_filename.png");
-  ui_test_utils::NavigateToURL(
-      browser(),
-      GURL("data:text/html,<a href='about:blank' download='" +
-           kSuggestedFilename + "'>link</a>"));
+  ui_test_utils::NavigateToURL(browser(), url);
 
   // Open a context menu.
   blink::WebMouseEvent mouse_event(
@@ -713,6 +735,38 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileName) {
   // Compare filename.
   base::string16 suggested_filename = menu_observer.params().suggested_filename;
   ASSERT_EQ(kSuggestedFilename, base::UTF16ToUTF8(suggested_filename).c_str());
+}
+
+// Check filename on clicking "Save Link As" is ignored for cross origin.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileNameCrossOrigin) {
+  // Register observer.
+  ContextMenuWaiter menu_observer;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(
+      embedded_test_server()->GetURL("/download-anchor-cross-origin.html"));
+
+  // Go to a page with a link having download attribute.
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Open a context menu.
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(15, 15);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  // Compare filename.
+  base::string16 suggested_filename = menu_observer.params().suggested_filename;
+  ASSERT_TRUE(suggested_filename.empty());
 }
 
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, DataSaverOpenOrigImageInNewTab) {
@@ -984,7 +1038,7 @@ IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest, ImageSearchWithCorruptImage) {
   SetupAndLoadImagePage(kCorruptImage);
 
   // Open and close a context menu.
-  ContextMenuWaiter waiter(content::NotificationService::AllSources());
+  ContextMenuWaiter waiter;
   RightClickImage();
   waiter.WaitForMenuOpenAndClose();
 

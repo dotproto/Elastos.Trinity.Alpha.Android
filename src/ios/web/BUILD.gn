@@ -62,6 +62,7 @@ source_set("web") {
     "crw_navigation_item_storage.mm",
     "features.mm",
     "load_committed_details.cc",
+    "network_context_owner.cc",
     "service_manager_connection_impl.cc",
     "service_manager_connection_impl.h",
     "service_manager_context.h",
@@ -207,10 +208,12 @@ source_set("ios_web_general_unittests") {
   sources = [
     "browser_state_unittest.cc",
     "history_state_util_unittest.mm",
+    "network_context_owner_unittest.cc",
     "service_manager_connection_impl_unittest.cc",
     "test/web_test_unittest.mm",
     "url_scheme_util_unittest.mm",
     "url_util_unittest.cc",
+    "web_client_unittest.mm",
   ]
 }
 
@@ -255,10 +258,9 @@ source_set("ios_web_navigation_unittests") {
     "navigation/navigation_manager_impl_unittest.mm",
     "navigation/navigation_manager_util_unittest.mm",
     "navigation/nscoder_util_unittest.mm",
-    "navigation/placeholder_navigation_util_unittest.mm",
     "navigation/serializable_user_data_manager_impl_unittest.mm",
     "navigation/wk_based_navigation_manager_impl_unittest.mm",
-    "navigation/wk_based_restore_session_util_unittest.mm",
+    "navigation/wk_navigation_util_unittest.mm",
   ]
 }
 
@@ -596,9 +598,9 @@ js_compile_bundle("main_frame_web_bundle") {
 
   sources = [
     "web_state/js/resources/console.js",
-    "web_state/js/resources/context_menu.js",
     "web_state/js/resources/error.js",
     "web_state/js/resources/legacy.js",
+    "web_state/js/resources/main_frame_context_menu.js",
     "web_state/js/resources/main_frame_web_bundle.js",
     "web_state/js/resources/navigation.js",
     "web_state/js/resources/scroll_workaround.js",
@@ -610,6 +612,7 @@ js_compile_bundle("all_frames_web_bundle") {
   closure_entry_point = "__crWeb.allFramesWebBundle"
 
   sources = [
+    "web_state/js/resources/all_frames_context_menu.js",
     "web_state/js/resources/all_frames_web_bundle.js",
     "web_state/js/resources/base.js",
     "web_state/js/resources/common.js",

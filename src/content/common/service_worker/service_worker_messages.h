@@ -19,21 +19,17 @@
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_param_traits.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
+#include "third_party/blink/public/platform/modules/serviceworker/web_service_worker_error.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
 #define IPC_MESSAGE_START ServiceWorkerMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerErrorType,
-                          blink::mojom::ServiceWorkerErrorType::kLast)
-
-IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerState,
-                          blink::mojom::ServiceWorkerState::kLast)
-
+// TODO(leonhsl): Figure out what's the purpose of all these traits then
+// eliminate this file finally.
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerResponseError,
-                          blink::mojom::ServiceWorkerResponseError::kLast)
+                          blink::mojom::ServiceWorkerResponseError::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(mode)
@@ -75,19 +71,5 @@ IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
   IPC_STRUCT_TRAITS_MEMBER(data)
   IPC_STRUCT_TRAITS_MEMBER(is_null)
 IPC_STRUCT_TRAITS_END()
-
-//---------------------------------------------------------------------------
-// Messages sent from the browser to the child process.
-//
-// NOTE: All ServiceWorkerMsg messages not sent via EmbeddedWorker must have
-// a thread_id as their first field so that ServiceWorkerMessageFilter can
-// extract it and dispatch the message to the correct ServiceWorkerDispatcher
-// on the correct thread.
-
-// Informs the child process that the ServiceWorker's state has changed.
-IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ServiceWorkerStateChanged,
-                     int /* thread_id */,
-                     int /* handle_id */,
-                     blink::mojom::ServiceWorkerState)
 
 #endif  // CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_

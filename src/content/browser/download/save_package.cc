@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -24,14 +24,15 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "components/download/public/common/download_item_impl.h"
 #include "components/download/public/common/download_request_handle_interface.h"
 #include "components/download/public/common/download_stats.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "components/download/public/common/download_ukm_helper.h"
+#include "components/download/public/common/download_utils.h"
 #include "components/filename_generation/filename_generation.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/download/download_item_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/download/save_file.h"
 #include "content/browser/download/save_file_manager.h"
@@ -255,6 +256,12 @@ void SavePackage::InternalInit() {
   DCHECK(download_manager_);
 
   download::RecordSavePackageEvent(download::SAVE_PACKAGE_STARTED);
+
+  ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
+  ukm_download_id_ = download::GetUniqueDownloadId();
+  download::DownloadUkmHelper::RecordDownloadStarted(
+      ukm_download_id_, ukm_source_id_, download::DownloadContent::TEXT,
+      download::DownloadSource::UNKNOWN);
 }
 
 bool SavePackage::Init(
@@ -277,11 +284,8 @@ bool SavePackage::Init(
   std::unique_ptr<download::DownloadRequestHandleInterface> request_handle(
       new SavePackageRequestHandle(AsWeakPtr()));
 
-  // The download manager keeps ownership but adds us as an observer.
-  ukm::SourceId ukm_source_id = ukm::UkmRecorder::GetNewSourceID();
-
   download::DownloadUkmHelper::UpdateSourceURL(
-      ukm::UkmRecorder::Get(), ukm_source_id,
+      ukm::UkmRecorder::Get(), ukm_source_id_,
       web_contents()->GetLastCommittedURL());
   RenderFrameHost* frame_host = web_contents()->GetMainFrame();
   download_manager_->CreateSavePackageDownloadItem(
@@ -289,7 +293,7 @@ bool SavePackage::Init(
       ((save_type_ == SAVE_PAGE_TYPE_AS_MHTML) ? "multipart/related"
                                                : "text/html"),
       frame_host->GetProcess()->GetID(), frame_host->GetRoutingID(),
-      std::move(request_handle), std::move(ukm_source_id),
+      std::move(request_handle),
       base::Bind(&SavePackage::InitWithDownloadItem, AsWeakPtr(),
                  download_created_callback));
   return true;
@@ -297,7 +301,7 @@ bool SavePackage::Init(
 
 void SavePackage::InitWithDownloadItem(
     const SavePackageDownloadCreatedCallback& download_created_callback,
-    DownloadItemImpl* item) {
+    download::DownloadItemImpl* item) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(item);
   download_ = item;
@@ -314,7 +318,7 @@ void SavePackage::InitWithDownloadItem(
     MHTMLGenerationParams mhtml_generation_params(saved_main_file_path_);
     web_contents()->GenerateMHTML(
         mhtml_generation_params,
-        base::Bind(&SavePackage::OnMHTMLGenerated, this));
+        base::BindOnce(&SavePackage::OnMHTMLGenerated, this));
   } else {
     DCHECK_EQ(SAVE_PAGE_TYPE_AS_ONLY_HTML, save_type_);
     wait_state_ = NET_FILES;
@@ -692,6 +696,10 @@ void SavePackage::Finish() {
 
   // Record finish.
   download::RecordSavePackageEvent(download::SAVE_PACKAGE_FINISHED);
+
+  // TODO(qinmin): report the actual file size and duration for the download.
+  download::DownloadUkmHelper::RecordDownloadCompleted(ukm_download_id_, 1,
+                                                       base::TimeDelta(), 0);
 
   // Record any errors that occurred.
   if (wrote_to_completed_file_)

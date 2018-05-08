@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "services/ui/ws/test_change_tracker.h"
+#include "services/ui/ws2/test_change_tracker.h"
 
 #include <stddef.h>
 
@@ -14,12 +14,12 @@
 #include "ui/gfx/geometry/point_conversions.h"
 
 namespace ui {
-
-namespace ws {
+namespace ws2 {
 
 std::string WindowIdToString(Id id) {
   return (id == 0) ? "null"
-                   : base::StringPrintf("%d,%d", HiWord(id), LoWord(id));
+                   : base::StringPrintf("%d,%d", ClientIdFromTransportId(id),
+                                        ClientWindowIdFromTransportId(id));
 }
 
 namespace {
@@ -28,12 +28,7 @@ std::string DirectionToString(mojom::OrderDirection direction) {
   return direction == mojom::OrderDirection::ABOVE ? "above" : "below";
 }
 
-enum class ChangeDescriptionType {
-  ONE,
-  TWO,
-  // Includes display id and location of events.
-  THREE,
-};
+enum class ChangeDescriptionType { ONE, TWO };
 
 std::string ChangeToDescription(const Change& change,
                                 ChangeDescriptionType type) {
@@ -175,6 +170,10 @@ std::string SingleChangeToDescriptionImpl(const std::vector<Change>& changes,
 
 }  // namespace
 
+std::string ChangeToDescription(const Change& change) {
+  return ChangeToDescription(change, ChangeDescriptionType::ONE);
+}
+
 std::vector<std::string> ChangesToDescription1(
     const std::vector<Change>& changes) {
   std::vector<std::string> strings(changes.size());
@@ -214,7 +213,7 @@ TestWindow WindowDataToTestWindow(const mojom::WindowDataPtr& data) {
   window.parent_id = data->parent_id;
   window.window_id = data->window_id;
   window.visible = data->visible;
-  window.properties = mojo::UnorderedMapToMap(data->properties);
+  window.properties = mojo::FlatMapToMap(data->properties);
   return window;
 }
 
@@ -404,7 +403,7 @@ void TestChangeTracker::OnWindowInputEvent(
 }
 
 void TestChangeTracker::OnPointerEventObserved(const ui::Event& event,
-                                               uint32_t window_id) {
+                                               Id window_id) {
   Change change;
   change.type = CHANGE_TYPE_POINTER_WATCHER_EVENT;
   change.event_action = static_cast<int32_t>(event.type());
@@ -498,6 +497,5 @@ std::string TestWindow::ToString2() const {
       WindowIdToString(parent_id).c_str(), visible ? "true" : "false");
 }
 
-}  // namespace ws
-
+}  // namespace ws2
 }  // namespace ui

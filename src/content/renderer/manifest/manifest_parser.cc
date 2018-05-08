@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "base/json/json_reader.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -18,11 +17,11 @@
 #include "content/public/common/manifest_share_target_util.h"
 #include "content/public/common/manifest_util.h"
 #include "content/renderer/manifest/manifest_uma_util.h"
-#include "third_party/WebKit/public/platform/WebColor.h"
-#include "third_party/WebKit/public/platform/WebIconSizesParser.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebCSSParser.h"
+#include "third_party/blink/public/platform/web_icon_sizes_parser.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_css_parser.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
@@ -138,7 +137,7 @@ int64_t ManifestParser::ParseColor(
   if (parsed_color.is_null())
     return Manifest::kInvalidOrMissingColor;
 
-  blink::WebColor color;
+  SkColor color;
   if (!blink::WebCSSParser::ParseColor(
           &color, blink::WebString::FromUTF16(parsed_color.string()))) {
     AddErrorInfo("property '" + key + "' ignored, '" +

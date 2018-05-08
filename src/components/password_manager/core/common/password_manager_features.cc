@@ -34,12 +34,6 @@ const base::Feature kEnableManualFallbacksFillingStandalone = {
     "EnableManualFallbacksFillingStandalone",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable that an omnibox icon is shown when the user types into a password
-// field. When the user clicks on the icon, a password save/update bubble is
-// shown.
-const base::Feature kManualSaving = {"ManualSaving",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable a context menu item in the password field that allows the user
 // to manually enforce saving of their password.
 const base::Feature kPasswordForceSaving = {
@@ -73,12 +67,20 @@ const base::Feature kPasswordImport = {"PasswordImport",
 
 // Allows searching for saved passwords in the settings page on mobile devices.
 const base::Feature kPasswordSearchMobile = {"PasswordSearchMobile",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Adds password-related features to the keyboard accessory on mobile devices.
+const base::Feature kPasswordsKeyboardAccessory = {
+    "PasswordsKeyboardAccessory", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables new password form parsing mechanism, details in
+// go/new-cpm-design-refactoring.
+const base::Feature kNewPasswordFormParsing = {
+    "new-password-form-parsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 

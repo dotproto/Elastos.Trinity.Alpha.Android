@@ -14,7 +14,7 @@
 #include "chrome/browser/vr/macros.h"
 #include "chrome/browser/vr/model/text_input_info.h"
 #include "chrome/browser/vr/text_edit_action.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace blink {
 class WebGestureEvent;
@@ -106,7 +106,14 @@ class ContentInputDelegate {
     OnWebInputTextChanged(text);
   }
 
+  void ClearTextInputState();
+
  private:
+  enum TextRequestState {
+    kNoPendingRequest,
+    kRequested,
+    kResponseReceived,
+  };
   void UpdateGesture(const gfx::PointF& normalized_content_hit_point,
                      blink::WebGestureEvent& gesture);
   void SendGestureToContent(std::unique_ptr<blink::WebInputEvent> event);
@@ -125,6 +132,7 @@ class ContentInputDelegate {
   PlatformController* controller_ = nullptr;
 
   EditedText last_keyboard_edit_;
+  TextRequestState pending_text_request_state_ = kNoPendingRequest;
   TextInputInfo pending_text_input_info_;
   std::queue<base::OnceCallback<void(const TextInputInfo&)>>
       update_state_callbacks_;

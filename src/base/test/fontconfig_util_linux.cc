@@ -29,104 +29,6 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
   <!-- GCS-synced fonts. -->
   <dir>$2</dir>
 
-  <!-- System fonts.  TODO(thomasanderson): Remove these. -->
-  <dir>/usr/share/fonts/opentype/ipafont-gothic</dir>
-  <dir>/usr/share/fonts/opentype/ipafont-mincho</dir>
-  <dir>/usr/share/fonts/truetype/msttcorefonts</dir>
-
-  <!-- The rejectfont element is used to exclude entire directories.  Then
-       acceptfont can be used to add specific fonts back.  Use this feature to
-       whitelist specific fonts from msttcorefonts while we transition to using
-       our own fonts. -->
-  <selectfont>
-    <rejectfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/*</glob>
-    </rejectfont>
-
-    <!-- Do not add more fonts to this list. -->
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Arial.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Arial_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Arial_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Comic_Sans_MS.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Comic_Sans_MS_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Courier_New.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Courier_New_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Courier_New_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Courier_New_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Georgia.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Impact.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Verdana.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Verdana_Bold.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Verdana_Bold_Italic.ttf</glob>
-    </acceptfont>
-    <acceptfont>
-      <glob>/usr/share/fonts/truetype/msttcorefonts/Verdana_Italic.ttf</glob>
-    </acceptfont>
-  </selectfont>
-
   <!-- Default properties. -->
   <match target="font">
     <edit name="embeddedbitmap" mode="append_last">
@@ -134,7 +36,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
     </edit>
   </match>
 
-  <!-- TODO(thomasanderson): Remove once Tinos is added to GCS fonts. -->
+  <!-- TODO(thomasanderson): Figure out why this is necessary. -->
   <match target="pattern">
     <test name="family" compare="eq">
       <string>Tinos</string>
@@ -145,9 +47,6 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
     <edit name="hintstyle" mode="assign">
       <const>hintslight</const>
     </edit>
-    <edit name="family" mode="assign">
-      <string>Times New Roman</string>
-    </edit>
   </match>
 
   <match target="pattern">
@@ -155,7 +54,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>Times</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Times New Roman</string>
+      <string>Tinos</string>
     </edit>
   </match>
 
@@ -173,18 +72,18 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>sans serif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
   </match>
 
   <!-- Some layout tests specify Helvetica as a family and we need to make sure
-       that we don't fallback to Times New Roman for them -->
+       that we don't fallback to Tinos for them -->
   <match target="pattern">
     <test qual="any" name="family">
       <string>Helvetica</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
   </match>
 
@@ -193,7 +92,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>sans-serif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
   </match>
 
@@ -202,7 +101,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>serif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Times New Roman</string>
+      <string>Tinos</string>
     </edit>
   </match>
 
@@ -211,7 +110,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>mono</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Courier New</string>
+      <string>Cousine</string>
     </edit>
   </match>
 
@@ -220,7 +119,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>monospace</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Courier New</string>
+      <string>Cousine</string>
     </edit>
   </match>
 
@@ -229,7 +128,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>Courier</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Courier New</string>
+      <string>Cousine</string>
     </edit>
   </match>
 
@@ -256,7 +155,53 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>Monaco</string>
     </test>
     <edit name="family" mode="assign">
+      <string>Tinos</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test qual="any" name="family">
+      <string>Arial</string>
+    </test>
+    <edit name="family" mode="assign">
+      <string>Arimo</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test qual="any" name="family">
+      <string>Courier New</string>
+    </test>
+    <edit name="family" mode="assign">
+      <string>Cousine</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test qual="any" name="family">
+      <string>Georgia</string>
+    </test>
+    <edit name="family" mode="assign">
+      <string>Gelasio</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test qual="any" name="family">
       <string>Times New Roman</string>
+    </test>
+    <edit name="family" mode="assign">
+      <string>Tinos</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test qual="any" name="family">
+      <string>Verdana</string>
+    </test>
+    <!-- NOT metrically compatible! -->
+    <edit name="family" mode="assign">
+      <string>Arimo</string>
     </edit>
   </match>
 
@@ -266,7 +211,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>NonAntiAliasedSans</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="antialias" mode="assign">
       <bool>false</bool>
@@ -278,7 +223,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>SlightHintedGeorgia</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Georgia</string>
+      <string>Gelasio</string>
     </edit>
     <edit name="hintstyle" mode="assign">
       <const>hintslight</const>
@@ -290,7 +235,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>NonHintedSans</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Verdana</string>
+      <string>Arimo</string>
     </edit>
     <!-- These deliberately contradict each other. The 'hinting' preference
          should take priority -->
@@ -307,7 +252,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>AutohintedSerif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="autohint" mode="assign">
       <bool>true</bool>
@@ -322,7 +267,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>HintedSerif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="autohint" mode="assign">
       <bool>false</bool>
@@ -337,7 +282,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>FullAndAutoHintedSerif</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="autohint" mode="assign">
       <bool>true</bool>
@@ -352,7 +297,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>SubpixelEnabledArial</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="rgba" mode="assign">
       <const>rgb</const>
@@ -364,7 +309,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>SubpixelDisabledArial</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Arial</string>
+      <string>Arimo</string>
     </edit>
     <edit name="rgba" mode="assign">
       <const>none</const>
@@ -380,7 +325,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>SubpixelPositioning</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Times New Roman</string>
+      <string>Tinos</string>
     </edit>
   </match>
 
@@ -399,7 +344,7 @@ const char kFontsConfTemplate[] = R"(<?xml version="1.0"?>
       <string>SlightHintedTimesNewRoman</string>
     </test>
     <edit name="family" mode="assign">
-      <string>Times New Roman</string>
+      <string>Tinos</string>
     </edit>
     <edit name="hintstyle" mode="assign">
       <const>hintslight</const>

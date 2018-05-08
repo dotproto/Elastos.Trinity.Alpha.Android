@@ -18,7 +18,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/process_type.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
 
 MetricsMemoryDetails::MetricsMemoryDetails(
@@ -156,6 +156,11 @@ void MetricsMemoryDetails::UpdateHistograms() {
   DCHECK_GE(non_renderer_count, 1);
   SiteDetails::UpdateHistograms(browser.site_data, all_renderer_count,
                                 non_renderer_count);
+
+  UMA_HISTOGRAM_COUNTS_100("Memory.ProcessCount",
+                           static_cast<int>(browser.processes.size()));
+  UMA_HISTOGRAM_COUNTS_100("Memory.ExtensionProcessCount", extension_count);
+  UMA_HISTOGRAM_COUNTS_100("Memory.RendererProcessCount", renderer_count);
 
   leveldb_chrome::UpdateHistograms();
 }

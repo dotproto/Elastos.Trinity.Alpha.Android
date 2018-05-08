@@ -8,6 +8,7 @@
 
 #include "base/bind_helpers.h"
 #include "content/browser/background_fetch/background_fetch_job_controller.h"
+#include "content/browser/background_fetch/background_fetch_metrics.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_registration_notifier.h"
 #include "content/browser/background_fetch/background_fetch_scheduler.h"
@@ -18,26 +19,6 @@
 #include "storage/browser/blob/blob_data_handle.h"
 
 namespace content {
-
-namespace {
-
-void IgnoreError(blink::mojom::BackgroundFetchError) {
-  // TODO(johnme): Log errors to UMA.
-}
-
-// Records the |error| status issued by the DataManager after it was requested
-// to create and store a new Background Fetch registration.
-void RecordRegistrationCreatedError(blink::mojom::BackgroundFetchError error) {
-  // TODO(peter): Add UMA.
-}
-
-// Records the |error| status issued by the DataManager after the storage
-// associated with a registration has been completely deleted.
-void RecordRegistrationDeletedError(blink::mojom::BackgroundFetchError error) {
-  // TODO(peter): Add UMA.
-}
-
-}  // namespace
 
 BackgroundFetchContext::BackgroundFetchContext(
     BrowserContext* browser_context,
@@ -111,19 +92,27 @@ void BackgroundFetchContext::StartFetch(
       registration_id, requests, options, icon,
       base::BindOnce(&BackgroundFetchContext::DidCreateRegistration,
                      weak_factory_.GetWeakPtr(), registration_id, options, icon,
-                     std::move(callback)));
+                     requests.size(), std::move(callback)));
+}
+
+void BackgroundFetchContext::GetIconDisplaySize(
+    blink::mojom::BackgroundFetchService::GetIconDisplaySizeCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  delegate_proxy_.GetIconDisplaySize(std::move(callback));
 }
 
 void BackgroundFetchContext::DidCreateRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     const BackgroundFetchOptions& options,
     const SkBitmap& icon,
+    size_t num_requests,
     blink::mojom::BackgroundFetchService::FetchCallback callback,
     blink::mojom::BackgroundFetchError error,
     std::unique_ptr<BackgroundFetchRegistration> registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  RecordRegistrationCreatedError(error);
+  background_fetch::RecordRegistrationCreatedError(error);
   if (error != blink::mojom::BackgroundFetchError::NONE) {
     std::move(callback).Run(error, base::nullopt);
     return;
@@ -131,7 +120,8 @@ void BackgroundFetchContext::DidCreateRegistration(
 
   DCHECK(registration);
   // Create the BackgroundFetchJobController to do the actual fetching.
-  CreateController(registration_id, options, icon, *registration.get());
+  CreateController(registration_id, options, icon, num_requests,
+                   *registration.get());
   std::move(callback).Run(error, *registration.get());
 }
 
@@ -142,23 +132,23 @@ void BackgroundFetchContext::AddRegistrationObserver(
 }
 
 void BackgroundFetchContext::UpdateUI(
-    const std::string& unique_id,
+    const BackgroundFetchRegistrationId& registration_id,
     const std::string& title,
     blink::mojom::BackgroundFetchService::UpdateUICallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // The registration must a) still be active, or b) have completed/failed (not
   // aborted) with the waitUntil promise from that event not yet resolved.
-  if (!job_controllers_.count(unique_id)) {
+  if (!job_controllers_.count(registration_id.unique_id())) {
     std::move(callback).Run(blink::mojom::BackgroundFetchError::INVALID_ID);
     return;
   }
 
   data_manager_.UpdateRegistrationUI(
-      unique_id, title,
+      registration_id, title,
       base::BindOnce(&BackgroundFetchContext::DidUpdateStoredUI,
-                     weak_factory_.GetWeakPtr(), unique_id, title,
-                     std::move(callback)));
+                     weak_factory_.GetWeakPtr(), registration_id.unique_id(),
+                     title, std::move(callback)));
 }
 
 void BackgroundFetchContext::DidUpdateStoredUI(
@@ -183,6 +173,7 @@ void BackgroundFetchContext::CreateController(
     const BackgroundFetchRegistrationId& registration_id,
     const BackgroundFetchOptions& options,
     const SkBitmap& icon,
+    size_t num_requests,
     const BackgroundFetchRegistration& registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -192,15 +183,16 @@ void BackgroundFetchContext::CreateController(
       // Safe because JobControllers are destroyed before RegistrationNotifier.
       base::BindRepeating(&BackgroundFetchRegistrationNotifier::Notify,
                           base::Unretained(registration_notifier_.get())),
-      base::BindOnce(&BackgroundFetchContext::DidFinishJob,
-                     weak_factory_.GetWeakPtr(), base::Bind(&IgnoreError)));
+      base::BindOnce(
+          &BackgroundFetchContext::DidFinishJob, weak_factory_.GetWeakPtr(),
+          base::Bind(&background_fetch::RecordSchedulerFinishedError)));
 
   // TODO(delphick): This assumes that fetches are always started afresh in
   // each browser session. We need to initialize the number of downloads using
   // information loaded from the database.
   controller->InitializeRequestStatus(
-      0, /* completed_downloads*/
-      data_manager_.GetTotalNumberOfRequests(registration_id),
+      0,            /* completed_downloads */
+      num_requests, /* total_downloads */
       std::vector<std::string>() /* outstanding download GUIDs */);
 
   scheduler_->AddJobController(controller.get());
@@ -331,7 +323,8 @@ void BackgroundFetchContext::LastObserverGarbageCollected(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   data_manager_.DeleteRegistration(
-      registration_id, base::BindOnce(&RecordRegistrationDeletedError));
+      registration_id,
+      base::BindOnce(&background_fetch::RecordRegistrationDeletedError));
 }
 
 }  // namespace content

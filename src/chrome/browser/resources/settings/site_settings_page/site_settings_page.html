@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../icons.html">
@@ -365,14 +366,23 @@
         <button aria-label="$i18n{siteSettingsZoomLevels}"></button>
       </paper-icon-button-light>
     </div>
-    <div id="usb-devices" class="settings-box"
+    <div id="usb-devices" class="settings-box two-line"
         category$="[[ContentSettingsTypes.USB_DEVICES]]"
         data-route="SITE_SETTINGS_USB_DEVICES" on-click="onTapNavigate_"
         actionable>
       <iron-icon icon="settings:usb"></iron-icon>
-      <div class="middle">$i18n{siteSettingsUsbDevices}</div>
+      <div class="middle">
+        $i18n{siteSettingsUsbDevices}
+        <div class="secondary" id="usbDevicesSecondary">
+          [[defaultSettingLabel_(
+              default_.usbDevices,
+              '$i18nPolymer{siteSettingsUsbDevicesAsk}',
+              '$i18nPolymer{siteSettingsUsbDevicesBlock}')]]
+        </div>
+      </div>
       <paper-icon-button-light class="subpage-arrow">
-        <button aria-label="$i18n{siteSettingsUsbDevices}"></button>
+        <button aria-label="$i18n{siteSettingsUsbDevices}"
+            area-describedby="usbDevicesSecondary"></button>
       </paper-icon-button-light>
     </div>
     <div id="pdf-documents" class="settings-box"
@@ -387,7 +397,7 @@
     <div id="protected-content" class="settings-box"
         data-route="SITE_SETTINGS_PROTECTED_CONTENT" on-click="onTapNavigate_"
         actionable>
-      <iron-icon icon="settings:security"></iron-icon>
+      <iron-icon icon="settings:protected-content"></iron-icon>
       <div class="middle">$i18n{siteSettingsProtectedContent}</div>
       <paper-icon-button-light class="subpage-arrow">
         <button aria-label="$i18n{siteSettingsProtectedContent}"></button>

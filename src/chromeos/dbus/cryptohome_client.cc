@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "chromeos/chromeos_switches.h"
@@ -923,28 +922,28 @@ class CryptohomeClientImpl : public CryptohomeClient {
         cryptohome::kCryptohomeInterface, cryptohome::kSignalAsyncCallStatus,
         base::Bind(&CryptohomeClientImpl::AsyncCallStatusReceived,
                    weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&CryptohomeClientImpl::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&CryptohomeClientImpl::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
     proxy_->ConnectToSignal(
         cryptohome::kCryptohomeInterface,
         cryptohome::kSignalAsyncCallStatusWithData,
         base::Bind(&CryptohomeClientImpl::AsyncCallStatusWithDataReceived,
                    weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&CryptohomeClientImpl::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&CryptohomeClientImpl::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
     proxy_->ConnectToSignal(
         cryptohome::kCryptohomeInterface, cryptohome::kSignalLowDiskSpace,
         base::Bind(&CryptohomeClientImpl::LowDiskSpaceReceived,
                    weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&CryptohomeClientImpl::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&CryptohomeClientImpl::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
     proxy_->ConnectToSignal(
         cryptohome::kCryptohomeInterface,
         cryptohome::kSignalDircryptoMigrationProgress,
         base::Bind(&CryptohomeClientImpl::DircryptoMigrationProgressReceived,
                    weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&CryptohomeClientImpl::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&CryptohomeClientImpl::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
  private:

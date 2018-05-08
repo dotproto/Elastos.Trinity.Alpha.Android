@@ -5,6 +5,7 @@
 #include "components/exo/shell_surface.h"
 
 #include "ash/accessibility/accessibility_delegate.h"
+#include "ash/frame/custom_frame_view_ash.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -13,7 +14,6 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm/workspace_controller_test_api.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
@@ -169,6 +169,8 @@ TEST_F(ShellSurfaceTest, Minimize) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
+  EXPECT_TRUE(shell_surface->CanMinimize());
+
   // Minimizing can be performed before the surface is committed.
   shell_surface->Minimize();
   EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
@@ -181,8 +183,15 @@ TEST_F(ShellSurfaceTest, Minimize) {
   shell_surface->Restore();
   EXPECT_FALSE(shell_surface->GetWidget()->IsMinimized());
 
-  shell_surface->Minimize();
-  EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
+  std::unique_ptr<Surface> child_surface(new Surface);
+  std::unique_ptr<ShellSurface> child_shell_surface(
+      new ShellSurface(child_surface.get()));
+
+  // Transient shell surfaces cannot be minimized.
+  child_surface->SetParent(surface.get(), gfx::Point());
+  child_surface->Attach(buffer.get());
+  child_surface->Commit();
+  EXPECT_FALSE(child_shell_surface->CanMinimize());
 }
 
 TEST_F(ShellSurfaceTest, Restore) {
@@ -226,11 +235,26 @@ TEST_F(ShellSurfaceTest, SetFullscreen) {
 }
 
 TEST_F(ShellSurfaceTest, SetTitle) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
   shell_surface->SetTitle(base::string16(base::ASCIIToUTF16("test")));
+  surface->Attach(buffer.get());
   surface->Commit();
+
+  // NativeWindow's title is used within the overview mode, so it should
+  // have the specified title.
+  EXPECT_EQ(base::ASCIIToUTF16("test"),
+            shell_surface->GetWidget()->GetNativeWindow()->GetTitle());
+  const ash::CustomFrameViewAsh* frame =
+      static_cast<const ash::CustomFrameViewAsh*>(
+          shell_surface->GetWidget()->non_client_view()->frame_view());
+  // Frame's title is the string to be shown in the title bar. This should be
+  // empty.
+  EXPECT_EQ(base::string16(), frame->GetFrameTitle());
 }
 
 TEST_F(ShellSurfaceTest, SetApplicationId) {
@@ -249,6 +273,30 @@ TEST_F(ShellSurfaceTest, SetApplicationId) {
   EXPECT_EQ("pre-widget-id", *ShellSurface::GetApplicationId(window));
   shell_surface->SetApplicationId("test");
   EXPECT_EQ("test", *ShellSurface::GetApplicationId(window));
+
+  shell_surface->SetApplicationId(nullptr);
+  EXPECT_EQ(nullptr, ShellSurface::GetApplicationId(window));
+}
+
+TEST_F(ShellSurfaceTest, SetStartupId) {
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  EXPECT_FALSE(shell_surface->GetWidget());
+  shell_surface->SetStartupId("pre-widget-id");
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  EXPECT_EQ("pre-widget-id", *ShellSurface::GetStartupId(window));
+  shell_surface->SetStartupId("test");
+  EXPECT_EQ("test", *ShellSurface::GetStartupId(window));
+
+  shell_surface->SetStartupId(nullptr);
+  EXPECT_EQ(nullptr, ShellSurface::GetStartupId(window));
 }
 
 TEST_F(ShellSurfaceTest, Move) {
@@ -315,6 +363,15 @@ TEST_F(ShellSurfaceTest, SetMinimumSize) {
                       ->GetNativeWindow()
                       ->delegate()
                       ->GetMinimumSize());
+
+  gfx::Size size_with_frame(50, 83);
+  surface->SetFrame(SurfaceFrameType::NORMAL);
+  EXPECT_EQ(size, shell_surface->GetMinimumSize());
+  EXPECT_EQ(size_with_frame, shell_surface->GetWidget()->GetMinimumSize());
+  EXPECT_EQ(size_with_frame, shell_surface->GetWidget()
+                                 ->GetNativeWindow()
+                                 ->delegate()
+                                 ->GetMinimumSize());
 }
 
 TEST_F(ShellSurfaceTest, SetMaximumSize) {
@@ -473,6 +530,59 @@ TEST_F(ShellSurfaceTest, ToggleFullscreen) {
 
   // Check that shell surface is maximized.
   EXPECT_EQ(CurrentContext()->bounds().width(),
+            shell_surface->GetWidget()->GetWindowBoundsInScreen().width());
+}
+
+TEST_F(ShellSurfaceTest, FrameColors) {
+  std::unique_ptr<Surface> surface(new Surface);
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  surface->Attach(buffer.get());
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  shell_surface->OnSetFrameColors(SK_ColorRED, SK_ColorTRANSPARENT);
+  surface->Commit();
+
+  const ash::CustomFrameViewAsh* frame =
+      static_cast<const ash::CustomFrameViewAsh*>(
+          shell_surface->GetWidget()->non_client_view()->frame_view());
+
+  // Test if colors set before initial commit are set.
+  EXPECT_EQ(SK_ColorRED, frame->GetActiveFrameColorForTest());
+  // Frame should be fully opaque.
+  EXPECT_EQ(SK_ColorBLACK, frame->GetInactiveFrameColorForTest());
+
+  shell_surface->OnSetFrameColors(SK_ColorTRANSPARENT, SK_ColorBLUE);
+  EXPECT_EQ(SK_ColorBLACK, frame->GetActiveFrameColorForTest());
+  EXPECT_EQ(SK_ColorBLUE, frame->GetInactiveFrameColorForTest());
+}
+
+TEST_F(ShellSurfaceTest, CycleSnap) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+  EXPECT_EQ(buffer_size,
+            shell_surface->GetWidget()->GetWindowBoundsInScreen().size());
+
+  ash::wm::WMEvent event(ash::wm::WM_EVENT_CYCLE_SNAP_LEFT);
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+
+  // Enter snapped mode.
+  ash::wm::GetWindowState(window)->OnWMEvent(&event);
+
+  EXPECT_EQ(CurrentContext()->bounds().width() / 2,
+            shell_surface->GetWidget()->GetWindowBoundsInScreen().width());
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  // Commit shouldn't change widget bounds when snapped.
+  EXPECT_EQ(CurrentContext()->bounds().width() / 2,
             shell_surface->GetWidget()->GetWindowBoundsInScreen().width());
 }
 

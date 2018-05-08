@@ -190,6 +190,22 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.text_direction;
   }
 
+  static bool is_enabled(const autofill::FormFieldData& r) {
+    return r.is_enabled;
+  }
+
+  static bool is_readonly(const autofill::FormFieldData& r) {
+    return r.is_readonly;
+  }
+
+  static bool is_default(const autofill::FormFieldData& r) {
+    return r.is_default;
+  }
+
+  static const base::string16& typed_value(const autofill::FormFieldData& r) {
+    return r.typed_value;
+  }
+
   static const std::vector<base::string16>& option_values(
       const autofill::FormFieldData& r) {
     return r.option_values;
@@ -269,6 +285,11 @@ struct StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
   static const std::string& parseable_name(
       const autofill::FormFieldDataPredictions& r) {
     return r.parseable_name;
+  }
+
+  static const std::string& section(
+      const autofill::FormFieldDataPredictions& r) {
+    return r.section;
   }
 
   static bool Read(autofill::mojom::FormFieldDataPredictionsDataView data,
@@ -542,10 +563,6 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
 
   static bool is_affiliation_based_match(const autofill::PasswordForm& r) {
     return r.is_affiliation_based_match;
-  }
-
-  static bool does_look_like_signup_form(const autofill::PasswordForm& r) {
-    return r.does_look_like_signup_form;
   }
 
   static autofill::PasswordForm::SubmissionIndicatorEvent submission_event(

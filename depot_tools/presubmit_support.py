@@ -43,7 +43,6 @@ import urlparse
 from warnings import warn
 
 # Local imports.
-import auth
 import fix_encoding
 import gclient_utils
 import git_footers
@@ -51,7 +50,6 @@ import gerrit_util
 import owners
 import owners_finder
 import presubmit_canned_checks
-import rietveld
 import scm
 import subprocess2 as subprocess  # Exposed through the API.
 
@@ -138,13 +136,12 @@ sigint_handler = SigintHandler()
 
 class ThreadPool(object):
   def __init__(self, pool_size=None):
-    self._tests = []
-    self._nonparallel_tests = []
     self._pool_size = pool_size or multiprocessing.cpu_count()
     self._messages = []
     self._messages_lock = threading.Lock()
-    self._current_index = 0
-    self._current_index_lock = threading.Lock()
+    self._tests = []
+    self._tests_lock = threading.Lock()
+    self._nonparallel_tests = []
 
   def CallCommand(self, test):
     """Runs an external program.
@@ -183,15 +180,16 @@ class ThreadPool(object):
       self._nonparallel_tests.extend(tests)
 
   def RunAsync(self):
+    self._messages = []
+
     def _WorkerFn():
       while True:
-        test_index = None
-        with self._current_index_lock:
-          if self._current_index == len(self._tests):
+        test = None
+        with self._tests_lock:
+          if not self._tests:
             break
-          test_index = self._current_index
-          self._current_index += 1
-        result = self.CallCommand(self._tests[test_index])
+          test = self._tests.pop()
+        result = self.CallCommand(test)
         if result:
           with self._messages_lock:
             self._messages.append(result)
@@ -202,7 +200,8 @@ class ThreadPool(object):
       t.start()
       return t
 
-    for test in self._nonparallel_tests:
+    while self._nonparallel_tests:
+      test = self._nonparallel_tests.pop()
       result = self.CallCommand(test)
       if result:
         self._messages.append(result)
@@ -508,7 +507,8 @@ class InputApi(object):
       # Scripts
       r".+\.js$", r".+\.py$", r".+\.sh$", r".+\.rb$", r".+\.pl$", r".+\.pm$",
       # Other
-      r".+\.java$", r".+\.mk$", r".+\.am$", r".+\.css$"
+      r".+\.java$", r".+\.mk$", r".+\.am$", r".+\.css$", r".+\.mojom$",
+      r".+\.fidl$"
   )
 
   # Path regexp that should be excluded from being considered containing source
@@ -516,8 +516,9 @@ class InputApi(object):
   DEFAULT_BLACK_LIST = (
       r"testing_support[\\\/]google_appengine[\\\/].*",
       r".*\bexperimental[\\\/].*",
-      # Exclude third_party/.* but NOT third_party/WebKit (crbug.com/539768).
-      r".*\bthird_party[\\\/](?!WebKit[\\\/]).*",
+      # Exclude third_party/.* but NOT third_party/{WebKit,blink}
+      # (crbug.com/539768 and crbug.com/836555).
+      r".*\bthird_party[\\\/](?!(WebKit|blink)[\\\/]).*",
       # Output directories (just in case)
       r".*\bDebug[\\\/].*",
       r".*\bRelease[\\\/].*",
@@ -534,29 +535,26 @@ class InputApi(object):
   )
 
   def __init__(self, change, presubmit_path, is_committing,
-      rietveld_obj, verbose, gerrit_obj=None, dry_run=None, thread_pool=None):
+      verbose, gerrit_obj, dry_run=None, thread_pool=None, parallel=False):
     """Builds an InputApi object.
 
     Args:
       change: A presubmit.Change object.
       presubmit_path: The path to the presubmit script being processed.
       is_committing: True if the change is about to be committed.
-      rietveld_obj: rietveld.Rietveld client object
       gerrit_obj: provides basic Gerrit codereview functionality.
       dry_run: if true, some Checks will be skipped.
+      parallel: if true, all tests reported via input_api.RunTests for all
+                PRESUBMIT files will be run in parallel.
     """
     # Version number of the presubmit_support script.
     self.version = [int(x) for x in __version__.split('.')]
     self.change = change
     self.is_committing = is_committing
-    self.rietveld = rietveld_obj
     self.gerrit = gerrit_obj
     self.dry_run = dry_run
-    # TBD
-    self.host_url = 'http://codereview.chromium.org'
-    if self.rietveld:
-      self.host_url = self.rietveld.url
 
+    self.parallel = parallel
     self.thread_pool = thread_pool or ThreadPool()
 
     # We expose various modules and functions as attributes of the input_api
@@ -658,7 +656,7 @@ class InputApi(object):
     """Returns absolute local paths of input_api.AffectedFiles()."""
     return [af.AbsoluteLocalPath() for af in self.AffectedFiles()]
 
-  def AffectedTestableFiles(self, include_deletes=None):
+  def AffectedTestableFiles(self, include_deletes=None, **kwargs):
     """Same as input_api.change.AffectedTestableFiles() except only lists files
     in the same directory as the current presubmit script, or subdirectories
     thereof.
@@ -669,7 +667,7 @@ class InputApi(object):
            category=DeprecationWarning,
            stacklevel=2)
     return filter(lambda x: x.IsTestableFile(),
-                  self.AffectedFiles(include_deletes=False))
+                  self.AffectedFiles(include_deletes=False, **kwargs))
 
   def AffectedTextFiles(self, include_deletes=None):
     """An alias to AffectedTestableFiles for backwards compatibility."""
@@ -787,8 +785,11 @@ class InputApi(object):
         tests.append(t)
         if self.verbose:
           t.info = _PresubmitNotifyResult
-        t.kwargs['cwd'] = self.PresubmitLocalPath()
+        if not t.kwargs.get('cwd'):
+          t.kwargs['cwd'] = self.PresubmitLocalPath()
     self.thread_pool.AddTests(tests, parallel)
+    if not self.parallel:
+      msgs.extend(self.thread_pool.RunAsync())
     return msgs
 
 
@@ -1126,7 +1127,7 @@ class Change(object):
       return affected
     return filter(lambda x: x.Action() != 'D', affected)
 
-  def AffectedTestableFiles(self, include_deletes=None):
+  def AffectedTestableFiles(self, include_deletes=None, **kwargs):
     """Return a list of the existing text files in a change."""
     if include_deletes is not None:
       warn("AffectedTeestableFiles(include_deletes=%s)"
@@ -1134,7 +1135,7 @@ class Change(object):
            category=DeprecationWarning,
            stacklevel=2)
     return filter(lambda x: x.IsTestableFile(),
-                  self.AffectedFiles(include_deletes=False))
+                  self.AffectedFiles(include_deletes=False, **kwargs))
 
   def AffectedTextFiles(self, include_deletes=None):
     """An alias to AffectedTestableFiles for backwards compatibility."""
@@ -1406,24 +1407,25 @@ def DoPostUploadExecuter(change,
 
 
 class PresubmitExecuter(object):
-  def __init__(self, change, committing, rietveld_obj, verbose,
-               gerrit_obj=None, dry_run=None, thread_pool=None):
+  def __init__(self, change, committing, verbose,
+               gerrit_obj, dry_run=None, thread_pool=None, parallel=False):
     """
     Args:
       change: The Change object.
       committing: True if 'git cl land' is running, False if 'git cl upload' is.
-      rietveld_obj: rietveld.Rietveld client object.
       gerrit_obj: provides basic Gerrit codereview functionality.
       dry_run: if true, some Checks will be skipped.
+      parallel: if true, all tests reported via input_api.RunTests for all
+                PRESUBMIT files will be run in parallel.
     """
     self.change = change
     self.committing = committing
-    self.rietveld = rietveld_obj
     self.gerrit = gerrit_obj
     self.verbose = verbose
     self.dry_run = dry_run
     self.more_cc = []
     self.thread_pool = thread_pool
+    self.parallel = parallel
 
   def ExecPresubmitScript(self, script_text, presubmit_path):
     """Executes a single presubmit script.
@@ -1443,9 +1445,9 @@ class PresubmitExecuter(object):
 
     # Load the presubmit script into context.
     input_api = InputApi(self.change, presubmit_path, self.committing,
-                         self.rietveld, self.verbose,
-                         gerrit_obj=self.gerrit, dry_run=self.dry_run,
-                         thread_pool=self.thread_pool)
+                         self.verbose, gerrit_obj=self.gerrit,
+                         dry_run=self.dry_run, thread_pool=self.thread_pool,
+                         parallel=self.parallel)
     output_api = OutputApi(self.committing)
     context = {}
     try:
@@ -1491,9 +1493,9 @@ def DoPresubmitChecks(change,
                       input_stream,
                       default_presubmit,
                       may_prompt,
-                      rietveld_obj,
-                      gerrit_obj=None,
-                      dry_run=None):
+                      gerrit_obj,
+                      dry_run=None,
+                      parallel=False):
   """Runs all presubmit checks that apply to the files in the change.
 
   This finds all PRESUBMIT.py files in directories enclosing the files in the
@@ -1512,9 +1514,10 @@ def DoPresubmitChecks(change,
     default_presubmit: A default presubmit script to execute in any case.
     may_prompt: Enable (y/n) questions on warning or error. If False,
                 any questions are answered with yes by default.
-    rietveld_obj: rietveld.Rietveld object.
     gerrit_obj: provides basic Gerrit codereview functionality.
     dry_run: if true, some Checks will be skipped.
+    parallel: if true, all tests specified by input_api.RunTests in all
+              PRESUBMIT files will be run in parallel.
 
   Warning:
     If may_prompt is true, output_stream SHOULD be sys.stdout and input_stream
@@ -1542,7 +1545,7 @@ def DoPresubmitChecks(change,
       output.write("Warning, no PRESUBMIT.py found.\n")
     results = []
     thread_pool = ThreadPool()
-    executer = PresubmitExecuter(change, committing, rietveld_obj, verbose,
+    executer = PresubmitExecuter(change, committing, verbose,
                                  gerrit_obj, dry_run, thread_pool)
     if default_presubmit:
       if verbose:
@@ -1701,17 +1704,11 @@ def main(argv=None):
   parser.add_option("--gerrit_url", help=optparse.SUPPRESS_HELP)
   parser.add_option("--gerrit_fetch", action='store_true',
                     help=optparse.SUPPRESS_HELP)
-  parser.add_option("--rietveld_url", help=optparse.SUPPRESS_HELP)
-  parser.add_option("--rietveld_email", help=optparse.SUPPRESS_HELP)
-  parser.add_option("--rietveld_fetch", action='store_true', default=False,
-                    help=optparse.SUPPRESS_HELP)
-  # These are for OAuth2 authentication for bots. See also apply_issue.py
-  parser.add_option("--rietveld_email_file", help=optparse.SUPPRESS_HELP)
-  parser.add_option("--rietveld_private_key_file", help=optparse.SUPPRESS_HELP)
+  parser.add_option('--parallel', action='store_true',
+                    help='Run all tests specified by input_api.RunTests in all '
+                         'PRESUBMIT files in parallel.')
 
-  auth.add_auth_options(parser)
   options, args = parser.parse_args(argv)
-  auth_config = auth.extract_auth_config_from_options(options)
 
   if options.verbose >= 2:
     logging.basicConfig(level=logging.DEBUG)
@@ -1720,49 +1717,14 @@ def main(argv=None):
   else:
     logging.basicConfig(level=logging.ERROR)
 
-  if (any((options.rietveld_url, options.rietveld_email_file,
-           options.rietveld_fetch, options.rietveld_private_key_file))
-      and any((options.gerrit_url, options.gerrit_fetch))):
-    parser.error('Options for only codereview --rietveld_* or --gerrit_* '
-                 'allowed')
-
-  if options.rietveld_email and options.rietveld_email_file:
-    parser.error("Only one of --rietveld_email or --rietveld_email_file "
-                 "can be passed to this program.")
-  if options.rietveld_email_file:
-    with open(options.rietveld_email_file, "rb") as f:
-      options.rietveld_email = f.read().strip()
-
   change_class, files = load_files(options, args)
   if not change_class:
     parser.error('For unversioned directory, <files> is not optional.')
   logging.info('Found %d file(s).', len(files))
 
-  rietveld_obj, gerrit_obj = None, None
-
-  if options.rietveld_url:
-    # The empty password is permitted: '' is not None.
-    if options.rietveld_private_key_file:
-      rietveld_obj = rietveld.JwtOAuth2Rietveld(
-        options.rietveld_url,
-        options.rietveld_email,
-        options.rietveld_private_key_file)
-    else:
-      rietveld_obj = rietveld.CachingRietveld(
-        options.rietveld_url,
-        auth_config,
-        options.rietveld_email)
-    if options.rietveld_fetch:
-      assert options.issue
-      props = rietveld_obj.get_issue_properties(options.issue, False)
-      options.author = props['owner_email']
-      options.description = props['description']
-      logging.info('Got author: "%s"', options.author)
-      logging.info('Got description: """\n%s\n"""', options.description)
-
+  gerrit_obj = None
   if options.gerrit_url and options.gerrit_fetch:
     assert options.issue and options.patchset
-    rietveld_obj = None
     gerrit_obj = GerritAccessor(urlparse.urlparse(options.gerrit_url).netloc)
     options.author = gerrit_obj.GetChangeOwner(options.issue)
     options.description = gerrit_obj.GetChangeDescription(options.issue,
@@ -1787,9 +1749,9 @@ def main(argv=None):
           sys.stdin,
           options.default_presubmit,
           options.may_prompt,
-          rietveld_obj,
           gerrit_obj,
-          options.dry_run)
+          options.dry_run,
+          options.parallel)
     return not results.should_continue()
   except PresubmitFailure, e:
     print >> sys.stderr, e

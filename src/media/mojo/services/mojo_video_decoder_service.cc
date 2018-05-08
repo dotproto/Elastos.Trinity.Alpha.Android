@@ -124,9 +124,9 @@ void MojoVideoDecoderService::Construct(
 
   client_.Bind(std::move(client));
 
-  mojom::MediaLogAssociatedPtr media_log_ptr;
-  media_log_ptr.Bind(std::move(media_log));
-  media_log_ = std::make_unique<MojoMediaLog>(std::move(media_log_ptr));
+  media_log_ = std::make_unique<MojoMediaLog>(
+      mojom::ThreadSafeMediaLogAssociatedPtr::Create(
+          std::move(media_log), base::ThreadTaskRunnerHandle::Get()));
 
   video_frame_handle_releaser_ =
       mojo::MakeStrongBinding(std::make_unique<VideoFrameHandleReleaserImpl>(),
@@ -198,7 +198,7 @@ void MojoVideoDecoderService::Reset(ResetCallback callback) {
     return;
   }
 
-  // Flush the reader so that pending decodes will be dispatches first.
+  // Flush the reader so that pending decodes will be dispatched first.
   mojo_decoder_buffer_reader_->Flush(
       base::Bind(&MojoVideoDecoderService::OnReaderFlushed, weak_this_,
                  base::Passed(&callback)));
@@ -253,6 +253,11 @@ void MojoVideoDecoderService::OnDecoderOutput(
   DVLOG(2) << __func__;
   DCHECK(client_);
   DCHECK(decoder_);
+
+  // All MojoVideoDecoder-based decoders are hardware decoders. If you're the
+  // first to implement an out-of-process decoder that is not power efficent,
+  // you can remove this DCHECK.
+  DCHECK(frame->metadata()->IsTrue(VideoFrameMetadata::POWER_EFFICIENT));
 
   base::Optional<base::UnguessableToken> release_token;
   if (frame->HasReleaseMailboxCB() && video_frame_handle_releaser_) {

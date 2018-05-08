@@ -18,7 +18,7 @@
 #include "content/browser/accessibility/accessibility_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility_position.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/web/WebAXEnums.h"
+#include "third_party/blink/public/web/web_ax_enums.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_range.h"
@@ -341,6 +341,13 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   int GetIndexInParent() const override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
+  int GetTableRowCount() const override;
+  int GetTableColCount() const override;
+  std::vector<int32_t> GetColHeaderNodeIds(int32_t col_index) const override;
+  std::vector<int32_t> GetRowHeaderNodeIds(int32_t row_index) const override;
+  int32_t GetCellId(int32_t row_index, int32_t col_index) const override;
+  int32_t CellIdToIndex(int32_t cell_id) const override;
+  int32_t CellIndexToId(int32_t cell_index) const override;
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;

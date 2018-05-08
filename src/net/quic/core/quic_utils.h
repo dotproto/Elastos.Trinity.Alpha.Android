@@ -57,6 +57,9 @@ class QUIC_EXPORT_PRIVATE QuicUtils {
   // Returns SentPacketState as a char*.
   static const char* SentPacketStateToString(SentPacketState state);
 
+  // Returns QuicLongHeaderType as a char*.
+  static const char* QuicLongHeaderTypetoString(QuicLongHeaderType type);
+
   // Determines and returns change type of address change from |old_address| to
   // |new_address|.
   static AddressChangeType DetermineAddressChangeType(
@@ -80,6 +83,10 @@ class QUIC_EXPORT_PRIVATE QuicUtils {
   // Returns packet state corresponding to |retransmission_type|.
   static SentPacketState RetransmissionTypeToPacketState(
       TransmissionType retransmission_type);
+
+  // Returns true if header with |first_byte| is considered as an IETF QUIC
+  // packet header.
+  static bool IsIetfPacketHeader(uint8_t first_byte);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicUtils);

@@ -13,13 +13,18 @@ assert(enable_cros_assistant)
 source_set("lib") {
   sources = [
     "assistant_manager_service.h",
+    "assistant_settings_manager.h",
     "fake_assistant_manager_service_impl.cc",
     "fake_assistant_manager_service_impl.h",
+    "fake_assistant_settings_manager_impl.cc",
+    "fake_assistant_settings_manager_impl.h",
     "service.cc",
     "service.h",
   ]
 
   deps = [
+    "//base",
+    "//build/util:webkit_version",
     "//chromeos",
     "//chromeos/assistant:buildflags",
     "//chromeos/services/assistant/public/mojom",
@@ -37,29 +42,39 @@ source_set("lib") {
     sources += [
       "assistant_manager_service_impl.cc",
       "assistant_manager_service_impl.h",
+      "assistant_settings_manager_impl.cc",
+      "assistant_settings_manager_impl.h",
       "platform/audio_input_provider_impl.cc",
       "platform/audio_input_provider_impl.h",
+      "platform/file_provider_impl.cc",
+      "platform/file_provider_impl.h",
+      "platform/network_provider_impl.cc",
+      "platform/network_provider_impl.h",
       "platform/system_provider_impl.cc",
       "platform/system_provider_impl.h",
       "platform_api_impl.cc",
       "platform_api_impl.h",
+      "utils.cc",
+      "utils.h",
     ]
 
     deps += [
       "//chromeos/assistant/internal/action",
       "//libassistant/contrib/core",
       "//libassistant/contrib/platform/audio",
-      "//libassistant/contrib/platform/auth",
-      "//libassistant/contrib/platform/file",
       "//libassistant/contrib/platform/net",
       "//libassistant/contrib/platform/resources",
-      "//libassistant/contrib/platform/system",
-      "//libassistant/internal/assistant/controller:libassistant",
       "//libassistant/shared/internal_api/c:api_wrappers_for_caller_no_chromium",
       "//libassistant/shared/proto:assistant_proto",
       "//libassistant/shared/public",
       "//libassistant/shared/public:export",
     ]
+
+    if (enable_cros_libassistant_so) {
+      deps += [ "//libassistant/internal/assistant/controller:libassistant" ]
+    } else {
+      libs = [ "assistant" ]
+    }
 
     include_dirs = [
       "//libassistant/contrib",

@@ -4,8 +4,9 @@
 
 #include "ui/ozone/platform/cast/gl_surface_cast.h"
 
+#include <string>
+
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/chromecast_switches.h"
@@ -18,7 +19,7 @@ namespace {
 // TODO(halliwell): We might need to customize this value on various devices
 // or make it dynamic that throttles framerate if device is overheating.
 base::TimeDelta GetVSyncInterval() {
-  if (base::FeatureList::IsEnabled(chromecast::kTripleBuffer720)) {
+  if (chromecast::IsFeatureEnabled(chromecast::kTripleBuffer720)) {
     return base::TimeDelta::FromSeconds(1) / 59.94;
   }
 
@@ -100,9 +101,10 @@ bool GLSurfaceCast::ScheduleOverlayPlane(int z_order,
                                          gfx::OverlayTransform transform,
                                          gl::GLImage* image,
                                          const gfx::Rect& bounds_rect,
-                                         const gfx::RectF& crop_rect) {
+                                         const gfx::RectF& crop_rect,
+                                         bool enable_blend) {
   return image->ScheduleOverlayPlane(widget_, z_order, transform, bounds_rect,
-                                     crop_rect);
+                                     crop_rect, enable_blend);
 }
 
 EGLConfig GLSurfaceCast::GetConfig() {

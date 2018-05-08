@@ -19,6 +19,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 
 namespace cc {
 namespace {
@@ -253,6 +254,8 @@ class GpuImageDecodeCacheTest
       viz::RasterContextProvider::ScopedRasterContextLock context_lock(
           context_provider_.get());
       transfer_cache_helper_.SetGrContext(context_provider_->GrContext());
+      max_texture_size_ =
+          context_provider_->ContextCapabilities().max_texture_size;
     }
     use_transfer_cache_ = GetParam().second;
     color_type_ = GetParam().first;
@@ -261,7 +264,7 @@ class GpuImageDecodeCacheTest
   std::unique_ptr<GpuImageDecodeCache> CreateCache() {
     return std::make_unique<GpuImageDecodeCache>(
         context_provider_.get(), use_transfer_cache_, color_type_,
-        kGpuMemoryLimitBytes);
+        kGpuMemoryLimitBytes, max_texture_size_);
   }
 
   GPUImageDecodeTestMockContextProvider* context_provider() {
@@ -315,6 +318,7 @@ class GpuImageDecodeCacheTest
   TransferCacheTestHelper transfer_cache_helper_;
   bool use_transfer_cache_;
   SkColorType color_type_;
+  int max_texture_size_ = 0;
 };
 
 SkMatrix CreateMatrix(const SkSize& scale, bool is_decomposable) {
@@ -1922,38 +1926,6 @@ TEST_P(GpuImageDecodeCacheTest, GetTaskForLargeImageNonSRGBColorSpace) {
   cache->UnrefImage(draw_image);
 }
 
-TEST_P(GpuImageDecodeCacheTest, RemoveUnusedImage) {
-  auto cache = CreateCache();
-  bool is_decomposable = true;
-  SkFilterQuality quality = kHigh_SkFilterQuality;
-  std::vector<PaintImage::FrameKey> frame_keys;
-
-  for (int i = 0; i < 10; ++i) {
-    PaintImage image = CreateDiscardablePaintImage(gfx::Size(100, 100));
-    DrawImage draw_image(
-        image, SkIRect::MakeWH(image.width(), image.height()), quality,
-        CreateMatrix(SkSize::Make(1.0f, 1.0f), is_decomposable),
-        PaintImage::kDefaultFrameIndex, DefaultColorSpace());
-    frame_keys.push_back(draw_image.frame_key());
-    ImageDecodeCache::TaskResult result = cache->GetTaskForImageAndRef(
-        draw_image, ImageDecodeCache::TracingInfo());
-    EXPECT_TRUE(result.need_unref);
-    EXPECT_TRUE(result.task);
-    TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
-    TestTileTaskRunner::ProcessTask(result.task.get());
-    cache->UnrefImage(draw_image);
-  }
-
-  // We should now have images in our cache.
-  EXPECT_EQ(cache->GetNumCacheEntriesForTesting(), 10u);
-
-  // Remove unused ids.
-  for (uint32_t i = 0; i < 10; ++i) {
-    cache->NotifyImageUnused(frame_keys[i]);
-    EXPECT_EQ(cache->GetNumCacheEntriesForTesting(), (10 - i - 1));
-  }
-}
-
 TEST_P(GpuImageDecodeCacheTest, CacheDecodesExpectedFrames) {
   auto cache = CreateCache();
 
@@ -2331,6 +2303,45 @@ TEST_P(GpuImageDecodeCacheTest, NonLazyImageUploadDownscaled) {
   EXPECT_TRUE(sw_image);
   EXPECT_EQ(sw_image->width(), 5);
   EXPECT_EQ(sw_image->height(), 5);
+}
+
+TEST_P(GpuImageDecodeCacheTest, KeepOnlyLast2ContentIds) {
+  auto cache = CreateCache();
+  bool is_decomposable = true;
+  SkFilterQuality quality = kHigh_SkFilterQuality;
+
+  viz::ContextProvider::ScopedContextLock context_lock(context_provider());
+  const PaintImage::Id paint_image_id = PaintImage::GetNextId();
+  std::vector<DrawImage> draw_images;
+  std::vector<DecodedDrawImage> decoded_draw_images;
+
+  for (int i = 0; i < 10; ++i) {
+    PaintImage image = CreateDiscardablePaintImage(
+        gfx::Size(10, 10), SkColorSpace::MakeSRGB(), true, paint_image_id);
+    DrawImage draw_image(
+        image, SkIRect::MakeWH(image.width(), image.height()), quality,
+        CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
+        PaintImage::kDefaultFrameIndex, DefaultColorSpace());
+    DecodedDrawImage decoded_draw_image =
+        EnsureImageBacked(cache->GetDecodedImageForDraw(draw_image));
+
+    draw_images.push_back(draw_image);
+    decoded_draw_images.push_back(decoded_draw_image);
+
+    if (i == 0)
+      continue;
+
+    // We should only have the last 2 entries in the persistent cache, even
+    // though everything is in the in use cache.
+    EXPECT_EQ(cache->GetNumCacheEntriesForTesting(), 2u);
+    EXPECT_EQ(cache->GetInUseCacheEntriesForTesting(), i + 1u);
+    EXPECT_TRUE(cache->IsInPersistentCacheForTesting(draw_images[i]));
+    EXPECT_TRUE(cache->IsInPersistentCacheForTesting(draw_images[i - 1]));
+  }
+
+  for (int i = 0; i < 10; ++i) {
+    cache->DrawWithImageFinished(draw_images[i], decoded_draw_images[i]);
+  }
 }
 
 INSTANTIATE_TEST_CASE_P(

@@ -24,7 +24,7 @@ const char* StrDupParam(const std::vector<std::string>& params, int index) {
   return strdup(params[index].c_str());
 }
 
-int SdkIntParam(const std::vector<std::string>& params, int index) {
+int GetIntParam(const std::vector<std::string>& params, int index) {
   int ret = 0;
   bool success = StringToInt(params[index], &ret);
   DCHECK(success);
@@ -59,7 +59,7 @@ BuildInfo::BuildInfo(const std::vector<std::string>& params)
       android_build_id_(StrDupParam(params, 2)),
       manufacturer_(StrDupParam(params, 3)),
       model_(StrDupParam(params, 4)),
-      sdk_int_(SdkIntParam(params, 5)),
+      sdk_int_(GetIntParam(params, 5)),
       build_type_(StrDupParam(params, 6)),
       board_(StrDupParam(params, 7)),
       host_package_name_(StrDupParam(params, 8)),
@@ -73,7 +73,10 @@ BuildInfo::BuildInfo(const std::vector<std::string>& params)
       installer_package_name_(StrDupParam(params, 16)),
       abi_name_(StrDupParam(params, 17)),
       firebase_app_id_(StrDupParam(params, 18)),
-      extracted_file_suffix_(params[19]),
+      custom_themes_(StrDupParam(params, 19)),
+      resources_version_(StrDupParam(params, 20)),
+      extracted_file_suffix_(params[21]),
+      is_at_least_p_(GetIntParam(params, 22)),
       java_exception_info_(NULL) {}
 
 // static

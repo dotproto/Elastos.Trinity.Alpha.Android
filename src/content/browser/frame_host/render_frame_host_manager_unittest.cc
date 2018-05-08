@@ -11,10 +11,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
@@ -32,12 +32,10 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
@@ -51,7 +49,6 @@
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
-#include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/mock_widget_input_handler.h"
 #include "content/test/test_content_browser_client.h"
@@ -62,8 +59,8 @@
 #include "content/test/test_web_contents.h"
 #include "net/base/load_flags.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/common/frame/frame_policy.h"
-#include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -318,7 +315,6 @@ class PluginFaviconMessageObserver : public WebContentsObserver {
 class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
  public:
   void SetUp() override {
-    mojo_feature_list_.InitAndEnableFeature(features::kMojoInputMessages);
     RenderViewHostImplTestHarness::SetUp();
     WebUIControllerFactory::RegisterFactory(&factory_);
   }
@@ -498,7 +494,6 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
                                RenderFrameHostManager*)>& commit_lambda);
 
  private:
-  base::test::ScopedFeatureList mojo_feature_list_;
   RenderFrameHostManagerTestWebUIControllerFactory factory_;
 };
 
@@ -1545,11 +1540,28 @@ TEST_F(RenderFrameHostManagerTest, NoSwapOnGuestNavigations) {
   EXPECT_EQ(host->GetSiteInstance(), instance);
 }
 
+namespace {
+
+class WidgetDestructionObserver : public RenderWidgetHostObserver {
+ public:
+  explicit WidgetDestructionObserver(base::OnceClosure closure)
+      : closure_(std::move(closure)) {}
+
+  void RenderWidgetHostDestroyed(RenderWidgetHost* widget_host) override {
+    std::move(closure_).Run();
+  }
+
+ private:
+  base::OnceClosure closure_;
+
+  DISALLOW_COPY_AND_ASSIGN(WidgetDestructionObserver);
+};
+
+}  // namespace
+
 // Test that we cancel a pending RVH if we close the tab while it's pending.
 // http://crbug.com/294697.
 TEST_F(RenderFrameHostManagerTest, NavigateWithEarlyClose) {
-  TestNotificationTracker notifications;
-
   scoped_refptr<SiteInstance> instance =
       SiteInstance::Create(browser_context());
 
@@ -1598,13 +1610,13 @@ TEST_F(RenderFrameHostManagerTest, NavigateWithEarlyClose) {
   EXPECT_EQ(host2, GetPendingFrameHost(manager));
 
   // 3) Close the tab. -------------------------
-  notifications.ListenFor(
-      NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(host2->render_view_host()->GetWidget()));
+  base::RunLoop run_loop;
+  WidgetDestructionObserver observer(run_loop.QuitClosure());
+  host2->render_view_host()->GetWidget()->AddObserver(&observer);
+
   manager->OnBeforeUnloadACK(true, base::TimeTicks());
 
-  EXPECT_TRUE(
-      notifications.Check1AndReset(NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED));
+  run_loop.Run();
   EXPECT_FALSE(GetPendingFrameHost(manager));
   EXPECT_EQ(host, manager->current_frame_host());
 }

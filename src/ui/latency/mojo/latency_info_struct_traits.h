@@ -5,7 +5,6 @@
 #ifndef UI_LATENCY_MOJO_LATENCY_INFO_STRUCT_TRAITS_H_
 #define UI_LATENCY_MOJO_LATENCY_INFO_STRUCT_TRAITS_H_
 
-#include "mojo/common/common_custom_types_struct_traits.h"
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
 #include "ui/latency/latency_info.h"
 #include "ui/latency/mojo/latency_info.mojom-shared.h"
@@ -101,8 +100,6 @@ struct StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo> {
   static bool began(const ui::LatencyInfo& info);
   static bool terminated(const ui::LatencyInfo& info);
   static ui::mojom::SourceEventType source_event_type(
-      const ui::LatencyInfo& info);
-  static base::TimeDelta expected_queueing_time_on_dispatch(
       const ui::LatencyInfo& info);
   static bool Read(ui::mojom::LatencyInfoDataView data, ui::LatencyInfo* out);
 };

@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -21,12 +20,12 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/isolated_origin_util.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/site_isolation_policy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
@@ -646,11 +645,12 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
   // Blob and filesystem URLs require special treatment, since they embed an
   // inner origin.
   if (url.SchemeIsBlob() || url.SchemeIsFileSystem()) {
-    // These resources may only be requested from processes that could have a
-    // same-origin page already: "Cross-origin requests of Blob URLs must return
-    // a network error." -- https://www.w3.org/TR/FileAPI/#originOfBlobURL . In
-    // practice, these requests should already be blocked by blink.
-    return CanCommitURL(child_id, url);
+    if (IsMalformedBlobUrl(url))
+      return false;
+
+    url::Origin origin = url::Origin::Create(url);
+    return origin.unique() || IsWebSafeScheme(origin.scheme()) ||
+           CanCommitURL(child_id, GURL(origin.Serialize()));
   }
 
   if (IsWebSafeScheme(scheme))
@@ -683,12 +683,12 @@ bool ChildProcessSecurityPolicyImpl::CanRedirectToURL(const GURL& url) {
 
   // Note about redirects and special URLs:
   // * data-url: Blocked by net::DataProtocolHandler::IsSafeRedirectTarget().
+  // * filesystem-url: Blocked by
+  // storage::FilesystemProtocolHandler::IsSafeRedirectTarget().
   // Depending on their inner origins and if the request is browser-initiated or
-  // renderer-initiated, blob-urls and filesystem-urls might get blocked by
-  // CanCommitURL or in DocumentLoader::RedirectReceived.
-  // * blob-url: If not blocked, a 'file not found' response will be
-  //             generated in net::BlobURLRequestJob::DidStart().
-  // * filesystem-url: If not blocked, the response is displayed.
+  // renderer-initiated, blob-urls might get blocked by CanCommitURL or in
+  // DocumentLoader::RedirectReceived. If not blocked, a 'file not found'
+  // response will be generated in net::BlobURLRequestJob::DidStart().
 
   return true;
 }

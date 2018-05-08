@@ -328,6 +328,8 @@ void SyncBackendHostCore::DoInitialize(SyncEngine::InitParams params) {
       params.report_unrecoverable_error_function;
   args.cancelation_signal = &stop_syncing_signal_;
   args.saved_nigori_state = std::move(params.saved_nigori_state);
+  args.short_poll_interval = params.short_poll_interval;
+  args.long_poll_interval = params.long_poll_interval;
   sync_manager_->Init(&args);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "SyncDirectory", base::ThreadTaskRunnerHandle::Get());
@@ -342,6 +344,13 @@ void SyncBackendHostCore::DoUpdateCredentials(
   // thread before this task was executed, so we do nothing.
   if (sync_manager_) {
     sync_manager_->UpdateCredentials(credentials);
+  }
+}
+
+void SyncBackendHostCore::DoInvalidateCredentials() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (sync_manager_) {
+    sync_manager_->InvalidateCredentials();
   }
 }
 
@@ -593,6 +602,12 @@ void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
                &SyncBackendHostImpl::OnCookieJarChangedDoneOnFrontendLoop,
                callback);
   }
+}
+
+bool SyncBackendHostCore::HasUnsyncedItemsForTest() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sync_manager_);
+  return sync_manager_->HasUnsyncedItemsForTest();
 }
 
 void SyncBackendHostCore::ClearServerDataDone(

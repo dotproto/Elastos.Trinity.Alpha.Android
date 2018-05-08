@@ -33,7 +33,6 @@
 #include "ash/shell_init_params.h"
 #include "ash/shell_port_mash.h"
 #include "ash/shell_port_mus.h"
-#include "ash/wayland/wayland_server_controller.h"
 #include "ash/wm/ash_focus_rules.h"
 #include "ash/wm/move_event_handler.h"
 #include "ash/wm/non_client_frame_controller.h"
@@ -42,6 +41,7 @@
 #include "ash/wm/top_level_window_factory.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
+#include "components/exo/file_helper.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/common/accelerator_util.h"
 #include "services/ui/common/types.h"
@@ -138,7 +138,8 @@ WindowManager::~WindowManager() {
 
 void WindowManager::Init(
     std::unique_ptr<aura::WindowTreeClient> window_tree_client,
-    std::unique_ptr<ShellDelegate> shell_delegate) {
+    std::unique_ptr<ShellDelegate> shell_delegate,
+    std::unique_ptr<base::Value> initial_display_prefs) {
   // Only create InputDeviceClient in MASH mode. For MUS mode WindowManager is
   // created by chrome, which creates InputDeviceClient.
   if (config_ == Config::MASH) {
@@ -174,8 +175,10 @@ void WindowManager::Init(
   window_tree_client_->capture_synchronizer()->AttachToCaptureClient(
       capture_client);
 
+  // AshTestHelper may set |shell_delegate_| directly.
   if (shell_delegate)
     shell_delegate_ = std::move(shell_delegate);
+  initial_display_prefs_ = std::move(initial_display_prefs);
 
   InitCursorOnKeyList();
 }
@@ -225,6 +228,7 @@ void WindowManager::CreateShell() {
   init_params.delegate = shell_delegate_
                              ? std::move(shell_delegate_)
                              : std::make_unique<ShellDelegateMus>(connector_);
+  init_params.initial_display_prefs = std::move(initial_display_prefs_);
   Shell::CreateInstance(std::move(init_params));
 }
 
@@ -339,8 +343,10 @@ void WindowManager::OnWmConnected() {
     Shell::GetPrimaryRootWindow()->GetHost()->Show();
 
   // We only create controller in the ash process for mash.
-  if (Shell::GetAshConfig() == Config::MASH)
-    wayland_server_controller_ = WaylandServerController::CreateIfNecessary();
+  if (Shell::GetAshConfig() == Config::MASH) {
+    // TODO(hirono): wire up the file helper. http://crbug.com/768395
+    Shell::Get()->InitWaylandServer(nullptr);
+  }
 }
 
 void WindowManager::OnWmAcceleratedWidgetAvailableForDisplay(
@@ -509,7 +515,7 @@ void WindowManager::OnWmCancelMoveLoop(aura::Window* window) {
 ui::mojom::EventResult WindowManager::OnAccelerator(
     uint32_t id,
     const ui::Event& event,
-    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
+    base::flat_map<std::string, std::vector<uint8_t>>* properties) {
   auto iter = accelerator_handlers_.find(GetAcceleratorNamespaceId(id));
   if (iter == accelerator_handlers_.end())
     return ui::mojom::EventResult::HANDLED;

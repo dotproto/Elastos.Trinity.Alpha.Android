@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "ui/base/models/menu_separator_types.h"
@@ -337,6 +338,11 @@ class VIEWS_EXPORT MenuItemView : public View {
     use_right_margin_ = use_right_margin;
   }
 
+  // Controls whether this menu has a forced visual selection state. This is
+  // used when animating item acceptance on Mac. Note that once this is set
+  // there's no way to unset it for this MenuItemView!
+  void SetForcedVisualSelection(bool selected);
+
  protected:
   // Creates a MenuItemView. This is used by the various AddXXX methods.
   MenuItemView(MenuItemView* parent, int command, Type type);
@@ -423,6 +429,14 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // Calculates and returns the MenuItemDimensions.
   MenuItemDimensions CalculateDimensions() const;
+
+  // Imposes MenuConfig's minimum sizes, if any, on the supplied
+  // dimensions and returns the new dimensions. It is guaranteed that:
+  //    ApplyMinimumDimensions(x).standard_width >= x.standard_width
+  //    ApplyMinimumDimensions(x).children_width == x.children_width
+  //    ApplyMinimumDimensions(x).minor_text_width == x.minor_text_width
+  //    ApplyMinimumDimensions(x).height >= x.height
+  void ApplyMinimumDimensions(MenuItemDimensions* dims) const;
 
   // Get the horizontal position at which to draw the menu item's label.
   int GetLabelStartForThisItem() const;
@@ -555,6 +569,9 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // The submenu indicator arrow icon in case the menu item has a Submenu.
   ImageView* submenu_arrow_image_view_;
+
+  // The forced visual selection state of this item, if any.
+  base::Optional<bool> forced_visual_selection_;
 
   DISALLOW_COPY_AND_ASSIGN(MenuItemView);
 };

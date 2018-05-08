@@ -66,7 +66,8 @@ void TestSessionControllerClient::Reset() {
 
   if (!controller_->GetSigninScreenPrefService()) {
     auto pref_service = std::make_unique<TestingPrefServiceSimple>();
-    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+    Shell::RegisterSigninProfilePrefs(pref_service->registry(),
+                                      true /* for_test */);
     controller_->SetSigninScreenPrefServiceForTest(std::move(pref_service));
   }
 }
@@ -123,13 +124,16 @@ void TestSessionControllerClient::AddUserSession(
     user_manager::UserType user_type,
     bool enable_settings,
     bool provide_pref_service,
-    bool is_new_profile) {
+    bool is_new_profile,
+    const std::string& service_user_id) {
   auto account_id = AccountId::FromUserEmail(GetUserIdFromEmail(display_email));
   mojom::UserSessionPtr session = mojom::UserSession::New();
   session->session_id = ++fake_session_id_;
   session->user_info = mojom::UserInfo::New();
+  session->user_info->avatar = mojom::UserAvatar::New();
   session->user_info->type = user_type;
   session->user_info->account_id = account_id;
+  session->user_info->service_user_id = service_user_id;
   session->user_info->display_name = "Über tray Über tray Über tray Über tray";
   session->user_info->display_email = display_email;
   session->user_info->is_ephemeral = false;
@@ -149,7 +153,8 @@ void TestSessionControllerClient::ProvidePrefServiceForUser(
   DCHECK(!controller_->GetUserPrefServiceForUser(account_id));
 
   auto pref_service = std::make_unique<TestingPrefServiceSimple>();
-  Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+  Shell::RegisterUserProfilePrefs(pref_service->registry(),
+                                  true /* for_test */);
   controller_->ProvideUserPrefServiceForTest(account_id,
                                              std::move(pref_service));
 }

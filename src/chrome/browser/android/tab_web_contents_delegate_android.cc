@@ -26,6 +26,7 @@
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/android/bluetooth_chooser_android.h"
 #include "chrome/browser/ui/android/infobars/framebust_block_infobar.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
@@ -40,6 +41,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/app_modal/javascript_dialog_manager.h"
 #include "components/infobars/core/infobar.h"
+#include "components/security_state/content/content_utils.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -47,11 +49,12 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/common/media_stream_request.h"
 #include "jni/TabWebContentsDelegateAndroid_jni.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -125,9 +128,9 @@ TabWebContentsDelegateAndroid::~TabWebContentsDelegateAndroid() {
 void TabWebContentsDelegateAndroid::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     const FileChooserParams& params) {
-  if (vr::VrTabHelper::IsInVr(
-          WebContents::FromRenderFrameHost(render_frame_host))) {
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kFileChooser);
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          WebContents::FromRenderFrameHost(render_frame_host),
+          vr::UiSuppressedElement::kFileChooser)) {
     return;
   }
   FileSelectHelper::RunFileChooser(render_frame_host, params);
@@ -137,8 +140,9 @@ std::unique_ptr<BluetoothChooser>
 TabWebContentsDelegateAndroid::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
-  if (vr::VrTabHelper::IsInVr(WebContents::FromRenderFrameHost(frame))) {
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kBluetoothChooser);
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          WebContents::FromRenderFrameHost(frame),
+          vr::UiSuppressedElement::kBluetoothChooser)) {
     return nullptr;
   }
   return std::make_unique<BluetoothChooserAndroid>(frame, event_handler);
@@ -273,10 +277,8 @@ void TabWebContentsDelegateAndroid::FindMatchRectsReply(
 content::JavaScriptDialogManager*
 TabWebContentsDelegateAndroid::GetJavaScriptDialogManager(
     WebContents* source) {
-  if (vr::VrTabHelper::IsInVr(source) &&
-      !base::FeatureList::IsEnabled(
-          chrome::android::kVrBrowsingNativeAndroidUi)) {
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kJavascriptDialog);
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          source, vr::UiSuppressedElement::kJavascriptDialog)) {
     return nullptr;
   }
   if (base::FeatureList::IsEnabled(chrome::android::kTabModalJsDialog) ||
@@ -286,16 +288,22 @@ TabWebContentsDelegateAndroid::GetJavaScriptDialogManager(
   return app_modal::JavaScriptDialogManager::GetInstance();
 }
 
+void TabWebContentsDelegateAndroid::AdjustPreviewsStateForNavigation(
+    content::WebContents* web_contents,
+    content::PreviewsState* previews_state) {
+  if (GetDisplayMode(web_contents) != blink::kWebDisplayModeBrowser) {
+    *previews_state = content::PREVIEWS_OFF;
+  }
+}
+
 void TabWebContentsDelegateAndroid::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-  if (vr::VrTabHelper::IsInVr(web_contents) &&
-      !base::FeatureList::IsEnabled(
-          chrome::android::kVrBrowsingNativeAndroidUi)) {
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          web_contents, vr::UiSuppressedElement::kMediaPermission)) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_NOT_SUPPORTED, nullptr);
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kMediaPermission);
     return;
   }
   MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
@@ -358,7 +366,7 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
        params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
        params.disposition == WindowOpenDisposition::NEW_WINDOW) &&
       PopupBlockerTabHelper::MaybeBlockPopup(source, base::Optional<GURL>(),
-                                             nav_params, &params,
+                                             &nav_params, &params,
                                              blink::mojom::WindowFeatures())) {
     return nullptr;
   }
@@ -366,12 +374,12 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
   if (disposition == WindowOpenDisposition::CURRENT_TAB) {
     // Only prerender for a current-tab navigation to avoid session storage
     // namespace issues.
-    nav_params.target_contents = source;
+    prerender::PrerenderManager::Params prerender_params(&nav_params, source);
     prerender::PrerenderManager* prerender_manager =
         prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
-    if (prerender_manager &&
-        prerender_manager->MaybeUsePrerenderedPage(params.url, &nav_params)) {
-      return nav_params.target_contents;
+    if (prerender_manager && prerender_manager->MaybeUsePrerenderedPage(
+                                 params.url, &prerender_params)) {
+      return prerender_params.replaced_contents;
     }
   }
 
@@ -390,7 +398,7 @@ bool TabWebContentsDelegateAndroid::ShouldResumeRequestsForCreatedWindow() {
 
 void TabWebContentsDelegateAndroid::AddNewContents(
     WebContents* source,
-    WebContents* new_contents,
+    std::unique_ptr<WebContents> new_contents,
     WindowOpenDisposition disposition,
     const gfx::Rect& initial_rect,
     bool user_gesture,
@@ -403,9 +411,9 @@ void TabWebContentsDelegateAndroid::AddNewContents(
   // At this point the |new_contents| is beyond the popup blocker, but we use
   // the same logic for determining if the popup tracker needs to be attached.
   if (source && PopupBlockerTabHelper::ConsiderForPopupBlocking(disposition))
-    PopupTracker::CreateForWebContents(new_contents, source);
+    PopupTracker::CreateForWebContents(new_contents.get(), source);
 
-  TabHelpers::AttachTabHelpers(new_contents);
+  TabHelpers::AttachTabHelpers(new_contents.get());
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
@@ -425,8 +433,23 @@ void TabWebContentsDelegateAndroid::AddNewContents(
 
   if (was_blocked)
     *was_blocked = !handled;
-  if (!handled)
-    delete new_contents;
+
+  // When handled is |true|, ownership has been passed to java, which in turn
+  // creates a new TabAndroid instance to own the WebContents.
+  if (handled)
+    new_contents.release();
+}
+
+blink::WebSecurityStyle TabWebContentsDelegateAndroid::GetSecurityStyle(
+    WebContents* web_contents,
+    content::SecurityStyleExplanations* security_style_explanations) {
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(web_contents);
+  DCHECK(helper);
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  return security_state::GetSecurityStyle(security_info,
+                                          security_style_explanations);
 }
 
 void TabWebContentsDelegateAndroid::RequestAppBannerFromDevTools(

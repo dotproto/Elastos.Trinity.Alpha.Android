@@ -32,7 +32,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -465,16 +465,14 @@ class MockSyntheticTapTouchTarget : public MockSyntheticTapGestureTarget {
       case NOT_STARTED:
         EXPECT_EQ(touch_event.GetType(), WebInputEvent::kTouchStart);
         position_ = gfx::PointF(touch_event.touches[0].PositionInWidget());
-        start_time_ = base::TimeDelta::FromMilliseconds(
-            static_cast<int64_t>(touch_event.TimeStampSeconds() * 1000));
+        start_time_ = touch_event.TimeStamp().since_origin();
         state_ = STARTED;
         break;
       case STARTED:
         EXPECT_EQ(touch_event.GetType(), WebInputEvent::kTouchEnd);
         EXPECT_EQ(position_,
                   gfx::PointF(touch_event.touches[0].PositionInWidget()));
-        stop_time_ = base::TimeDelta::FromMilliseconds(
-            static_cast<int64_t>(touch_event.TimeStampSeconds() * 1000));
+        stop_time_ = touch_event.TimeStamp().since_origin();
         state_ = FINISHED;
         break;
       case FINISHED:
@@ -499,8 +497,7 @@ class MockSyntheticTapMouseTarget : public MockSyntheticTapGestureTarget {
         EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::kLeft);
         EXPECT_EQ(mouse_event.click_count, 1);
         position_ = gfx::PointF(mouse_event.PositionInWidget());
-        start_time_ = base::TimeDelta::FromMilliseconds(
-            static_cast<int64_t>(mouse_event.TimeStampSeconds() * 1000));
+        start_time_ = mouse_event.TimeStamp().since_origin();
         state_ = STARTED;
         break;
       case STARTED:
@@ -508,8 +505,7 @@ class MockSyntheticTapMouseTarget : public MockSyntheticTapGestureTarget {
         EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::kLeft);
         EXPECT_EQ(mouse_event.click_count, 1);
         EXPECT_EQ(position_, gfx::PointF(mouse_event.PositionInWidget()));
-        stop_time_ = base::TimeDelta::FromMilliseconds(
-            static_cast<int64_t>(mouse_event.TimeStampSeconds() * 1000));
+        stop_time_ = mouse_event.TimeStamp().since_origin();
         state_ = FINISHED;
         break;
       case FINISHED:

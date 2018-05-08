@@ -9,12 +9,13 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
@@ -188,6 +189,14 @@ bool HeadlessBrowserTest::WaitForLoad(HeadlessWebContents* web_contents) {
   return observer.last_navigation_succeeded();
 }
 
+void HeadlessBrowserTest::WaitForFocus(HeadlessWebContents* web_contents) {
+  HeadlessWebContentsImpl* web_contents_impl =
+      HeadlessWebContentsImpl::From(web_contents);
+  content::FrameFocusedObserver observer(
+      web_contents_impl->web_contents()->GetMainFrame());
+  observer.Wait();
+}
+
 std::unique_ptr<runtime::EvaluateResult> HeadlessBrowserTest::EvaluateScript(
     HeadlessWebContents* web_contents,
     const std::string& script) {
@@ -197,8 +206,7 @@ std::unique_ptr<runtime::EvaluateResult> HeadlessBrowserTest::EvaluateScript(
 }
 
 void HeadlessBrowserTest::RunAsynchronousTest() {
-  base::MessageLoop::ScopedNestableTaskAllower nestable_allower(
-      base::MessageLoop::current());
+  base::MessageLoopCurrent::ScopedNestableTaskAllower nestable_allower;
   EXPECT_FALSE(run_loop_);
   run_loop_ = std::make_unique<base::RunLoop>();
   PreRunAsynchronousTest();
@@ -252,10 +260,13 @@ void HeadlessAsyncDevTooledBrowserTest::RunTest() {
   browser()->SetDefaultBrowserContext(browser_context_);
   browser()->GetDevToolsTarget()->AttachClient(browser_devtools_client_.get());
 
-  web_contents_ = browser_context_->CreateWebContentsBuilder()
-                      .SetAllowTabSockets(GetAllowTabSockets())
-                      .SetEnableBeginFrameControl(GetEnableBeginFrameControl())
-                      .Build();
+  HeadlessWebContents::Builder web_contents_builder =
+      browser_context_->CreateWebContentsBuilder();
+  web_contents_builder.SetAllowTabSockets(GetAllowTabSockets());
+  web_contents_builder.SetEnableBeginFrameControl(GetEnableBeginFrameControl());
+  CustomizeHeadlessWebContents(web_contents_builder);
+  web_contents_ = web_contents_builder.Build();
+
   web_contents_->AddObserver(this);
 
   RunAsynchronousTest();
@@ -284,5 +295,8 @@ bool HeadlessAsyncDevTooledBrowserTest::GetEnableBeginFrameControl() {
 
 void HeadlessAsyncDevTooledBrowserTest::CustomizeHeadlessBrowserContext(
     HeadlessBrowserContext::Builder& builder) {}
+
+void HeadlessAsyncDevTooledBrowserTest::CustomizeHeadlessWebContents(
+    HeadlessWebContents::Builder& builder) {}
 
 }  // namespace headless

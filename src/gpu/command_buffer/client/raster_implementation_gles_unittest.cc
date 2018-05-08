@@ -140,12 +140,11 @@ class RasterMockGLES2Interface : public gles2::GLES2InterfaceStub {
   MOCK_METHOD1(LockDiscardableTextureCHROMIUM, bool(GLuint texture_id));
 
   // OOP-Raster
-  MOCK_METHOD7(BeginRasterCHROMIUM,
+  MOCK_METHOD6(BeginRasterCHROMIUM,
                void(GLuint texture_id,
                     GLuint sk_color,
                     GLuint msaa_sample_count,
                     GLboolean can_use_lcd_text,
-                    GLboolean use_distance_field_text,
                     GLint color_type,
                     GLuint color_space_id));
   MOCK_METHOD2(RasterCHROMIUM, void(GLsizeiptr size, const void* list));
@@ -176,15 +175,18 @@ class ContextSupportStub : public ContextSupport {
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override {
   }
 
-  void Swap() override {}
-  void SwapWithBounds(const std::vector<gfx::Rect>& rects) override {}
-  void PartialSwapBuffers(const gfx::Rect& sub_buffer) override {}
-  void CommitOverlayPlanes() override {}
+  void Swap(uint32_t flags) override {}
+  void SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                      uint32_t flags) override {}
+  void PartialSwapBuffers(const gfx::Rect& sub_buffer,
+                          uint32_t flags) override {}
+  void CommitOverlayPlanes(uint32_t flags) override {}
   void ScheduleOverlayPlane(int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             unsigned overlay_texture_id,
                             const gfx::Rect& display_bounds,
-                            const gfx::RectF& uv_rect) override {}
+                            const gfx::RectF& uv_rect,
+                            bool enable_blend) override {}
   uint64_t ShareGroupTracingGUID() const override { return 0; }
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t)> callback) override {}
@@ -670,7 +672,6 @@ TEST_F(RasterImplementationGLESTest, BeginRasterCHROMIUM) {
   const GLuint sk_color = 0x226688AAu;
   const GLuint msaa_sample_count = 4;
   const GLboolean can_use_lcd_text = GL_TRUE;
-  const GLboolean use_distance_field_text = GL_FALSE;
   const GLint color_type = kRGBA_8888_SkColorType;
   const auto raster_color_space =
       cc::RasterColorSpace(gfx::ColorSpace::CreateSRGB(), 2);
@@ -678,12 +679,10 @@ TEST_F(RasterImplementationGLESTest, BeginRasterCHROMIUM) {
   AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888, texture_id);
 
   EXPECT_CALL(*gl_, BeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
-                                        can_use_lcd_text,
-                                        use_distance_field_text, color_type, 2))
+                                        can_use_lcd_text, color_type, 2))
       .Times(1);
   ri_->BeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
-                           can_use_lcd_text, use_distance_field_text,
-                           color_type, raster_color_space);
+                           can_use_lcd_text, color_type, raster_color_space);
 }
 
 TEST_F(RasterImplementationGLESTest, RasterCHROMIUM) {

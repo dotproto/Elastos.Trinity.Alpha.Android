@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/sha1.h"
 #include "base/stl_util.h"
@@ -97,7 +96,8 @@ const char* const kCrxDownloadUrls[] = {
 #endif
 
 // Whitelisted origins:
-const char kFamiliesUrl[] = "https://families.google.com/";
+const char kFamiliesSecureUrl[] = "https://families.google.com/";
+const char kFamiliesUrl[] = "http://families.google.com/";
 
 // This class encapsulates all the state that is required during construction of
 // a new SupervisedUserURLFilter::Contents.
@@ -368,7 +368,8 @@ SupervisedUserURLFilter::GetFilteringBehaviorForURL(
 
   // Allow navigations to whitelisted origins (currently families.google.com).
   static const base::NoDestructor<base::flat_set<GURL>> kWhitelistedOrigins(
-      base::flat_set<GURL>({GURL(kFamiliesUrl).GetOrigin()}));
+      base::flat_set<GURL>({GURL(kFamiliesUrl).GetOrigin(),
+                            GURL(kFamiliesSecureUrl).GetOrigin()}));
   if (base::ContainsKey(*kWhitelistedOrigins, effective_url.GetOrigin()))
     return ALLOW;
 

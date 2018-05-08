@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,6 +28,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test_utils.h"
+#include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
@@ -233,6 +233,13 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptOtherExtensions) {
   // Then load targeted extension to make sure its content isn't changed.
   ASSERT_TRUE(RunExtensionTest("content_scripts/other_extensions/victim"))
       << message_;
+}
+
+// https://crbug.com/825111 -- content scripts may fetch() a blob URL from their
+// chrome-extension:// origin.
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptBlobFetch) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("content_scripts/blob_fetch")) << message_;
 }
 
 class ContentScriptCssInjectionTest : public ExtensionApiTest {
@@ -633,7 +640,7 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
                                                        false);
   LoadExtension(data_dir.AppendASCII("script_a_com"));
   LoadExtension(data_dir.AppendASCII("background_page_iframe"));
-  iframe_loaded_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(iframe_loaded_listener.WaitUntilSatisfied());
   EXPECT_FALSE(content_script_listener.was_satisfied());
 }
 
@@ -673,6 +680,122 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, CannotScriptTheNewTabPage) {
   ui_test_utils::NavigateToURL(browser(), unprotected_url);
   EXPECT_TRUE(
       did_script_inject(browser()->tab_strip_model()->GetActiveWebContents()));
+}
+
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptSameSiteCookies) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("content_scripts/request_cookies"));
+  ASSERT_TRUE(extension);
+  GURL url = embedded_test_server()->GetURL("a.com", "/extensions/body1.html");
+  ResultCatcher catcher;
+  constexpr char kScript[] =
+      R"(chrome.tabs.create({url: '%s'}, () => {
+           let message = 'success';
+           if (chrome.runtime.lastError)
+             message = chrome.runtime.lastError.message;
+           domAutomationController.send(message);
+         });)";
+  std::string result = browsertest_util::ExecuteScriptInBackgroundPage(
+      profile(), extension->id(),
+      base::StringPrintf(kScript, url.spec().c_str()));
+
+  EXPECT_EQ("success", result);
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ExecuteScriptFileSameSiteCookies) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("content_scripts/request_cookies"));
+  ASSERT_TRUE(extension);
+  GURL url = embedded_test_server()->GetURL("b.com", "/extensions/body1.html");
+  ResultCatcher catcher;
+  constexpr char kScript[] =
+      R"(chrome.tabs.create({url: '%s'}, (tab) => {
+           if (chrome.runtime.lastError) {
+             domAutomationController.send(chrome.runtime.lastError.message);
+             return;
+           }
+           chrome.tabs.executeScript(tab.id, {file: 'cookies.js'}, () => {
+             let message = 'success';
+             if (chrome.runtime.lastError)
+               message = chrome.runtime.lastError.message;
+             domAutomationController.send(message);
+           });
+         });)";
+  std::string result = browsertest_util::ExecuteScriptInBackgroundPage(
+      profile(), extension->id(),
+      base::StringPrintf(kScript, url.spec().c_str()));
+
+  EXPECT_EQ("success", result);
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ExecuteScriptCodeSameSiteCookies) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("content_scripts/request_cookies"));
+  ASSERT_TRUE(extension);
+  GURL url = embedded_test_server()->GetURL("b.com", "/extensions/body1.html");
+  ResultCatcher catcher;
+  constexpr char kScript[] =
+      R"(chrome.tabs.create({url: '%s'}, (tab) => {
+           if (chrome.runtime.lastError) {
+             domAutomationController.send(chrome.runtime.lastError.message);
+             return;
+           }
+           fetch(chrome.runtime.getURL('cookies.js')).then((response) => {
+             return response.text();
+           }).then((text) => {
+             chrome.tabs.executeScript(tab.id, {code: text}, () => {
+               let message = 'success';
+               if (chrome.runtime.lastError)
+                 message = chrome.runtime.lastError.message;
+               domAutomationController.send(message);
+             });
+           }).catch((e) => {
+             domAutomationController.send(e);
+           });
+         });)";
+  std::string result = browsertest_util::ExecuteScriptInBackgroundPage(
+      profile(), extension->id(),
+      base::StringPrintf(kScript, url.spec().c_str()));
+
+  EXPECT_EQ("success", result);
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+}
+
+// Tests that extension content scripts can execute (including asynchronously
+// through timeouts) in pages with Content-Security-Policy: sandbox.
+// See https://crbug.com/811528.
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ExecuteScriptBypassingSandbox) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(
+      R"({
+           "name": "Bypass Sandbox CSP",
+           "description": "Extensions should bypass a page's CSP sandbox.",
+           "version": "0.1",
+           "manifest_version": 2,
+           "content_scripts": [{
+             "matches": ["*://example.com:*/*"],
+             "js": ["script.js"]
+           }]
+         })");
+  test_dir.WriteFile(
+      FILE_PATH_LITERAL("script.js"),
+      R"(window.setTimeout(() => { chrome.test.notifyPass(); }, 10);)");
+
+  ResultCatcher catcher;
+  const Extension* extension = LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  GURL url = embedded_test_server()->GetURL(
+      "example.com", "/extensions/page_with_sandbox_csp.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
 }  // namespace extensions

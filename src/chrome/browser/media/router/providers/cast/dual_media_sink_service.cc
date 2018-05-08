@@ -4,7 +4,9 @@
 
 #include "chrome/browser/media/router/providers/cast/dual_media_sink_service.h"
 
+#include "base/time/default_tick_clock.h"
 #include "chrome/browser/media/router/discovery/dial/dial_media_sink_service.h"
+#include "chrome/browser/media/router/discovery/dial/dial_media_sink_service_impl.h"
 #include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/providers/cast/cast_app_discovery_service.h"
@@ -30,6 +32,10 @@ DualMediaSinkService* DualMediaSinkService::GetInstance() {
 void DualMediaSinkService::SetInstanceForTest(
     DualMediaSinkService* instance_for_test) {
   instance_for_test_ = instance_for_test;
+}
+
+DialMediaSinkServiceImpl* DualMediaSinkService::GetDialMediaSinkServiceImpl() {
+  return dial_media_sink_service_->impl();
 }
 
 DualMediaSinkService::Subscription
@@ -61,7 +67,8 @@ DualMediaSinkService::DualMediaSinkService() {
       cast_channel::CastSocketService* cast_socket_service =
           cast_channel::CastSocketService::GetInstance();
       cast_app_discovery_service_ = std::make_unique<CastAppDiscoveryService>(
-          GetCastMessageHandler(), cast_socket_service);
+          GetCastMessageHandler(), cast_socket_service,
+          base::DefaultTickClock::GetInstance());
     }
 
     cast_media_sink_service_ = std::make_unique<CastMediaSinkService>();

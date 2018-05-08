@@ -59,8 +59,8 @@ void DeviceManagerManual::RemoveObserver(DeviceEventObserver* observer) {
 
 void DeviceManagerManual::StartWatching() {
   if (!watcher_.Watch(base::FilePath(kDevInput), false,
-                      base::Bind(&DeviceManagerManual::OnWatcherEvent,
-                                 weak_ptr_factory_.GetWeakPtr()))) {
+                      base::BindRepeating(&DeviceManagerManual::OnWatcherEvent,
+                                          weak_ptr_factory_.GetWeakPtr()))) {
     LOG(ERROR) << "Failed to start FilePathWatcher";
   }
 }
@@ -70,9 +70,9 @@ void DeviceManagerManual::InitiateScanDevices() {
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&ScanDevicesOnWorkerThread, result),
-      base::Bind(&DeviceManagerManual::OnDevicesScanned,
-                 weak_ptr_factory_.GetWeakPtr(), base::Owned(result)));
+      base::BindOnce(&ScanDevicesOnWorkerThread, result),
+      base::BindOnce(&DeviceManagerManual::OnDevicesScanned,
+                     weak_ptr_factory_.GetWeakPtr(), base::Owned(result)));
 }
 
 void DeviceManagerManual::OnDevicesScanned(

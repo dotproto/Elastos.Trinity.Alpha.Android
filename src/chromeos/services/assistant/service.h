@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
+#include "chromeos/services/assistant/public/mojom/settings.mojom.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -32,6 +33,7 @@ namespace chromeos {
 namespace assistant {
 
 class AssistantManagerService;
+class AssistantSettingsManager;
 
 class Service : public service_manager::Service,
                 public ash::mojom::SessionActivationObserver,
@@ -63,6 +65,10 @@ class Service : public service_manager::Service,
 
   // ash::mojom::SessionActivationObserver overrides:
   void OnSessionActivated(bool activated) override;
+  void OnLockStateChanged(bool locked) override;
+
+  void BindAssistantSettingsManager(
+      mojom::AssistantSettingsManagerRequest request);
 
   void RequestAccessToken();
 
@@ -78,6 +84,10 @@ class Service : public service_manager::Service,
 
   void AddAshSessionObserver();
 
+  void UpdateListeningState();
+
+  void FinalizeAssistantManangerService();
+
   service_manager::BinderRegistry registry_;
 
   mojo::BindingSet<mojom::Assistant> bindings_;
@@ -90,7 +100,16 @@ class Service : public service_manager::Service,
 
   AccountId account_id_;
   std::unique_ptr<AssistantManagerService> assistant_manager_service_;
+  AssistantSettingsManager* assistant_settings_manager_;
   std::unique_ptr<base::OneShotTimer> token_refresh_timer_;
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+
+  // Whether the current user session is active.
+  bool session_active_ = false;
+  // Whether the lock screen is on.
+  bool locked_ = false;
+
+  base::WeakPtrFactory<Service> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Service);
 };

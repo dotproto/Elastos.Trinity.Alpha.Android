@@ -91,21 +91,25 @@ enum NotificationType {
   // A RenderViewHost was created for a WebContents. The source is the
   // associated WebContents, and the details is the RenderViewHost
   // pointer.
+  // DEPRECATED: Use WebContentsObserver::RenderViewCreated()
   NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
 
   // Indicates that a RenderProcessHost was created and its handle is now
   // available. The source will be the RenderProcessHost that corresponds to
   // the process.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessReady()
   NOTIFICATION_RENDERER_PROCESS_CREATED,
 
   // Indicates that a RenderProcessHost is destructing. The source will be the
   // RenderProcessHost that corresponds to the process.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessHostDestroyed()
   NOTIFICATION_RENDERER_PROCESS_TERMINATED,
 
   // Indicates that a render process was closed (meaning it exited, but the
   // RenderProcessHost might be reused).  The source will be the corresponding
-  // RenderProcessHost.  The details will be a RendererClosedDetails struct.
-  // This may get sent along with RENDERER_PROCESS_TERMINATED.
+  // RenderProcessHost.  The details will be a ChildProcessTerminationInfo
+  // struct. This may get sent along with RENDERER_PROCESS_TERMINATED.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessExited()
   NOTIFICATION_RENDERER_PROCESS_CLOSED,
 
   // Indicates that a RenderWidgetHost has become unresponsive for a period of
@@ -115,6 +119,7 @@ enum NotificationType {
 
   // This is sent when a RenderWidgetHost is being destroyed. The source is
   // the RenderWidgetHost, the details are not used.
+  // DEPRECATED: Use RenderWidgetHostObserver::RenderWidgetHostDestroyed()
   NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
 
   // Sent after the backing store has been updated but before the widget has
@@ -124,6 +129,9 @@ enum NotificationType {
   // Indicates a RenderWidgetHost has been hidden or restored. The source is
   // the RWH whose visibility changed, the details is a bool set to true if
   // the new state is "visible."
+  //
+  // DEPRECATED:
+  // Use RenderWidgetHostObserver::RenderWidgetHostVisibilityChanged()
   NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
 
   // The focused element inside a page has changed.  The source is the

@@ -13,12 +13,12 @@
 namespace media {
 namespace {
 
-class UserInputMonitorMac : public UserInputMonitor {
+class UserInputMonitorMac : public UserInputMonitorBase {
  public:
   UserInputMonitorMac();
   ~UserInputMonitorMac() override;
 
-  size_t GetKeyPressCount() const override;
+  uint32_t GetKeyPressCount() const override;
 
  private:
   void StartKeyboardMonitoring() override;
@@ -31,7 +31,7 @@ UserInputMonitorMac::UserInputMonitorMac() {}
 
 UserInputMonitorMac::~UserInputMonitorMac() {}
 
-size_t UserInputMonitorMac::GetKeyPressCount() const {
+uint32_t UserInputMonitorMac::GetKeyPressCount() const {
   // Use |kCGEventSourceStateHIDSystemState| since we only want to count
   // hardware generated events.
   return CGEventSourceCounterForEventType(kCGEventSourceStateHIDSystemState,
@@ -45,8 +45,8 @@ void UserInputMonitorMac::StopKeyboardMonitoring() {}
 }  // namespace
 
 std::unique_ptr<UserInputMonitor> UserInputMonitor::Create(
-    const scoped_refptr<base::SingleThreadTaskRunner>& input_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
   return std::make_unique<UserInputMonitorMac>();
 }
 

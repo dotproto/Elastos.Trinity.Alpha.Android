@@ -84,12 +84,14 @@
                                      inBackground:NO];
 
   // Tell the delegate to display the tab.
+  DCHECK(self.delegate);
   [self.delegate tabSwitcher:self shouldFinishWithActiveModel:targetModel];
 
   return tab;
 }
 
 - (void)setOtrTabModel:(TabModel*)otrModel {
+  DCHECK(self.incognitoMediator);
   self.incognitoMediator.tabModel = otrModel;
 }
 

@@ -9,7 +9,6 @@
 #include <linux/input.h>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -38,6 +37,7 @@ EventReaderLibevdevCros::EventReaderLibevdevCros(
                           id,
                           devinfo.device_type(),
                           devinfo.name(),
+                          devinfo.phys(),
                           devinfo.vendor_id(),
                           devinfo.product_id()),
       has_keyboard_(devinfo.HasKeyboard()),

@@ -4,7 +4,6 @@
 
 #include "extensions/renderer/storage_area.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "extensions/common/api/storage.h"
 #include "extensions/renderer/bindings/api_binding_util.h"
@@ -22,6 +21,7 @@ namespace extensions {
 namespace {
 
 #define DEFINE_STORAGE_AREA_HANDLERS()                            \
+  const char* GetTypeName() override { return "StorageArea"; }    \
   void Get(gin::Arguments* arguments) {                           \
     storage_area_.HandleFunctionCall("get", arguments);           \
   }                                                               \

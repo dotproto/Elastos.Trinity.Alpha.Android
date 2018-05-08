@@ -6,6 +6,7 @@
 
 #include "ash/message_center/message_center_style.h"
 #include "ash/message_center/message_center_view.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -30,10 +31,13 @@ namespace ash {
 namespace {
 const int kAnimateClearingNextNotificationDelayMS = 40;
 
+bool HasBorderPadding() {
+  return !switches::IsSidebarEnabled() &&
+         !features::IsSystemTrayUnifiedEnabled();
+}
+
 int GetMarginBetweenItems() {
-  return switches::IsSidebarEnabled()
-             ? 0
-             : message_center::kMarginBetweenItemsInList;
+  return HasBorderPadding() ? message_center::kMarginBetweenItemsInList : 0;
 }
 
 }  // namespace
@@ -43,6 +47,7 @@ MessageListView::MessageListView()
       fixed_height_(0),
       has_deferred_task_(false),
       clear_all_started_(false),
+      use_fixed_height_(true),
       animator_(this),
       weak_ptr_factory_(this) {
   auto layout = std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical,
@@ -50,7 +55,7 @@ MessageListView::MessageListView()
   layout->SetDefaultFlex(1);
   SetLayoutManager(std::move(layout));
 
-  if (!switches::IsSidebarEnabled()) {
+  if (HasBorderPadding()) {
     SetBorder(views::CreateEmptyBorder(
         gfx::Insets(message_center::kMarginBetweenItemsInList)));
   }
@@ -203,7 +208,7 @@ gfx::Size MessageListView::CalculatePreferredSize() const {
 }
 
 int MessageListView::GetHeightForWidth(int width) const {
-  if (fixed_height_ > 0)
+  if (use_fixed_height_ && fixed_height_ > 0)
     return fixed_height_;
 
   width -= GetInsets().width();

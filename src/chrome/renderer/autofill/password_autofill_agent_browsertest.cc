@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "chrome/renderer/autofill/fake_content_password_manager_driver.h"
 #include "chrome/renderer/autofill/fake_password_manager_client.h"
 #include "chrome/renderer/autofill/password_generation_test_utils.h"
@@ -31,17 +32,17 @@
 #include "content/public/test/browser_test_utils.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 using autofill::FormTracker;
@@ -793,6 +794,36 @@ TEST_F(PasswordAutofillAgentTest,
                                               UTF16ToUTF8(password3_), true);
 }
 
+// Fill username and password fields when username field contains a prefilled
+// value that matches the list of known possible prefilled values usually used
+// as placeholders.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_AutocompleteForPrefilledUsernameValue \
+  DISABLED_AutocompleteForPrefilledUsernameValue
+#else
+#define MAYBE_AutocompleteForPrefilledUsernameValue \
+  AutocompleteForPrefilledUsernameValue
+#endif
+TEST_F(PasswordAutofillAgentTest, MAYBE_AutocompleteForPrefilledUsernameValue) {
+  // Set the username element to a value from the prefilled values list.
+  // Comparison should be insensitive to leading and trailing whitespaces.
+  username_element_.SetValue(
+      WebString::FromUTF16(base::UTF8ToUTF16(" User Name ")));
+
+  // Simulate the browser sending back the login info, it triggers the
+  // autocomplete.
+  SimulateOnFillPasswordForm(fill_data_);
+
+  // The username and password should both have suggested values.
+  CheckTextFieldsSuggestedState(kAliceUsername, true, kAlicePassword, true);
+
+  // Simulate a user click so that the password field's real value is filled.
+  SimulateElementClick(kUsernameName);
+
+  // The username and password should have been autocompleted.
+  CheckTextFieldsDOMState(kAliceUsername, true, kAlicePassword, true);
+}
+
 // Fill a password field if the stored username is a prefix of username in
 // read-only field.
 TEST_F(PasswordAutofillAgentTest,
@@ -864,8 +895,9 @@ TEST_F(PasswordAutofillAgentTest, NoAutocompleteForFilledFieldUnmatched) {
                                               false);
 }
 
-// Don't try to complete a prefilled value even if it's a partial match
-// to a username.
+// Don't try to complete a prefilled value that is a partial match
+// to a username if the prefilled value isn't on the list of known values
+// used as placeholders.
 TEST_F(PasswordAutofillAgentTest, NoPartialMatchForPrefilledUsername) {
   username_element_.SetValue(WebString::FromUTF8("ali"));
 
@@ -1148,8 +1180,13 @@ TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_Redirection) {
 }
 
 // Tests that a password will only be filled as a suggested and will not be
-// accessible by the DOM until a user gesture has occurred.
-TEST_F(PasswordAutofillAgentTest, GestureRequiredTest) {
+// accessible by the DOM until a user gesture has occurred. Leaks under ASan.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_GestureRequiredTest DISABLED_GestureRequiredTest
+#else
+#define MAYBE_GestureRequiredTest GestureRequiredTest
+#endif
+TEST_F(PasswordAutofillAgentTest, MAYBE_GestureRequiredTest) {
   // Trigger the initial autocomplete.
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -1176,9 +1213,16 @@ TEST_F(PasswordAutofillAgentTest, NoDOMActivationTest) {
 }
 
 // Verifies that password autofill triggers events in JavaScript for forms that
-// are filled on page load.
+// are filled on page load. Leaks under ASan.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_PasswordAutofillTriggersOnChangeEventsOnLoad \
+  DISABLED_PasswordAutofillTriggersOnChangeEventsOnLoad
+#else
+#define MAYBE_PasswordAutofillTriggersOnChangeEventsOnLoad \
+  PasswordAutofillTriggersOnChangeEventsOnLoad
+#endif
 TEST_F(PasswordAutofillAgentTest,
-       PasswordAutofillTriggersOnChangeEventsOnLoad) {
+       MAYBE_PasswordAutofillTriggersOnChangeEventsOnLoad) {
   std::vector<base::string16> username_event_checkers;
   std::vector<base::string16> password_event_checkers;
   std::string events_registration_script =
@@ -2999,9 +3043,17 @@ TEST_F(PasswordAutofillAgentTest,
 }
 
 // Tests that password manager sees both autofill assisted and user entered
-// data on saving that is triggered by form submission.
+// data on saving that is triggered by form submission. Leaks under ASan.
+// Disabled on Win due to https://crbug.com/835865.
+#if defined(ADDRESS_SANITIZER) || defined(OS_WIN)
+#define MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted \
+  DISABLED_UsernameChangedAfterPasswordInput_FormSubmitted
+#else
+#define MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted \
+  UsernameChangedAfterPasswordInput_FormSubmitted
+#endif
 TEST_F(PasswordAutofillAgentTest,
-       UsernameChangedAfterPasswordInput_FormSubmitted) {
+       MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted) {
   for (auto change_source :
        {FieldChangeSource::USER, FieldChangeSource::AUTOFILL,
         FieldChangeSource::USER_AUTOFILL}) {
@@ -3018,8 +3070,14 @@ TEST_F(PasswordAutofillAgentTest,
 }
 
 // Tests that a suggestion dropdown is shown on a password field even if a
-// username field is present.
-TEST_F(PasswordAutofillAgentTest, SuggestPasswordFieldSignInForm) {
+// username field is present. Leaks under ASan.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_SuggestPasswordFieldSignInForm \
+  DISABLED_SuggestPasswordFieldSignInForm
+#else
+#define MAYBE_SuggestPasswordFieldSignInForm SuggestPasswordFieldSignInForm
+#endif
+TEST_F(PasswordAutofillAgentTest, MAYBE_SuggestPasswordFieldSignInForm) {
   // Simulate the browser sending back the login info.
   SimulateOnFillPasswordForm(fill_data_);
 

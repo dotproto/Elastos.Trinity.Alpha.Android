@@ -136,6 +136,21 @@ const MojoDeadline MOJO_DEADLINE_INDEFINITE = static_cast<MojoDeadline>(-1);
 #define MOJO_DEADLINE_INDEFINITE ((MojoDeadline)-1)
 #endif
 
+// Flags passed to |MojoInitialize()| via |MojoInitializeOptions|.
+typedef uint32_t MojoInitializeFlags;
+
+// No flags.
+#define MOJO_INITIALIZE_FLAG_NONE ((MojoInitializeFlags)0)
+
+// Options passed to |MojoInitialize()|.
+struct MOJO_ALIGNAS(8) MojoInitializeOptions {
+  // The size of this structure, used for versioning.
+  uint32_t struct_size;
+
+  // See |MojoInitializeFlags|.
+  MojoInitializeFlags flags;
+};
+
 // |MojoHandleSignals|: Used to specify signals that can be watched for on a
 // handle (and which can be triggered), e.g., the ability to read or write to
 // the handle.
@@ -190,20 +205,6 @@ struct MOJO_ALIGNAS(4) MojoHandleSignalsState {
 };
 MOJO_STATIC_ASSERT(sizeof(MojoHandleSignalsState) == 8,
                    "MojoHandleSignalsState has wrong size");
-
-// |MojoPropertyType|: Property types that can be passed to |MojoGetProperty()|
-// to retrieve system properties. May take the following values:
-//   |MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED| - Whether making synchronous calls
-//       (i.e., blocking to wait for a response to an outbound message) is
-//       allowed. The property value is of boolean type. If the value is true,
-//       users should refrain from making sync calls.
-typedef uint32_t MojoPropertyType;
-
-#ifdef __cplusplus
-const MojoPropertyType MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED = 0;
-#else
-#define MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED ((MojoPropertyType)0)
-#endif
 
 // TODO(https://crbug.com/819046): Remove these aliases.
 #define MOJO_WATCH_CONDITION_SATISFIED MOJO_TRIGGER_CONDITION_SIGNALS_SATISFIED

@@ -10,8 +10,8 @@
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/secure_message_delegate.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace cryptauth {
 
@@ -105,9 +105,9 @@ void RemoteDeviceLoader::OnPSKDerived(
                << ", " << remaining_devices_.size() << " keys remaining.";
 
   cryptauth::RemoteDevice remote_device(
-      user_id_, device.friendly_device_name(), device.public_key(),
-      device.bluetooth_address(), psk, device.unlock_key(),
-      device.mobile_hotspot_supported(), device.last_update_time_millis());
+      user_id_, device.friendly_device_name(), device.public_key(), psk,
+      device.unlock_key(), device.mobile_hotspot_supported(),
+      device.last_update_time_millis());
 
   if (should_load_beacon_seeds_) {
     std::vector<BeaconSeed> beacon_seeds;

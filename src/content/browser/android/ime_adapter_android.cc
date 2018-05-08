@@ -19,14 +19,13 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/common/frame_messages.h"
-#include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ImeAdapterImpl_jni.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebTextInputType.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_text_input_type.h"
 #include "ui/base/ime/ime_text_span.h"
 
 using base::android::AttachCurrentThread;
@@ -54,10 +53,10 @@ NativeWebKeyboardEvent NativeWebKeyboardEventFromKeyEvent(
     int scan_code,
     bool is_system_key,
     int unicode_char) {
-  return NativeWebKeyboardEvent(env, java_key_event,
-                                static_cast<blink::WebInputEvent::Type>(type),
-                                modifiers, time_ms / 1000.0, key_code,
-                                scan_code, unicode_char, is_system_key);
+  return NativeWebKeyboardEvent(
+      env, java_key_event, static_cast<blink::WebInputEvent::Type>(type),
+      modifiers, base::TimeTicks() + base::TimeDelta::FromMilliseconds(time_ms),
+      key_code, scan_code, unicode_char, is_system_key);
 }
 
 }  // anonymous namespace
@@ -85,12 +84,11 @@ void JNI_ImeAdapterImpl_AppendBackgroundColorSpan(JNIEnv*,
   // Do not check |background_color|.
   std::vector<ui::ImeTextSpan>* ime_text_spans =
       reinterpret_cast<std::vector<ui::ImeTextSpan>*>(ime_text_spans_ptr);
-  ime_text_spans->push_back(
-      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition,
-                      static_cast<unsigned>(start), static_cast<unsigned>(end),
-                      SK_ColorTRANSPARENT, ui::ImeTextSpan::Thickness::kNone,
-                      static_cast<unsigned>(background_color),
-                      SK_ColorTRANSPARENT, std::vector<std::string>()));
+  ime_text_spans->push_back(ui::ImeTextSpan(
+      ui::ImeTextSpan::Type::kComposition, static_cast<unsigned>(start),
+      static_cast<unsigned>(end), ui::ImeTextSpan::Thickness::kNone,
+      static_cast<unsigned>(background_color), SK_ColorTRANSPARENT,
+      std::vector<std::string>()));
 }
 
 // Callback from Java to convert SuggestionSpan data to a
@@ -116,11 +114,12 @@ void JNI_ImeAdapterImpl_AppendSuggestionSpan(
       reinterpret_cast<std::vector<ui::ImeTextSpan>*>(ime_text_spans_ptr);
   std::vector<std::string> suggestions_vec;
   AppendJavaStringArrayToStringVector(env, suggestions, &suggestions_vec);
-  ime_text_spans->push_back(ui::ImeTextSpan(
+  ui::ImeTextSpan ime_text_span = ui::ImeTextSpan(
       type, static_cast<unsigned>(start), static_cast<unsigned>(end),
-      static_cast<unsigned>(underline_color),
       ui::ImeTextSpan::Thickness::kThick, SK_ColorTRANSPARENT,
-      static_cast<unsigned>(suggestion_highlight_color), suggestions_vec));
+      static_cast<unsigned>(suggestion_highlight_color), suggestions_vec);
+  ime_text_span.underline_color = static_cast<unsigned>(underline_color);
+  ime_text_spans->push_back(ime_text_span);
 }
 
 // Callback from Java to convert UnderlineSpan data to a
@@ -136,9 +135,8 @@ void JNI_ImeAdapterImpl_AppendUnderlineSpan(JNIEnv*,
       reinterpret_cast<std::vector<ui::ImeTextSpan>*>(ime_text_spans_ptr);
   ime_text_spans->push_back(ui::ImeTextSpan(
       ui::ImeTextSpan::Type::kComposition, static_cast<unsigned>(start),
-      static_cast<unsigned>(end), SK_ColorBLACK,
-      ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT,
-      SK_ColorTRANSPARENT, std::vector<std::string>()));
+      static_cast<unsigned>(end), ui::ImeTextSpan::Thickness::kThin,
+      SK_ColorTRANSPARENT, SK_ColorTRANSPARENT, std::vector<std::string>()));
 }
 
 ImeAdapterAndroid::ImeAdapterAndroid(JNIEnv* env,
@@ -193,6 +191,14 @@ void ImeAdapterAndroid::UpdateAfterViewSizeChanged() {
   if (obj.is_null())
     return;
   Java_ImeAdapterImpl_updateAfterViewSizeChanged(env, obj);
+}
+
+void ImeAdapterAndroid::UpdateOnTouchDown() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ime_adapter_.get(env);
+  if (obj.is_null())
+    return;
+  Java_ImeAdapterImpl_updateOnTouchDown(env, obj);
 }
 
 void ImeAdapterAndroid::UpdateFrameInfo(
@@ -258,10 +264,10 @@ void ImeAdapterAndroid::SetComposingText(JNIEnv* env,
 
   // Default to plain underline if we didn't find any span that we care about.
   if (ime_text_spans.empty()) {
-    ime_text_spans.push_back(ui::ImeTextSpan(
-        ui::ImeTextSpan::Type::kComposition, 0, text16.length(), SK_ColorBLACK,
-        ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT,
-        SK_ColorTRANSPARENT, std::vector<std::string>()));
+    ime_text_spans.push_back(
+        ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, text16.length(),
+                        ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT,
+                        SK_ColorTRANSPARENT, std::vector<std::string>()));
   }
 
   // relative_cursor_pos is as described in the Android API for
@@ -382,10 +388,10 @@ void ImeAdapterAndroid::SetComposingRegion(JNIEnv*,
     return;
 
   std::vector<ui::ImeTextSpan> ime_text_spans;
-  ime_text_spans.push_back(ui::ImeTextSpan(
-      ui::ImeTextSpan::Type::kComposition, 0, end - start, SK_ColorBLACK,
-      ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT,
-      SK_ColorTRANSPARENT, std::vector<std::string>()));
+  ime_text_spans.push_back(
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, end - start,
+                      ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT,
+                      SK_ColorTRANSPARENT, std::vector<std::string>()));
 
   rfh->GetFrameInputHandler()->SetCompositionFromExistingText(start, end,
                                                               ime_text_spans);

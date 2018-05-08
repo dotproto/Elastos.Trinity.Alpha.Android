@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -40,6 +39,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/cookie_config/cookie_store_util.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
@@ -68,7 +68,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_server_properties_manager.h"
-#include "net/net_features.h"
+#include "net/net_buildflags.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
@@ -193,6 +193,21 @@ void ProfileImplIOData::Handle::Init(
           g_browser_process->io_thread()->net_log(), profile_->GetPrefs(),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
+
+#if defined(OS_CHROMEOS)
+  // Set a task runner for the get network id call in DataReductionProxyConfig
+  // to work around the bug that recv() in AddressTrackerLinux blocks IO thread
+  // and freezes the screen. Using SingleThreadTaskRunner so that task scheduler
+  // does not create too many worker threads when https://crbug.com/821607
+  // happens.
+  // TODO(https://crbug.com/821607): Remove after the bug is resolved.
+  io_data_->data_reduction_proxy_io_data()
+      ->config()
+      ->set_get_network_id_task_runner(
+          base::CreateSingleThreadTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+               base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
+#endif
 }
 
 content::ResourceContext*
@@ -435,9 +450,6 @@ void ProfileImplIOData::InitializeInternal(
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
 
-  builder->set_network_quality_estimator(
-      io_thread_globals->network_quality_estimator.get());
-
   // This check is needed because with the network service the cookies are used
   // in a different process. See the bottom of
   // ProfileNetworkContextService::SetUpProfileIODataMainContext.
@@ -588,13 +600,20 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
     channel_id_db = new net::SQLiteChannelIDStore(
         channel_id_path, cookie_background_task_runner);
   }
-  std::unique_ptr<net::ChannelIDService> channel_id_service(
-      new net::ChannelIDService(
-          new net::DefaultChannelIDStore(channel_id_db.get())));
-  cookie_config.channel_id_service = channel_id_service.get();
+  std::unique_ptr<net::ChannelIDService> channel_id_service;
+
+  // If |main_context| has Channel ID disabled, do not enable it for the App's
+  // context.
+  if (main_context->channel_id_service()) {
+    channel_id_service.reset(new net::ChannelIDService(
+        new net::DefaultChannelIDStore(channel_id_db.get())));
+    cookie_config.channel_id_service = channel_id_service.get();
+  }
   cookie_config.background_task_runner = cookie_background_task_runner;
   cookie_store = content::CreateCookieStore(cookie_config);
-  cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
+  if (channel_id_service) {
+    cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
+  }
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
   // TODO(mmenke):  It's weird to combine state from

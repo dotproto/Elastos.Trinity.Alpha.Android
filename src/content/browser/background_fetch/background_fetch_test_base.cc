@@ -15,7 +15,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -95,8 +94,9 @@ int64_t BackgroundFetchTestBase::RegisterServiceWorker() {
     base::RunLoop run_loop;
     embedded_worker_test_helper_.context()->RegisterServiceWorker(
         script_url, options,
-        base::Bind(&DidRegisterServiceWorker, &service_worker_registration_id,
-                   run_loop.QuitClosure()));
+        base::BindOnce(&DidRegisterServiceWorker,
+                       &service_worker_registration_id,
+                       run_loop.QuitClosure()));
 
     run_loop.Run();
   }

@@ -145,7 +145,8 @@ UIColor* IncognitoSecureTextColor() {
 
 // When editing, forward the message on to |editView_|.
 - (BOOL)textFieldShouldClear:(UITextField*)textField {
-  editView_->OnClear();
+  DCHECK(IsRefreshLocationBarEnabled());
+  editView_->ClearText();
   processingUserEvent_ = YES;
   return YES;
 }
@@ -407,8 +408,10 @@ void OmniboxViewIOS::OnDidBeginEditing() {
   [field_ setText:[field_ text]];
   OnBeforePossibleChange();
   // In the case where the user taps the fakebox on the Google landing page,
-  // the focus source is already set to FAKEBOX. Otherwise, set it to OMNIBOX.
-  if (model()->focus_source() != OmniboxEditModel::FocusSource::FAKEBOX) {
+  // or from the secondary toolbar search button, the focus source is already
+  // set to FAKEBOX or SEARCH_BUTTON respectively. Otherwise, set it to OMNIBOX.
+  if (model()->focus_source() != OmniboxEditModel::FocusSource::FAKEBOX &&
+      model()->focus_source() != OmniboxEditModel::FocusSource::SEARCH_BUTTON) {
     model()->set_focus_source(OmniboxEditModel::FocusSource::OMNIBOX);
   }
 
@@ -675,6 +678,10 @@ UIColor* OmniboxViewIOS::GetSecureTextColor(
 }
 
 void OmniboxViewIOS::SetEmphasis(bool emphasize, const gfx::Range& range) {
+  if (IsRefreshLocationBarEnabled()) {
+    return;
+  }
+
   NSRange ns_range = range.IsValid()
                          ? range.ToNSRange()
                          : NSMakeRange(0, [attributing_display_string_ length]);
@@ -686,6 +693,10 @@ void OmniboxViewIOS::SetEmphasis(bool emphasize, const gfx::Range& range) {
 }
 
 void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
+  if (IsRefreshLocationBarEnabled()) {
+    return;
+  }
+
   if (!range.IsValid())
     return;
 
@@ -771,6 +782,11 @@ void OmniboxViewIOS::UpdateAppearance() {
 }
 
 void OmniboxViewIOS::CreateClearTextIcon(bool is_incognito) {
+  if (IsRefreshLocationBarEnabled()) {
+    // In UI Refresh, the system clear button is used.
+    return;
+  }
+
   UIButton* button = [UIButton buttonWithType:UIButtonTypeCustom];
   UIImage* omniBoxClearImage = is_incognito
                                    ? NativeImage(IDR_IOS_OMNIBOX_CLEAR_OTR)
@@ -797,6 +813,10 @@ void OmniboxViewIOS::CreateClearTextIcon(bool is_incognito) {
 }
 
 void OmniboxViewIOS::UpdateRightDecorations() {
+  if (IsRefreshLocationBarEnabled()) {
+    return;
+  }
+
   DCHECK(clear_text_button_);
   if (!model()->has_focus()) {
     // Do nothing for iPhone. The right view will be set to nil after the

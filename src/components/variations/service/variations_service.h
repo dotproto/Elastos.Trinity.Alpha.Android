@@ -171,6 +171,8 @@ class VariationsService
                         std::unique_ptr<base::FeatureList> feature_list,
                         variations::PlatformFieldTrials* platform_field_trials);
 
+  int request_count() const { return request_count_; }
+
  protected:
   // Starts the fetching process once, where |OnURLFetchComplete| is called with
   // the response. This calls DoFetchToURL with the set url.
@@ -244,6 +246,8 @@ class VariationsService
     LOAD_COUNTRY_HAS_BOTH_VERSION_NEQ_COUNTRY_NEQ,
     LOAD_COUNTRY_MAX,
   };
+
+  void InitResourceRequestedAllowedNotifier();
 
   // Attempts a seed fetch from the set |url|. Returns true if the fetch was
   // started successfully, false otherwise. |is_http_retry| should be true if

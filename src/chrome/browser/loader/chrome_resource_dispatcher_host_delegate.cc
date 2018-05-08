@@ -26,7 +26,6 @@
 #include "chrome/browser/loader/chrome_navigation_data.h"
 #include "chrome/browser/loader/predictor_resource_throttle.h"
 #include "chrome/browser/loader/safe_browsing_resource_throttle.h"
-#include "chrome/browser/mod_pagespeed/mod_pagespeed_metrics.h"
 #include "chrome/browser/net/loading_predictor_observer.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
@@ -537,17 +536,10 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 #endif  // defined(OS_ANDROID)
 
 #if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
-  if (!first_throttle && io_data->safe_browsing_enabled()->GetValue()) {
-    bool url_loader_throttle_used =
-        base::FeatureList::IsEnabled(
-            safe_browsing::kCheckByURLLoaderThrottle) &&
-        (!content::IsResourceTypeFrame(resource_type) ||
-         content::IsNavigationMojoResponseEnabled());
-
-    if (!url_loader_throttle_used) {
-      first_throttle = MaybeCreateSafeBrowsingResourceThrottle(
-          request, resource_type, safe_browsing_.get(), io_data);
-    }
+  if (!first_throttle && io_data->safe_browsing_enabled()->GetValue() &&
+      !base::FeatureList::IsEnabled(safe_browsing::kCheckByURLLoaderThrottle)) {
+    first_throttle = MaybeCreateSafeBrowsingResourceThrottle(
+        request, resource_type, safe_browsing_.get(), io_data);
   }
 #endif  // defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
 
@@ -646,7 +638,7 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   GURL webstore_url(extension_urls::GetWebstoreLaunchURL());
   if (request->url().SchemeIsHTTPOrHTTPS() &&
-      request->url().DomainIs(webstore_url.host().c_str())) {
+      request->url().DomainIs(webstore_url.host_piece())) {
     net::HttpResponseHeaders* response_headers = request->response_headers();
     if (response_headers &&
         !response_headers->HasHeaderValue("x-frame-options", "deny") &&
@@ -702,9 +694,6 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
       LogCommittedPreviewsDecision(io_data, request->url(), previews_user_data);
     }
   }
-
-  mod_pagespeed::RecordMetrics(info->GetResourceType(), request->url(),
-                               request->response_headers());
 }
 
 void ChromeResourceDispatcherHostDelegate::OnRequestRedirected(

@@ -68,6 +68,7 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/switches.h"
 #include "net/url_request/url_request_file_job.h"
 
 #if defined(OS_CHROMEOS)

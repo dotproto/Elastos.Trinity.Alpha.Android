@@ -207,20 +207,19 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
      * @param swUri            The URI to get the app's service worker js script.
      * @param scope            The scope of the service worker that should be registered.
      * @param useCache         Whether to use cache when registering the service worker.
-     * @param methodNames      Supported method names of the app.
+     * @param method           Supported method name of the app.
      */
     public static void installAndInvokePaymentApp(WebContents webContents, String origin,
             String iframeOrigin, String paymentRequestId, Set<PaymentMethodData> methodData,
             PaymentItem total, Set<PaymentDetailsModifier> modifiers,
             PaymentInstrument.InstrumentDetailsCallback callback, String appName,
-            @Nullable Bitmap icon, URI swUri, URI scope, boolean useCache,
-            Set<String> methodNames) {
+            @Nullable Bitmap icon, URI swUri, URI scope, boolean useCache, String method) {
         ThreadUtils.assertOnUiThread();
 
         nativeInstallAndInvokePaymentApp(webContents, origin, iframeOrigin, paymentRequestId,
                 methodData.toArray(new PaymentMethodData[0]), total,
                 modifiers.toArray(new PaymentDetailsModifier[0]), callback, appName, icon,
-                swUri.toString(), scope.toString(), useCache, methodNames.toArray(new String[0]));
+                swUri.toString(), scope.toString(), useCache, method);
     }
 
     /**
@@ -235,6 +234,10 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         ThreadUtils.assertOnUiThread();
 
         nativeAbortPaymentApp(webContents, registrationId, callback);
+    }
+
+    public static void onClosingPaymentAppWindow(WebContents webContents) {
+        nativeOnClosingPaymentAppWindow(webContents);
     }
 
     @CalledByNative
@@ -303,8 +306,9 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     @CalledByNative
     private static void onPaymentAppCreated(long registrationId, String scope,
             @Nullable String name, @Nullable String userHint, String origin, @Nullable Bitmap icon,
-            String[] methodNameArray, Object[] capabilities, String[] preferredRelatedApplications,
-            WebContents webContents, PaymentAppFactory.PaymentAppCreatedCallback callback) {
+            String[] methodNameArray, boolean explicitlyVerified, Object[] capabilities,
+            String[] preferredRelatedApplications, WebContents webContents,
+            PaymentAppFactory.PaymentAppCreatedCallback callback) {
         ThreadUtils.assertOnUiThread();
 
         Context context = ChromeActivity.fromWebContents(webContents);
@@ -317,7 +321,8 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         callback.onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents, registrationId,
                 scopeUri, name, userHint, origin,
                 icon == null ? null : new BitmapDrawable(context.getResources(), icon),
-                methodNameArray, (ServiceWorkerPaymentApp.Capabilities[]) capabilities,
+                methodNameArray, explicitlyVerified,
+                (ServiceWorkerPaymentApp.Capabilities[]) capabilities,
                 preferredRelatedApplications));
     }
 
@@ -427,8 +432,7 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
             String topLevelOrigin, String paymentRequestOrigin, String paymentRequestId,
             PaymentMethodData[] methodData, PaymentItem total, PaymentDetailsModifier[] modifiers,
             PaymentInstrument.InstrumentDetailsCallback callback, String appName,
-            @Nullable Bitmap icon, String swUrl, String scope, boolean useCache,
-            String[] methodNames);
+            @Nullable Bitmap icon, String swUrl, String scope, boolean useCache, String method);
 
     private static native void nativeAbortPaymentApp(
             WebContents webContents, long registrationId, PaymentInstrument.AbortCallback callback);
@@ -436,4 +440,6 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     private static native void nativeCanMakePayment(WebContents webContents, long registrationId,
             String topLevelOrigin, String paymentRequestOrigin, PaymentMethodData[] methodData,
             PaymentDetailsModifier[] modifiers, CanMakePaymentCallback callback);
+
+    private static native void nativeOnClosingPaymentAppWindow(WebContents webContents);
 }

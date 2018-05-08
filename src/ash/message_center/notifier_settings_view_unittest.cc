@@ -38,7 +38,8 @@ class TestAshMessageCenterClient : public mojom::AshMessageCenterClient {
   }
 
   // mojom::AshMessageCenterClient:
-  void HandleNotificationClosed(const std::string& id, bool by_user) override {}
+  void HandleNotificationClosed(const base::UnguessableToken& token,
+                                bool by_user) override {}
   void HandleNotificationClicked(const std::string& id) override {}
   void HandleNotificationButtonClicked(
       const std::string& id,
@@ -65,6 +66,11 @@ class TestAshMessageCenterClient : public mojom::AshMessageCenterClient {
     }
 
     std::move(callback).Run(std::move(ui_data));
+  }
+  void GetArcAppIdByPackageName(
+      const std::string& package_name,
+      GetArcAppIdByPackageNameCallback callback) override {
+    std::move(callback).Run(std::string());
   }
 
  private:

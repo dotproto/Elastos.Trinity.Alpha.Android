@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
@@ -22,6 +23,27 @@
 #include "ui/views/views_delegate.h"
 
 namespace views {
+
+namespace {
+
+// A testing stub that creates web contents.
+WebView::WebContentsCreator* GetCreatorForTesting() {
+  static base::NoDestructor<WebView::WebContentsCreator> creator;
+  return creator.get();
+}
+
+}  // namespace
+
+WebView::ScopedWebContentsCreatorForTesting::ScopedWebContentsCreatorForTesting(
+    WebContentsCreator creator) {
+  DCHECK(!*GetCreatorForTesting());
+  *GetCreatorForTesting() = creator;
+}
+
+WebView::ScopedWebContentsCreatorForTesting::
+    ~ScopedWebContentsCreatorForTesting() {
+  *GetCreatorForTesting() = WebView::WebContentsCreator();
+}
 
 // static
 const char WebView::kViewClassName[] = "WebView";
@@ -44,7 +66,7 @@ WebView::~WebView() {
 
 content::WebContents* WebView::GetWebContents() {
   if (!web_contents()) {
-    wc_owner_.reset(CreateWebContents(browser_context_));
+    wc_owner_ = CreateWebContents(browser_context_);
     wc_owner_->SetDelegate(this);
     SetWebContents(wc_owner_.get());
   }
@@ -147,6 +169,10 @@ void WebView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
     // Reset the native view size.
     holder_->SetNativeViewSize(gfx::Size());
     holder_->SetBoundsRect(holder_bounds);
+    if (is_letterboxing_) {
+      is_letterboxing_ = false;
+      OnLetterboxingChanged();
+    }
     return;
   }
 
@@ -165,6 +191,10 @@ void WebView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
         static_cast<int>(x / capture_size.height()), holder_bounds.height()));
   }
 
+  if (!is_letterboxing_) {
+    is_letterboxing_ = true;
+    OnLetterboxingChanged();
+  }
   holder_->SetNativeViewSize(capture_size);
   holder_->SetBoundsRect(holder_bounds);
 }
@@ -347,9 +377,15 @@ void WebView::ReattachForFullscreenChange(bool enter_fullscreen) {
 }
 
 void WebView::UpdateCrashedOverlayView() {
-  if (web_contents() && web_contents()->IsCrashed() && crashed_overlay_view_) {
+  // TODO(dmazzoni): Fix WebContents::IsCrashed() so we can call that
+  // instead of checking termination status codes.
+  if (web_contents() &&
+      web_contents()->GetCrashedStatus() !=
+          base::TERMINATION_STATUS_NORMAL_TERMINATION &&
+      web_contents()->GetCrashedStatus() !=
+          base::TERMINATION_STATUS_STILL_RUNNING &&
+      crashed_overlay_view_) {
     SetFocusBehavior(FocusBehavior::NEVER);
-    holder_->SetVisible(false);
     crashed_overlay_view_->SetVisible(true);
     return;
   }
@@ -359,7 +395,6 @@ void WebView::UpdateCrashedOverlayView() {
 
   if (crashed_overlay_view_)
     crashed_overlay_view_->SetVisible(false);
-  holder_->SetVisible(true);
 }
 
 void WebView::NotifyAccessibilityWebContentsChanged() {
@@ -367,12 +402,11 @@ void WebView::NotifyAccessibilityWebContentsChanged() {
     NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
 }
 
-content::WebContents* WebView::CreateWebContents(
-      content::BrowserContext* browser_context) {
-  content::WebContents* contents = NULL;
-  if (ViewsDelegate::GetInstance()) {
-    contents =
-        ViewsDelegate::GetInstance()->CreateWebContents(browser_context, NULL);
+std::unique_ptr<content::WebContents> WebView::CreateWebContents(
+    content::BrowserContext* browser_context) {
+  std::unique_ptr<content::WebContents> contents;
+  if (*GetCreatorForTesting()) {
+    contents = GetCreatorForTesting()->Run(browser_context);
   }
 
   if (!contents) {

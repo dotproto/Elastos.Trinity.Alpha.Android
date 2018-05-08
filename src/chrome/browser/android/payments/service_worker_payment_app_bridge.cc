@@ -21,7 +21,7 @@
 #include "content/public/browser/payment_app_provider.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ServiceWorkerPaymentAppBridge_jni.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
 #include "ui/gfx/android/java_bitmap.h"
 
 namespace {
@@ -97,7 +97,7 @@ void OnGotAllPaymentApps(
             ? nullptr
             : gfx::ConvertToJavaBitmap(app_info.second->icon.get()),
         ToJavaArrayOfStrings(env, app_info.second->enabled_methods),
-        jcapabilities,
+        app_info.second->has_explicitly_verified_methods, jcapabilities,
         ToJavaArrayOfStrings(env, preferred_related_application_ids),
         jweb_contents, jcallback);
   }
@@ -467,7 +467,7 @@ static void JNI_ServiceWorkerPaymentAppBridge_InstallAndInvokePaymentApp(
     const JavaParamRef<jstring>& jsw_js_url,
     const JavaParamRef<jstring>& jsw_scope,
     jboolean juse_cache,
-    const JavaParamRef<jobjectArray>& jmethod_names) {
+    const JavaParamRef<jstring>& jmethod) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(jweb_contents);
 
@@ -476,9 +476,6 @@ static void JNI_ServiceWorkerPaymentAppBridge_InstallAndInvokePaymentApp(
     icon_bitmap = gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(jicon));
   }
 
-  std::vector<std::string> enabled_methods;
-  base::android::AppendJavaStringArrayToStringVector(env, jmethod_names,
-                                                     &enabled_methods);
   content::PaymentAppProvider::GetInstance()->InstallAndInvokePaymentApp(
       web_contents,
       ConvertPaymentRequestEventDataFromJavaToNative(
@@ -486,7 +483,8 @@ static void JNI_ServiceWorkerPaymentAppBridge_InstallAndInvokePaymentApp(
           jmethod_data, jtotal, jmodifiers),
       ConvertJavaStringToUTF8(env, japp_name), icon_bitmap,
       ConvertJavaStringToUTF8(env, jsw_js_url),
-      ConvertJavaStringToUTF8(env, jsw_scope), juse_cache, enabled_methods,
+      ConvertJavaStringToUTF8(env, jsw_scope), juse_cache,
+      ConvertJavaStringToUTF8(env, jmethod),
       base::BindOnce(&OnPaymentAppInvoked,
                      ScopedJavaGlobalRef<jobject>(env, jweb_contents),
                      ScopedJavaGlobalRef<jobject>(env, jcallback)));
@@ -506,4 +504,15 @@ static void JNI_ServiceWorkerPaymentAppBridge_AbortPaymentApp(
       base::BindOnce(&OnPaymentAppAborted,
                      ScopedJavaGlobalRef<jobject>(env, jweb_contents),
                      ScopedJavaGlobalRef<jobject>(env, jcallback)));
+}
+
+static void JNI_ServiceWorkerPaymentAppBridge_OnClosingPaymentAppWindow(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    const JavaParamRef<jobject>& jweb_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents);
+
+  content::PaymentAppProvider::GetInstance()->OnClosingOpenedWindow(
+      web_contents->GetBrowserContext());
 }

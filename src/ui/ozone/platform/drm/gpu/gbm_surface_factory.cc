@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "third_party/khronos/EGL/egl.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -145,12 +144,6 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage) {
-#if !defined(OS_CHROMEOS)
-  // Support for memory mapping accelerated buffers requires some
-  // CrOS-specific patches (using dma-buf mmap API).
-  DCHECK(gfx::BufferUsage::SCANOUT == usage);
-#endif
-
   scoped_refptr<GbmBuffer> buffer =
       drm_thread_proxy_->CreateBuffer(widget, size, format, usage);
   if (!buffer.get())

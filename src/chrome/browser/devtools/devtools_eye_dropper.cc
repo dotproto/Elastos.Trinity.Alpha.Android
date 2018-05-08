@@ -16,8 +16,8 @@
 #include "content/public/common/cursor_info.h"
 #include "content/public/common/screen_info.h"
 #include "media/base/limits.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -65,9 +65,8 @@ void DevToolsEyeDropper::AttachToHost(content::RenderWidgetHost* host) {
   // Create and configure the video capturer.
   video_capturer_ = host_->GetView()->CreateVideoCapturer();
   video_capturer_->SetResolutionConstraints(
-      gfx::Size(1, 1),
-      gfx::Size(media::limits::kMaxDimension, media::limits::kMaxDimension),
-      false);
+      host_->GetView()->GetViewBounds().size(),
+      host_->GetView()->GetViewBounds().size(), true);
   video_capturer_->SetAutoThrottlingEnabled(false);
   video_capturer_->SetMinSizeChangePeriod(base::TimeDelta());
   video_capturer_->SetFormat(media::PIXEL_FORMAT_ARGB,
@@ -317,6 +316,13 @@ void DevToolsEyeDropper::OnFrameCaptured(
     const gfx::Rect& update_rect,
     const gfx::Rect& content_rect,
     viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {
+  gfx::Size view_size = host_->GetView()->GetViewBounds().size();
+  if (view_size != content_rect.size()) {
+    video_capturer_->SetResolutionConstraints(view_size, view_size, true);
+    video_capturer_->RequestRefreshFrame();
+    return;
+  }
+
   if (!buffer.is_valid()) {
     callbacks->Done();
     return;

@@ -508,7 +508,7 @@ void ContextState::RestoreVertexAttribArrays(
   }
 }
 
-void ContextState::RestoreVertexAttribs() const {
+void ContextState::RestoreVertexAttribs(const ContextState* prev_state) const {
   // Restore Vertex Attrib Arrays
   DCHECK(vertex_attrib_manager.get());
   // Restore VAOs.
@@ -526,6 +526,14 @@ void ContextState::RestoreVertexAttribs() const {
     if (curr_vao_service_id != 0)
       api()->glBindVertexArrayOESFn(curr_vao_service_id);
   } else {
+    if (prev_state &&
+        prev_state->feature_info_->feature_flags().native_vertex_array_object &&
+        feature_info_->workarounds()
+            .use_client_side_arrays_for_stream_buffers) {
+      // In order to use client side arrays, the driver's default VAO has to be
+      // bound.
+      api()->glBindVertexArrayOESFn(0);
+    }
     // If native VAO isn't supported, emulated VAOs are used.
     // Restore to the currently bound VAO.
     RestoreVertexAttribArrays(vertex_attrib_manager);
@@ -542,7 +550,7 @@ void ContextState::RestoreGlobalState(const ContextState* prev_state) const {
 
 void ContextState::RestoreState(const ContextState* prev_state) {
   RestoreAllTextureUnitAndSamplerBindings(prev_state);
-  RestoreVertexAttribs();
+  RestoreVertexAttribs(prev_state);
   // RestoreIndexedUniformBufferBindings must be called before
   // RestoreBufferBindings. This is because setting the indexed uniform buffer
   // bindings via glBindBuffer{Base,Range} also sets the general uniform buffer
@@ -712,46 +720,69 @@ void ContextState::SetBoundBuffer(GLenum target, Buffer* buffer) {
 void ContextState::RemoveBoundBuffer(Buffer* buffer) {
   DCHECK(buffer);
   bool do_refcounting = feature_info_->IsWebGL2OrES3Context();
-  vertex_attrib_manager->Unbind(buffer);
   if (bound_array_buffer.get() == buffer) {
     bound_array_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_ARRAY_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_ARRAY_BUFFER, 0);
   }
+  // Needs to be called after bound_array_buffer handled.
+  vertex_attrib_manager->Unbind(buffer, bound_array_buffer.get());
   if (bound_copy_read_buffer.get() == buffer) {
     bound_copy_read_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_COPY_READ_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_COPY_READ_BUFFER, 0);
   }
   if (bound_copy_write_buffer.get() == buffer) {
     bound_copy_write_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_COPY_WRITE_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_COPY_WRITE_BUFFER, 0);
   }
   if (bound_pixel_pack_buffer.get() == buffer) {
     bound_pixel_pack_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_PIXEL_PACK_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_PIXEL_PACK_BUFFER, 0);
     UpdatePackParameters();
   }
   if (bound_pixel_unpack_buffer.get() == buffer) {
     bound_pixel_unpack_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_PIXEL_UNPACK_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_PIXEL_UNPACK_BUFFER, 0);
     UpdateUnpackParameters();
   }
   if (bound_transform_feedback_buffer.get() == buffer) {
     bound_transform_feedback_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_TRANSFORM_FEEDBACK_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_TRANSFORM_FEEDBACK_BUFFER, 0);
   }
+  // Needs to be called after bound_transform_feedback_buffer handled.
   if (bound_transform_feedback.get()) {
-    bound_transform_feedback->RemoveBoundBuffer(buffer);
+    bound_transform_feedback->RemoveBoundBuffer(
+        GL_TRANSFORM_FEEDBACK_BUFFER, buffer,
+        bound_transform_feedback_buffer.get(), !context_lost_);
   }
   if (bound_uniform_buffer.get() == buffer) {
     bound_uniform_buffer = nullptr;
-    if (do_refcounting && buffer)
+    if (do_refcounting)
       buffer->OnUnbind(GL_UNIFORM_BUFFER);
+    if (!context_lost_)
+      api()->glBindBufferFn(GL_UNIFORM_BUFFER, 0);
+  }
+  // Needs to be called after bound_uniform_buffer handled.
+  if (indexed_uniform_buffer_bindings) {
+    indexed_uniform_buffer_bindings->RemoveBoundBuffer(
+        GL_UNIFORM_BUFFER, buffer, bound_uniform_buffer.get(), !context_lost_);
   }
 }
 

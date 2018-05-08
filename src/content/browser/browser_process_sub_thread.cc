@@ -5,6 +5,7 @@
 #include "content/browser/browser_process_sub_thread.h"
 
 #include "base/compiler_specific.h"
+#include "base/debug/alias.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "content/browser/browser_child_process_host_impl.h"
@@ -124,8 +125,6 @@ void BrowserProcessSubThread::CleanUp() {
 #if defined(OS_WIN)
   com_initializer_.reset();
 #endif
-
-  browser_thread_.reset();
 }
 
 void BrowserProcessSubThread::CompleteInitializationOnBrowserThread() {
@@ -145,16 +144,16 @@ void BrowserProcessSubThread::CompleteInitializationOnBrowserThread() {
 MSVC_DISABLE_OPTIMIZE()
 MSVC_PUSH_DISABLE_WARNING(4748)
 
-void BrowserProcessSubThread::UIThreadRun(base::RunLoop* run_loop) {
-  volatile int line_number = __LINE__;
+NOINLINE void BrowserProcessSubThread::UIThreadRun(base::RunLoop* run_loop) {
+  const int line_number = __LINE__;
   Thread::Run(run_loop);
-  CHECK_GT(line_number, 0);
+  base::debug::Alias(&line_number);
 }
 
-void BrowserProcessSubThread::IOThreadRun(base::RunLoop* run_loop) {
-  volatile int line_number = __LINE__;
+NOINLINE void BrowserProcessSubThread::IOThreadRun(base::RunLoop* run_loop) {
+  const int line_number = __LINE__;
   Thread::Run(run_loop);
-  CHECK_GT(line_number, 0);
+  base::debug::Alias(&line_number);
 }
 
 MSVC_POP_WARNING()

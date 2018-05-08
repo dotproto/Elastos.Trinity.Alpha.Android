@@ -37,12 +37,14 @@ class Repositioner : public UiElement {
   // different if this has happened).
   bool HasMovedBeyondThreshold() const { return has_moved_beyond_threshold_; }
 
+  bool ShouldUpdateWorldSpaceTransform(
+      bool parent_transform_changed) const override;
+
  private:
   gfx::Transform LocalTransform() const override;
   gfx::Transform GetTargetLocalTransform() const override;
   void UpdateTransform(const gfx::Transform& head_pose);
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override;
+  bool OnBeginFrame(const gfx::Transform& head_pose) override;
 #ifndef NDEBUG
   void DumpGeometry(std::ostringstream* os) const override;
 #endif

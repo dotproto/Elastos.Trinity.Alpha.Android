@@ -251,7 +251,38 @@ void DownloadItemNotification::Close(bool by_user) {
   }
 }
 
-void DownloadItemNotification::Click() {
+void DownloadItemNotification::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
+  if (button_index) {
+    if (*button_index < 0 ||
+        static_cast<size_t>(*button_index) >= button_actions_->size()) {
+      // Out of boundary.
+      NOTREACHED();
+      return;
+    }
+
+    DownloadCommands::Command command = button_actions_->at(*button_index);
+    RecordButtonClickAction(command);
+
+    DownloadCommands(item_).ExecuteCommand(command);
+
+    // ExecuteCommand() might cause |item_| to be destroyed.
+    if (item_ && command != DownloadCommands::PAUSE &&
+        command != DownloadCommands::RESUME) {
+      CloseNotification();
+    }
+
+    // Shows the notification again after clicking "Keep" on dangerous download.
+    if (command == DownloadCommands::KEEP) {
+      show_next_ = true;
+      Update();
+    }
+
+    return;
+  }
+
+  // Handle a click on the notification's body.
   if (item_->IsDangerous()) {
     base::RecordAction(
         UserMetricsAction("DownloadNotification.Click_Dangerous"));
@@ -286,32 +317,6 @@ void DownloadItemNotification::Click() {
   }
 }
 
-void DownloadItemNotification::ButtonClick(int button_index) {
-  if (button_index < 0 ||
-      static_cast<size_t>(button_index) >= button_actions_->size()) {
-    // Out of boundary.
-    NOTREACHED();
-    return;
-  }
-
-  DownloadCommands::Command command = button_actions_->at(button_index);
-  RecordButtonClickAction(command);
-
-  DownloadCommands(item_).ExecuteCommand(command);
-
-  // ExecuteCommand() might cause |item_| to be destroyed.
-  if (item_ && command != DownloadCommands::PAUSE &&
-      command != DownloadCommands::RESUME) {
-    CloseNotification();
-  }
-
-  // Shows the notification again after clicking "Keep" on dangerous download.
-  if (command == DownloadCommands::KEEP) {
-    show_next_ = true;
-    Update();
-  }
-}
-
 std::string DownloadItemNotification::GetNotificationId() const {
   return item_->GetGuid();
 }
@@ -328,15 +333,14 @@ void DownloadItemNotification::Update() {
   auto download_state = item_->GetState();
 
   // When the download is just completed, interrupted or transitions to
-  // dangerous, increase the priority over its previous value to make sure it
-  // pops up again.
-  bool popup =
+  // dangerous, make sure it pops up again.
+  bool pop_up =
       ((item_->IsDangerous() && !previous_dangerous_state_) ||
        (download_state == download::DownloadItem::COMPLETE &&
         previous_download_state_ != download::DownloadItem::COMPLETE) ||
        (download_state == download::DownloadItem::INTERRUPTED &&
         previous_download_state_ != download::DownloadItem::INTERRUPTED));
-  UpdateNotificationData(!closed_ || show_next_ || popup, popup);
+  UpdateNotificationData(!closed_ || show_next_ || pop_up, pop_up);
 
   show_next_ = false;
   previous_download_state_ = item_->GetState();
@@ -344,7 +348,7 @@ void DownloadItemNotification::Update() {
 }
 
 void DownloadItemNotification::UpdateNotificationData(bool display,
-                                                      bool bump_priority) {
+                                                      bool force_pop_up) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (item_->GetState() == download::DownloadItem::CANCELLED) {
@@ -422,12 +426,10 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
   }
   notification_->set_buttons(notification_actions);
 
+  notification_->set_renotify(force_pop_up);
+
   if (display) {
     closed_ = false;
-    if (bump_priority &&
-        notification_->priority() < message_center::HIGH_PRIORITY) {
-      notification_->set_priority(notification_->priority() + 1);
-    }
     NotificationDisplayServiceFactory::GetForProfile(profile())->Display(
         NotificationHandler::Type::TRANSIENT, *notification_);
   }

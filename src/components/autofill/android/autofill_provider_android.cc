@@ -9,7 +9,6 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "base/memory/ptr_util.h"
 #include "components/autofill/android/form_data_android.h"
 #include "components/autofill/core/browser/autofill_handler_proxy.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -158,26 +157,27 @@ void AutofillProviderAndroid::FireSuccessfulSubmission(
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
+
   Java_AutofillProvider_onFormSubmitted(env, obj, (int)source);
   Reset();
 }
 
-bool AutofillProviderAndroid::OnFormSubmitted(AutofillHandlerProxy* handler,
+void AutofillProviderAndroid::OnFormSubmitted(AutofillHandlerProxy* handler,
                                               const FormData& form,
                                               bool known_success,
                                               SubmissionSource source,
                                               base::TimeTicks timestamp) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!IsCurrentlyLinkedHandler(handler) || !IsCurrentlyLinkedForm(form))
-    return false;
+    return;
 
   if (known_success || source == SubmissionSource::FORM_SUBMISSION) {
     FireSuccessfulSubmission(source);
-  } else {
-    check_submission_ = true;
-    pending_submission_source_ = source;
+    return;
   }
-  return true;
+
+  check_submission_ = true;
+  pending_submission_source_ = source;
 }
 
 void AutofillProviderAndroid::OnFocusNoLongerOnForm(
@@ -314,40 +314,6 @@ void AutofillProviderAndroid::Reset() {
   form_.reset(nullptr);
   id_ = kNoQueryId;
   check_submission_ = false;
-}
-
-void AutofillProviderAndroid::FireSelectControlDidChangeForTesting(
-    JNIEnv* env,
-    jobject jcaller,
-    jint index,
-    jstring id,
-    jobjectArray options,
-    jint selected_option) {
-  FormData form_data;
-  FormFieldData form_field_data;
-  AutofillHandlerProxy* handler = nullptr;
-  if (form_.get() == nullptr) {
-    // Build a fake form
-    for (int i = 0; i < index; i++)
-      form_data.fields.push_back(FormFieldData());
-
-    base::android::AppendJavaStringArrayToStringVector(
-        env, options, &(form_field_data.option_values));
-    form_field_data.option_contents = form_field_data.option_values;
-    form_field_data.id = base::android::ConvertJavaStringToUTF16(env, id);
-    form_data.fields.push_back(form_field_data);
-    handler = handler_for_testing_.get();
-  } else {
-    form_data = form_->form_for_testing();
-    form_field_data = form_data.fields[index];
-    handler = handler_.get();
-  }
-  DCHECK(form_field_data.option_values.size() != 0);
-  DCHECK(!handler);
-  form_field_data.value = base::android::ConvertJavaStringToUTF16(
-      env, static_cast<jstring>(
-               env->GetObjectArrayElement(options, selected_option)));
-  OnSelectControlDidChange(handler, form_data, form_field_data, gfx::RectF());
 }
 
 }  // namespace autofill

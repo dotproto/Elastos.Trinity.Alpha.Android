@@ -5,6 +5,8 @@
 #include "ash/session/session_controller.h"
 
 #include <algorithm>
+#include <memory>
+#include <string>
 #include <utility>
 
 #include "ash/public/interfaces/pref_connector.mojom.h"
@@ -344,10 +346,9 @@ void SessionController::SetUserSessionOrder(
       observer.OnActiveUserSessionChanged(
           user_sessions_[0]->user_info->account_id);
     }
-    if (it != per_user_prefs_.end()) {
-      for (auto& observer : observers_)
-        observer.OnActiveUserPrefServiceChanged(last_active_user_prefs_);
-    }
+
+    if (it != per_user_prefs_.end())
+      MaybeNotifyOnActiveUserPrefServiceChanged();
 
     UpdateLoginStatus();
   }
@@ -438,6 +439,8 @@ void SessionController::ShowMultiprofilesSessionAbortedDialog(
 void SessionController::AddSessionActivationObserverForAccountId(
     const AccountId& account_id,
     mojom::SessionActivationObserverPtr observer) {
+  bool locked = state_ == SessionState::LOCKED;
+  observer->OnLockStateChanged(locked);
   observer->OnSessionActivated(user_sessions_.size() &&
                                user_sessions_[0]->user_info->account_id ==
                                    account_id);
@@ -490,12 +493,12 @@ void SessionController::SetSessionState(SessionState state) {
 
     for (auto& observer : observers_)
       observer.OnLockStateChanged(locked);
+
+    session_activation_observer_holder_.NotifyLockStateChanged(locked);
   }
 
-  // Signin profile prefs are needed at OOBE and login screen, but don't request
-  // them twice.
-  if (!signin_screen_prefs_requested_ &&
-      (state_ == SessionState::OOBE || state_ == SessionState::LOGIN_PRIMARY)) {
+  // Request signin profile prefs only once.
+  if (!signin_screen_prefs_requested_) {
     ConnectToSigninScreenPrefService();
     signin_screen_prefs_requested_ = true;
   }
@@ -511,7 +514,7 @@ void SessionController::AddUserSession(mojom::UserSessionPtr user_session) {
 
   if (connector_) {
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
-    Shell::RegisterProfilePrefs(pref_registry.get());
+    Shell::RegisterUserProfilePrefs(pref_registry.get());
     ash::mojom::PrefConnectorPtr pref_connector_connector;
     connector_->BindInterface(mojom::kPrefConnectorServiceName,
                               &pref_connector_connector);
@@ -611,7 +614,7 @@ void SessionController::ConnectToSigninScreenPrefService() {
 
   // Connect to the PrefService for the signin profile.
   auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
-  Shell::RegisterProfilePrefs(pref_registry.get());
+  Shell::RegisterSigninProfilePrefs(pref_registry.get());
   ash::mojom::PrefConnectorPtr pref_connector_connector;
   connector_->BindInterface(mojom::kPrefConnectorServiceName,
                             &pref_connector_connector);
@@ -633,11 +636,18 @@ void SessionController::OnSigninScreenPrefServiceInitialized(
   DCHECK(!signin_screen_prefs_);
   signin_screen_prefs_ = std::move(pref_service);
 
-  // The signin profile should be initialized before any user profile.
-  DCHECK(!last_active_user_prefs_);
-
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnSigninScreenPrefServiceInitialized(signin_screen_prefs_.get());
+  }
+
+  if (on_active_user_prefs_changed_notify_deferred_) {
+    // Notify obsevers with the deferred OnActiveUserPrefServiceChanged(). Do
+    // this in a separate loop from the above since observers might depend on
+    // each other and we want to avoid having inconsistent states.
+    for (auto& observer : observers_)
+      observer.OnActiveUserPrefServiceChanged(last_active_user_prefs_);
+    on_active_user_prefs_changed_notify_deferred_ = false;
+  }
 }
 
 void SessionController::OnProfilePrefServiceInitialized(
@@ -654,9 +664,24 @@ void SessionController::OnProfilePrefServiceInitialized(
   DCHECK(!user_sessions_.empty());
   if (account_id == user_sessions_[0]->user_info->account_id) {
     last_active_user_prefs_ = pref_service_ptr;
-    for (auto& observer : observers_)
-      observer.OnActiveUserPrefServiceChanged(pref_service_ptr);
+
+    MaybeNotifyOnActiveUserPrefServiceChanged();
   }
+}
+
+void SessionController::MaybeNotifyOnActiveUserPrefServiceChanged() {
+  DCHECK(last_active_user_prefs_);
+
+  if (!signin_screen_prefs_) {
+    // We must guarantee that OnSigninScreenPrefServiceInitialized() is called
+    // before OnActiveUserPrefServiceChanged(), so defer notifying the
+    // observers until the sign in prefs are received.
+    on_active_user_prefs_changed_notify_deferred_ = true;
+    return;
+  }
+
+  for (auto& observer : observers_)
+    observer.OnActiveUserPrefServiceChanged(last_active_user_prefs_);
 }
 
 }  // namespace ash

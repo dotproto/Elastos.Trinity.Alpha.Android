@@ -7,6 +7,7 @@
 #include <map>
 
 #include "base/bind.h"
+#include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
@@ -66,7 +67,7 @@ void ReadData(scoped_refptr<network::ResourceResponse> headers,
 
   network::mojom::URLLoaderClientPtr client;
   client.Bind(std::move(client_info));
-  client->OnReceiveResponse(headers->head, base::nullopt, nullptr);
+  client->OnReceiveResponse(headers->head, nullptr);
 
   base::StringPiece input(reinterpret_cast<const char*>(bytes->front()),
                           bytes->size());
@@ -257,6 +258,11 @@ class WebUIURLLoaderFactory : public network::mojom::URLLoaderFactory,
     if (!allowed_hosts_.empty() &&
         (!request.url.has_host() ||
          allowed_hosts_.find(request.url.host()) == allowed_hosts_.end())) {
+      // Temporary reporting the bad WebUI host for for http://crbug.com/837328.
+      static auto* crash_key = base::debug::AllocateCrashKeyString(
+          "webui_url", base::debug::CrashKeySize::Size64);
+      base::debug::SetCrashKeyString(crash_key, request.url.spec());
+
       DVLOG(1) << "Bad host: \"" << request.url.host() << '"';
       ReceivedBadMessage(render_frame_host_->GetProcess(),
                          bad_message::WEBUI_BAD_HOST_ACCESS);
@@ -332,10 +338,6 @@ std::unique_ptr<network::mojom::URLLoaderFactory> CreateWebUIURLLoader(
     RenderFrameHost* render_frame_host,
     const std::string& scheme,
     base::flat_set<std::string> allowed_hosts) {
-  // At present we have no use-case for a need to allow all hosts if
-  // constructing via this method. If this changes remove the DCHECK below and
-  // WebUIURLLoaderFactory will not filter.
-  DCHECK(!allowed_hosts.empty());
   return std::make_unique<WebUIURLLoaderFactory>(render_frame_host, scheme,
                                                  std::move(allowed_hosts));
 }

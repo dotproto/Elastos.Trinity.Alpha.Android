@@ -58,7 +58,7 @@
             'device_type': 'hammerhead',
           },
         ],
-        'hard_timeout': 960,
+        'hard_timeout': 1800,
       },
       'test': 'chrome_public_test_vr_apk',
     },
@@ -74,7 +74,7 @@
             'device_type': 'hammerhead',
           },
         ],
-        'hard_timeout': 960,
+        'hard_timeout': 1800,
       },
       'test': 'chrome_public_test_vr_apk',
     },
@@ -90,7 +90,7 @@
             'device_type': 'bullhead',
           },
         ],
-        'hard_timeout': 960,
+        'hard_timeout': 1800,
       },
       'test': 'chrome_public_test_vr_apk',
     },
@@ -106,7 +106,7 @@
             'device_type': 'marlin',
           },
         ],
-        'hard_timeout': 960,
+        'hard_timeout': 1800,
       },
       'test': 'chrome_public_test_vr_apk',
     },
@@ -184,6 +184,14 @@
     'chrome_public_test_vr_apk (daydream)': {
       'args': [
         '--shared-prefs-file=src/chrome/android/shared_preference_files/test/vr_ddview_skipdon_setupcomplete.json',
+        '--additional-apk=src/third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk',
+        '--additional-apk=src/third_party/gvr-android-sdk/test-apks/daydream_home/daydream_home_current.apk',
+      ],
+      'test': 'chrome_public_test_vr_apk',
+    },
+    'chrome_public_test_vr_apk (daydream, O2)': {
+      'args': [
+        '--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_ddview_skipdon_setupcomplete_o2.json',
         '--additional-apk=src/third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk',
         '--additional-apk=src/third_party/gvr-android-sdk/test-apks/daydream_home/daydream_home_current.apk',
       ],
@@ -320,9 +328,10 @@
     }
   },
 
-  'check_network_annotation_auditor_script': {
-    'check_network_annotation_auditor': {
-      'script': 'check_network_annotation_auditor.py',
+  'test_traffic_annotation_auditor_script': {
+    'test_traffic_annotation_auditor': {
+      'hard_timeout': 14400,
+      'script': 'test_traffic_annotation_auditor.py',
     },
   },
 
@@ -332,12 +341,30 @@
     },
   },
 
+  'chrome_cleaner_gtests': {
+    'chrome_cleaner_unittests': {}
+  },
+
   'chromedriver_py_tests_isolated_scripts': {
     'chromedriver_py_tests': {
       "args": [
         "--test-type=integration",
       ],
     },
+  },
+
+  'chromeos_gtests': {
+    'cacheinvalidation_unittests': {},
+    'capture_unittests': {},
+    'crypto_unittests': {
+       'swarming': {
+         'shards': 2,
+       },
+    },
+    'midi_unittests': {},
+    'google_apis_unittests': {},
+    'sql_unittests': {},
+    'url_unittests': {},
   },
 
   'chromeos_remote_device_isolated_tests': {
@@ -404,7 +431,6 @@
         'shards': 2,
       },
     },
-    'components_perftests': {},
     'content_browsertests': {
       'android_swarming': {
         'hard_timeout': 1500,
@@ -418,7 +444,6 @@
     },
     'crypto_unittests': {},
     'google_apis_unittests': {},
-    'gpu_ipc_service_unittests': {},
     'gpu_unittests': {
       'android_swarming': {
         'hard_timeout': 960,
@@ -427,6 +452,7 @@
     'ipc_tests': {},
     'jingle_unittests': {},
     'media_blink_unittests': {},
+    'media_service_unittests': {},
     'media_unittests': {
       'android_swarming': {
         'hard_timeout': 900,
@@ -435,13 +461,13 @@
     'midi_unittests': {},
     'net_unittests': {
       'android_swarming': {
-        'hard_timeout': 900,
+        'hard_timeout': 1800,
         'shards': 3,
       },
     },
     'services_unittests': {
       'android_swarming': {
-        'hard_timeout': 120,
+        'hard_timeout': 300,
       },
     },
     'skia_unittests': {},
@@ -460,6 +486,10 @@
   'chromium_gtests_for_devices_with_graphical_output': {
     'device_unittests': {},
     'remoting_unittests': {},
+  },
+
+  'chromium_gtests_for_linux_and_chromeos_only': {
+    'mojo_core_unittests': {},
   },
 
   'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output': {
@@ -531,11 +561,12 @@
         'args': [
           '--verbose',
         ],
-        'script': '//third_party/WebKit/Tools/Scripts/merge-layout-test-results',
+        'script': '//third_party/blink/tools/merge_web_test_results.py',
       },
+      'only_retry_failed_tests': True,
       'results_handler': 'layout tests',
       'swarming': {
-        'shards': 6,
+        'shards': 12,
       }
     },
   },
@@ -695,10 +726,9 @@
     'remoting_unittests': {},
     'services_unittests': {},
 
-    'site_per_process_browser_tests': {
+    'not_site_per_process_browser_tests': {
       'args': [
-        '--site-per-process',
-        '--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.browser_tests.filter'
+        '--disable-site-isolation-trials'
       ],
       'swarming': {
         'shards': 10,
@@ -718,7 +748,10 @@
       ],
       'test': 'content_unittests',
     },
-    'site_per_process_unit_tests': {
+    'not_site_per_process_unit_tests': {
+      'args': [
+        '--disable-site-isolation-trials'
+      ],
       'test': 'unit_tests',
     },
     'sync_integration_tests': {},
@@ -802,16 +835,20 @@
     },
     'views_perftests': {},
     'webkit_layout_tests': {
+      'args': [
+        '--zero-tests-executed-ok',
+      ],
       'isolate_name': 'webkit_layout_tests_exparchive',
       'merge': {
         'args': [
           '--verbose',
         ],
-        'script': '//third_party/WebKit/Tools/Scripts/merge-layout-test-results',
+        'script': '//third_party/blink/tools/merge_web_test_results.py',
       },
+      'only_retry_failed_tests': True,
       'results_handler': 'layout tests',
       'swarming': {
-        'shards': 10,
+        'shards': 12,
       }
     },
     'webkit_python_tests': {},
@@ -837,8 +874,6 @@
       ],
     },
     'media_unittests': {
-    },
-    'mojo_common_unittests': {
     },
     'mojo_unittests': {
       'args': [
@@ -929,11 +964,6 @@
     },
   },
 
-  'linux_and_chromeos_non_clang_specific_chromium_gtests': {
-    # TOOD(kbr): rename back to linux_and_chromeos_specific_chromium_gtests.
-    'media_service_unittests': {},
-  },
-
   'linux_and_mac_non_clang_specific_chromium_gtests': {
     # TODO(kbr): merge back into linux_and_mac_specific_chromium_gtests.
     'snapshot_unittests': {},
@@ -948,37 +978,6 @@
       ],
     },
    },
-
-  'linux_chromeos_rel_isolated_scripts': {
-    'telemetry_perf_unittests': {
-      'args': [
-        '--browser=exact',
-        '--browser-executable=./test_chrome',
-        '--xvfb',
-        '--skip=benchmarks.benchmark_smoke_unittest.BenchmarkSmokeTest.v8.runtime_stats.top_25',
-        '--skip=scripts_smoke_unittest.ScriptsSmokeTest.testRunTelemetryBenchmarkAsGoogletest',
-      ],
-      'swarming': {
-        'hard_timeout': 960,
-        'shards': 12,
-      },
-    },
-    'telemetry_unittests': {
-      'args': [
-        '--browser=exact',
-        '--browser-executable=./test_chrome',
-        '--jobs=1',
-        '--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForElement',
-        '--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForElementWithWrongText',
-        '--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForJavaScriptCondition',
-        '--skip=telemetry.internal.actions.key_event_unittest.KeyPressActionTest.testPressEndAndHome',
-        '--skip=telemetry.page.page_run_end_to_end_unittest.ActualPageRunEndToEndTests.testTrafficSettings',
-      ],
-      'swarming': {
-        'shards': 4,
-      },
-    },
-  },
 
   'linux_viz_isolated_scripts': {
     'telemetry_perf_unittests': {
@@ -995,8 +994,7 @@
       'args': [
         '--xvfb',
         '--extra-browser-args=--enable-features=VizDisplayCompositor',
-        '--skip=contrib.cluster_telemetry.screenshot_unittest.ScreenshotUnitTest.testScreenshot',
-        '--skip=measurements.tab_switching_unittest.TabSwitchingUnittest.testTabSwitching',
+	'--skip=contrib.cluster_telemetry.screenshot_unittest.ScreenshotUnitTest.testScreenshot',
       ],
       'swarming': {
         'hard_timeout': 960,
@@ -1007,11 +1005,8 @@
       'isolate_name': 'telemetry_unittests',
       'args': [
         '--extra-browser-args=--enable-features=VizDisplayCompositor',
-        '--skip=telemetry.internal.actions.scroll_unittest.ScrollActionTest.testWheelScrollDistanceWhileZoomed',
-        '--skip=telemetry.internal.backends.chrome_inspector.inspector_page_unittest.InspectorPageTest.testCaptureScreenshot',
-        '--skip=telemetry.internal.backends.chrome.tab_list_backend_unittest.TabListBackendTest.testNewTab',
-        '--skip=telemetry.internal.browser.tab_unittest.GpuTabTest.testScreenshot',
-        '--skip=telemetry.page.cache_temperature_unittest.CacheTemperatureTests.testEnsureHotAfterColdRun',
+	'--skip=telemetry.internal.backends.chrome_inspector.inspector_page_unittest.InspectorPageTest.testCaptureScreenshot',
+	'--skip=telemetry.internal.browser.tab_unittest.GpuTabTest.testScreenshot',
       ],
       'swarming': {
         'shards': 4,
@@ -1082,14 +1077,16 @@
     'webkit_layout_tests': {
       'args': [
         '--additional-driver-flag=--enable-features=NetworkService',
+        '--zero-tests-executed-ok',
       ],
       'isolate_name': 'webkit_layout_tests_exparchive',
       'merge': {
         'args': [
           '--verbose',
         ],
-        'script': '//third_party/WebKit/Tools/Scripts/merge-layout-test-results',
+        'script': '//third_party/blink/tools/merge_web_test_results.py',
       },
+      'only_retry_failed_tests': True,
       'results_handler': 'layout tests',
       'swarming': {
         'dimension_sets': [
@@ -1097,59 +1094,17 @@
             'os': 'Ubuntu-14.04',
           }
         ],
-        'shards': 6,
+        'shards': 12,
       },
     },
   },
 
   'mojo_windows_specific_gtests': {
-    'media_service_unittests': {},
     'services_unittests': {},
   },
 
   'monochrome_apk_checker_isolated_script': {
     'monochrome_apk_checker': {},
-  },
-
-  'linux_chromeos_rel_mus_specific_gtests': {
-    'mus_ash_unittests': {
-      'args': [
-        '--enable-features=Mus',
-      ],
-      'test': 'ash_unittests',
-    },
-    'mus_browser_tests': {
-      'args': [
-        '--enable-features=Mus',
-        '--ozone-platform=headless',
-        '--override-use-software-gl-for-tests',
-      ],
-      'swarming': {
-        'shards': 10,
-      },
-      'test': 'browser_tests',
-    },
-    'mus_content_unittests': {
-      'args': [
-        '--enable-features=Mus',
-      ],
-      'test': 'content_unittests',
-    },
-    'mus_content_browsertests': {
-      'args': [
-        '--enable-features=Mus',
-      ],
-      'swarming': {
-        'shards': 2,
-      },
-      'test': 'content_browsertests',
-    },
-    'mus_unit_tests': {
-      'args': [
-        '--enable-features=Mus',
-      ],
-      'test': 'unit_tests',
-    },
   },
 
   'network_service_android_gtests': {
@@ -1197,8 +1152,7 @@
     },
     'network_service_interactive_ui_tests': {
       'args': [
-        '--enable-features=NetworkService',
-        '--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_interactive_ui_tests.filter',
+        '--enable-features=NetworkService'
       ],
       'test': 'interactive_ui_tests',
     },
@@ -1273,7 +1227,7 @@
         'args': [
           '--verbose',
         ],
-        'script': '//third_party/WebKit/Tools/Scripts/merge-layout-test-results',
+        'script': '//third_party/blink/tools/merge_web_test_results.py',
       },
       'results_handler': 'layout tests',
       'swarming': {
@@ -1319,6 +1273,7 @@
         '--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForElementWithWrongText',
         '--skip=telemetry.internal.actions.action_runner_unittest.ActionRunnerTest.testWaitForJavaScriptCondition',
         '--skip=telemetry.internal.actions.key_event_unittest.KeyPressActionTest.testPressEndAndHome',
+        '--skip=telemetry.internal.actions.repeatable_scroll_unittest.RepeatableScrollActionTest.testRepeatableScrollActionNoRepeats',
         '--skip=telemetry.page.page_run_end_to_end_unittest.ActualPageRunEndToEndTests.testTrafficSettings',
       ],
       'swarming': {
@@ -1348,6 +1303,8 @@
 
   'non_android_and_cast_and_chromeos_chromium_gtests': {
     'blink_platform_unittests': {},
+    'cronet_tests': {},
+    'cronet_unittests': {},
   },
 
   'non_android_and_cast_and_chromeos_and_clang_and_mac_fyi_chromium_gtests': {
@@ -1417,11 +1374,6 @@
   'non_clang_win_chromium_gtests': {
     # TODO(kbr): merge back into chromium_gtests.
     'components_browsertests': {},
-    'mojo_common_unittests': {
-      'android_swarming': {
-        'hard_timeout': 60,
-      },
-    },
     'mojo_unittests': {
       'android_swarming': {
         'hard_timeout': 300,
@@ -1458,10 +1410,9 @@
   },
 
   'site_isolation_chromium_gtests': {
-    'site_per_process_browser_tests': {
+    'not_site_per_process_browser_tests': {
       'args': [
-        '--site-per-process',
-        '--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.browser_tests.filter',
+        '--disable-site-isolation-trials'
       ],
       'swarming': {
         'shards': 10,
@@ -1481,9 +1432,9 @@
       ],
       'test': 'content_unittests',
     },
-    'site_per_process_unit_tests': {
+    'not_site_per_process_unit_tests': {
       'args': [
-        '--site-per-process',
+        '--disable-site-isolation-trials'
       ],
       'test': 'unit_tests',
     },
@@ -1514,15 +1465,15 @@
       ],
       'test': 'extensions_unittests',
     },
-    'site_per_process_interactive_ui_tests': {
+    'not_site_per_process_interactive_ui_tests': {
       'args': [
-        '--site-per-process',
+        '--disable-site-isolation-trials'
       ],
       'test': 'interactive_ui_tests',
     },
-    'site_per_process_sync_integration_tests': {
+    'not_site_per_process_sync_integration_tests': {
       'args': [
-        '--site-per-process',
+        '--disable-site-isolation-trials'
       ],
       'test': 'sync_integration_tests',
     },
@@ -1564,8 +1515,7 @@
     },
     'browser_tests': {
       'args': [
-        '--site-per-process',
-        '--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.browser_tests.filter',
+        '--site-per-process'
       ],
       'swarming': {
         'shards': 10,
@@ -1647,6 +1597,10 @@
         'shards': 12,
       },
     },
+  },
+
+  'components_perftests_isolated_scripts' : {
+    'components_perftests': {},
   },
 
   'telemetry_perf_unittests_scripts': {
@@ -1757,13 +1711,17 @@
   # adding them to test_suite_exceptions.pyl.
   'webkit_layout_tests_isolated_scripts': {
     'webkit_layout_tests': {
+      'args': [
+        '--zero-tests-executed-ok',
+      ],
       'isolate_name': 'webkit_layout_tests_exparchive',
       'merge': {
         'args': [
           '--verbose'
         ],
-        'script': '//third_party/WebKit/Tools/Scripts/merge-layout-test-results',
+        'script': '//third_party/blink/tools/merge_web_test_results.py',
       },
+      'only_retry_failed_tests': True,
       'results_handler': 'layout tests',
     },
   },
@@ -1804,6 +1762,18 @@
       },
     },
     'zucchini_unittests': {},
+  },
+
+  'win_specific_isolated_scripts': {
+    'mini_installer_tests': {
+      'swarming': {
+        'dimension_sets': [
+          {
+            'integrity': 'high',
+          }
+        ],
+      },
+    },
   },
 
   'win7_32_bit_gtests': {
@@ -1867,6 +1837,7 @@
 
   'chromium_rel_isolated_scripts': [
     'chromedriver_py_tests_isolated_scripts',
+    'components_perftests_isolated_scripts',
     'desktop_chromium_isolated_scripts',
     'telemetry_perf_unittests_isolated_scripts',
   ],
@@ -1944,9 +1915,9 @@
     'aura_non_clang_gtests',
     'chromium_gtests',
     'chromium_gtests_for_devices_with_graphical_output',
+    'chromium_gtests_for_linux_and_chromeos_only',
     'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'linux_and_chromeos_non_clang_specific_chromium_gtests',
     'linux_and_mac_non_clang_specific_chromium_gtests',
     'linux_flavor_specific_chromium_gtests',
     'linux_incl_clang_specific_chromium_gtests',
@@ -1983,9 +1954,9 @@
     'aura_non_clang_gtests',
     'chromium_gtests',
     'chromium_gtests_for_devices_with_graphical_output',
+    'chromium_gtests_for_linux_and_chromeos_only',
     'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'linux_and_chromeos_non_clang_specific_chromium_gtests',
     'linux_and_mac_non_clang_specific_chromium_gtests',
     'linux_chromeos_specific_gtests',
     'linux_flavor_specific_chromium_gtests',
@@ -2003,19 +1974,17 @@
   'linux_chromeos_rel_gtests': [
     # This is:
     #   linux_chromeos_dbg_gtests
-    #   + linux_chromeos_rel_mus_specific_gtests
     #   + linux_chromeos_rel_specific_gtests
     #   + mash_chromium_gtests
     'aura_gtests',
     'aura_non_clang_gtests',
     'chromium_gtests',
     'chromium_gtests_for_devices_with_graphical_output',
+    'chromium_gtests_for_linux_and_chromeos_only',
     'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'linux_and_chromeos_non_clang_specific_chromium_gtests',
     'linux_and_mac_non_clang_specific_chromium_gtests',
     'linux_chromeos_specific_gtests',
-    'linux_chromeos_rel_mus_specific_gtests',
     'linux_chromeos_rel_specific_gtests',
     'linux_flavor_specific_chromium_gtests',
     'mash_chromium_gtests',
@@ -2113,33 +2082,15 @@
     'chromium_gtests_for_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'linux_chromeos_rel_mus_specific_gtests',
     'linux_chromeos_specific_gtests',
     'linux_flavor_specific_chromium_gtests',
+    'linux_incl_clang_specific_chromium_gtests',
     'mash_chromium_gtests',
     'non_android_and_cast_chromium_gtests',
     'non_android_and_clang_linux_mac_win_chromium_gtests',
     'non_android_and_clang_mac_win_chromium_gtests',
     'non_android_and_clang_win_chromium_gtests',
     'non_android_chromium_gtests',
-    'non_clang_mac_win_chromium_gtests',
-    'non_clang_win_chromium_gtests',
-    'non_mac_non_clang_win_chromium_gtests',
-  ],
-
-  'chromium_memory_chromiumos_msan_gtests': [
-    'aura_gtests',
-    'chromium_gtests',
-    'chromium_gtests_for_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'linux_flavor_specific_chromium_gtests',
-    'linux_incl_clang_specific_chromium_gtests',
-    'non_android_chromium_gtests',
-    'non_android_and_clang_linux_mac_win_chromium_gtests',
-    'non_android_and_clang_mac_win_chromium_gtests',
-    'non_android_and_clang_win_chromium_gtests',
-    'non_android_and_cast_chromium_gtests',
     'non_clang_mac_win_chromium_gtests',
     'non_clang_win_chromium_gtests',
     'non_mac_non_clang_win_chromium_gtests',
@@ -2163,41 +2114,6 @@
     'non_android_and_clang_win_chromium_gtests',
     'non_android_chromium_gtests',
     'non_clang_android_mac_win_chromium_gtests',
-    'non_clang_mac_win_chromium_gtests',
-    'non_clang_win_chromium_gtests',
-    'non_mac_non_clang_win_chromium_gtests',
-  ],
-
-  'chromium_memory_linux_msan_gtests': [
-    'aura_gtests',
-    'chromium_gtests',
-    'chromium_gtests_for_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'interactive_ui_tests_gtests',
-    'linux_flavor_specific_chromium_gtests',
-    'linux_incl_clang_specific_chromium_gtests',
-    'non_android_and_cast_chromium_gtests',
-    'non_android_and_clang_mac_win_chromium_gtests',
-    'non_android_and_clang_win_chromium_gtests',
-    'non_android_chromium_gtests',
-    'non_clang_mac_win_chromium_gtests',
-    'non_clang_win_chromium_gtests',
-    'non_mac_non_clang_win_chromium_gtests',
-  ],
-
-  'chromium_memory_linux_tsan_gtests': [
-    'aura_gtests',
-    'chromium_gtests',
-    'chromium_gtests_for_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
-    'chromium_gtests_for_non_clang_win_devices_with_graphical_output',
-    'interactive_ui_tests_gtests',
-    'linux_flavor_specific_chromium_gtests',
-    'linux_incl_clang_specific_chromium_gtests',
-    'non_android_and_cast_chromium_gtests',
-    'non_android_and_clang_win_chromium_gtests',
-    'non_android_chromium_gtests',
     'non_clang_mac_win_chromium_gtests',
     'non_clang_win_chromium_gtests',
     'non_mac_non_clang_win_chromium_gtests',
@@ -2248,6 +2164,7 @@
   'chromium_win_fyi_gtests': [
     'aura_gtests',
     'aura_non_clang_gtests',
+    'chrome_cleaner_gtests',
     'chromium_gtests',
     'chromium_gtests_for_devices_with_graphical_output',
     'chromium_gtests_for_non_clang_and_fyi_mac_win_devices_with_graphical_output',
@@ -2301,6 +2218,7 @@
   ],
 
   'marshmallow_isolated_scripts': [
+    'components_perftests_isolated_scripts',
     'monochrome_apk_checker_isolated_script',
     'telemetry_perf_unittests_isolated_scripts',
   ],
@@ -2316,7 +2234,6 @@
 
   'mojo_chromiumos_fyi_gtests': [
     'aura_non_clang_gtests',
-    'linux_chromeos_rel_mus_specific_gtests',
     'mash_chromium_gtests',
     'mojo_chromiumos_specific_gtests',
     'viz_fyi_gtests',

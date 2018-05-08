@@ -178,6 +178,7 @@ class CONTENT_EXPORT WebContentsAndroid
                         const base::android::JavaParamRef<jobject>& obj,
                         jint width,
                         jint height,
+                        const base::android::JavaParamRef<jstring>& jpath,
                         const base::android::JavaParamRef<jobject>& jcallback);
 
   void ReloadLoFiImages(JNIEnv* env,
@@ -206,6 +207,7 @@ class CONTENT_EXPORT WebContentsAndroid
   bool IsPictureInPictureAllowedForFullscreenVideo(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+
   base::android::ScopedJavaLocalRef<jobject> GetFullscreenVideoSize(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -223,11 +225,18 @@ class CONTENT_EXPORT WebContentsAndroid
   void SetMediaSession(
       const base::android::ScopedJavaLocalRef<jobject>& j_media_session);
 
+  // Returns the amount of the top controls height if controls are in the state
+  // of shrinking Blink's view size, otherwise 0.
+  int GetTopControlsShrinkBlinkHeightPixForTesting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
  private:
   RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid();
 
   void OnFinishGetContentBitmap(const base::android::JavaRef<jobject>& obj,
                                 const base::android::JavaRef<jobject>& callback,
+                                const std::string& path,
                                 const SkBitmap& bitmap);
 
   void OnFinishDownloadImage(const base::android::JavaRef<jobject>& obj,

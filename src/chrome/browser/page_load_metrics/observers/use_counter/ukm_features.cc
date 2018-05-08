@@ -25,6 +25,9 @@ bool IsAllowedUkmFeature(blink::mojom::WebFeature feature) {
           WebFeature::kMixedContentVideo, WebFeature::kMixedContentPlugin,
           WebFeature::kOpenerNavigationWithoutGesture,
           WebFeature::kUsbRequestDevice, WebFeature::kXMLHttpRequestSynchronous,
+          WebFeature::kPaymentHandler,
+          WebFeature::kPaymentRequestShowWithoutGesture,
+          WebFeature::kHTMLImports, WebFeature::kHTMLImportsHasStyleSheets,
       }));
   return opt_in_features.count(feature);
 }

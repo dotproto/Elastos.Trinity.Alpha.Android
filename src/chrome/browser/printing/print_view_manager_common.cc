@@ -8,7 +8,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -49,8 +49,7 @@ content::WebContents* GetWebContentsToUse(content::WebContents* contents) {
           contents->GetBrowserContext());
   if (guest_view_manager) {
     guest_view_manager->ForEachGuest(
-        contents,
-        base::Bind(&StoreFullPagePlugin, &contents));
+        contents, base::BindRepeating(&StoreFullPagePlugin, &contents));
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return contents;
@@ -94,12 +93,9 @@ void StartPrint(content::WebContents* contents,
   }
 #endif  // ENABLE_PRINT_PREVIEW
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   print_view_manager->PrintNow(rfh_to_use);
-#endif  // ENABLE_BASIC_PRINTING
 }
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 void StartBasicPrint(content::WebContents* contents) {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   content::WebContents* contents_to_use = GetWebContentsToUse(contents);
@@ -116,7 +112,6 @@ void StartBasicPrint(content::WebContents* contents) {
   print_view_manager->BasicPrint(rfh_to_use);
 #endif  // ENABLE_PRINT_PREVIEW
 }
-#endif  // ENABLE_BASIC_PRINTING
 
 content::RenderFrameHost* GetFrameToPrint(content::WebContents* contents) {
   auto* focused_frame = contents->GetFocusedFrame();

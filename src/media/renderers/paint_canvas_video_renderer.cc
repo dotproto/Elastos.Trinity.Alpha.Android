@@ -19,7 +19,6 @@
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "media/base/data_buffer.h"
 #include "media/base/video_frame.h"
-#include "skia/ext/texture_handle.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
@@ -62,13 +61,6 @@ namespace {
 // This class keeps the last image drawn.
 // We delete the temporary resource if it is not used for 3 seconds.
 const int kTemporaryResourceDeletionDelay = 3;  // Seconds;
-
-bool CheckColorSpace(const VideoFrame* video_frame, ColorSpace color_space) {
-  int result;
-  return video_frame->metadata()->GetInteger(VideoFrameMetadata::COLOR_SPACE,
-                                             &result) &&
-         result == color_space;
-}
 
 class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
  public:
@@ -153,11 +145,10 @@ sk_sp<SkImage> NewSkImageFromVideoFrameYUVTextures(
                        GrMipMapped::kNo, source_textures[2]),
   };
 
+  // TODO(hubbe): This should really default to rec709.
+  // https://crbug.com/828599
   SkYUVColorSpace color_space = kRec601_SkYUVColorSpace;
-  if (CheckColorSpace(video_frame, media::COLOR_SPACE_JPEG))
-    color_space = kJPEG_SkYUVColorSpace;
-  else if (CheckColorSpace(video_frame, media::COLOR_SPACE_HD_REC709))
-    color_space = kRec709_SkYUVColorSpace;
+  video_frame->ColorSpace().ToSkYUVColorSpace(&color_space);
 
   sk_sp<SkImage> img;
   if (video_frame->format() == PIXEL_FORMAT_NV12) {
@@ -268,12 +259,11 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
     }
 
     if (color_space) {
-      if (CheckColorSpace(frame_.get(), COLOR_SPACE_JPEG))
-        *color_space = kJPEG_SkYUVColorSpace;
-      else if (CheckColorSpace(frame_.get(), COLOR_SPACE_HD_REC709))
-        *color_space = kRec709_SkYUVColorSpace;
-      else
+      if (!frame_->ColorSpace().ToSkYUVColorSpace(color_space)) {
+        // TODO(hubbe): This really should default to rec709
+        // https://crbug.com/828599
         *color_space = kRec601_SkYUVColorSpace;
+      }
     }
 
     for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane;
@@ -475,7 +465,8 @@ void PaintCanvasVideoRenderer::Copy(
   cc::PaintFlags flags;
   flags.setBlendMode(SkBlendMode::kSrc);
   flags.setFilterQuality(kLow_SkFilterQuality);
-  Paint(video_frame, canvas, gfx::RectF(video_frame->visible_rect()), flags,
+  Paint(video_frame, canvas,
+        gfx::RectF(gfx::SizeF(video_frame->visible_rect().size())), flags,
         media::VIDEO_ROTATION_0, context_3d);
 }
 
@@ -513,6 +504,7 @@ scoped_refptr<VideoFrame> DownShiftHighbitVideoFrame(
       format, video_frame->coded_size(), video_frame->visible_rect(),
       video_frame->natural_size(), video_frame->timestamp());
 
+  ret->set_color_space(video_frame->ColorSpace());
   // Copy all metadata.
   // (May be enough to copy color space)
   ret->metadata()->MergeMetadataFrom(video_frame->metadata());
@@ -671,39 +663,48 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     return;
   }
 
+  // TODO(hubbe): This should really default to the rec709 colorspace.
+  // https://crbug.com/828599
+  SkYUVColorSpace color_space = kRec601_SkYUVColorSpace;
+  video_frame->ColorSpace().ToSkYUVColorSpace(&color_space);
+
   switch (video_frame->format()) {
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
-      if (CheckColorSpace(video_frame, COLOR_SPACE_JPEG)) {
-        LIBYUV_J420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
-                            video_frame->stride(VideoFrame::kYPlane),
-                            video_frame->visible_data(VideoFrame::kUPlane),
-                            video_frame->stride(VideoFrame::kUPlane),
-                            video_frame->visible_data(VideoFrame::kVPlane),
-                            video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
-                            video_frame->visible_rect().width(),
-                            video_frame->visible_rect().height());
-      } else if (CheckColorSpace(video_frame, COLOR_SPACE_HD_REC709)) {
-        LIBYUV_H420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
-                            video_frame->stride(VideoFrame::kYPlane),
-                            video_frame->visible_data(VideoFrame::kUPlane),
-                            video_frame->stride(VideoFrame::kUPlane),
-                            video_frame->visible_data(VideoFrame::kVPlane),
-                            video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
-                            video_frame->visible_rect().width(),
-                            video_frame->visible_rect().height());
-      } else {
-        LIBYUV_I420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
-                            video_frame->stride(VideoFrame::kYPlane),
-                            video_frame->visible_data(VideoFrame::kUPlane),
-                            video_frame->stride(VideoFrame::kUPlane),
-                            video_frame->visible_data(VideoFrame::kVPlane),
-                            video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
-                            video_frame->visible_rect().width(),
-                            video_frame->visible_rect().height());
+      switch (color_space) {
+        case kJPEG_SkYUVColorSpace:
+          LIBYUV_J420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
+                              video_frame->stride(VideoFrame::kYPlane),
+                              video_frame->visible_data(VideoFrame::kUPlane),
+                              video_frame->stride(VideoFrame::kUPlane),
+                              video_frame->visible_data(VideoFrame::kVPlane),
+                              video_frame->stride(VideoFrame::kVPlane),
+                              static_cast<uint8_t*>(rgb_pixels), row_bytes,
+                              video_frame->visible_rect().width(),
+                              video_frame->visible_rect().height());
+          break;
+        case kRec709_SkYUVColorSpace:
+          LIBYUV_H420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
+                              video_frame->stride(VideoFrame::kYPlane),
+                              video_frame->visible_data(VideoFrame::kUPlane),
+                              video_frame->stride(VideoFrame::kUPlane),
+                              video_frame->visible_data(VideoFrame::kVPlane),
+                              video_frame->stride(VideoFrame::kVPlane),
+                              static_cast<uint8_t*>(rgb_pixels), row_bytes,
+                              video_frame->visible_rect().width(),
+                              video_frame->visible_rect().height());
+          break;
+        case kRec601_SkYUVColorSpace:
+          LIBYUV_I420_TO_ARGB(video_frame->visible_data(VideoFrame::kYPlane),
+                              video_frame->stride(VideoFrame::kYPlane),
+                              video_frame->visible_data(VideoFrame::kUPlane),
+                              video_frame->stride(VideoFrame::kUPlane),
+                              video_frame->visible_data(VideoFrame::kVPlane),
+                              video_frame->stride(VideoFrame::kVPlane),
+                              static_cast<uint8_t*>(rgb_pixels), row_bytes,
+                              video_frame->visible_rect().width(),
+                              video_frame->visible_rect().height());
+          break;
       }
       break;
     case PIXEL_FORMAT_I422:
@@ -747,7 +748,7 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
       break;
 
     case PIXEL_FORMAT_YUV420P10:
-      if (CheckColorSpace(video_frame, COLOR_SPACE_HD_REC709)) {
+      if (color_space == kRec709_SkYUVColorSpace) {
         LIBYUV_H010_TO_ARGB(reinterpret_cast<const uint16_t*>(
                                 video_frame->visible_data(VideoFrame::kYPlane)),
                             video_frame->stride(VideoFrame::kYPlane) / 2,
@@ -896,18 +897,19 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
     if (!UpdateLastImage(video_frame, context_3d))
       return false;
 
-    const GrGLTextureInfo* texture_info =
-        skia::GrBackendObjectToGrGLTextureInfo(
-            last_image_.GetSkImage()->getTextureHandle(true));
-
-    if (!texture_info)
+    GrBackendTexture backend_texture =
+        last_image_.GetSkImage()->getBackendTexture(true);
+    if (!backend_texture.isValid())
+      return false;
+    GrGLTextureInfo texture_info;
+    if (!backend_texture.getGLTextureInfo(&texture_info))
       return false;
 
     gpu::gles2::GLES2Interface* canvas_gl = context_3d.gl;
     gpu::MailboxHolder mailbox_holder;
-    mailbox_holder.texture_target = texture_info->fTarget;
+    mailbox_holder.texture_target = texture_info.fTarget;
     canvas_gl->GenMailboxCHROMIUM(mailbox_holder.mailbox.name);
-    canvas_gl->ProduceTextureDirectCHROMIUM(texture_info->fID,
+    canvas_gl->ProduceTextureDirectCHROMIUM(texture_info.fID,
                                             mailbox_holder.mailbox.name);
 
     // Wait for mailbox creation on canvas context before consuming it and
@@ -1019,14 +1021,14 @@ void PaintCanvasVideoRenderer::ResetCache() {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Clear cached values.
   last_image_ = cc::PaintImage();
-  last_timestamp_ = kNoTimestamp;
+  last_id_.reset();
 }
 
 bool PaintCanvasVideoRenderer::UpdateLastImage(
     const scoped_refptr<VideoFrame>& video_frame,
     const Context3D& context_3d) {
-  if (!last_image_ || video_frame->timestamp() != last_timestamp_ ||
-      !last_image_.GetSkImage()->getTextureHandle(true)) {
+  if (!last_image_ || video_frame->unique_id() != last_id_ ||
+      !last_image_.GetSkImage()->getBackendTexture(true).isValid()) {
     ResetCache();
 
     auto paint_image_builder =
@@ -1060,7 +1062,7 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
     CorrectLastImageDimensions(gfx::RectToSkIRect(video_frame->visible_rect()));
     if (!last_image_)  // Couldn't create the SkImage.
       return false;
-    last_timestamp_ = video_frame->timestamp();
+    last_id_ = video_frame->unique_id();
   }
   last_image_deleting_timer_.Reset();
   DCHECK(!!last_image_);

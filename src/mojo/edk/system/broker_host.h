@@ -9,12 +9,13 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
 #include "mojo/edk/embedder/process_error_callback.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/edk/system/channel.h"
+#include "mojo/edk/system/scoped_process_handle.h"
 
 namespace mojo {
 namespace edk {
@@ -22,7 +23,7 @@ namespace edk {
 // The BrokerHost is a channel to a broker client process, servicing synchronous
 // IPCs issued by the client.
 class BrokerHost : public Channel::Delegate,
-                   public base::MessageLoop::DestructionObserver {
+                   public base::MessageLoopCurrent::DestructionObserver {
  public:
   BrokerHost(base::ProcessHandle client_process,
              ScopedPlatformHandle handle,
@@ -47,7 +48,7 @@ class BrokerHost : public Channel::Delegate,
                         std::vector<ScopedPlatformHandle> handles) override;
   void OnChannelError(Channel::Error error) override;
 
-  // base::MessageLoop::DestructionObserver:
+  // base::MessageLoopCurrent::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override;
 
   void OnBufferRequest(uint32_t num_bytes);
@@ -55,7 +56,7 @@ class BrokerHost : public Channel::Delegate,
   const ProcessErrorCallback process_error_callback_;
 
 #if defined(OS_WIN)
-  base::ProcessHandle client_process_;
+  ScopedProcessHandle client_process_;
 #endif
 
   scoped_refptr<Channel> channel_;

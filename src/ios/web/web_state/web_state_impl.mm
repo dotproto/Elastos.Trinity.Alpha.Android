@@ -17,9 +17,9 @@
 #import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/legacy_navigation_manager_impl.h"
 #import "ios/web/navigation/navigation_item_impl.h"
-#include "ios/web/navigation/placeholder_navigation_util.h"
 #import "ios/web/navigation/session_storage_builder.h"
 #import "ios/web/navigation/wk_based_navigation_manager_impl.h"
+#import "ios/web/navigation/wk_navigation_util.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/crw_navigation_item_storage.h"
 #import "ios/web/public/crw_session_storage.h"
@@ -49,8 +49,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-using web::placeholder_navigation_util::IsPlaceholderUrl;
 
 namespace web {
 
@@ -177,6 +175,11 @@ void WebStateImpl::SetWebController(CRWWebController* web_controller) {
   web_controller_ = web_controller;
 }
 
+void WebStateImpl::OnBackForwardStateChanged() {
+  for (auto& observer : observers_)
+    observer.DidChangeBackForwardState(this);
+}
+
 void WebStateImpl::OnTitleChanged() {
   for (auto& observer : observers_)
     observer.TitleWasSet(this);
@@ -249,9 +252,10 @@ bool WebStateImpl::IsBeingDestroyed() const {
 }
 
 void WebStateImpl::OnPageLoaded(const GURL& url, bool load_success) {
-  // Native Content and WebUI placeholder URL is an internal implementation
-  // detail of //ios/web/ navigation. Do not trigger external callbacks.
-  if (IsPlaceholderUrl(url))
+  // Navigation manager loads internal URLs to restore session history and
+  // create back-forward entries for Native View and WebUI. Do not trigger
+  // external callbacks.
+  if (wk_navigation_util::IsWKInternalUrl(url))
     return;
 
   PageLoadCompletionStatus load_completion_status =
@@ -588,12 +592,18 @@ UIView* WebStateImpl::GetView() {
 }
 
 void WebStateImpl::WasShown() {
+  if (IsVisible())
+    return;
+
   [web_controller_ wasShown];
   for (auto& observer : observers_)
     observer.WasShown(this);
 }
 
 void WebStateImpl::WasHidden() {
+  if (!IsVisible())
+    return;
+
   [web_controller_ wasHidden];
   for (auto& observer : observers_)
     observer.WasHidden(this);
@@ -651,8 +661,8 @@ void WebStateImpl::ExecuteJavaScript(const base::string16& javascript) {
 }
 
 void WebStateImpl::ExecuteJavaScript(const base::string16& javascript,
-                                     const JavaScriptResultCallback& callback) {
-  JavaScriptResultCallback stackCallback = callback;
+                                     JavaScriptResultCallback callback) {
+  __block JavaScriptResultCallback stack_callback = std::move(callback);
   [web_controller_ executeJavaScript:base::SysUTF16ToNSString(javascript)
                    completionHandler:^(id value, NSError* error) {
                      if (error) {
@@ -661,7 +671,8 @@ void WebStateImpl::ExecuteJavaScript(const base::string16& javascript,
                            << base::SysNSStringToUTF16(
                                   error.userInfo[NSLocalizedDescriptionKey]);
                      }
-                     stackCallback.Run(ValueResultFromWKResult(value).get());
+                     std::move(stack_callback)
+                         .Run(ValueResultFromWKResult(value).get());
                    }];
 }
 
@@ -744,9 +755,10 @@ void WebStateImpl::TakeSnapshot(const SnapshotCallback& callback,
 }
 
 void WebStateImpl::OnNavigationStarted(web::NavigationContext* context) {
-  // Native Content and WebUI placeholder URL is an internal implementation
-  // detail of //ios/web/ navigation. Do not trigger external callbacks.
-  if (IsPlaceholderUrl(context->GetUrl()))
+  // Navigation manager loads internal URLs to restore session history and
+  // create back-forward entries for Native View and WebUI. Do not trigger
+  // external callbacks.
+  if (wk_navigation_util::IsWKInternalUrl(context->GetUrl()))
     return;
 
   for (auto& observer : observers_)
@@ -754,9 +766,10 @@ void WebStateImpl::OnNavigationStarted(web::NavigationContext* context) {
 }
 
 void WebStateImpl::OnNavigationFinished(web::NavigationContext* context) {
-  // Native Content and WebUI placeholder URL is an internal implementation
-  // detail of //ios/web/ navigation. Do not trigger external callbacks.
-  if (IsPlaceholderUrl(context->GetUrl()))
+  // Navigation manager loads internal URLs to restore session history and
+  // create back-forward entries for Native View and WebUI. Do not trigger
+  // external callbacks.
+  if (wk_navigation_util::IsWKInternalUrl(context->GetUrl()))
     return;
 
   for (auto& observer : observers_)

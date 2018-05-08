@@ -82,6 +82,20 @@ void VRDeviceBase::GetMagicWindowPose(
   OnMagicWindowPoseRequest(std::move(callback));
 }
 
+void VRDeviceBase::GetMagicWindowFrameData(
+    const gfx::Size& frame_size,
+    display::Display::Rotation display_rotation,
+    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+  // TODO(https://crbug.com/836565): rename this boolean.
+  if (!magic_window_enabled_) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  OnMagicWindowFrameDataRequest(frame_size, display_rotation,
+                                std::move(callback));
+}
+
 void VRDeviceBase::AddDisplay(VRDisplayImpl* display) {
   displays_.insert(display);
 }
@@ -94,8 +108,6 @@ void VRDeviceBase::RemoveDisplay(VRDisplayImpl* display) {
     listening_for_activate_diplay_ = nullptr;
     OnListeningForActivate(false);
   }
-  if (last_listening_for_activate_diplay_ == display)
-    last_listening_for_activate_diplay_ = nullptr;
 }
 
 bool VRDeviceBase::IsAccessAllowed(VRDisplayImpl* display) {
@@ -135,10 +147,6 @@ void VRDeviceBase::OnActivate(mojom::VRDisplayEventReason reason,
                               base::Callback<void(bool)> on_handled) {
   if (listening_for_activate_diplay_) {
     listening_for_activate_diplay_->OnActivate(reason, std::move(on_handled));
-  } else if (last_listening_for_activate_diplay_ &&
-             last_listening_for_activate_diplay_->InFocusedFrame()) {
-    last_listening_for_activate_diplay_->OnActivate(reason,
-                                                    std::move(on_handled));
   } else {
     std::move(on_handled).Run(true /* will_not_present */);
   }
@@ -151,6 +159,13 @@ void VRDeviceBase::OnMagicWindowPoseRequest(
   std::move(callback).Run(nullptr);
 }
 
+void VRDeviceBase::OnMagicWindowFrameDataRequest(
+    const gfx::Size& frame_size,
+    display::Display::Rotation display_rotation,
+    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+  std::move(callback).Run(nullptr);
+}
+
 void VRDeviceBase::UpdateListeningForActivate(VRDisplayImpl* display) {
   if (display->ListeningForActivate() && display->InFocusedFrame()) {
     bool was_listening = !!listening_for_activate_diplay_;
@@ -158,7 +173,6 @@ void VRDeviceBase::UpdateListeningForActivate(VRDisplayImpl* display) {
     if (!was_listening)
       OnListeningForActivate(true);
   } else if (listening_for_activate_diplay_ == display) {
-    last_listening_for_activate_diplay_ = listening_for_activate_diplay_;
     listening_for_activate_diplay_ = nullptr;
     OnListeningForActivate(false);
   }

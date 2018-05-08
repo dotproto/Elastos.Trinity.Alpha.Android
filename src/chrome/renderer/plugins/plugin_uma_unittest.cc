@@ -5,8 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 
 class PluginUMATest : public testing::Test {
  public:

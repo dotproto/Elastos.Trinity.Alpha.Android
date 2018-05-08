@@ -71,7 +71,7 @@ class WebRtcEventLogUploaderImpl : public WebRtcEventLogUploader {
    protected:
     friend class WebRtcEventLogUploaderImplTest;
 
-    std::unique_ptr<WebRtcEventLogUploader> CreateWithCurstomMaxSizeForTesting(
+    std::unique_ptr<WebRtcEventLogUploader> CreateWithCustomMaxSizeForTesting(
         const base::FilePath& log_file,
         WebRtcEventLogUploaderObserver* observer,
         size_t max_remote_log_file_size_bytes);
@@ -121,6 +121,11 @@ class WebRtcEventLogUploaderImpl : public WebRtcEventLogUploader {
     ~Delegate() override = default;
 
     // net::URLFetcherDelegate implementation.
+#if DCHECK_IS_ON()
+    void OnURLFetchUploadProgress(const net::URLFetcher* source,
+                                  int64_t current,
+                                  int64_t total) override;
+#endif
     void OnURLFetchComplete(const net::URLFetcher* source) override;
 
    private:

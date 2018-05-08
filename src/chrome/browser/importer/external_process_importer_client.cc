@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
@@ -50,34 +49,32 @@ void ExternalProcessImporterClient::Start() {
 
   // Dictionary of all localized strings that could be needed by the importer
   // in the external process.
-  auto localized_strings = std::make_unique<base::DictionaryValue>();
-  localized_strings->SetString(base::IntToString(IDS_BOOKMARK_GROUP),
-                               l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP));
-  localized_strings->SetString(
-      base::IntToString(IDS_BOOKMARK_GROUP_FROM_FIREFOX),
+  base::flat_map<uint32_t, std::string> localized_strings;
+  localized_strings.try_emplace(IDS_BOOKMARK_GROUP,
+                                l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP));
+  localized_strings.try_emplace(
+      IDS_BOOKMARK_GROUP_FROM_FIREFOX,
       l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP_FROM_FIREFOX));
-  localized_strings->SetString(
-      base::IntToString(IDS_BOOKMARK_GROUP_FROM_SAFARI),
+  localized_strings.try_emplace(
+      IDS_BOOKMARK_GROUP_FROM_SAFARI,
       l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP_FROM_SAFARI));
-  localized_strings->SetString(
-      base::IntToString(IDS_IMPORT_FROM_FIREFOX),
+  localized_strings.try_emplace(
+      IDS_IMPORT_FROM_FIREFOX,
       l10n_util::GetStringUTF8(IDS_IMPORT_FROM_FIREFOX));
-  localized_strings->SetString(
-      base::IntToString(IDS_IMPORT_FROM_ICEWEASEL),
+  localized_strings.try_emplace(
+      IDS_IMPORT_FROM_ICEWEASEL,
       l10n_util::GetStringUTF8(IDS_IMPORT_FROM_ICEWEASEL));
-  localized_strings->SetString(
-      base::IntToString(IDS_IMPORT_FROM_SAFARI),
-      l10n_util::GetStringUTF8(IDS_IMPORT_FROM_SAFARI));
-  localized_strings->SetString(
-      base::IntToString(IDS_BOOKMARK_BAR_FOLDER_NAME),
+  localized_strings.try_emplace(
+      IDS_IMPORT_FROM_SAFARI, l10n_util::GetStringUTF8(IDS_IMPORT_FROM_SAFARI));
+  localized_strings.try_emplace(
+      IDS_BOOKMARK_BAR_FOLDER_NAME,
       l10n_util::GetStringUTF8(IDS_BOOKMARK_BAR_FOLDER_NAME));
 
   // If the utility process hasn't started yet the message will queue until it
   // does.
   chrome::mojom::ProfileImportObserverPtr observer;
   binding_.Bind(mojo::MakeRequest(&observer));
-  profile_import_->StartImport(source_profile_, items_,
-                               std::move(localized_strings),
+  profile_import_->StartImport(source_profile_, items_, localized_strings,
                                std::move(observer));
 }
 

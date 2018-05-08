@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "cc/paint/paint_op_buffer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "cc/paint/decoded_draw_image.h"
 #include "cc/paint/display_item_list.h"
@@ -1197,12 +1196,9 @@ std::vector<PaintFlags> test_flags = {
 };
 
 std::vector<SkColor> test_colors = {
-    SkColorSetARGBInline(0, 0, 0, 0),
-    SkColorSetARGBInline(255, 255, 255, 255),
-    SkColorSetARGBInline(0, 255, 10, 255),
-    SkColorSetARGBInline(255, 0, 20, 255),
-    SkColorSetARGBInline(30, 255, 0, 255),
-    SkColorSetARGBInline(255, 40, 0, 0),
+    SkColorSetARGB(0, 0, 0, 0),      SkColorSetARGB(255, 255, 255, 255),
+    SkColorSetARGB(0, 255, 10, 255), SkColorSetARGB(255, 0, 20, 255),
+    SkColorSetARGB(30, 255, 0, 255), SkColorSetARGB(255, 40, 0, 0),
 };
 
 std::vector<std::string> test_strings = {
@@ -1955,7 +1951,7 @@ TEST_P(PaintOpSerializationTest, UsesOverridenFlags) {
     PaintOp* written = PaintOp::Deserialize(
         output_.get(), bytes_written, deserialized.get(), deserialized_size,
         &bytes_read, options_provider.deserialize_options());
-    ASSERT_TRUE(written);
+    ASSERT_TRUE(written) << PaintOpTypeToString(GetParamType());
     EXPECT_EQ(*op, *written);
     written->DestroyThis();
     written = nullptr;
@@ -3122,6 +3118,22 @@ TEST(PaintOpBufferTest, RecordShadersSerializeScaledImages) {
   auto scale = options_provider.decoded_images().at(0).scale();
   EXPECT_EQ(scale.width(), 0.5f);
   EXPECT_EQ(scale.height(), 0.8f);
+}
+
+TEST(PaintOpBufferTest, TotalOpCount) {
+  auto record_buffer = sk_make_sp<PaintOpBuffer>();
+  auto sub_record_buffer = sk_make_sp<PaintOpBuffer>();
+  auto sub_sub_record_buffer = sk_make_sp<PaintOpBuffer>();
+  PushDrawRectOps(sub_sub_record_buffer.get());
+  PushDrawRectOps(sub_record_buffer.get());
+  PushDrawRectOps(record_buffer.get());
+  sub_record_buffer->push<DrawRecordOp>(sub_sub_record_buffer);
+  record_buffer->push<DrawRecordOp>(sub_record_buffer);
+
+  size_t len = std::min(test_rects.size(), test_flags.size());
+  EXPECT_EQ(len, sub_sub_record_buffer->total_op_count());
+  EXPECT_EQ(2 * len + 1, sub_record_buffer->total_op_count());
+  EXPECT_EQ(3 * len + 2, record_buffer->total_op_count());
 }
 
 }  // namespace cc

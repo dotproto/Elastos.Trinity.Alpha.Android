@@ -44,7 +44,7 @@ static_library("test") {
     "test_paths.h",
   ]
 
-  if (crashpad_is_posix) {
+  if (crashpad_is_posix || crashpad_is_fuchsia) {
     sources += [ "scoped_temp_dir_posix.cc" ]
 
     if (!crashpad_is_fuchsia) {
@@ -69,6 +69,7 @@ static_library("test") {
   }
 
   if (crashpad_is_linux || crashpad_is_android) {
+    set_sources_assignment_filter([])
     sources += [
       "linux/fake_ptrace_connection.cc",
       "linux/fake_ptrace_connection.h",
@@ -139,6 +140,8 @@ source_set("test_test") {
     "test_paths_test.cc",
   ]
 
+  # TODO(crbug.com/812974): Remove !crashpad_is_fuchsia when Fuchsia is no
+  # longer treated as a posix platform.
   if (crashpad_is_posix && !crashpad_is_fuchsia) {
     sources += [ "multiprocess_posix_test.cc" ]
   }
@@ -152,9 +155,6 @@ source_set("test_test") {
       "win/win_child_process_test.cc",
       "win/win_multiprocess_test.cc",
     ]
-  }
-
-  if (!crashpad_is_fuchsia) {
   }
 
   deps = [
@@ -171,7 +171,7 @@ source_set("test_test") {
   ]
 }
 
-executable("crashpad_test_test_multiprocess_exec_test_child") {
+crashpad_executable("crashpad_test_test_multiprocess_exec_test_child") {
   sources = [
     "multiprocess_exec_test_child.cc",
   ]

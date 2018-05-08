@@ -96,15 +96,15 @@ void WebClient::AllowCertificateError(
 }
 
 bool WebClient::IsSlimNavigationManagerEnabled() const {
-  if (@available(iOS 11.3, *)) {
-    // Starting iOS 11.3, pushState and replaceState are not allowed in file://
-    // scheme which the new navigation manager relies on. So this excludes the
-    // newer iOS versions until this bug is fixed.
-    // TODO(crbug.com/814803): Remove this workaround.
-    return false;
-  } else {
-    return base::FeatureList::IsEnabled(web::features::kSlimNavigationManager);
-  }
+  return base::FeatureList::IsEnabled(web::features::kSlimNavigationManager);
+}
+
+void WebClient::PrepareErrorPage(NSError* error,
+                                 bool is_post,
+                                 bool is_off_the_record,
+                                 NSString** error_html) {
+  DCHECK(error);
+  *error_html = error.localizedDescription;
 }
 
 }  // namespace web

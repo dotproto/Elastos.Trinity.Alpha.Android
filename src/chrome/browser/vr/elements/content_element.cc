@@ -8,7 +8,7 @@
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/vr_gl_util.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace vr {
@@ -48,11 +48,19 @@ ContentElement::~ContentElement() = default;
 void ContentElement::Render(UiElementRenderer* renderer,
                             const CameraModel& model) const {
   gfx::RectF copy_rect(0, 0, 1, 1);
-  if (texture_id_ || overlay_texture_id_) {
+  int overlay_texture_id = overlay_texture_non_empty_ ? overlay_texture_id_ : 0;
+  int texture_id = texture_id_;
+  bool blend = true;
+  if (uses_quad_layer_) {
+    texture_id = 0;
+    overlay_texture_id = 0;
+    blend = false;
+  }
+  if (uses_quad_layer_ || texture_id_ || overlay_texture_id) {
     renderer->DrawTexturedQuad(
-        texture_id_, overlay_texture_id_, texture_location_,
+        texture_id, overlay_texture_id, texture_location_,
         model.view_proj_matrix * world_space_transform(), copy_rect,
-        computed_opacity(), size(), corner_radius());
+        computed_opacity(), size(), corner_radius(), blend);
   }
 }
 
@@ -80,7 +88,6 @@ void ContentElement::OnHoverEnter(const gfx::PointF& position) {
 
 void ContentElement::OnHoverLeave() {
   if (delegate_)
-
     delegate_->OnContentLeave();
 }
 
@@ -145,6 +152,14 @@ void ContentElement::SetOverlayTextureLocation(
   overlay_texture_location_ = location;
 }
 
+void ContentElement::SetOverlayTextureEmpty(bool empty) {
+  overlay_texture_non_empty_ = !empty;
+}
+
+bool ContentElement::GetOverlayTextureEmpty() {
+  return !overlay_texture_non_empty_;
+}
+
 void ContentElement::SetProjectionMatrix(const gfx::Transform& matrix) {
   projection_matrix_ = matrix;
 }
@@ -173,8 +188,7 @@ void ContentElement::UpdateInput(const EditedText& info) {
     text_input_delegate_->UpdateInput(info.current);
 }
 
-bool ContentElement::OnBeginFrame(const base::TimeTicks& time,
-                                  const gfx::Transform& head_pose) {
+bool ContentElement::OnBeginFrame(const gfx::Transform& head_pose) {
   // TODO(mthiesse): This projection matrix is always going to be a frame
   // behind when computing the content size. We'll need to address this somehow
   // when we allow content resizing, or we could end up triggering an extra
@@ -232,6 +246,10 @@ bool ContentElement::OnBeginFrame(const base::TimeTicks& time,
 
 void ContentElement::SetDelegate(ContentInputDelegate* delegate) {
   delegate_ = delegate;
+}
+
+void ContentElement::SetUsesQuadLayer(bool uses_quad_layer) {
+  uses_quad_layer_ = uses_quad_layer;
 }
 
 }  // namespace vr

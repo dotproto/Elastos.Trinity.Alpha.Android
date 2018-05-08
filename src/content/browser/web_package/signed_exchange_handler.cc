@@ -5,13 +5,20 @@
 #include "content/browser/web_package/signed_exchange_handler.h"
 
 #include "base/feature_list.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/loader/merkle_integrity_source_stream.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
+#include "content/browser/web_package/signed_exchange_certificate_chain.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
+#include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_header.h"
 #include "content/browser/web_package/signed_exchange_signature_verifier.h"
+#include "content/browser/web_package/signed_exchange_utils.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_loader_throttle.h"
 #include "mojo/public/cpp/system/string_data_pipe_producer.h"
@@ -22,6 +29,7 @@
 #include "net/filter/source_stream.h"
 #include "net/ssl/ssl_config.h"
 #include "net/ssl/ssl_config_service.h"
+#include "net/ssl/ssl_info.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
@@ -68,7 +76,8 @@ SignedExchangeHandler::SignedExchangeHandler(
     std::unique_ptr<net::SourceStream> body,
     ExchangeHeadersCallback headers_callback,
     std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory,
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter)
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy)
     : headers_callback_(std::move(headers_callback)),
       source_(std::move(body)),
       cert_fetcher_factory_(std::move(cert_fetcher_factory)),
@@ -76,6 +85,7 @@ SignedExchangeHandler::SignedExchangeHandler(
       net_log_(net::NetLogWithSource::Make(
           request_context_getter_->GetURLRequestContext()->net_log(),
           net::NetLogSourceType::CERT_VERIFIER_JOB)),
+      devtools_proxy_(std::move(devtools_proxy)),
       weak_factory_(this) {
   DCHECK(base::FeatureList::IsEnabled(features::kSignedHTTPExchange));
   TRACE_EVENT_BEGIN0(TRACE_DISABLED_BY_DEFAULT("loading"),
@@ -88,12 +98,13 @@ SignedExchangeHandler::SignedExchangeHandler(
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(&SignedExchangeHandler::RunErrorCallback,
                                   weak_factory_.GetWeakPtr(), net::ERR_FAILED));
-    TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::SignedExchangeHandler", "error",
-                     "Unsupported version of the content type. Currentry "
-                     "content type must be "
-                     "\"application/signed-exchange;v=b0\".",
-                     "content-type", content_type);
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::SignedExchangeHandler",
+        base::StringPrintf("Unsupported version of the content type. Currentry "
+                           "content type must be "
+                           "\"application/signed-exchange;v=b0\". But the "
+                           "response content type was \"%s\"",
+                           content_type.c_str()));
     return;
   }
 
@@ -103,7 +114,7 @@ SignedExchangeHandler::SignedExchangeHandler(
       FROM_HERE, base::BindOnce(&SignedExchangeHandler::DoHeaderLoop,
                                 weak_factory_.GetWeakPtr()));
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
-                   "SignedExchangeCertFetcher::SignedExchangeHandler");
+                   "SignedExchangeHandler::SignedExchangeHandler");
 }
 
 SignedExchangeHandler::~SignedExchangeHandler() = default;
@@ -131,18 +142,18 @@ void SignedExchangeHandler::DidReadHeader(bool completed_syncly, int result) {
   TRACE_EVENT_BEGIN0(TRACE_DISABLED_BY_DEFAULT("loading"),
                      "SignedExchangeHandler::DidReadHeader");
   if (result < 0) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::DidReadHeader",
+        base::StringPrintf("Error reading body stream. result: %d", result));
     RunErrorCallback(static_cast<net::Error>(result));
-    TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::DidReadHeader", "error",
-                     "Error reading body stream.", "result", result);
     return;
   }
 
   if (result == 0) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::DidReadHeader",
+        "Stream ended while reading signed exchange header.");
     RunErrorCallback(net::ERR_FAILED);
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::DidReadHeader", "error",
-                     "Stream ended while reading signed exchange header.");
     return;
   }
 
@@ -179,7 +190,7 @@ void SignedExchangeHandler::DidReadHeader(bool completed_syncly, int result) {
     DoHeaderLoop();
   }
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
-                   "SignedExchangeCertFetcher::DidReadHeader");
+                   "SignedExchangeHandler::DidReadHeader");
 }
 
 bool SignedExchangeHandler::ParseHeadersLength() {
@@ -191,10 +202,9 @@ bool SignedExchangeHandler::ParseHeadersLength() {
       base::make_span(reinterpret_cast<uint8_t*>(header_buf_->data()),
                       SignedExchangeHeader::kEncodedHeaderLengthInBytes));
   if (headers_length_ == 0 || headers_length_ > kMaxHeadersCBORLength) {
-    TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::ParseHeadersLength", "error",
-                     "Invalid CBOR header length.", "headers_length",
-                     headers_length_);
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::ParseHeadersLength",
+        base::StringPrintf("Invalid CBOR header length: %zu", headers_length_));
     return false;
   }
 
@@ -202,7 +212,7 @@ bool SignedExchangeHandler::ParseHeadersLength() {
   SetupBuffers(headers_length_);
   state_ = State::kReadingHeaders;
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
-                   "SignedExchangeCertFetcher::ParseHeadersLength");
+                   "SignedExchangeHandler::ParseHeadersLength");
   return true;
 }
 
@@ -211,14 +221,17 @@ bool SignedExchangeHandler::ParseHeadersAndFetchCertificate() {
                      "SignedExchangeHandler::ParseHeadersAndFetchCertificate");
   DCHECK_EQ(state_, State::kReadingHeaders);
 
-  header_ = SignedExchangeHeader::Parse(base::make_span(
-      reinterpret_cast<uint8_t*>(header_buf_->data()), headers_length_));
+  header_ = SignedExchangeHeader::Parse(
+      base::make_span(reinterpret_cast<uint8_t*>(header_buf_->data()),
+                      headers_length_),
+      devtools_proxy_.get());
   header_read_buf_ = nullptr;
   header_buf_ = nullptr;
   if (!header_) {
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::ParseHeadersAndFetchCertificate",
-                     "error", "Failed to parse SignedExchange header.");
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(),
+        "SignedExchangeHandler::ParseHeadersAndFetchCertificate",
+        "Failed to parse SignedExchange header.");
     return false;
   }
 
@@ -232,7 +245,8 @@ bool SignedExchangeHandler::ParseHeadersAndFetchCertificate() {
                       ->CreateFetcherAndStart(
                           cert_url, false,
                           base::BindOnce(&SignedExchangeHandler::OnCertReceived,
-                                         base::Unretained(this)));
+                                         base::Unretained(this)),
+                          devtools_proxy_.get());
 
   state_ = State::kFetchingCertificate;
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
@@ -244,43 +258,44 @@ void SignedExchangeHandler::RunErrorCallback(net::Error error) {
   DCHECK_NE(state_, State::kHeadersCallbackCalled);
   std::move(headers_callback_)
       .Run(error, GURL(), std::string(), network::ResourceResponseHead(),
-           nullptr, base::nullopt);
+           nullptr);
   state_ = State::kHeadersCallbackCalled;
 }
 
 void SignedExchangeHandler::OnCertReceived(
-    scoped_refptr<net::X509Certificate> cert) {
+    std::unique_ptr<SignedExchangeCertificateChain> cert_chain) {
   TRACE_EVENT_BEGIN0(TRACE_DISABLED_BY_DEFAULT("loading"),
                      "SignedExchangeHandler::OnCertReceived");
   DCHECK_EQ(state_, State::kFetchingCertificate);
-  if (!cert) {
+  if (!cert_chain) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::OnCertReceived",
+        "Failed to fetch the certificate.");
     RunErrorCallback(net::ERR_FAILED);
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::OnCertReceived", "error",
-                     "Fetching certificate error.");
     return;
   }
 
-  if (SignedExchangeSignatureVerifier::Verify(*header_, cert,
-                                              GetVerificationTime()) !=
+  if (SignedExchangeSignatureVerifier::Verify(*header_, cert_chain->cert(),
+                                              GetVerificationTime(),
+                                              devtools_proxy_.get()) !=
       SignedExchangeSignatureVerifier::Result::kSuccess) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::OnCertReceived",
+        "Failed to verify the signed exchange header.");
     RunErrorCallback(net::ERR_FAILED);
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::OnCertReceived", "error",
-                     "SignedExchangeSignatureVerifier failed.");
     return;
   }
   net::URLRequestContext* request_context =
       request_context_getter_->GetURLRequestContext();
   if (!request_context) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::OnCertReceived",
+        "No request context available.");
     RunErrorCallback(net::ERR_CONTEXT_SHUT_DOWN);
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::OnCertReceived", "error",
-                     "No request context available.");
     return;
   }
 
-  unverified_cert_ = cert;
+  unverified_cert_chain_ = std::move(cert_chain);
 
   net::SSLConfig config;
   request_context->ssl_config_service()->GetSSLConfig(&config);
@@ -293,7 +308,7 @@ void SignedExchangeHandler::OnCertReceived(
   // (nextUpdate - thisUpdate) is less than 7 days.
   int result = cert_verifier->Verify(
       net::CertVerifier::RequestParams(
-          unverified_cert_, header_->request_url().host(),
+          unverified_cert_chain_->cert(), header_->request_url().host(),
           config.GetCertVerifyFlags(), std::string() /* ocsp_response */,
           net::CertificateList()),
       net::SSLConfigService::GetCRLSet().get(), &cert_verify_result_,
@@ -314,10 +329,10 @@ void SignedExchangeHandler::OnCertVerifyComplete(int result) {
                      "SignedExchangeHandler::OnCertVerifyComplete");
 
   if (result != net::OK) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::OnCertVerifyComplete",
+        base::StringPrintf("Certificate verification error: %d", result));
     RunErrorCallback(static_cast<net::Error>(result));
-    TRACE_EVENT_END2(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::OnCertVerifyComplete", "error",
-                     "Certificate verification error.", "result", result);
     return;
   }
 
@@ -338,10 +353,10 @@ void SignedExchangeHandler::OnCertVerifyComplete(int result) {
   std::string mi_header_value;
   if (!response_head.headers->EnumerateHeader(nullptr, kMiHeader,
                                               &mi_header_value)) {
+    signed_exchange_utils::ReportErrorAndEndTraceEvent(
+        devtools_proxy_.get(), "SignedExchangeHandler::OnCertVerifyComplete",
+        "Signed exchange has no MI: header");
     RunErrorCallback(net::ERR_FAILED);
-    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
-                     "SignedExchangeHandler::OnCertVerifyComplete", "error",
-                     "Signed exchange has no MI: header.");
     return;
   }
   auto mi_stream = std::make_unique<MerkleIntegritySourceStream>(
@@ -349,7 +364,7 @@ void SignedExchangeHandler::OnCertVerifyComplete(int result) {
 
   net::SSLInfo ssl_info;
   ssl_info.cert = cert_verify_result_.verified_cert;
-  ssl_info.unverified_cert = unverified_cert_;
+  ssl_info.unverified_cert = unverified_cert_chain_->cert();
   ssl_info.cert_status = cert_verify_result_.cert_status;
   ssl_info.is_issued_by_known_root =
       cert_verify_result_.is_issued_by_known_root;
@@ -358,10 +373,11 @@ void SignedExchangeHandler::OnCertVerifyComplete(int result) {
   ssl_info.is_fatal_cert_error =
       net::IsCertStatusError(ssl_info.cert_status) &&
       !net::IsCertStatusMinorError(ssl_info.cert_status);
+  response_head.ssl_info = std::move(ssl_info);
   // TODO(https://crbug.com/815025): Verify the Certificate Transparency status.
   std::move(headers_callback_)
       .Run(net::OK, header_->request_url(), header_->request_method(),
-           response_head, std::move(mi_stream), ssl_info);
+           response_head, std::move(mi_stream));
   state_ = State::kHeadersCallbackCalled;
   TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("loading"),
                    "SignedExchangeHandler::OnCertVerifyComplete");

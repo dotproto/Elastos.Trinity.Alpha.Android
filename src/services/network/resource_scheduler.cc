@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -46,6 +45,12 @@ namespace {
 const base::Feature kPrioritySupportedRequestsDelayable{
     "PrioritySupportedRequestsDelayable", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When kSpdyProxiesRequestsDelayable is enabled, HTTP requests fetched from
+// a SPDY/QUIC/H2 proxies can be delayed by the ResourceScheduler just as
+// HTTP/1.1 resources are.
+const base::Feature kSpdyProxiesRequestsDelayable{
+    "SpdyProxiesRequestsDelayable", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // When enabled, low-priority H2 and QUIC requests are throttled, but only
 // when the parser is in head.
 const base::Feature kHeadPrioritySupportedRequestsDelayable{
@@ -72,7 +77,7 @@ const int kYieldMsDefault = 0;
 // may also throttle delayable requests based on the number of non-delayable
 // requests in-flight times a weighting factor.
 const base::Feature kThrottleDelayable{"ThrottleDelayable",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 enum StartMode { START_SYNC, START_ASYNC };
 
@@ -399,7 +404,9 @@ class ResourceScheduler::Client {
  public:
   Client(const net::NetworkQualityEstimator* const network_quality_estimator,
          ResourceScheduler* resource_scheduler)
-      : deprecated_is_loaded_(false),
+      : spdy_proxy_requests_delayble_(
+            base::FeatureList::IsEnabled(kSpdyProxiesRequestsDelayable)),
+        deprecated_is_loaded_(false),
         deprecated_has_html_body_(false),
         using_spdy_proxy_(false),
         in_flight_delayable_count_(0),
@@ -507,6 +514,11 @@ class ResourceScheduler::Client {
   }
 
   void OnReceivedSpdyProxiedHttpResponse() {
+    // If the requests to SPDY/H2/QUIC proxies are delayable, then return
+    // immediately.
+    if (spdy_proxy_requests_delayble_)
+      return;
+
     if (!using_spdy_proxy_) {
       using_spdy_proxy_ = true;
       LoadAnyStartablePendingRequests(RequestStartTrigger::SPDY_PROXY_DETECTED);
@@ -960,6 +972,10 @@ class ResourceScheduler::Client {
     }
   }
 
+  // True if requests to SPDY/H2/QUIC proxies can be delayed by the
+  // ResourceScheduler just as HTTP/1.1 resources are.
+  const bool spdy_proxy_requests_delayble_;
+
   bool deprecated_is_loaded_;
   // Tracks if the main HTML parser has reached the body which marks the end of
   // layout-blocking resources.
@@ -1262,11 +1278,8 @@ ResourceScheduler::ThrottleDelayable::GetParamsForNetworkQualityContainer() {
   result.push_back({net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G, 8, 3});
   result.push_back({net::EFFECTIVE_CONNECTION_TYPE_2G, 8, 3});
 
-  if (!base::FeatureList::IsEnabled(kThrottleDelayable))
-    return result;
-
-  int config_param_index = 1;
-  while (true) {
+  for (int config_param_index = 1; config_param_index <= 20;
+       ++config_param_index) {
     size_t max_delayable_requests;
 
     if (!base::StringToSizeT(
@@ -1274,7 +1287,6 @@ ResourceScheduler::ThrottleDelayable::GetParamsForNetworkQualityContainer() {
                 kThrottleDelayable, kMaxDelayableRequestsBase +
                                         base::IntToString(config_param_index)),
             &max_delayable_requests)) {
-      DCHECK_LE(result.size(), 20u);
       return result;
     }
 
@@ -1283,17 +1295,11 @@ ResourceScheduler::ThrottleDelayable::GetParamsForNetworkQualityContainer() {
             base::GetFieldTrialParamValueByFeature(
                 kThrottleDelayable, kEffectiveConnectionTypeBase +
                                         base::IntToString(config_param_index)));
-    if (!effective_connection_type)
-      return result;
+    DCHECK(effective_connection_type.has_value());
 
-    double non_delayable_weight;
-    if (!base::StringToDouble(
-            base::GetFieldTrialParamValueByFeature(
-                kThrottleDelayable, kNonDelayableWeightBase +
-                                        base::IntToString(config_param_index)),
-            &non_delayable_weight)) {
-      return result;
-    }
+    double non_delayable_weight = base::GetFieldTrialParamByFeatureAsDouble(
+        kThrottleDelayable,
+        kNonDelayableWeightBase + base::IntToString(config_param_index), 0.0);
 
     // Check if the entry is already present. This will happen if the default
     // params are being overridden by the field trial.
@@ -1311,8 +1317,10 @@ ResourceScheduler::ThrottleDelayable::GetParamsForNetworkQualityContainer() {
       result.push_back({effective_connection_type.value(),
                         max_delayable_requests, non_delayable_weight});
     }
-    config_param_index++;
   }
+  // There should not have been more than 20 params indices specified.
+  NOTREACHED();
+  return result;
 }
 
 bool ResourceScheduler::IsRendererSideResourceSchedulerEnabled() {

@@ -103,6 +103,18 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   DCHECK(surface->HasActiveFrame());
   if (last_activated_surface_id_ != surface->surface_id()) {
     if (last_activated_surface_id_.is_valid()) {
+      const LocalSurfaceId& local_surface_id =
+          surface->surface_id().local_surface_id();
+      const LocalSurfaceId& last_activated_local_surface_id =
+          last_activated_surface_id_.local_surface_id();
+      CHECK_GE(local_surface_id.parent_sequence_number(),
+               last_activated_local_surface_id.parent_sequence_number());
+      CHECK_GE(local_surface_id.child_sequence_number(),
+               last_activated_local_surface_id.child_sequence_number());
+      CHECK(local_surface_id.parent_sequence_number() >
+                last_activated_local_surface_id.parent_sequence_number() ||
+            local_surface_id.child_sequence_number() >
+                last_activated_local_surface_id.child_sequence_number());
       Surface* prev_surface =
           surface_manager_->GetSurfaceForId(last_activated_surface_id_);
       DCHECK(prev_surface);
@@ -118,6 +130,14 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   uint32_t frame_token = surface->GetActiveFrame().metadata.frame_token;
   if (frame_token)
     frame_sink_manager_->OnFrameTokenChanged(frame_sink_id_, frame_token);
+}
+
+void CompositorFrameSinkSupport::OnSurfaceDiscarded(Surface* surface) {
+  if (surface->surface_id() == last_activated_surface_id_)
+    last_activated_surface_id_ = SurfaceId();
+
+  if (surface->surface_id() == last_created_surface_id_)
+    last_created_surface_id_ = SurfaceId();
 }
 
 void CompositorFrameSinkSupport::RefResources(
@@ -148,13 +168,22 @@ void CompositorFrameSinkSupport::ReceiveFromChild(
   surface_resource_holder_.ReceiveFromChild(resources);
 }
 
-bool CompositorFrameSinkSupport::HasCopyOutputRequests() {
-  return !copy_output_requests_.empty();
-}
-
 std::vector<std::unique_ptr<CopyOutputRequest>>
-CompositorFrameSinkSupport::TakeCopyOutputRequests() {
-  return std::move(copy_output_requests_);
+CompositorFrameSinkSupport::TakeCopyOutputRequests(
+    const LocalSurfaceId& latest_local_id) {
+  std::vector<std::unique_ptr<CopyOutputRequest>> results;
+  for (auto it = copy_output_requests_.begin();
+       it != copy_output_requests_.end();) {
+    // Requests with a non-valid local id should be satisfied as soon as
+    // possible.
+    if (!it->first.is_valid() || it->first <= latest_local_id) {
+      results.push_back(std::move(it->second));
+      it = copy_output_requests_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  return results;
 }
 
 void CompositorFrameSinkSupport::EvictLastActivatedSurface() {
@@ -478,6 +507,7 @@ gfx::Size CompositorFrameSinkSupport::GetActiveFrameSize() {
   if (last_activated_surface_id_.is_valid()) {
     Surface* current_surface =
         surface_manager_->GetSurfaceForId(last_activated_surface_id_);
+    DCHECK(current_surface);
     if (current_surface->HasActiveFrame()) {
       DCHECK(current_surface->GetActiveFrame().size_in_pixels() ==
              current_surface->size_in_pixels());
@@ -488,13 +518,25 @@ gfx::Size CompositorFrameSinkSupport::GetActiveFrameSize() {
 }
 
 void CompositorFrameSinkSupport::RequestCopyOfOutput(
+    const LocalSurfaceId& local_surface_id,
     std::unique_ptr<CopyOutputRequest> copy_request) {
+  copy_output_requests_.push_back(
+      std::make_pair(local_surface_id, std::move(copy_request)));
+  if (last_activated_surface_id_.is_valid()) {
+    BeginFrameAck ack;
+    ack.has_damage = true;
+    surface_manager_->SurfaceModified(last_activated_surface_id_, ack);
+  }
+}
+
+const CompositorFrameMetadata*
+CompositorFrameSinkSupport::GetLastActivatedFrameMetadata() {
   if (!last_activated_surface_id_.is_valid())
-    return;
-  copy_output_requests_.push_back(std::move(copy_request));
-  BeginFrameAck ack;
-  ack.has_damage = true;
-  surface_manager_->SurfaceModified(last_activated_surface_id_, ack);
+    return nullptr;
+  Surface* surface =
+      surface_manager_->GetSurfaceForId(last_activated_surface_id_);
+  DCHECK(surface);
+  return &surface->GetActiveFrame().metadata;
 }
 
 HitTestAggregator* CompositorFrameSinkSupport::GetHitTestAggregator() {
@@ -523,11 +565,12 @@ const char* CompositorFrameSinkSupport::GetSubmitResultAsString(
 
 void CompositorFrameSinkSupport::OnAggregatedDamage(
     const LocalSurfaceId& local_surface_id,
-    const gfx::Size& frame_size_in_pixels,
+    const CompositorFrame& frame,
     const gfx::Rect& damage_rect,
     base::TimeTicks expected_display_time) const {
   DCHECK(!damage_rect.IsEmpty());
 
+  const gfx::Size& frame_size_in_pixels = frame.size_in_pixels();
   if (aggregated_damage_callback_) {
     aggregated_damage_callback_.Run(local_surface_id, frame_size_in_pixels,
                                     damage_rect, expected_display_time);
@@ -535,7 +578,7 @@ void CompositorFrameSinkSupport::OnAggregatedDamage(
 
   for (CapturableFrameSink::Client* client : capture_clients_) {
     client->OnFrameDamaged(frame_size_in_pixels, damage_rect,
-                           expected_display_time);
+                           expected_display_time, frame.metadata);
   }
 }
 

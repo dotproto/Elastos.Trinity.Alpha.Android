@@ -17,7 +17,7 @@
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/chromium/spdy_http_utils.h"
-#include "net/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "quic_http_stream.h"
 
 namespace net {
@@ -81,8 +81,12 @@ void BidirectionalStreamQuicImpl::Start(
   delegate_ = delegate;
   request_info_ = request_info;
 
+  // Only allow SAFE methods to use early data, unless overriden by the caller.
+  bool use_early_data = !HttpUtil::IsMethodSafe(request_info_->method);
+  use_early_data |= request_info_->allow_early_data_override;
+
   int rv = session_->RequestStream(
-      !HttpUtil::IsMethodSafe(request_info_->method),
+      use_early_data,
       base::Bind(&BidirectionalStreamQuicImpl::OnStreamReady,
                  weak_factory_.GetWeakPtr()),
       traffic_annotation);

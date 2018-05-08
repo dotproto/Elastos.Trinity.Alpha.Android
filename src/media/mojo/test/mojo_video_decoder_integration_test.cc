@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
@@ -92,8 +93,7 @@ class MockVideoDecoder : public VideoDecoder {
   }
 
   MOCK_METHOD2(Decode,
-               void(const scoped_refptr<DecoderBuffer>& buffer,
-                    const DecodeCB&));
+               void(scoped_refptr<DecoderBuffer> buffer, const DecodeCB&));
   MOCK_METHOD1(Reset, void(const base::Closure&));
   MOCK_CONST_METHOD0(NeedsBitstreamConversion, bool());
   MOCK_CONST_METHOD0(CanReadWithoutStalling, bool());
@@ -112,15 +112,17 @@ class MockVideoDecoder : public VideoDecoder {
 
   // Returns an output frame immediately.
   // TODO(sandersd): Extend to support tests of MojoVideoFrame frames.
-  void DoDecode(const scoped_refptr<DecoderBuffer>& buffer,
+  void DoDecode(scoped_refptr<DecoderBuffer> buffer,
                 const DecodeCB& decode_cb) {
     if (!buffer->end_of_stream()) {
       gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
       mailbox_holders[0].mailbox.name[0] = 1;
-      output_cb_.Run(VideoFrame::WrapNativeTextures(
+      scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
           PIXEL_FORMAT_ARGB, mailbox_holders, GetReleaseMailboxCB(),
           config_.coded_size(), config_.visible_rect(), config_.natural_size(),
-          buffer->timestamp()));
+          buffer->timestamp());
+      frame->metadata()->SetBoolean(VideoFrameMetadata::POWER_EFFICIENT, true);
+      output_cb_.Run(frame);
     }
     // |decode_cb| must not be called from the same stack.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -215,7 +217,7 @@ class MojoVideoDecoderIntegrationTest : public ::testing::Test {
     return result;
   }
 
-  DecodeStatus Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  DecodeStatus Decode(scoped_refptr<DecoderBuffer> buffer,
                       VideoFrame::ReleaseMailboxCB release_cb =
                           VideoFrame::ReleaseMailboxCB()) {
     DecodeStatus result = DecodeStatus::DECODE_ERROR;

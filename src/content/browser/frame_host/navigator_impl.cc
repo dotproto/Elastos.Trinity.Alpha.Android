@@ -474,16 +474,19 @@ void NavigatorImpl::DidNavigate(
     }
   }
 
-  // Save the origin of the new page.  Do this before calling
-  // DidNavigateFrame(), because the origin needs to be included in the SwapOut
-  // message, which is sent inside DidNavigateFrame().  SwapOut needs the
-  // origin because it creates a RenderFrameProxy that needs this to initialize
-  // its security context. This origin will also be sent to RenderFrameProxies
-  // created via mojom::Renderer::CreateView and
-  // mojom::Renderer::CreateFrameProxy.
+  // DidNavigateFrame() must be called before replicating the new origin and
+  // other properties to proxies.  This is because it destroys the subframes of
+  // the frame we're navigating from, which might trigger those subframes to
+  // run unload handlers.  Those unload handlers should still see the old
+  // frame's origin.  See https://crbug.com/825283.
+  frame_tree_node->render_manager()->DidNavigateFrame(
+      render_frame_host, params.gesture == NavigationGestureUser);
+
+  // Save the new page's origin and other properties, and replicate them to
+  // proxies, including the proxy created in DidNavigateFrame() to replace the
+  // old frame in cross-process navigation cases.
   frame_tree_node->SetCurrentOrigin(
       params.origin, params.has_potentially_trustworthy_unique_origin);
-
   frame_tree_node->SetInsecureRequestPolicy(params.insecure_request_policy);
   frame_tree_node->SetInsecureNavigationsSet(params.insecure_navigations_set);
 
@@ -493,9 +496,6 @@ void NavigatorImpl::DidNavigate(
     render_frame_host->ResetContentSecurityPolicies();
     frame_tree_node->ResetForNavigation();
   }
-
-  frame_tree_node->render_manager()->DidNavigateFrame(
-      render_frame_host, params.gesture == NavigationGestureUser);
 
   // Update the site of the SiteInstance if it doesn't have one yet, unless
   // assigning a site is not necessary for this URL or the commit was for an
@@ -849,7 +849,8 @@ void NavigatorImpl::OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
 void NavigatorImpl::OnBeginNavigation(
     FrameTreeNode* frame_tree_node,
     const CommonNavigationParams& common_params,
-    mojom::BeginNavigationParamsPtr begin_params) {
+    mojom::BeginNavigationParamsPtr begin_params,
+    scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory) {
   // TODO(clamy): the url sent by the renderer should be validated with
   // FilterURL.
   // This is a renderer-initiated navigation.
@@ -909,7 +910,8 @@ void NavigatorImpl::OnBeginNavigation(
       NavigationRequest::CreateRendererInitiated(
           frame_tree_node, pending_entry, common_params,
           std::move(begin_params), controller_->GetLastCommittedEntryIndex(),
-          controller_->GetEntryCount(), override_user_agent));
+          controller_->GetEntryCount(), override_user_agent,
+          std::move(blob_url_loader_factory)));
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
 
   // For main frames, NavigationHandle will be created after the call to

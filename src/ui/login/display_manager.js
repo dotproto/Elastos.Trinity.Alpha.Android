@@ -40,6 +40,7 @@
 /** @const */ var SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE =
     'ad-password-change';
 /** @const */ var SCREEN_SYNC_CONSENT = 'sync-consent';
+/** @const */ var SCREEN_RECOMMEND_APPS = 'recommend-apps';
 
 /* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
@@ -162,7 +163,8 @@ cr.define('cr.ui.login', function() {
     SCREEN_CONFIRM_PASSWORD,
     SCREEN_UPDATE_REQUIRED,
     SCREEN_FATAL_ERROR,
-    SCREEN_SYNC_CONSENT
+    SCREEN_SYNC_CONSENT,
+    SCREEN_RECOMMEND_APPS
   ];
 
   /**
@@ -197,7 +199,7 @@ cr.define('cr.ui.login', function() {
    * @const
    */
   var DEMO_MODE_SETUP_AVAILABLE_SCREEN_GROUP = [
-    SCREEN_GAIA_SIGNIN,
+    SCREEN_OOBE_NETWORK,
   ];
 
   /**
@@ -385,12 +387,12 @@ cr.define('cr.ui.login', function() {
      * @param {string} name Accelerator name.
      */
     handleAccelerator: function(name) {
-      if (this.currentScreen.ignoreAccelerators) {
+      if (this.currentScreen && this.currentScreen.ignoreAccelerators) {
         return;
       }
       var currentStepId = this.screens_[this.currentStep_];
       if (name == ACCELERATOR_CANCEL) {
-        if (this.currentScreen.cancel) {
+        if (this.currentScreen && this.currentScreen.cancel) {
           this.currentScreen.cancel();
         }
       } else if (name == ACCELERATOR_ENABLE_DEBBUGING) {

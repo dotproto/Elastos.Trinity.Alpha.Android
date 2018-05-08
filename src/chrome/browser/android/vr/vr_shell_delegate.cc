@@ -8,7 +8,8 @@
 
 #include "base/android/jni_android.h"
 #include "base/callback_helpers.h"
-#include "chrome/browser/android/vr/vr_metrics_util.h"
+#include "chrome/browser/android/vr/arcore_device/arcore_device_provider.h"
+#include "chrome/browser/android/vr/metrics_util_android.h"
 #include "chrome/browser/android/vr/vr_shell.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/vr_assets_component_installer.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/vr/service/vr_device_manager.h"
 #include "chrome/browser/vr/service/vr_service_impl.h"
 #include "content/public/browser/webvr_service_provider.h"
+#include "device/vr/android/arcore/arcore_device_provider_factory.h"
 #include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "jni/VrShellDelegate_jni.h"
@@ -45,6 +47,22 @@ class VrShellDelegateProviderFactory
 device::GvrDelegateProvider*
 VrShellDelegateProviderFactory::CreateGvrDelegateProvider() {
   return VrShellDelegate::CreateVrShellDelegate();
+}
+
+class ARCoreDeviceProviderFactoryImpl
+    : public device::ARCoreDeviceProviderFactory {
+ public:
+  ARCoreDeviceProviderFactoryImpl() = default;
+  ~ARCoreDeviceProviderFactoryImpl() override = default;
+  std::unique_ptr<device::VRDeviceProvider> CreateDeviceProvider() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ARCoreDeviceProviderFactoryImpl);
+};
+
+std::unique_ptr<device::VRDeviceProvider>
+ARCoreDeviceProviderFactoryImpl::CreateDeviceProvider() {
+  return std::make_unique<device::ARCoreDeviceProvider>();
 }
 
 }  // namespace
@@ -95,9 +113,15 @@ void VrShellDelegate::SetDelegate(VrShell* vr_shell,
     pending_successful_present_request_ = false;
     base::ResetAndReturn(&on_present_result_callback_).Run(true);
   }
+
+  if (pending_vr_start_action_) {
+    vr_shell_->RecordVrStartAction(*pending_vr_start_action_);
+    pending_vr_start_action_ = base::nullopt;
+  }
+
   JNIEnv* env = AttachCurrentThread();
   std::unique_ptr<VrCoreInfo> vr_core_info = MakeVrCoreInfo(env);
-  VrMetricsUtil::LogGvrVersionForVrViewerType(viewer_type, *vr_core_info);
+  MetricsUtilAndroid::LogGvrVersionForVrViewerType(viewer_type, *vr_core_info);
 }
 
 void VrShellDelegate::RemoveDelegate() {
@@ -122,6 +146,27 @@ void VrShellDelegate::SetPresentResult(JNIEnv* env,
       .Run(static_cast<bool>(success));
 }
 
+void VrShellDelegate::RecordVrStartAction(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jint start_action) {
+  VrStartAction action = static_cast<VrStartAction>(start_action);
+
+  if (action == VrStartAction::kDeepLinkedApp) {
+    // If this is a deep linked app we expect a DisplayActivate to be coming
+    // down the pipeline shortly.
+    possible_presentation_start_action_ =
+        PresentationStartAction::kDeepLinkedApp;
+  }
+
+  if (!vr_shell_) {
+    pending_vr_start_action_ = action;
+    return;
+  }
+
+  vr_shell_->RecordVrStartAction(action);
+}
+
 void VrShellDelegate::OnPresentResult(
     device::mojom::VRSubmitFrameClientPtr submit_client,
     device::mojom::VRPresentationProviderRequest request,
@@ -129,8 +174,10 @@ void VrShellDelegate::OnPresentResult(
     device::mojom::VRRequestPresentOptionsPtr present_options,
     device::mojom::VRDisplayHost::RequestPresentCallback callback,
     bool success) {
+  DVLOG(1) << __FUNCTION__ << ": success=" << success;
   if (!success) {
     std::move(callback).Run(false, nullptr);
+    possible_presentation_start_action_ = base::nullopt;
     return;
   }
 
@@ -145,17 +192,48 @@ void VrShellDelegate::OnPresentResult(
     return;
   }
 
+  // If possible_presentation_start_action_ is not set at this point, then this
+  // request present probably came from blink, and has already been reported
+  // from there.
+  if (possible_presentation_start_action_) {
+    vr_shell_->RecordPresentationStartAction(
+        *possible_presentation_start_action_);
+    possible_presentation_start_action_ = base::nullopt;
+  }
+
+  DVLOG(1) << __FUNCTION__ << ": connecting presenting service";
+  request_present_response_callback_ = std::move(callback);
   vr_shell_->ConnectPresentingService(
       std::move(submit_client), std::move(request), std::move(display_info),
       std::move(present_options));
+}
 
-  std::move(callback).Run(true, vr_shell_->GetVRDisplayFrameTransportOptions());
+void VrShellDelegate::SendRequestPresentReply(
+    bool success,
+    device::mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+  DVLOG(1) << __FUNCTION__;
+  if (!request_present_response_callback_) {
+    DLOG(ERROR) << __FUNCTION__ << ": ERROR: no callback";
+    return;
+  }
+  base::ResetAndReturn(&request_present_response_callback_)
+      .Run(success, std::move(transport_options));
 }
 
 void VrShellDelegate::DisplayActivate(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj) {
   device::GvrDevice* device = static_cast<device::GvrDevice*>(GetDevice());
   if (device) {
+    if (!possible_presentation_start_action_ ||
+        possible_presentation_start_action_ !=
+            PresentationStartAction::kDeepLinkedApp) {
+      // The only possible sources for DisplayActivate are at the moment DLAs
+      // and HeadsetActivations. Therefore if it's not a DLA it must be a
+      // HeadsetActivation.
+      possible_presentation_start_action_ =
+          PresentationStartAction::kHeadsetActivation;
+    }
+
     device->Activate(
         device::mojom::VRDisplayEventReason::MOUNTED,
         base::BindRepeating(&VrShellDelegate::OnActivateDisplayHandled,
@@ -179,11 +257,6 @@ void VrShellDelegate::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   device::VRDevice* device = GetDevice();
   if (device)
     device->ResumeTracking();
-}
-
-bool VrShellDelegate::IsClearActivatePending(JNIEnv* env,
-                                             const JavaParamRef<jobject>& obj) {
-  return !clear_activate_task_.IsCancelled();
 }
 
 void VrShellDelegate::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -216,7 +289,8 @@ void VrShellDelegate::RequestWebVRPresent(
     device::mojom::VRDisplayInfoPtr display_info,
     device::mojom::VRRequestPresentOptionsPtr present_options,
     device::mojom::VRDisplayHost::RequestPresentCallback callback) {
-  if (!on_present_result_callback_.is_null()) {
+  if (!on_present_result_callback_.is_null() ||
+      !request_present_response_callback_.is_null()) {
     // Can only handle one request at a time. This is also extremely unlikely to
     // happen in practice.
     std::move(callback).Run(false, nullptr);
@@ -250,26 +324,12 @@ void VrShellDelegate::OnActivateDisplayHandled(bool will_not_present) {
     // WebVR page didn't request presentation in the vrdisplayactivate handler.
     // Tell VrShell that we are in VR Browsing Mode.
     ExitWebVRPresent();
+    // Reset possible_presentation_start_action_ as it may have been set.
+    possible_presentation_start_action_ = base::nullopt;
   }
 }
 
 void VrShellDelegate::OnListeningForActivateChanged(bool listening) {
-  if (listening) {
-    SetListeningForActivate(true);
-  } else {
-    // We post here to ensure that this runs after Android finishes running all
-    // onPause handlers. This allows us to capture the pre-paused state during
-    // onPause in java, so we know that the pause is the cause of the focus
-    // loss, and that the page is still listening for activate.
-    clear_activate_task_.Reset(
-        base::BindRepeating(&VrShellDelegate::SetListeningForActivate,
-                            weak_ptr_factory_.GetWeakPtr(), false));
-    task_runner_->PostTask(FROM_HERE, clear_activate_task_.callback());
-  }
-}
-
-void VrShellDelegate::SetListeningForActivate(bool listening) {
-  clear_activate_task_.Cancel();
   JNIEnv* env = AttachCurrentThread();
   Java_VrShellDelegate_setListeningForWebVrActivate(env, j_vr_shell_delegate_,
                                                     listening);
@@ -292,6 +352,11 @@ static void JNI_VrShellDelegate_OnLibraryAvailable(
     const JavaParamRef<jclass>& clazz) {
   device::GvrDelegateProviderFactory::Install(
       new VrShellDelegateProviderFactory);
+
+  // TODO(https://crbug.com/837965): Move this to an ARCore-specific location
+  // with similar timing (occurs before VRDeviceManager is initialized).
+  device::ARCoreDeviceProviderFactory::Install(
+      new ARCoreDeviceProviderFactoryImpl);
 }
 
 static void JNI_VrShellDelegate_RegisterVrAssetsComponent(

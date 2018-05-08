@@ -83,6 +83,9 @@
     "includes": [11000],
     "structures": [11470],
   },
+  "chrome/browser/resources/chromeos/multidevice_setup/multidevice_setup_resources.grd": {
+    "structures": [11515],
+  },
   "chrome/browser/resources/component_extension_resources.grd": {
     "includes": [11560],
     "structures": [11810],
@@ -99,8 +102,11 @@
   "chrome/browser/resources/net_internals_resources.grd": {
     "includes": [12000],
   },
+  "chrome/browser/resources/print_preview/print_preview_resources_vulcanized.grd": {
+    "includes": [12010],
+  },
   "chrome/browser/resources/print_preview/print_preview_resources.grd": {
-    "structures": [12010],
+    "structures": [12020],
   },
   "chrome/browser/resources/quota_internals_resources.grd": {
     "includes": [12210],
@@ -284,8 +290,11 @@
   "ash/components/resources/ash_components_resources.grd": {
     "structures": [24250],
   },
+  "ash/public/cpp/resources/ash_public_unscaled_resources.grd": {
+    "includes": [24260],
+  },
   "ash/resources/ash_resources.grd": {
-    "structures": [24260],
+    "structures": [24280],
   },
 
   "chromecast/browser/cast_browser_resources.grd": {
@@ -334,13 +343,13 @@
     "messages": [24800],
   },
 
-  "third_party/WebKit/public/blink_image_resources.grd": {
+  "third_party/blink/public/blink_image_resources.grd": {
     "structures": [25300],
   },
-  "third_party/WebKit/public/blink_resources.grd": {
+  "third_party/blink/public/blink_resources.grd": {
     "includes": [25400],
   },
-  "third_party/WebKit/Source/modules/media_controls/resources/media_controls_resources.grd": {
+  "third_party/blink/renderer/modules/media_controls/resources/media_controls_resources.grd": {
     "includes": [25500],
     "structures": [25600],
   },

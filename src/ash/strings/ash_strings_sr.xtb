@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Покретач</translation>
 <translation id="1525508553941733066">ОДБАЦИ</translation>
+<translation id="1537254971476575106">Лупа за цео екран</translation>
 <translation id="15373452373711364">Велики курсор</translation>
 <translation id="1550523713251050646">Кликните за више опција</translation>
 <translation id="1567387640189251553">Нека друга тастатура је повезана откако сте последњи пут унели лозинку. Можда покушава да украде вашу комбинацију тастера.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Жао нам је, верификација лозинке још увек није успела. Напомена: ако сте недавно променили лозинку, нова лозинка ће се применити када се одјавите. Овде користите стару лозинку.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> је преостало</translation>
 <translation id="1698760176351776263">IPv6 адреса: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Администратор уређаја може да надгледа ваше активности.</translation>
 <translation id="1734367976349034509">Овим уређајем управља предузеће</translation>
 <translation id="1746730358044914197">Методе уноса конфигурише администратор.</translation>
 <translation id="1747827819627189109">Тастатура на екрану је омогућена</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Дугме за додатне опције</translation>
 <translation id="1951012854035635156">Помоћник</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Подесите језик</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Искључи</translation>
 <translation id="2012624427112548395">Ctrl + тастер за претрагу + H</translation>
 <translation id="2049639323467105390">Овим уређајем управља домен <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Вертикално</translation>
 <translation id="2067602449040652523">Осветљеност тастатуре</translation>
+<translation id="2081529251031312395">$1 ће и даље моћи да се пријави касније.</translation>
 <translation id="2122028596993374965">Заустави пребацивање картице <ph name="TAB_NAME" /> на <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Пуњач мале снаге</translation>
+<translation id="2135456203358955318">Монтирана лупа екрана</translation>
 <translation id="2144487987174258011">Покрените поново да бисте ажурирали Adobe Flash Player</translation>
-<translation id="2191905770366256395">Треба да инсталирате важно ажурирање одвојиве тастатуре</translation>
 <translation id="2208323208084708176">Режим спојених радних површина</translation>
 <translation id="2220572644011485463">PIN или лозинка</translation>
 <translation id="225680501294068881">Скенирање уређаја...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Размера приказа</translation>
 <translation id="2303600792989757991">Укључи/искључи преглед прозора</translation>
 <translation id="2338501278241028356">Укључите Bluetooth да бисте открили уређаје у близини</translation>
+<translation id="2339073806695260576">Додирните дугме писаљке на полици да бисте направили белешку и снимак екрана и да бисте користили ласерски показивач или лупу.</translation>
 <translation id="2351266942280602854">Језик и унос</translation>
 <translation id="2352467521400612932">Подешавања писаљке</translation>
 <translation id="2354174487190027830">Активирање мреже <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Пошаљи</translation>
 <translation id="2675319268637823299">Администратор је забранио вишеструко пријављивање за <ph name="USER_EMAIL" />.
     Сви корисници морају да се одјаве да бисмо наставили са сесијом.</translation>
+<translation id="2696763960464195425">Информације ће бити уклоњене када се одјавите. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Подесите тастатуру</translation>
 <translation id="2718395828230677721">Ноћно светло</translation>
 <translation id="2727977024730340865">Уређај је укључен у пуњач мале снаге. Пуњење батерије можда неће бити поуздано.</translation>
 <translation id="2761704814324807722">Статусна трака, време <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -201,7 +208,7 @@
 <translation id="5860033963881614850">Искључено</translation>
 <translation id="5895138241574237353">Покрени поново</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
-<translation id="5916664084637901428">Укључи</translation>
+<translation id="5916664084637901428">Укључено</translation>
 <translation id="5927132638760172455">Пребацује се на непознати пријемник</translation>
 <translation id="5947494881799873997">Врати</translation>
 <translation id="595202126637698455">Праћење учинка је омогућено</translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Унос рукописа</translation>
 <translation id="6528179044667508675">Не узнемиравај</translation>
 <translation id="6537270692134705506">Сними екран</translation>
-<translation id="6580955892089546165">Ова функција вам омогућава да брзо приступите било ком пријављеном кориснику без лозинке.
-
-Користите ову функцију само са налозима у које имате поверења.</translation>
 <translation id="6585808820553845416">Сесија се завршава за <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Тастер за претрагу+Shift+K</translation>
 <translation id="6650933572246256093">Bluetooth уређај „<ph name="DEVICE_NAME" />“ жели дозволу за упаривање. Унесите ову шифру на том уређају: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Лозинка</translation>
 <translation id="6691659475504239918">Тастер за претрагу + Shift + H</translation>
+<translation id="6696025732084565524">Треба да инсталирате важно ажурирање за одвојиву тастатуру</translation>
 <translation id="6700713906295497288">Дугме IME менија</translation>
 <translation id="6713285437468012787">Bluetooth уређај „<ph name="DEVICE_NAME" />“ је упарен и сада је доступан свим корисницима. Можете да уклоните то упаривање помоћу Подешавања.</translation>
 <translation id="6715542151869432661">Није пронађен ниједан мобилни уређај.</translation>
@@ -260,7 +265,6 @@
 <translation id="7029814467594812963">Изађи из сесије</translation>
 <translation id="7034339000180558234"><ph name="TAB_NAME" /> се пребацује на <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Подеси позадину...</translation>
-<translation id="7054808953701320293">Важи, не приказуј ми ово поново.</translation>
 <translation id="7066646422045619941">Ову мрежу је онемогућио администратор.</translation>
 <translation id="7067196344162293536">Аутоматски ротирај</translation>
 <translation id="7098389117866926363">Уређај са USB прикључком типа C (леви задњи порт)</translation>
@@ -299,8 +303,6 @@
 <translation id="7994370417837006925">Вишеструко пријављивање</translation>
 <translation id="8000066093800657092">Нема мреже</translation>
 <translation id="8054466585765276473">Израчунавање времена трајања батерије.</translation>
-<translation id="8056430285089645882">Важи, не приказуј ово поново.</translation>
-<translation id="8088137642766812908">Пазите, ова функција можда уједа</translation>
 <translation id="8098591350844501178">Заустави пребацивање екрана на <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Успостављена је веза са <ph name="NAME" /></translation>
 <translation id="813913629614996137">Покреће се…</translation>
@@ -326,10 +328,8 @@
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Повезан је пуњач мале снаге</translation>
 <translation id="8734991477317290293">Можда покушава да украде вашу комбинацију тастера</translation>
+<translation id="8809737090443522491">Унесите назив апликације или документа</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">Премештање прозора на други рачунар може да доведе до неочекиваног понашања.
-
-Накнадна обавештења, прозори и дијалози ће можда бити подељени између рачунара.</translation>
 <translation id="8825534185036233643">Пресликавање са више од два екрана није подржано.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Дугме Назад</translation>
@@ -347,7 +347,7 @@
 <translation id="9091626656156419976">Уклоњен је приказ <ph name="DISPLAY_NAME" /></translation>
 <translation id="9111102763498581341">Откључај</translation>
 <translation id="9151726767154816831">Поново покрените и обавите Powerwash да бисте ажурирали</translation>
-<translation id="9194617393863864469">Пријавите другог корисника...</translation>
+<translation id="9194617393863864469">Пријавите још једног корисника...</translation>
 <translation id="9201131092683066720">Батерија је <ph name="PERCENTAGE" />% пуна.</translation>
 <translation id="9210037371811586452">Излазак из режима спојених радних површина</translation>
 <translation id="923686485342484400">Двапут притисните Control Shift Q да бисте се одјавили.</translation>

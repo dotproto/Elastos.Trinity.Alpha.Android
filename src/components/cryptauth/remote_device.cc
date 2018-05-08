@@ -40,7 +40,6 @@ RemoteDevice::RemoteDevice()
 RemoteDevice::RemoteDevice(const std::string& user_id,
                            const std::string& name,
                            const std::string& public_key,
-                           const std::string& bluetooth_address,
                            const std::string& persistent_symmetric_key,
                            bool unlock_key,
                            bool supports_mobile_hotspot,
@@ -48,7 +47,6 @@ RemoteDevice::RemoteDevice(const std::string& user_id,
     : user_id(user_id),
       name(name),
       public_key(public_key),
-      bluetooth_address(bluetooth_address),
       persistent_symmetric_key(persistent_symmetric_key),
       unlock_key(unlock_key),
       supports_mobile_hotspot(supports_mobile_hotspot),
@@ -85,7 +83,6 @@ bool RemoteDevice::operator==(const RemoteDevice& other) const {
 
   return user_id == other.user_id && name == other.name &&
          public_key == other.public_key &&
-         bluetooth_address == other.bluetooth_address &&
          persistent_symmetric_key == other.persistent_symmetric_key &&
          unlock_key == other.unlock_key &&
          supports_mobile_hotspot == other.supports_mobile_hotspot &&

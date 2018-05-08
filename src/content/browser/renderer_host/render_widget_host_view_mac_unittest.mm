@@ -21,6 +21,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -359,7 +360,6 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     ui::SetEventTickClockForTesting(&mock_clock_);
     SetFeatureList();
 
-    mojo_feature_list_.InitAndEnableFeature(features::kMojoInputMessages);
     vsync_feature_list_.InitAndEnableFeature(
         features::kVsyncAlignedInputEvents);
   }
@@ -368,6 +368,9 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     RenderViewHostImplTestHarness::SetUp();
     gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
 
+    browser_context_ = std::make_unique<TestBrowserContext>();
+    process_host_ =
+        std::make_unique<MockRenderProcessHost>(browser_context_.get());
     process_host_->Init();
     host_ = MockRenderWidgetHostImpl::Create(&delegate_, process_host_.get(),
                                              process_host_->GetNextRoutingID());
@@ -382,6 +385,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     rwhv_cocoa_.reset();
     host_->ShutdownAndDestroyWidget(true);
     process_host_.reset();
+    browser_context_.reset();
     RecycleAndWait();
     RenderViewHostImplTestHarness::TearDown();
   }
@@ -434,9 +438,8 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
   MockRenderWidgetHostDelegate delegate_;
 
-  TestBrowserContext browser_context_;
-  std::unique_ptr<MockRenderProcessHost> process_host_ =
-      std::make_unique<MockRenderProcessHost>(&browser_context_);
+  std::unique_ptr<TestBrowserContext> browser_context_;
+  std::unique_ptr<MockRenderProcessHost> process_host_;
   MockRenderWidgetHostImpl* host_ = nullptr;
   RenderWidgetHostViewMac* rwhv_mac_ = nullptr;
   base::scoped_nsobject<RenderWidgetHostViewCocoa> rwhv_cocoa_;
@@ -448,7 +451,6 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
   // This class isn't derived from PlatformTest.
   base::mac::ScopedNSAutoreleasePool pool_;
 
-  base::test::ScopedFeatureList mojo_feature_list_;
   base::test::ScopedFeatureList vsync_feature_list_;
   base::test::ScopedFeatureList feature_list_;
 
@@ -486,78 +488,6 @@ TEST_F(RenderWidgetHostViewMacTest, NSTextInputClientConformance) {
   EXPECT_EQ(nil, actualString);
   EXPECT_EQ(static_cast<NSUInteger>(NSNotFound), actualRange.location);
   EXPECT_EQ(0u, actualRange.length);
-}
-
-TEST_F(RenderWidgetHostViewMacTest, Fullscreen) {
-  rwhv_mac_->InitAsFullscreen(nullptr);
-  EXPECT_TRUE(rwhv_mac_->pepper_fullscreen_window());
-
-  // Break the reference cycle caused by pepper_fullscreen_window() without
-  // an <esc> event. See comment in
-  // release_pepper_fullscreen_window_for_testing().
-  rwhv_mac_->release_pepper_fullscreen_window_for_testing();
-}
-
-// Verify that escape key down in fullscreen mode suppressed the keyup event on
-// the parent.
-TEST_F(RenderWidgetHostViewMacTest, FullscreenCloseOnEscape) {
-  // Use our own RWH since we need to destroy it.
-  MockRenderWidgetHostDelegate delegate;
-  int32_t routing_id = process_host_->GetNextRoutingID();
-  // Owned by its |cocoa_view()|.
-  MockRenderWidgetHostImpl* rwh = MockRenderWidgetHostImpl::Create(
-      &delegate, process_host_.get(), routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, false);
-
-  view->InitAsFullscreen(rwhv_mac_);
-
-  WindowedNotificationObserver observer(
-      NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(rwh));
-  EXPECT_FALSE([rwhv_mac_->cocoa_view() suppressNextEscapeKeyUp]);
-
-  // Escape key down. Should close window and set |suppressNextEscapeKeyUp| on
-  // the parent.
-  [view->cocoa_view() keyEvent:
-      cocoa_test_event_utils::KeyEventWithKeyCode(53, 27, NSKeyDown, 0)];
-  observer.Wait();
-  EXPECT_TRUE([rwhv_mac_->cocoa_view() suppressNextEscapeKeyUp]);
-
-  // Escape key up on the parent should clear |suppressNextEscapeKeyUp|.
-  [rwhv_mac_->cocoa_view() keyEvent:
-      cocoa_test_event_utils::KeyEventWithKeyCode(53, 27, NSKeyUp, 0)];
-  EXPECT_FALSE([rwhv_mac_->cocoa_view() suppressNextEscapeKeyUp]);
-}
-
-// Test that command accelerators which destroy the fullscreen window
-// don't crash when forwarded via the window's responder machinery.
-TEST_F(RenderWidgetHostViewMacTest, AcceleratorDestroy) {
-  // Use our own RWH since we need to destroy it.
-  MockRenderWidgetHostDelegate delegate;
-  TestBrowserContext browser_context;
-  int32_t routing_id = process_host_->GetNextRoutingID();
-  // Owned by its |cocoa_view()|.
-  MockRenderWidgetHostImpl* rwh = MockRenderWidgetHostImpl::Create(
-      &delegate, process_host_.get(), routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, false);
-
-  view->InitAsFullscreen(rwhv_mac_);
-
-  WindowedNotificationObserver observer(
-      NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(rwh));
-
-  // Key equivalents are only sent to the renderer if the window is key.
-  ui::test::ScopedFakeNSWindowFocus key_window_faker;
-  [[view->cocoa_view() window] makeKeyWindow];
-
-  // Command-ESC will destroy the view, while the window is still in
-  // |-performKeyEquivalent:|.  There are other cases where this can
-  // happen, Command-ESC is the easiest to trigger.
-  [[view->cocoa_view() window] performKeyEquivalent:
-      cocoa_test_event_utils::KeyEventWithKeyCode(
-          53, 27, NSKeyDown, NSCommandKeyMask)];
-  observer.Wait();
 }
 
 // Test that NSEvent of private use character won't generate keypress event
@@ -616,31 +546,23 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   gfx::Range caret_range(0, 0);
   ViewHostMsg_SelectionBounds_Params params;
 
-  NSRect rect;
-  NSRange actual_range;
+  gfx::Rect rect;
+  gfx::Range actual_range;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
   params.anchor_rect = params.focus_rect = caret_rect;
   params.anchor_dir = params.focus_dir = blink::kWebTextDirectionLeftToRight;
   rwhv_mac_->SelectionBoundsChanged(params);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        caret_range.ToNSRange(),
-        &rect,
-        &actual_range));
-  EXPECT_EQ(caret_rect, gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(caret_range, &rect,
+                                                             &actual_range));
+  EXPECT_EQ(caret_rect, rect);
   EXPECT_EQ(caret_range, gfx::Range(actual_range));
 
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(0, 1).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(0, 1), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(1, 1).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(1, 1), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(2, 3).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(2, 3), &rect, &actual_range));
 
   // Caret moved.
   caret_rect = gfx::Rect(20, 11, 0, 10);
@@ -648,25 +570,17 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   params.anchor_rect = params.focus_rect = caret_rect;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
   rwhv_mac_->SelectionBoundsChanged(params);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        caret_range.ToNSRange(),
-        &rect,
-        &actual_range));
-  EXPECT_EQ(caret_rect, gfx::Rect(NSRectToCGRect(rect)));
-  EXPECT_EQ(caret_range, gfx::Range(actual_range));
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(caret_range, &rect,
+                                                             &actual_range));
+  EXPECT_EQ(caret_rect, rect);
+  EXPECT_EQ(caret_range, actual_range);
 
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(0, 0).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(0, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(1, 2).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(1, 2), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(2, 3).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(2, 3), &rect, &actual_range));
 
   // No caret.
   caret_range = gfx::Range(1, 2);
@@ -675,25 +589,15 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   params.focus_rect = gfx::Rect(30, 11, 0, 10);
   rwhv_mac_->SelectionBoundsChanged(params);
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(0, 0).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(0, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(0, 1).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(0, 1), &rect, &actual_range));
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(1, 1).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(1, 1), &rect, &actual_range));
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(1, 2).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(1, 2), &rect, &actual_range));
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-        gfx::Range(2, 2).ToNSRange(),
-        &rect,
-        &actual_range));
+      gfx::Range(2, 2), &rect, &actual_range));
 }
 
 TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
@@ -701,41 +605,31 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
   const gfx::Point kOrigin(10, 11);
   const gfx::Size kBoundsUnit(10, 20);
 
-  NSRect rect;
+  gfx::Rect rect;
   // Make sure not crashing by passing nullptr pointer instead of
   // |actual_range|.
-  EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(0, 0).ToNSRange(), &rect, nullptr));
+  EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(gfx::Range(0, 0),
+                                                              &rect, nullptr));
 
   // If there are no update from renderer, always returned caret position.
-  NSRange actual_range;
+  gfx::Range actual_range;
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(0, 0).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(0, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(0, 1).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(0, 1), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(1, 0).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(1, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(1, 1).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(1, 1), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(1, 2).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(1, 2), &rect, &actual_range));
 
   // If the firstRectForCharacterRange is failed in renderer, empty rect vector
   // is sent. Make sure this does not crash.
   rwhv_mac_->ImeCompositionRangeChanged(gfx::Range(10, 12),
                                         std::vector<gfx::Rect>());
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(10, 11).ToNSRange(), &rect, nullptr));
+      gfx::Range(10, 11), &rect, nullptr));
 
   const int kCompositionLength = 10;
   std::vector<gfx::Rect> composition_bounds;
@@ -751,29 +645,17 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
 
   // Out of range requests will return caret position.
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(0, 0).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(0, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(1, 1).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(1, 1), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(1, 2).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(1, 2), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(2, 2).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(2, 2), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(13, 14).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(13, 14), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
-      gfx::Range(14, 15).ToNSRange(),
-      &rect,
-      &actual_range));
+      gfx::Range(14, 15), &rect, &actual_range));
 
   for (int i = 0; i <= kCompositionLength; ++i) {
     for (int j = 0; j <= kCompositionLength - i; ++j) {
@@ -782,15 +664,14 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
                                                       kBoundsUnit,
                                                       range,
                                                       0);
-      const NSRange request_range = gfx::Range(
-          kCompositionStart + range.start(),
-          kCompositionStart + range.end()).ToNSRange();
+      const gfx::Range request_range = gfx::Range(
+          kCompositionStart + range.start(), kCompositionStart + range.end());
       EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
             request_range,
             &rect,
             &actual_range));
-      EXPECT_EQ(gfx::Range(request_range), gfx::Range(actual_range));
-      EXPECT_EQ(expected_rect, gfx::Rect(NSRectToCGRect(rect)));
+      EXPECT_EQ(request_range, actual_range);
+      EXPECT_EQ(expected_rect, rect);
 
       // Make sure not crashing by passing nullptr pointer instead of
       // |actual_range|.
@@ -804,7 +685,7 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionMultilineCase) {
   ActivateViewWithTextInputManager(rwhv_mac_, ui::TEXT_INPUT_TYPE_TEXT);
   const gfx::Point kOrigin(10, 11);
   const gfx::Size kBoundsUnit(10, 20);
-  NSRect rect;
+  gfx::Rect rect;
 
   const int kCompositionLength = 30;
   std::vector<gfx::Rect> composition_bounds;
@@ -823,112 +704,76 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionMultilineCase) {
   // Range doesn't contain line breaking point.
   gfx::Range range;
   range = gfx::Range(5, 8);
-  NSRange actual_range;
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  gfx::Range actual_range;
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(range, gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, range, 0),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(range, actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, range, 0), rect);
   range = gfx::Range(15, 18);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(range, gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 8), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(range, actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 8), 1), rect);
   range = gfx::Range(25, 28);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(range, gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 8), 2),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(range, actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 8), 2), rect);
 
   // Range contains line breaking point.
   range = gfx::Range(8, 12);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(8, 10), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(8, 10), 0),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(8, 10), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(8, 10), 0), rect);
   range = gfx::Range(18, 22);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(18, 20), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(8, 10), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(18, 20), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(8, 10), 1), rect);
 
   // Start point is line breaking point.
   range = gfx::Range(10, 12);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(10, 12), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 2), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(10, 12), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 2), 1), rect);
   range = gfx::Range(20, 22);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(20, 22), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 2), 2),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(20, 22), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 2), 2), rect);
 
   // End point is line breaking point.
   range = gfx::Range(5, 10);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(5, 10), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 10), 0),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(5, 10), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 10), 0), rect);
   range = gfx::Range(15, 20);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(15, 20), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 10), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(15, 20), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(5, 10), 1), rect);
 
   // Start and end point are same line breaking point.
   range = gfx::Range(10, 10);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(10, 10), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 0), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(10, 10), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 0), 1), rect);
   range = gfx::Range(20, 20);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(20, 20), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 0), 2),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(20, 20), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 0), 2), rect);
 
   // Start and end point are different line breaking point.
   range = gfx::Range(10, 20);
-  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range.ToNSRange(),
-                                                             &rect,
+  EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(range, &rect,
                                                              &actual_range));
-  EXPECT_EQ(gfx::Range(10, 20), gfx::Range(actual_range));
-  EXPECT_EQ(
-      GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 10), 1),
-      gfx::Rect(NSRectToCGRect(rect)));
+  EXPECT_EQ(gfx::Range(10, 20), actual_range);
+  EXPECT_EQ(GetExpectedRect(kOrigin, kBoundsUnit, gfx::Range(0, 10), 1), rect);
 }
 
 // Check that events coming from AppKit via -[NSTextInputClient
@@ -1756,14 +1601,18 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
 
   void SetUp() override {
     RenderWidgetHostViewMacTest::SetUp();
-    process_host_ = new MockRenderProcessHost(&browser_context_);
+
+    browser_context_ = std::make_unique<TestBrowserContext>();
+    process_host_ = new MockRenderProcessHost(browser_context_.get());
     process_host_->Init();
     widget_ = MockRenderWidgetHostImpl::Create(
         &delegate_, process_host_, process_host_->GetNextRoutingID());
     view_ = new RenderWidgetHostViewMac(widget_, false);
 
     // Initializing a child frame's view.
-    child_process_host_ = new MockRenderProcessHost(&child_browser_context_);
+    child_browser_context_ = std::make_unique<TestBrowserContext>();
+    child_process_host_ =
+        new MockRenderProcessHost(child_browser_context_.get());
     child_process_host_->Init();
     child_widget_ = MockRenderWidgetHostImpl::Create(
         &delegate_, child_process_host_,
@@ -1775,6 +1624,9 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
   void TearDown() override {
     widget_->ShutdownAndDestroyWidget(true);
     child_widget_->ShutdownAndDestroyWidget(true);
+
+    child_browser_context_.reset();
+    browser_context_.reset();
 
     RenderWidgetHostViewMacTest::TearDown();
   }
@@ -1806,8 +1658,8 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
   TestRenderWidgetHostView* child_view_;
 
  private:
-  TestBrowserContext browser_context_;
-  TestBrowserContext child_browser_context_;
+  std::unique_ptr<TestBrowserContext> browser_context_;
+  std::unique_ptr<TestBrowserContext> child_browser_context_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodMacTest);
 };
@@ -2081,68 +1933,6 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
   EXPECT_FALSE(message->monitor_request());
 }
 
-// Ensure RenderWidgetHostViewMac claims hotkeys when AppKit spams the UI with
-// -performKeyEquivalent:, but only when the window is key.
-// Flaky: https://crbug.com/792907
-TEST_F(RenderWidgetHostViewMacTest, DISABLED_ForwardKeyEquivalentsOnlyIfKey) {
-  int32_t routing_id = process_host_->GetNextRoutingID();
-  // Owned by its |cocoa_view()|.
-  MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
-      &delegate_, process_host_.get(), routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
-
-  EXPECT_CALL(*host, Focus()).Times(2);
-  EXPECT_CALL(*host, Blur());
-
-  // This test needs an NSWindow. |rwhv_cocoa_| isn't in one, but going
-  // fullscreen conveniently puts it in one.
-  EXPECT_FALSE([view->cocoa_view() window]);
-  view->InitAsFullscreen(nullptr);
-  NSWindow* window = [view->cocoa_view() window];
-  EXPECT_TRUE(window);
-  base::RunLoop().RunUntilIdle();
-  MockWidgetInputHandler::MessageVector events =
-      host->GetAndResetDispatchedMessages();
-
-  ui::test::ScopedFakeNSWindowFocus key_window_faker;
-  EXPECT_FALSE([window isKeyWindow]);
-  base::RunLoop().RunUntilIdle();
-  events = host->GetAndResetDispatchedMessages();
-
-  EXPECT_EQ(0U, events.size());
-
-  // Cmd+x.
-  NSEvent* key_down =
-      cocoa_test_event_utils::KeyEventWithType(NSKeyDown, NSCommandKeyMask);
-
-  // Sending while not key should forward along the responder chain (e.g. to the
-  // mainMenu). Note the event is being sent to the NSWindow, which may also ask
-  // other parts of the UI to handle it, but in the test they should all say
-  // "NO" as well.
-  EXPECT_FALSE([window performKeyEquivalent:key_down]);
-  base::RunLoop().RunUntilIdle();
-  events = host->GetAndResetDispatchedMessages();
-  EXPECT_EQ(0U, events.size());
-
-  // Make key and send again. Event should be seen.
-  [window makeKeyWindow];
-  EXPECT_TRUE([window isKeyWindow]);
-  base::RunLoop().RunUntilIdle();
-  events = host->GetAndResetDispatchedMessages();
-
-  // -performKeyEquivalent: now returns YES to prevent further propagation, and
-  // the event is sent to the renderer.
-  EXPECT_TRUE([window performKeyEquivalent:key_down]);
-  base::RunLoop().RunUntilIdle();
-  events = host->GetAndResetDispatchedMessages();
-  EXPECT_EQ("RawKeyDown Char", GetMessageNames(events));
-
-  view->release_pepper_fullscreen_window_for_testing();
-
-  // Clean up.
-  host->ShutdownAndDestroyWidget(true);
-}
-
 TEST_F(RenderWidgetHostViewMacTest, ClearCompositorFrame) {
   BrowserCompositorMac* browser_compositor =
       rwhv_mac_->BrowserCompositorForTesting();
@@ -2151,6 +1941,73 @@ TEST_F(RenderWidgetHostViewMacTest, ClearCompositorFrame) {
   rwhv_mac_->ClearCompositorFrame();
   EXPECT_NE(browser_compositor->CompositorForTesting(), nullptr);
   EXPECT_FALSE(browser_compositor->CompositorForTesting()->IsLocked());
+}
+
+// This test verifies that in AutoResize mode a child-allocated
+// viz::LocalSurfaceId will be properly routed and stored in the parent.
+TEST_F(RenderWidgetHostViewMacTest, ChildAllocationAcceptedInParent) {
+  viz::LocalSurfaceId local_surface_id1(rwhv_mac_->GetLocalSurfaceId());
+  EXPECT_TRUE(local_surface_id1.is_valid());
+
+  host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
+
+  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
+  params.view_size = gfx::Size(75, 75);
+  viz::ChildLocalSurfaceIdAllocator child_allocator;
+  child_allocator.UpdateFromParent(local_surface_id1);
+  viz::LocalSurfaceId local_surface_id2 = child_allocator.GenerateId();
+  params.child_allocated_local_surface_id = local_surface_id2;
+  host_->OnResizeOrRepaintACK(params);
+
+  // RenderWidgetHostImpl has delayed auto-resize processing. Yield here to
+  // let it complete.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+
+  viz::LocalSurfaceId local_surface_id3(rwhv_mac_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, local_surface_id3);
+  EXPECT_EQ(local_surface_id2, local_surface_id3);
+}
+
+// This test verifies that when the child and parent both allocate their own
+// viz::LocalSurfaceId the resulting conflict is resolved.
+TEST_F(RenderWidgetHostViewMacTest, ConflictingAllocationsResolve) {
+  viz::LocalSurfaceId local_surface_id1(rwhv_mac_->GetLocalSurfaceId());
+  EXPECT_TRUE(local_surface_id1.is_valid());
+
+  host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
+  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
+  params.view_size = gfx::Size(75, 75);
+  viz::ChildLocalSurfaceIdAllocator child_allocator;
+  child_allocator.UpdateFromParent(local_surface_id1);
+  viz::LocalSurfaceId local_surface_id2 = child_allocator.GenerateId();
+  params.child_allocated_local_surface_id = local_surface_id2;
+  host_->OnResizeOrRepaintACK(params);
+
+  // Cause a conflicting viz::LocalSurfaceId allocation
+  BrowserCompositorMac* browser_compositor =
+      rwhv_mac_->BrowserCompositorForTesting();
+  EXPECT_TRUE(browser_compositor->ForceNewSurfaceForTesting());
+  viz::LocalSurfaceId local_surface_id3(rwhv_mac_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, local_surface_id3);
+
+  // RenderWidgetHostImpl has delayed auto-resize processing. Yield here to
+  // let it complete.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+
+  viz::LocalSurfaceId local_surface_id4(rwhv_mac_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, local_surface_id4);
+  EXPECT_NE(local_surface_id2, local_surface_id4);
+  viz::LocalSurfaceId merged_local_surface_id(
+      local_surface_id2.parent_sequence_number() + 1,
+      local_surface_id2.child_sequence_number(),
+      local_surface_id2.embed_token());
+  EXPECT_EQ(local_surface_id4, merged_local_surface_id);
 }
 
 }  // namespace content

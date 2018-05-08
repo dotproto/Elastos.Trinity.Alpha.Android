@@ -28,11 +28,13 @@ TEST_F(EntityDataTest, Swap) {
   EntityData data;
   AddDefaultFieldValue(BOOKMARKS, &data.specifics);
   data.id = "id";
+  data.server_defined_unique_tag = "server_defined_unique_tag";
   data.client_tag_hash = "client_tag_hash";
   data.non_unique_name = "non_unique_name";
   data.creation_time = base::Time::FromTimeT(10);
   data.modification_time = base::Time::FromTimeT(20);
   data.parent_id = "parent_id";
+  data.is_folder = true;
 
   UniquePosition unique_position =
       UniquePosition::InitialPosition(UniquePosition::RandomSuffix());
@@ -54,11 +56,14 @@ TEST_F(EntityDataTest, Swap) {
 
   // Compare other fields.
   EXPECT_EQ("id", ptr->id);
+  EXPECT_EQ("server_defined_unique_tag", ptr->server_defined_unique_tag);
   EXPECT_EQ("client_tag_hash", ptr->client_tag_hash);
   EXPECT_EQ("non_unique_name", ptr->non_unique_name);
   EXPECT_EQ("parent_id", ptr->parent_id);
   EXPECT_EQ(base::Time::FromTimeT(10), ptr->creation_time);
   EXPECT_EQ(base::Time::FromTimeT(20), ptr->modification_time);
+  EXPECT_EQ(true, ptr->is_folder);
+  EXPECT_EQ(false, data.is_folder);
 }
 
 }  // namespace syncer

@@ -22,7 +22,6 @@ import android.os.Process;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.accessibility.AccessibilityManager;
 
@@ -99,7 +98,6 @@ public class WindowAndroid {
     private HashSet<Animator> mAnimationsOverContent = new HashSet<>();
     private View mAnimationPlaceholderView;
 
-    private ViewGroup mKeyboardAccessoryView;
 
     protected boolean mIsKeyboardShowing;
 
@@ -247,6 +245,14 @@ public class WindowAndroid {
     @CalledByNative
     private void clearNativePointer() {
         mNativeWindowAndroid = 0;
+    }
+
+    /**
+     * @return the delegate to interact with the android permissions system, or null if not
+     *         available
+     */
+    public AndroidPermissionDelegate getAndroidPermissionDelegate() {
+        return mPermissionDelegate;
     }
 
     /**
@@ -552,18 +558,6 @@ public class WindowAndroid {
     }
 
     /**
-     * Callback for permission requests.
-     */
-    public interface PermissionCallback {
-        /**
-         * Called upon completing a permission request.
-         * @param permissions The list of permissions in the result.
-         * @param grantResults Whether the permissions were granted.
-         */
-        void onRequestPermissionsResult(String[] permissions, int[] grantResults);
-    }
-
-    /**
      * Tests that an activity is available to handle the passed in intent.
      * @param  intent The intent to check.
      * @return True if an activity is available to process this intent when started, meaning that
@@ -634,22 +628,6 @@ public class WindowAndroid {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             mTouchExplorationMonitor = new TouchExplorationMonitor();
         }
-    }
-
-    /**
-     * Sets the keyboard accessory view.
-     * @param view This view sits at the bottom of the content area and pushes the content up rather
-     *             than overlaying it. Currently used as a container for Autofill suggestions.
-     */
-    public void setKeyboardAccessoryView(ViewGroup view) {
-        mKeyboardAccessoryView = view;
-    }
-
-    /**
-     * @see #setKeyboardAccessoryView(ViewGroup)
-     */
-    public ViewGroup getKeyboardAccessoryView() {
-        return mKeyboardAccessoryView;
     }
 
     protected void registerKeyboardVisibilityCallbacks() {

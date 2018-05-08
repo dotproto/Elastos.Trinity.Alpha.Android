@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/test_discardable_memory_allocator.h"
@@ -88,12 +89,13 @@ class PdfCompositorServiceTest : public service_manager::test::ServiceTest {
   PdfCompositorServiceTest() : ServiceTest("pdf_compositor_service_unittest") {}
   ~PdfCompositorServiceTest() override {}
 
-  MOCK_METHOD1(CallbackOnCompositeSuccess, void(mojo::SharedBufferHandle));
+  MOCK_METHOD1(CallbackOnCompositeSuccess,
+               void(const base::ReadOnlySharedMemoryRegion&));
   MOCK_METHOD1(CallbackOnCompositeStatus, void(mojom::PdfCompositor::Status));
   void OnCompositeToPdfCallback(mojom::PdfCompositor::Status status,
-                                mojo::ScopedSharedBufferHandle handle) {
+                                base::ReadOnlySharedMemoryRegion region) {
     if (status == mojom::PdfCompositor::Status::SUCCESS)
-      CallbackOnCompositeSuccess(handle.get());
+      CallbackOnCompositeSuccess(region);
     else
       CallbackOnCompositeStatus(status);
     run_loop_->Quit();
@@ -139,19 +141,11 @@ class PdfCompositorServiceTest : public service_manager::test::ServiceTest {
     doc->close();
 
     size_t len = stream.bytesWritten();
-    base::SharedMemoryCreateOptions options;
-    options.size = len;
-    options.share_read_only = true;
-
-    base::SharedMemory shared_memory;
-    if (shared_memory.Create(options) && shared_memory.Map(len)) {
-      stream.copyTo(shared_memory.memory());
-      auto handle = shared_memory.GetReadOnlyHandle();
-      return mojo::WrapSharedMemoryHandle(
-          handle, handle.GetSize(),
-          mojo::UnwrappedSharedMemoryHandleProtection::kReadOnly);
-    }
-    return mojo::ScopedSharedBufferHandle();
+    base::MappedReadOnlyRegion memory =
+        base::ReadOnlySharedMemoryRegion::Create(len);
+    CHECK(memory.mapping.IsValid());
+    stream.copyTo(memory.mapping.memory());
+    return mojo::WrapReadOnlySharedMemoryRegion(std::move(memory.region));
   }
 
   void CallCompositorWithSuccess(mojom::PdfCompositorPtr ptr) {

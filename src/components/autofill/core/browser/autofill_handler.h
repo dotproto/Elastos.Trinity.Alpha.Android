@@ -65,8 +65,8 @@ class AutofillHandler {
 
   // Invoked when |form| has been submitted.
   // Processes the submitted |form|, saving any new Autofill data to the user's
-  // personal profile. Returns false if this form is not relevant for Autofill.
-  bool OnFormSubmitted(const FormData& form,
+  // personal profile.
+  void OnFormSubmitted(const FormData& form,
                        bool known_success,
                        SubmissionSource source,
                        base::TimeTicks timestamp);
@@ -96,6 +96,9 @@ class AutofillHandler {
   virtual void OnSetDataList(const std::vector<base::string16>& values,
                              const std::vector<base::string16>& labels) = 0;
 
+  // Invoked when the options of a select element in the |form| changed.
+  virtual void SelectFieldOptionsDidChange(const FormData& form) = 0;
+
   // Resets cache.
   virtual void Reset() = 0;
 
@@ -107,7 +110,7 @@ class AutofillHandler {
  protected:
   AutofillHandler(AutofillDriver* driver);
 
-  virtual bool OnFormSubmittedImpl(const FormData& form,
+  virtual void OnFormSubmittedImpl(const FormData& form,
                                    bool known_success,
                                    SubmissionSource source,
                                    base::TimeTicks timestamp) = 0;

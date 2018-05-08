@@ -11,7 +11,7 @@
 #include <string>
 
 #include "ash/detachable_base/detachable_base_observer.h"
-#include "ash/wallpaper/wallpaper_controller_observer.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
@@ -29,14 +29,15 @@
 #include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
-#include "components/proximity_auth/screenlock_bridge.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_ui.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/base/net_errors.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -162,9 +163,6 @@ class SigninScreenHandlerDelegate {
   // Shows Enable Developer Features screen.
   virtual void ShowEnableDebuggingScreen() = 0;
 
-  // Shows Demo Mode Setup screen.
-  virtual void ShowDemoModeSetupScreen() = 0;
-
   // Shows Kiosk Enable screen.
   virtual void ShowKioskEnableScreen() = 0;
 
@@ -229,7 +227,7 @@ class SigninScreenHandler
       public lock_screen_apps::StateObserver,
       public OobeUI::Observer,
       public session_manager::SessionManagerObserver,
-      public ash::WallpaperControllerObserver,
+      public ash::mojom::WallpaperObserver,
       public ash::DetachableBaseObserver {
  public:
   SigninScreenHandler(
@@ -269,10 +267,11 @@ class SigninScreenHandler
                               OobeScreen new_screen) override;
   void OnScreenInitialized(OobeScreen screen) override{};
 
-  // ash::WallpaperControllerObserver implementation:
-  void OnWallpaperDataChanged() override;
-  void OnWallpaperColorsChanged() override;
-  void OnWallpaperBlurChanged() override;
+  // ash::mojom::WallpaperObserver implementation:
+  void OnWallpaperChanged(uint32_t image_id) override;
+  void OnWallpaperColorsChanged(
+      const std::vector<SkColor>& prominent_colors) override;
+  void OnWallpaperBlurChanged(bool blurred) override;
 
   // ash::DetachableBaseObserver:
   void OnDetachableBasePairingStatusChanged(
@@ -317,10 +316,6 @@ class SigninScreenHandler
   void HideOfflineMessage(NetworkStateInformer::State state,
                           NetworkError::ErrorReason reason);
   void ReloadGaia(bool force_reload);
-
-  // Updates the color of the scrollable container on account picker screen,
-  // based on wallpaper color extraction results.
-  void UpdateAccountPickerColors();
 
   // BaseScreenHandler implementation:
   void DeclareLocalizedValues(
@@ -378,6 +373,10 @@ class SigninScreenHandler
 
   // Enable or disable the pin keyboard for the given account.
   void UpdatePinKeyboardState(const AccountId& account_id);
+  void SetPinEnabledForUser(const AccountId& account_id, bool is_enabled);
+  // Callback run by PinBackend. If |should_preload| is true the PIN keyboard is
+  // preloaded.
+  void PreloadPinKeyboard(bool should_preload);
 
   // WebUI message handlers.
   void HandleGetUsers();
@@ -396,7 +395,6 @@ class SigninScreenHandler
   void HandleToggleEnrollmentScreen();
   void HandleToggleEnrollmentAd();
   void HandleToggleEnableDebuggingScreen();
-  void HandleSetupDemoMode();
   void HandleToggleKioskEnableScreen();
   void HandleToggleResetScreen();
   void HandleToggleKioskAutolaunchScreen();
@@ -596,6 +594,9 @@ class SigninScreenHandler
 
   ScopedObserver<ash::DetachableBaseHandler, ash::DetachableBaseObserver>
       detachable_base_observer_;
+
+  // The binding this instance uses to implement ash::mojom::WallpaperObserver.
+  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_;
 
   base::WeakPtrFactory<SigninScreenHandler> weak_factory_;
 

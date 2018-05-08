@@ -30,6 +30,7 @@
 
 class MediaDeviceIDSalt;
 class PrefService;
+class SSLConfigServiceManager;
 
 #if defined(OS_CHROMEOS)
 namespace chromeos {
@@ -52,10 +53,6 @@ namespace policy {
 class ConfigurationPolicyProvider;
 class ProfilePolicyConnector;
 class SchemaRegistryService;
-}
-
-namespace ssl_config {
-class SSLConfigServiceManager;
 }
 
 namespace sync_preferences {
@@ -190,6 +187,9 @@ class ProfileImpl : public Profile {
   void UpdateNameInStorage();
   void UpdateAvatarInStorage();
   void UpdateIsEphemeralInStorage();
+  void UpdateCTPolicy();
+
+  void ScheduleUpdateCTPolicy();
 
   void GetMediaCacheParameters(base::FilePath* cache_path, int* max_size);
 
@@ -238,8 +238,7 @@ class ProfileImpl : public Profile {
   scoped_refptr<ExtensionSpecialStoragePolicy>
       extension_special_storage_policy_;
 #endif
-  std::unique_ptr<ssl_config::SSLConfigServiceManager>
-      ssl_config_service_manager_;
+  std::unique_ptr<SSLConfigServiceManager> ssl_config_service_manager_;
 
   // Exit type the last time the profile was opened. This is set only once from
   // prefs.
@@ -282,6 +281,9 @@ class ProfileImpl : public Profile {
   Profile::Delegate* delegate_;
 
   chrome_browser_net::Predictor* predictor_;
+
+  // Used to post schedule CT policy updates
+  base::OneShotTimer ct_policy_update_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileImpl);
 };

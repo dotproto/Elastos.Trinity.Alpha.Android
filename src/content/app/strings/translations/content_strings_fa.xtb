@@ -94,6 +94,7 @@
 <translation id="5034860022980953847">نشانگر پیشرفت</translation>
 <translation id="5117590920725113268">نمایش ماه بعدی</translation>
 <translation id="512758898067543763">عنوان ردیف</translation>
+<translation id="5153163864850940242">این ویدیو درحال پخش شدن در حالت «تصویر در تصویر» است</translation>
 <translation id="5164977714490026579">مقدار باید بیشتر یا مساوی با <ph name="MINIMUM" /> باشد.</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> پتابایت</translation>
 <translation id="5307600278924710095">لطفاً قسمت قبل از «<ph name="ATSIGN" />» را وارد کنید. «<ph name="INVALIDADDRESS" />» ناقص است.</translation>
@@ -124,7 +125,6 @@
 <translation id="6404546809543547843">انتخابگر زمان صدا</translation>
 <translation id="648732519525291180">انتخابگر زمان</translation>
 <translation id="6550675742724504774">گزینه‌ها</translation>
-<translation id="6564313821541007458">اکنون درحالت تصویردرتصویر</translation>
 <translation id="658823671542763450">رفتن به حالت تمام صفحه</translation>
 <translation id="663493177488814956">خبرمایه</translation>
 <translation id="6637586476836377253">log</translation>

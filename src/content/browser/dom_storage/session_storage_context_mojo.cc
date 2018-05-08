@@ -4,6 +4,7 @@
 
 #include "content/browser/dom_storage/session_storage_context_mojo.h"
 
+#include "base/sequenced_task_runner.h"
 #include "content/browser/leveldb_wrapper_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/common/content_features.h"
@@ -63,7 +64,7 @@ void SessionStorageContextMojo::GetStorageUsage(
   NOTREACHED();
 }
 void SessionStorageContextMojo::DeleteStorage(
-    const GURL& origin,
+    const url::Origin& origin,
     const std::string& persistent_namespace_id) {
   NOTREACHED();
 }

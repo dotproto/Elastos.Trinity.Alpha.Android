@@ -42,6 +42,8 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionSurfaceWin
   // Returns true if there is an HDR capable display connected.
   static bool IsHDRSupported();
 
+  static void EnableScaledOverlaysForTesting();
+
   bool InitializeNativeWindow();
 
   // GLSurfaceEGL implementation.
@@ -64,6 +66,7 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionSurfaceWin
   gfx::VSyncProvider* GetVSyncProvider() override;
   bool SetEnableDCLayers(bool enable) override;
   bool FlipsVertically() const override;
+  bool SupportsPresentationCallback() override;
   bool SupportsPostSubBuffer() override;
   bool OnMakeCurrent(gl::GLContext* context) override;
   bool SupportsDCLayers() const override;

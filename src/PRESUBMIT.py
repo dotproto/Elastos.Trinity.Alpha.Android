@@ -337,10 +337,12 @@ _BANNED_CPP_FUNCTIONS = (
         'Specify libraries to link with in build files and not in the source.',
       ),
       True,
-      (),
+      (
+          r'^third_party[\\\/]abseil-cpp[\\\/].*',
+      ),
     ),
     (
-      'base::SequenceChecker',
+      r'/base::SequenceChecker\b',
       (
         'Consider using SEQUENCE_CHECKER macros instead of the class directly.',
       ),
@@ -348,7 +350,7 @@ _BANNED_CPP_FUNCTIONS = (
       (),
     ),
     (
-      'base::ThreadChecker',
+      r'/base::ThreadChecker\b',
       (
         'Consider using THREAD_CHECKER macros instead of the class directly.',
       ),
@@ -400,7 +402,8 @@ _BANNED_CPP_FUNCTIONS = (
       'leveldb::NewMemEnv',
       (
         'Instead of leveldb::NewMemEnv() use leveldb_chrome::NewMemEnv() from',
-        'third_party/leveldatabase/leveldb_chrome.h.',
+        'third_party/leveldatabase/leveldb_chrome.h. It exposes environments',
+        "to Chrome's tracing, making their memory usage visible.",
       ),
       True,
       (
@@ -422,15 +425,19 @@ _BANNED_CPP_FUNCTIONS = (
         'Please migrate away from RunLoop::QuitCurrent*() methods. Use member',
         'methods of a specific RunLoop instance instead.',
       ),
-      True,
+      False,
       (),
     ),
     (
       'base::ScopedMockTimeMessageLoopTaskRunner',
       (
-        'ScopedMockTimeMessageLoopTaskRunner is deprecated.',
+        'ScopedMockTimeMessageLoopTaskRunner is deprecated. Prefer',
+        'ScopedTaskEnvironment::MainThreadType::MOCK_TIME. There are still a',
+        'few cases that may require a ScopedMockTimeMessageLoopTaskRunner',
+        '(i.e. mocking the main MessageLoopForUI in browser_tests), but check',
+        'with gab@ first if you think you need it)',
       ),
-      True,
+      False,
       (),
     ),
     (
@@ -454,7 +461,7 @@ _BANNED_CPP_FUNCTIONS = (
     (
       r'/\bbase::Bind\(',
       (
-          'Please consider using base::Bind{Once,Repeating} instead '
+          'Please consider using base::Bind{Once,Repeating} instead',
           'of base::Bind. (crbug.com/714018)',
       ),
       False,
@@ -463,7 +470,7 @@ _BANNED_CPP_FUNCTIONS = (
     (
       r'/\bbase::Callback<',
       (
-          'Please consider using base::{Once,Repeating}Callback instead '
+          'Please consider using base::{Once,Repeating}Callback instead',
           'of base::Callback. (crbug.com/714018)',
       ),
       False,
@@ -472,8 +479,61 @@ _BANNED_CPP_FUNCTIONS = (
     (
       r'/\bbase::Closure\b',
       (
-          'Please consider using base::{Once,Repeating}Closure instead '
+          'Please consider using base::{Once,Repeating}Closure instead',
           'of base::Closure. (crbug.com/714018)',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'RunMessageLoop',
+      (
+          'RunMessageLoop is deprecated, use RunLoop instead.',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'RunThisRunLoop',
+      (
+          'RunThisRunLoop is deprecated, use RunLoop directly instead.',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'RunAllPendingInMessageLoop()',
+      (
+          "Prefer RunLoop over RunAllPendingInMessageLoop, please contact gab@",
+          "if you're convinced you need this.",
+      ),
+      False,
+      (),
+    ),
+    (
+      r'RunAllPendingInMessageLoop(BrowserThread',
+      (
+          'RunAllPendingInMessageLoop is deprecated. Use RunLoop for',
+          'BrowserThread::UI, TestBrowserThreadBundle::RunIOThreadUntilIdle',
+          'for BrowserThread::IO, and prefer RunLoop::QuitClosure to observe',
+          'async events instead of flushing threads.',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'MessageLoopRunner',
+      (
+          'MessageLoopRunner is deprecated, use RunLoop instead.',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'GetDeferredQuitTaskForRunLoop',
+      (
+          "GetDeferredQuitTaskForRunLoop shouldn't be needed, please contact",
+          "gab@ if you found a use case where this is the only solution.",
       ),
       False,
       (),
@@ -490,6 +550,33 @@ _BANNED_CPP_FUNCTIONS = (
         r'^third_party/sqlite/.*\.(c|cc|h)$',
       ),
     ),
+    (
+      'net::URLFetcher',
+      (
+        'net::URLFetcher should no longer be used in content embedders. ',
+        'Instead, use network::SimpleURLLoader instead, which supports ',
+        'an out-of-process network stack. ',
+        'net::URLFetcher may still be used in binaries that do not embed',
+        'content.',
+      ),
+      False,
+      (
+        r'^ios[\\\/].*\.(cc|h)$',
+        r'.*[\\\/]ios[\\\/].*\.(cc|h)$',
+        r'.*_ios\.(cc|h)$',
+        r'^net[\\\/].*\.(cc|h)$',
+        r'.*[\\\/]tools[\\\/].*\.(cc|h)$',
+      ),
+    ),
+    (
+      r'/\barraysize\b',
+      (
+          "arraysize is deprecated, please use base::size(array) instead ",
+          "(https://crbug.com/837308). ",
+      ),
+      False,
+      (),
+    ),
 )
 
 
@@ -501,6 +588,7 @@ _IPC_ENUM_TRAITS_DEPRECATED = (
 _JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS = [
     r".*[\\\/]BuildHooksAndroidImpl\.java",
     r".*[\\\/]LicenseContentProvider\.java",
+    r".*[\\\/]PlatformServiceBridgeImpl.java",
 ]
 
 # These paths contain test data and other known invalid JSON files.
@@ -509,6 +597,7 @@ _KNOWN_INVALID_JSON_FILE_PATTERNS = [
     r'^components[\\\/]policy[\\\/]resources[\\\/]policy_templates\.json$',
     r'^third_party[\\\/]protobuf[\\\/]',
     r'^third_party[\\\/]WebKit[\\\/]LayoutTests[\\\/]external[\\\/]wpt[\\\/]',
+    r'^third_party[\\\/]blink[\\\/]renderer[\\\/]devtools[\\\/]protocol\.json$',
 ]
 
 
@@ -556,9 +645,10 @@ _ALL_PYDEPS_FILES = _ANDROID_SPECIFIC_PYDEPS_FILES + _GENERIC_PYDEPS_FILES
 
 # Bypass the AUTHORS check for these accounts.
 _KNOWN_ROBOTS = set(
-  '%s-chromium-autoroll@skia-buildbots.google.com.iam.gserviceaccount.com' % s
-  for s in ('afdo', 'angle', 'catapult', 'chromite', 'depot-tools',
-            'fuchsia-sdk', 'nacl', 'pdfium', 'skia', 'src-internal', 'webrtc'))
+    '%s-chromium-autoroll@skia-buildbots.google.com.iam.gserviceaccount.com' % s
+    for s in ('afdo', 'angle', 'catapult', 'chromite', 'depot-tools',
+              'fuchsia-sdk', 'nacl', 'pdfium', 'skia', 'src-internal', 'webrtc')
+  ) | set('%s@appspot.gserviceaccount.com' % s for s in ('findit-for-me',))
 
 
 def _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
@@ -595,6 +685,49 @@ def _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
       if (inclusion_pattern.search(line) and
           not comment_pattern.search(line) and
           not exclusion_pattern.search(line)):
+        problems.append(
+          '%s:%d\n    %s' % (local_path, line_number, line.strip()))
+
+  if problems:
+    return [output_api.PresubmitPromptOrNotify(_TEST_ONLY_WARNING, problems)]
+  else:
+    return []
+
+
+def _CheckNoProductionCodeUsingTestOnlyFunctionsJava(input_api, output_api):
+  """This is a simplified version of
+  _CheckNoProductionCodeUsingTestOnlyFunctions for Java files.
+  """
+  javadoc_start_re = input_api.re.compile(r'^\s*/\*\*')
+  javadoc_end_re = input_api.re.compile(r'^\s*\*/')
+  name_pattern = r'ForTest(s|ing)?'
+  # Describes an occurrence of "ForTest*" inside a // comment.
+  comment_re = input_api.re.compile(r'//.*%s' % name_pattern)
+  # Catch calls.
+  inclusion_re = input_api.re.compile(r'(%s)\s*\(' % name_pattern)
+  # Ignore definitions. (Comments are ignored separately.)
+  exclusion_re = input_api.re.compile(r'(%s)[^;]+\{' % name_pattern)
+
+  problems = []
+  sources = lambda x: input_api.FilterSourceFile(
+    x,
+    black_list=(('(?i).*test', r'.*\/junit\/')
+                + input_api.DEFAULT_BLACK_LIST),
+    white_list=(r'.*\.java$',)
+  )
+  for f in input_api.AffectedFiles(include_deletes=False, file_filter=sources):
+    local_path = f.LocalPath()
+    is_inside_javadoc = False
+    for line_number, line in f.ChangedContents():
+      if is_inside_javadoc and javadoc_end_re.search(line):
+        is_inside_javadoc = False
+      if not is_inside_javadoc and javadoc_start_re.search(line):
+        is_inside_javadoc = True
+      if is_inside_javadoc:
+        continue
+      if (inclusion_re.search(line) and
+          not comment_re.search(line) and
+          not exclusion_re.search(line)):
         problems.append(
           '%s:%d\n    %s' % (local_path, line_number, line.strip()))
 
@@ -677,18 +810,40 @@ def _CheckUmaHistogramChanges(input_api, output_api):
   the reverse: changes in histograms.xml not matched in the code itself."""
   touched_histograms = []
   histograms_xml_modifications = []
-  pattern = input_api.re.compile('UMA_HISTOGRAM.*\("(.*)"')
+  call_pattern_c = r'\bUMA_HISTOGRAM.*\('
+  call_pattern_java = r'\bRecordHistogram\.record[a-zA-Z]+Histogram\('
+  name_pattern = r'"(.*?)"'
+  single_line_c_re = input_api.re.compile(call_pattern_c + name_pattern)
+  single_line_java_re = input_api.re.compile(call_pattern_java + name_pattern)
+  split_line_c_prefix_re = input_api.re.compile(call_pattern_c)
+  split_line_java_prefix_re = input_api.re.compile(call_pattern_java)
+  split_line_suffix_re = input_api.re.compile(r'^\s*' + name_pattern)
+  last_line_matched_prefix = False
   for f in input_api.AffectedFiles():
     # If histograms.xml itself is modified, keep the modified lines for later.
     if f.LocalPath().endswith(('histograms.xml')):
       histograms_xml_modifications = f.ChangedContents()
       continue
-    if not f.LocalPath().endswith(('cc', 'mm', 'cpp')):
+    if f.LocalPath().endswith(('cc', 'mm', 'cpp')):
+      single_line_re = single_line_c_re
+      split_line_prefix_re = split_line_c_prefix_re
+    elif f.LocalPath().endswith(('java')):
+      single_line_re = single_line_java_re
+      split_line_prefix_re = split_line_java_prefix_re
+    else:
       continue
     for line_num, line in f.ChangedContents():
-      found = pattern.search(line)
+      if last_line_matched_prefix:
+        suffix_found = split_line_suffix_re.search(line)
+        if suffix_found :
+          touched_histograms.append([suffix_found.group(1), f, line_num])
+          last_line_matched_prefix = False
+          continue
+      found = single_line_re.search(line)
       if found:
         touched_histograms.append([found.group(1), f, line_num])
+        continue
+      last_line_matched_prefix = split_line_prefix_re.search(line)
 
   # Search for the touched histogram names in the local modifications to
   # histograms.xml, and, if not found, on the base histograms.xml file.
@@ -1448,11 +1603,43 @@ def _CheckUniquePtr(input_api, output_api):
       black_list=(_EXCLUDED_PATHS + _TEST_CODE_EXCLUDED_PATHS +
                   input_api.DEFAULT_BLACK_LIST),
       white_list=(file_inclusion_pattern,))
-  return_construct_pattern = input_api.re.compile(
-      r'(=|\breturn)\s*std::unique_ptr<.*?(?<!])>\([^)]+\)')
+
+  # Pattern to capture a single "<...>" block of template arguments. It can
+  # handle linearly nested blocks, such as "<std::vector<std::set<T>>>", but
+  # cannot handle branching structures, such as "<pair<set<T>,set<U>>". The
+  # latter would likely require counting that < and > match, which is not
+  # expressible in regular languages. Should the need arise, one can introduce
+  # limited counting (matching up to a total number of nesting depth), which
+  # should cover all practical cases for already a low nesting limit.
+  template_arg_pattern = (
+      r'<[^>]*'       # Opening block of <.
+      r'>([^<]*>)?')  # Closing block of >.
+  # Prefix expressing that whatever follows is not already inside a <...>
+  # block.
+  not_inside_template_arg_pattern = r'(^|[^<,\s]\s*)'
   null_construct_pattern = input_api.re.compile(
-      r'\b(?<!<)std::unique_ptr<.*?>\(\)')
-  errors = []
+      not_inside_template_arg_pattern
+      + r'\bstd::unique_ptr'
+      + template_arg_pattern
+      + r'\(\)')
+
+  # Same as template_arg_pattern, but excluding type arrays, e.g., <T[]>.
+  template_arg_no_array_pattern = (
+      r'<[^>]*[^]]'        # Opening block of <.
+      r'>([^(<]*[^]]>)?')  # Closing block of >.
+  # Prefix saying that what follows is the start of an expression.
+  start_of_expr_pattern = r'(=|\breturn|^)\s*'
+  # Suffix saying that what follows are call parentheses with a non-empty list
+  # of arguments.
+  nonempty_arg_list_pattern = r'\(([^)]|$)'
+  return_construct_pattern = input_api.re.compile(
+      start_of_expr_pattern
+      + r'std::unique_ptr'
+      + template_arg_no_array_pattern
+      + nonempty_arg_list_pattern)
+
+  problems_constructor = []
+  problems_nullptr = []
   for f in input_api.AffectedSourceFiles(sources):
     for line_number, line in f.ChangedContents():
       # Disallow:
@@ -1461,17 +1648,26 @@ def _CheckUniquePtr(input_api, output_api):
       # But allow:
       # return std::unique_ptr<T[]>(foo);
       # bar = std::unique_ptr<T[]>(foo);
+      local_path = f.LocalPath()
       if return_construct_pattern.search(line):
-        errors.append(output_api.PresubmitError(
-          ('%s:%d uses explicit std::unique_ptr constructor. ' +
-           'Use std::make_unique<T>() instead.') %
-          (f.LocalPath(), line_number)))
+        problems_constructor.append(
+          '%s:%d\n    %s' % (local_path, line_number, line.strip()))
       # Disallow:
       # std::unique_ptr<T>()
       if null_construct_pattern.search(line):
-        errors.append(output_api.PresubmitError(
-          '%s:%d uses std::unique_ptr<T>(). Use nullptr instead.' %
-          (f.LocalPath(), line_number)))
+        problems_nullptr.append(
+          '%s:%d\n    %s' % (local_path, line_number, line.strip()))
+
+  errors = []
+  if problems_nullptr:
+    errors.append(output_api.PresubmitError(
+        'The following files use std::unique_ptr<T>(). Use nullptr instead.',
+        problems_nullptr))
+  if problems_constructor:
+    errors.append(output_api.PresubmitError(
+        'The following files use explicit std::unique_ptr constructor.'
+        'Use std::make_unique<T>() instead.',
+        problems_constructor))
   return errors
 
 
@@ -1715,7 +1911,12 @@ def _GetOwnersFilesToCheckForIpcOwners(input_api):
       mostly_json_lines = '\n'.join(f.NewContents())
       # Comments aren't allowed in strict JSON, so filter them out.
       json_lines = json_comment_eater.Nom(mostly_json_lines)
-      json_content = input_api.json.loads(json_lines)
+      try:
+        json_content = input_api.json.loads(json_lines)
+      except:
+        # There's another PRESUBMIT check that already verifies that JSON files
+        # are not invalid, so no need to emit another warning here.
+        continue
       if 'interface_provider_specs' in json_content:
         AddPatternToCheck(f, input_api.os_path.basename(f.LocalPath()))
     for pattern in file_patterns:
@@ -1766,8 +1967,10 @@ def _CheckIpcOwners(input_api, output_api):
       files.extend(['  %s' % f.LocalPath() for f in entry['files']])
     if missing_lines:
       errors.append(
-          '%s needs the following lines added:\n\n%s\n\nfor files:\n%s' %
-          (owners_file, '\n'.join(missing_lines), '\n'.join(files)))
+          'Because of the presence of files:\n%s\n\n'
+          '%s needs the following %d lines added:\n\n%s' %
+          ('\n'.join(files), owners_file, len(missing_lines),
+           '\n'.join(missing_lines)))
 
   results = []
   if errors:
@@ -2586,6 +2789,8 @@ def _CommonChecks(input_api, output_api):
 
   results.extend(
       _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api))
+  results.extend(
+      _CheckNoProductionCodeUsingTestOnlyFunctionsJava(input_api, output_api))
   results.extend(_CheckNoIOStreamInHeaders(input_api, output_api))
   results.extend(_CheckNoUNIT_TESTInSourceFiles(input_api, output_api))
   results.extend(_CheckDCHECK_IS_ONHasBraces(input_api, output_api))
@@ -2614,7 +2819,6 @@ def _CommonChecks(input_api, output_api):
           source_file_filter=lambda x: x.LocalPath().endswith('.grd')))
   results.extend(_CheckSpamLogging(input_api, output_api))
   results.extend(_CheckForAnonymousVariables(input_api, output_api))
-  results.extend(_CheckUniquePtr(input_api, output_api))
   results.extend(_CheckUserActionUpdate(input_api, output_api))
   results.extend(_CheckNoDeprecatedCss(input_api, output_api))
   results.extend(_CheckNoDeprecatedJs(input_api, output_api))
@@ -2637,9 +2841,13 @@ def _CommonChecks(input_api, output_api):
     path, name = input_api.os_path.split(f.LocalPath())
     if name == 'PRESUBMIT.py':
       full_path = input_api.os_path.join(input_api.PresubmitLocalPath(), path)
-      results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
-          input_api, output_api, full_path,
-          whitelist=[r'^PRESUBMIT_test\.py$']))
+      if f.Action() != 'D':
+        # The PRESUBMIT.py file (and the directory containing it) might
+        # have been affected by being moved or removed, so only try to
+        # run the tests if they still exist.
+        results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
+            input_api, output_api, full_path,
+            whitelist=[r'^PRESUBMIT_test\.py$']))
   return results
 
 
@@ -3014,6 +3222,7 @@ def CheckChangeOnUpload(input_api, output_api):
   results.extend(_CheckSyslogUseWarning(input_api, output_api))
   results.extend(_CheckGoogleSupportAnswerUrl(input_api, output_api))
   results.extend(_CheckCrbugLinksHaveHttps(input_api, output_api))
+  results.extend(_CheckUniquePtr(input_api, output_api))
   return results
 
 

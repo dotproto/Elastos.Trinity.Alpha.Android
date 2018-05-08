@@ -4,13 +4,11 @@
 
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_view_controller.h"
 
-#include "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/history_popup_commands.h"
-#import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_foreground_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_end_animator.h"
@@ -559,10 +557,6 @@ const CGFloat kScrollFadeDistance = 30;
   self.view.shareButton.enabled = enabled;
 }
 
-- (void)setSearchIcon:(UIImage*)searchIcon {
-  // No-op, no search icon in the non-adaptive toolbar.
-}
-
 #pragma mark - ToolbarViewFullscreenDelegate
 
 - (void)toolbarViewFrameChanged {
@@ -616,7 +610,7 @@ const CGFloat kScrollFadeDistance = 30;
 
 - (void)addFullscreenAnimationsToAnimator:(FullscreenAnimator*)animator {
   CGFloat finalProgress = animator.finalProgress;
-  [animator addAnimations:^() {
+  [animator addAnimations:^{
     [self updateForFullscreenProgress:finalProgress];
   }];
 }
@@ -656,9 +650,9 @@ const CGFloat kScrollFadeDistance = 30;
 // Target of the voice search button.
 - (void)startVoiceSearch:(id)sender {
   UIView* view = base::mac::ObjCCastStrict<UIView>(sender);
-  StartVoiceSearchCommand* command =
-      [[StartVoiceSearchCommand alloc] initWithOriginView:view];
-  [self.dispatcher startVoiceSearch:command];
+  [NamedGuide guideWithName:kVoiceSearchButtonGuide view:view].constrainedView =
+      view;
+  [self.dispatcher startVoiceSearch];
 }
 
 // Sets all Toolbar Buttons opacity to |alpha|.

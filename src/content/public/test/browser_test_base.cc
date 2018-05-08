@@ -14,8 +14,8 @@
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -177,7 +177,8 @@ void BrowserTestBase::SetUp() {
       base::Int64ToString(TestTimeouts::action_max_timeout().InSeconds()));
 
   // The tests assume that file:// URIs can freely access other file:// URIs.
-  command_line->AppendSwitch(switches::kAllowFileAccessFromFiles);
+  if (AllowFileAccessFromFiles())
+    command_line->AppendSwitch(switches::kAllowFileAccessFromFiles);
 
   command_line->AppendSwitch(switches::kDomAutomationController);
 
@@ -325,6 +326,10 @@ void BrowserTestBase::SetUp() {
 void BrowserTestBase::TearDown() {
 }
 
+bool BrowserTestBase::AllowFileAccessFromFiles() const {
+  return true;
+}
+
 void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 #if defined(OS_POSIX) && !defined(OS_FUCHSIA)
   g_browser_process_pid = base::GetCurrentProcId();
@@ -349,8 +354,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     // This can be called from a posted task. Allow nested tasks here, because
     // otherwise the test body will have to do it in order to use RunLoop for
     // waiting.
-    base::MessageLoop::ScopedNestableTaskAllower allow(
-        base::MessageLoop::current());
+    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
     PreRunTestOnMainThread();
     std::unique_ptr<InitialNavigationObserver> initial_navigation_observer;
     if (initial_web_contents_ &&
@@ -450,20 +454,12 @@ void BrowserTestBase::InitializeNetworkProcess() {
     return;
 
   initialized_network_process_ = true;
-  const testing::TestInfo* const test_info =
-      testing::UnitTest::GetInstance()->current_test_info();
-  bool network_service =
-      base::FeatureList::IsEnabled(network::features::kNetworkService);
-  // ProcessTransferAfterError is the only browser test which needs to modify
-  // the host rules (when not using the network service).
-  if (network_service ||
-      std::string(test_info->name()) != "ProcessTransferAfterError") {
-    host_resolver()->DisableModifications();
-  }
+  host_resolver()->DisableModifications();
 
   // Send the host resolver rules to the network service if it's in use. No need
   // to do this if it's running in the browser process though.
-  if (!network_service || IsNetworkServiceRunningInProcess())
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService) ||
+      IsNetworkServiceRunningInProcess())
     return;
 
   net::RuleBasedHostResolverProc::RuleList rules = host_resolver()->GetRules();
@@ -493,8 +489,7 @@ void BrowserTestBase::InitializeNetworkProcess() {
       mojom::kNetworkServiceName, &network_service_test);
 
   // Allow nested tasks so that the mojo reply is dispatched.
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
   // Send the DNS rules to network service process. Android needs the RunLoop
   // to dispatch a Java callback that makes network process to enter native
   // code.

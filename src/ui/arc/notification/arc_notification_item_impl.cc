@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "ash/shelf/shelf_constants.h"
-#include "base/memory/ptr_util.h"
+// TODO(https://crbug.com/768439): Remove nogncheck when moved to ash.
+#include "ash/shelf/shelf_constants.h"  // nogncheck
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/arc/notification/arc_notification_delegate.h"
@@ -33,19 +33,21 @@ constexpr char kNotificationIdPrefix[] = "ARC_NOTIFICATION_";
 // TODO(yoshiki): rewrite this conversion as typemap
 int ConvertAndroidPriority(mojom::ArcNotificationPriority android_priority) {
   switch (android_priority) {
+    case mojom::ArcNotificationPriority::NONE:
     case mojom::ArcNotificationPriority::MIN:
-    case mojom::ArcNotificationPriority::LOW:
       return message_center::MIN_PRIORITY;
+    case mojom::ArcNotificationPriority::LOW:
     case mojom::ArcNotificationPriority::DEFAULT:
       return message_center::LOW_PRIORITY;
     case mojom::ArcNotificationPriority::HIGH:
-      return message_center::DEFAULT_PRIORITY;
+      return message_center::HIGH_PRIORITY;
     case mojom::ArcNotificationPriority::MAX:
       return message_center::MAX_PRIORITY;
   }
 
   NOTREACHED() << "Invalid Priority: " << android_priority;
-  return message_center::DEFAULT_PRIORITY;
+  // Invalid values are treated as Android's DEFAULT priority.
+  return message_center::LOW_PRIORITY;
 }
 
 }  // anonymous namespace
@@ -78,15 +80,10 @@ void ArcNotificationItemImpl::OnUpdatedFromAndroid(
   rich_data.priority = ConvertAndroidPriority(data->priority);
   if (data->small_icon)
     rich_data.small_image = gfx::Image::CreateFrom1xBitmap(*data->small_icon);
-  if (data->accessible_name.has_value()) {
-    accessible_name_ = base::UTF8ToUTF16(*data->accessible_name);
-  } else {
-    accessible_name_ = base::JoinString(
-        {base::UTF8ToUTF16(data->title), base::UTF8ToUTF16(data->message)},
-        base::ASCIIToUTF16("\n"));
-  }
-  rich_data.accessible_name = accessible_name_;
-  if (IsOpeningSettingsSupported()) {
+
+  rich_data.accessible_name = base::UTF8ToUTF16(
+      data->accessible_name.value_or(data->title + "\n" + data->message));
+  if (manager_->IsOpeningSettingsSupported()) {
     rich_data.settings_button_handler =
         message_center::SettingsButtonHandler::DELEGATE;
   }
@@ -131,9 +128,6 @@ void ArcNotificationItemImpl::OnUpdatedFromAndroid(
         gfx::ImageSkiaRep(*data->snapshot_image, data->snapshot_image_scale));
   }
 
-  for (auto& observer : observers_)
-    observer.OnItemUpdated();
-
   message_center_->AddNotification(std::move(notification));
 }
 
@@ -160,10 +154,6 @@ void ArcNotificationItemImpl::Click() {
 
 void ArcNotificationItemImpl::OpenSettings() {
   manager_->OpenNotificationSettings(notification_key_);
-}
-
-bool ArcNotificationItemImpl::IsOpeningSettingsSupported() const {
-  return manager_->IsOpeningSettingsSupported();
 }
 
 void ArcNotificationItemImpl::ToggleExpansion() {
@@ -240,10 +230,6 @@ const std::string& ArcNotificationItemImpl::GetNotificationKey() const {
 
 const std::string& ArcNotificationItemImpl::GetNotificationId() const {
   return notification_id_;
-}
-
-const base::string16& ArcNotificationItemImpl::GetAccessibleName() const {
-  return accessible_name_;
 }
 
 }  // namespace arc

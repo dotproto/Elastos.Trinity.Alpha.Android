@@ -2846,7 +2846,7 @@
         "type": "android"
       },
       "gl_vendor": "Imagination.*",
-      "gl_renderer": "PowerVR SGX54.",
+      "gl_renderer": "PowerVR SGX 54.*",
       "features": [
         "init_gl_position_in_vertex_shader"
       ]
@@ -2859,7 +2859,7 @@
         "type": "android"
       },
       "gl_vendor": "Imagination.*",
-      "gl_renderer": "PowerVR G6200",
+      "gl_renderer": "PowerVR.*G6200.*",
       "features": [
         "init_gl_position_in_vertex_shader"
       ]
@@ -2879,6 +2879,50 @@
       "disabled_extensions": [
         "GL_EXT_disjoint_timer_query",
         "GL_EXT_disjoint_timer_query_webgl2"
+      ]
+    },
+    {
+      "id": 266,
+      "cr_bugs": [828721],
+      "description": "Crash in gl::GLApiBase::glGetQueryObjectui64vFn with NetEase devices ",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NetEase",
+      "gl_renderer": "MuMu GL.*",
+      "features": [
+        "disable_timestamp_queries"
+      ],
+      "disabled_extensions": [
+        "GL_EXT_disjoint_timer_query",
+        "GL_EXT_disjoint_timer_query_webgl2"
+      ]
+    },
+    {
+      "id": 267,
+      "cr_bugs": [831781],
+      "description": "WebGL with multisampling produces errors on Mali",
+      "os": {
+        "type": "linux"
+      },
+      "gl_vendor": "ARM",
+      "gl_renderer": "Mali-TDVX",
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
+      ],
+      "features": [
+        "disable_chromium_framebuffer_multisample"
+      ]
+    },
+    {
+      "id": 268,
+      "cr_bugs": [797243],
+      "description": "Limit MSAA to 4x on Android devices",
+      "os": {
+        "type": "android"
+      },
+      "features": [
+        "max_msaa_sample_count_4"
       ]
     }
   ]

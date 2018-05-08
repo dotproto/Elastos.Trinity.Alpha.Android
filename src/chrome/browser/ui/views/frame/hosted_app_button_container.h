@@ -8,21 +8,32 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "chrome/browser/ui/views/frame/browser_view_button_provider.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+#include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
+#include "ui/views/accessible_pane_view.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/view.h"
 
-class AppMenu;
-class HostedAppMenuModel;
+namespace {
+class HostedAppNonClientFrameViewAshTest;
+}
+
+class AppMenuButton;
 class BrowserView;
+class HostedAppMenuButton;
+
+namespace views {
+class MenuButton;
+}
 
 // A container for hosted app buttons in the title bar.
-class HostedAppButtonContainer : public views::View,
+class HostedAppButtonContainer : public views::AccessiblePaneView,
                                  public BrowserActionsContainer::Delegate,
-                                 public BrowserViewButtonProvider {
+                                 public ToolbarButtonProvider,
+                                 public ImmersiveModeController::Observer {
  public:
   // |active_icon_color| and |inactive_icon_color| indicate the colors to use
   // for button icons when the window is focused and blurred respectively.
@@ -42,49 +53,18 @@ class HostedAppButtonContainer : public views::View,
   void StartTitlebarAnimation(base::TimeDelta origin_text_slide_duration);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(HostedAppNonClientFrameViewAshTest, HostedAppFrame);
+  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshHostedAppBrowserTest,
+                           FrameLayout);
+  friend class HostedAppNonClientFrameViewAshTest;
+
+  static void DisableAnimationForTesting();
 
   class ContentSettingsContainer;
 
+  views::View* GetContentSettingContainerForTesting();
+
   const std::vector<ContentSettingImageView*>&
   GetContentSettingViewsForTesting() const;
-
-  // The 'app menu' button for the hosted app.
-  class AppMenuButton : public views::MenuButton,
-                        public views::MenuButtonListener {
-   public:
-    explicit AppMenuButton(BrowserView* browser_view);
-    ~AppMenuButton() override;
-
-    // Sets the color of the menu button icon.
-    void SetIconColor(SkColor color);
-
-    // views::MenuButtonListener:
-    void OnMenuButtonClicked(views::MenuButton* source,
-                             const gfx::Point& point,
-                             const ui::Event* event) override;
-
-    AppMenu* menu() { return menu_.get(); }
-
-    // Fades the menu button highlight on and off.
-    void StartHighlightAnimation(base::TimeDelta duration);
-
-   private:
-    void FadeHighlightOff();
-
-    // The containing browser view.
-    BrowserView* browser_view_;
-
-    // App model and menu.
-    // Note that the menu should be destroyed before the model it uses, so the
-    // menu should be listed later.
-    std::unique_ptr<HostedAppMenuModel> menu_model_;
-    std::unique_ptr<AppMenu> menu_;
-
-    base::OneShotTimer highlight_off_timer_;
-
-    DISALLOW_COPY_AND_ASSIGN(AppMenuButton);
-  };
 
   void FadeInContentSettingButtons();
 
@@ -100,9 +80,15 @@ class HostedAppButtonContainer : public views::View,
       Browser* browser,
       ToolbarActionsBar* main_bar) const override;
 
-  // BrowserViewButtonProvider:
+  // ToolbarButtonProvider:
   BrowserActionsContainer* GetBrowserActionsContainer() override;
-  views::MenuButton* GetAppMenuButton() override;
+  AppMenuButton* GetAppMenuButton() override;
+  void FocusToolbar() override;
+  views::AccessiblePaneView* GetAsAccessiblePaneView() override;
+
+  // ImmersiveModeController::Observer:
+  void OnImmersiveRevealStarted() override;
+  void OnImmersiveFullscreenExited() override;
 
   // The containing browser view.
   BrowserView* browser_view_;
@@ -114,7 +100,7 @@ class HostedAppButtonContainer : public views::View,
   base::OneShotTimer fade_in_content_setting_buttons_timer_;
 
   // Owned by the views hierarchy.
-  AppMenuButton* app_menu_button_;
+  HostedAppMenuButton* app_menu_button_;
   ContentSettingsContainer* content_settings_container_;
   BrowserActionsContainer* browser_actions_container_;
 

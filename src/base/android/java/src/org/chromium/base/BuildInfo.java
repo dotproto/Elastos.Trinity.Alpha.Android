@@ -45,6 +45,10 @@ public class BuildInfo {
     public final String androidBuildFingerprint;
     /** A string that is different each time the apk changes. */
     public final String extractedFileSuffix;
+    /** Whether or not the device has apps installed for using custom themes. */
+    public final String customThemes;
+    /** Product version as stored in Android resources. */
+    public final String resourcesVersion;
 
     private static class Holder { private static BuildInfo sInstance = new BuildInfo(); }
 
@@ -59,8 +63,13 @@ public class BuildInfo {
                 buildInfo.packageName, String.valueOf(buildInfo.versionCode), buildInfo.versionName,
                 buildInfo.androidBuildFingerprint, buildInfo.gmsVersionCode,
                 buildInfo.installerPackageName, buildInfo.abiString, BuildConfig.FIREBASE_APP_ID,
-                buildInfo.extractedFileSuffix,
+                buildInfo.customThemes, buildInfo.resourcesVersion, buildInfo.extractedFileSuffix,
+                isAtLeastP() ? "1" : "0",
         };
+    }
+
+    private static String nullToEmpty(CharSequence seq) {
+        return seq == null ? "" : seq.toString();
     }
 
     /**
@@ -86,19 +95,16 @@ public class BuildInfo {
             if (sBrowserPackageInfo != null) {
                 packageName = sBrowserPackageInfo.packageName;
                 versionCode = sBrowserPackageInfo.versionCode;
-                versionName = sBrowserPackageInfo.versionName;
+                versionName = nullToEmpty(sBrowserPackageInfo.versionName);
                 sBrowserPackageInfo = null;
             } else {
                 packageName = hostPackageName;
                 versionCode = hostVersionCode;
-                versionName = pi.versionName;
+                versionName = nullToEmpty(pi.versionName);
             }
 
-            CharSequence label = pm.getApplicationLabel(pi.applicationInfo);
-            hostPackageLabel = label == null ? "" : label.toString();
-
-            String value = pm.getInstallerPackageName(packageName);
-            installerPackageName = value == null ? "" : value;
+            hostPackageLabel = nullToEmpty(pm.getApplicationLabel(pi.applicationInfo));
+            installerPackageName = nullToEmpty(pm.getInstallerPackageName(packageName));
 
             PackageInfo gmsPackageInfo = null;
             try {
@@ -108,6 +114,34 @@ public class BuildInfo {
             }
             gmsVersionCode = gmsPackageInfo != null ? String.valueOf(gmsPackageInfo.versionCode)
                                                     : "gms versionCode not available.";
+
+            String hasCustomThemes = "true";
+            try {
+                // Substratum is a theme engine that enables users to use custom themes provided
+                // by theme apps. Sometimes these can cause crashs if not installed correctly.
+                // These crashes can be difficult to debug, so knowing if the theme manager is
+                // present on the device is useful (http://crbug.com/820591).
+                pm.getPackageInfo("projekt.substratum", 0);
+            } catch (NameNotFoundException e) {
+                hasCustomThemes = "false";
+            }
+            customThemes = hasCustomThemes;
+
+            String currentResourcesVersion = "Not Enabled";
+            // Controlled by target specific build flags.
+            if (BuildConfig.R_STRING_PRODUCT_VERSION != 0) {
+                try {
+                    // This value can be compared with the actual product version to determine if
+                    // corrupted resources were the cause of a crash. This can happen if the app
+                    // loads resources from the outdated package  during an update
+                    // (http://crbug.com/820591).
+                    currentResourcesVersion = ContextUtils.getApplicationContext().getString(
+                            BuildConfig.R_STRING_PRODUCT_VERSION);
+                } catch (Exception e) {
+                    currentResourcesVersion = "Not found";
+                }
+            }
+            resourcesVersion = currentResourcesVersion;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 abiString = TextUtils.join(", ", Build.SUPPORTED_ABIS);
@@ -142,23 +176,17 @@ public class BuildInfo {
     /**
      * Checks if the device is running on a pre-release version of Android P or newer.
      * <p>
-     * <strong>Note:</strong> This method will return {@code false} on devices running release
-     * versions of Android. When Android P is finalized for release, this method will be deprecated
-     * and all calls should be replaced with {@code Build.SDK_INT >= Build.VERSION_CODES#P}.
-     *
      * @return {@code true} if P APIs are available for use, {@code false} otherwise
      */
     public static boolean isAtLeastP() {
-        return VERSION.CODENAME.equals("P");
+        return VERSION.SDK_INT >= 28;
     }
 
     /**
-     * Checks if the application targets pre-release SDK P
+     * Checks if the application targets at least released SDK P
      */
     public static boolean targetsAtLeastP() {
-        return isAtLeastP()
-                && ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion
-                == Build.VERSION_CODES.CUR_DEVELOPMENT;
+        return ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion >= 28;
     }
 
     // End:BuildCompat

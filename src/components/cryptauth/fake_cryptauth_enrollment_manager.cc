@@ -16,12 +16,13 @@ void FakeCryptAuthEnrollmentManager::Start() {
 
 void FakeCryptAuthEnrollmentManager::FinishActiveEnrollment(
     bool success,
-    const base::Time& enrollment_finish_time) {
+    base::Time enrollment_finish_time) {
   DCHECK(is_enrollment_in_progress_);
   is_enrollment_in_progress_ = false;
 
   if (success) {
     last_enrollment_time_ = enrollment_finish_time;
+    is_enrollment_valid_ = true;
     is_recovering_from_failure_ = false;
   } else {
     is_recovering_from_failure_ = true;

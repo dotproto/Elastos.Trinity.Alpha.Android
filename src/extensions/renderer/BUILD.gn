@@ -52,6 +52,8 @@ jumbo_source_set("renderer") {
     "bindings/api_last_error.h",
     "bindings/api_request_handler.cc",
     "bindings/api_request_handler.h",
+    "bindings/api_response_validator.cc",
+    "bindings/api_response_validator.h",
     "bindings/api_signature.cc",
     "bindings/api_signature.h",
     "bindings/api_type_reference_map.cc",
@@ -193,6 +195,7 @@ jumbo_source_set("renderer") {
     "resources/extension.css",
     "resources/extension_custom_bindings.js",
     "resources/extension_fonts.css",
+    "resources/feedback_private_custom_bindings.js",
     "resources/file_entry_binding_util.js",
     "resources/file_system_custom_bindings.js",
     "resources/greasemonkey_api.js",
@@ -312,7 +315,7 @@ jumbo_source_set("renderer") {
     "//extensions/common/api",
     "//gin",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//third_party/cld_3/src/src:cld_3",
   ]
 
@@ -406,6 +409,7 @@ source_set("unit_tests") {
     "bindings/api_invocation_errors_unittest.cc",
     "bindings/api_last_error_unittest.cc",
     "bindings/api_request_handler_unittest.cc",
+    "bindings/api_response_validator_unittest.cc",
     "bindings/api_signature_unittest.cc",
     "bindings/argument_spec_builder.cc",
     "bindings/argument_spec_builder.h",
@@ -452,7 +456,7 @@ source_set("unit_tests") {
     "//ipc:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//ui/base",
   ]
 

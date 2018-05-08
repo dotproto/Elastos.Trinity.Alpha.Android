@@ -36,18 +36,16 @@ QuicUint128 IncrementalHashFast(QuicUint128 uhash, QuicStringPiece data) {
   // 2. Because there are so fewer instructions (around 13), the hot loop fits
   //    nicely in the instruction queue of many Intel CPUs.
   // kPrime = 309485009821345068724781371
-  static const __uint128_t kPrime =
-      (static_cast<__uint128_t>(16777216) << 64) + 315;
+  static const QuicUint128 kPrime =
+      (static_cast<QuicUint128>(16777216) << 64) + 315;
   auto hi = QuicUint128High64(uhash);
   auto lo = QuicUint128Low64(uhash);
-  __uint128_t xhash = (static_cast<__uint128_t>(hi) << 64) + lo;
+  QuicUint128 xhash = (static_cast<QuicUint128>(hi) << 64) + lo;
   const uint8_t* octets = reinterpret_cast<const uint8_t*>(data.data());
   for (size_t i = 0; i < data.length(); ++i) {
-    xhash = (xhash ^ octets[i]) * kPrime;
+    xhash = (xhash ^ static_cast<uint32_t>(octets[i])) * kPrime;
   }
-  return MakeQuicUint128(
-      static_cast<uint64_t>(xhash >> 64),
-      static_cast<uint64_t>(xhash & UINT64_C(0xFFFFFFFFFFFFFFFF)));
+  return MakeQuicUint128(QuicUint128High64(xhash), QuicUint128Low64(xhash));
 }
 #endif
 
@@ -55,7 +53,7 @@ QuicUint128 IncrementalHashFast(QuicUint128 uhash, QuicStringPiece data) {
 // Slow implementation of IncrementalHash. In practice, only used by Chromium.
 QuicUint128 IncrementalHashSlow(QuicUint128 hash, QuicStringPiece data) {
   // kPrime = 309485009821345068724781371
-  static const uint128 kPrime = MakeQuicUint128(16777216, 315);
+  static const QuicUint128 kPrime = MakeQuicUint128(16777216, 315);
   const uint8_t* octets = reinterpret_cast<const uint8_t*>(data.data());
   for (size_t i = 0; i < data.length(); ++i) {
     hash = hash ^ MakeQuicUint128(0, octets[i]);
@@ -193,6 +191,19 @@ const char* QuicUtils::SentPacketStateToString(SentPacketState state) {
 }
 
 // static
+const char* QuicUtils::QuicLongHeaderTypetoString(QuicLongHeaderType type) {
+  switch (type) {
+    RETURN_STRING_LITERAL(VERSION_NEGOTIATION);
+    RETURN_STRING_LITERAL(INITIAL);
+    RETURN_STRING_LITERAL(RETRY);
+    RETURN_STRING_LITERAL(HANDSHAKE);
+    RETURN_STRING_LITERAL(ZERO_RTT_PROTECTED);
+    default:
+      return "INVALID_PACKET_TYPE";
+  }
+}
+
+// static
 AddressChangeType QuicUtils::DetermineAddressChangeType(
     const QuicSocketAddress& old_address,
     const QuicSocketAddress& new_address) {
@@ -302,6 +313,12 @@ SentPacketState QuicUtils::RetransmissionTypeToPacketState(
                << " is not a retransmission_type";
       return UNACKABLE;
   }
+}
+
+// static
+bool QuicUtils::IsIetfPacketHeader(uint8_t first_byte) {
+  return (first_byte & FLAGS_LONG_HEADER) ||
+         !(first_byte & FLAGS_DEMULTIPLEXING_BIT);
 }
 
 }  // namespace net

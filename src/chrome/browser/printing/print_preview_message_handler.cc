@@ -58,19 +58,17 @@ void StopWorker(int document_cookie) {
   }
 }
 
-scoped_refptr<base::RefCountedBytes> GetDataFromHandle(
+scoped_refptr<base::RefCountedMemory> GetDataFromHandle(
     base::SharedMemoryHandle handle,
     uint32_t data_size) {
-  std::unique_ptr<base::SharedMemory> shared_buf(
-      new base::SharedMemory(handle, true));
+  auto shared_buf = std::make_unique<base::SharedMemory>(handle, true);
   if (!shared_buf->Map(data_size)) {
     NOTREACHED();
     return nullptr;
   }
 
-  unsigned char* data_begin = static_cast<unsigned char*>(shared_buf->memory());
-  std::vector<unsigned char> data(data_begin, data_begin + data_size);
-  return base::RefCountedBytes::TakeVector(&data);
+  return base::MakeRefCounted<base::RefCountedSharedMemory>(
+      std::move(shared_buf), data_size);
 }
 
 }  // namespace
@@ -240,7 +238,7 @@ void PrintPreviewMessageHandler::OnSetOptionsFromDocument(
 void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
     int page_number,
     int request_id,
-    scoped_refptr<base::RefCountedBytes> data_bytes) {
+    scoped_refptr<base::RefCountedMemory> data_bytes) {
   DCHECK(data_bytes);
 
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
@@ -254,7 +252,7 @@ void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
 void PrintPreviewMessageHandler::NotifyUIPreviewDocumentReady(
     int page_count,
     int request_id,
-    scoped_refptr<base::RefCountedBytes> data_bytes) {
+    scoped_refptr<base::RefCountedMemory> data_bytes) {
   if (!data_bytes || !data_bytes->size())
     return;
 
@@ -270,28 +268,30 @@ void PrintPreviewMessageHandler::OnCompositePdfPageDone(
     int page_number,
     int request_id,
     mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
+    base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
   }
-  NotifyUIPreviewPageReady(page_number, request_id,
-                           GetDataFromMojoHandle(std::move(handle)));
+  NotifyUIPreviewPageReady(
+      page_number, request_id,
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
 void PrintPreviewMessageHandler::OnCompositePdfDocumentDone(
     int page_count,
     int request_id,
     mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
+    base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
   }
-  NotifyUIPreviewDocumentReady(page_count, request_id,
-                               GetDataFromMojoHandle(std::move(handle)));
+  NotifyUIPreviewDocumentReady(
+      page_count, request_id,
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
 bool PrintPreviewMessageHandler::OnMessageReceived(

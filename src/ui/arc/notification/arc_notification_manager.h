@@ -9,52 +9,42 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/memory/weak_ptr.h"
 #include "components/arc/common/notifications.mojom.h"
+#include "components/arc/connection_holder.h"
 #include "components/arc/connection_observer.h"
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "ui/message_center/message_center.h"
 
-namespace content {
-class BrowserContext;
-}  // namespace content
-
 namespace arc {
 
-class ArcBridgeService;
 class ArcNotificationItem;
 
 class ArcNotificationManager
-    : public KeyedService,
-      public ConnectionObserver<mojom::NotificationsInstance>,
+    : public ConnectionObserver<mojom::NotificationsInstance>,
       public mojom::NotificationsHost {
  public:
-  // Returns singleton instance for the given BrowserContext,
-  // or nullptr if the browser |context| is not allowed to use ARC.
-  static ArcNotificationManager* GetForBrowserContext(
-      content::BrowserContext* context);
-
-  // Returns a created instance for testing.
-  static std::unique_ptr<ArcNotificationManager> CreateForTesting(
-      ArcBridgeService* bridge_service,
-      const AccountId& main_profile_id,
-      message_center::MessageCenter* message_center);
-
   // Sets the factory function to create ARC notification views. Exposed for
   // testing.
   static void SetCustomNotificationViewFactory();
 
-  // TODO(hidehiko): Make ctor private to enforce all service users should
-  // use GetForBrowserContext().
-  ArcNotificationManager(content::BrowserContext* context,
-                         ArcBridgeService* bridge_service);
+  ArcNotificationManager(const AccountId& main_profile_id,
+                         message_center::MessageCenter* message_center);
 
   ~ArcNotificationManager() override;
 
-  void set_get_app_id_callback(
-      base::RepeatingCallback<std::string(const std::string&)>
-          get_app_id_callback) {
-    get_app_id_callback_ = std::move(get_app_id_callback);
+  void SetInstance(mojom::NotificationsInstancePtr instance);
+
+  ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>*
+  GetConnectionHolderForTest();
+
+  using GetAppIdResponseCallback =
+      base::OnceCallback<void(const std::string& app_id)>;
+  using GetAppIdCallback =
+      base::RepeatingCallback<void(const std::string& package_name,
+                                   GetAppIdResponseCallback callback)>;
+  void set_get_app_id_callback(const GetAppIdCallback& get_app_id_callback) {
+    get_app_id_callback_ = get_app_id_callback;
   }
 
   // ConnectionObserver<mojom::NotificationsInstance> implementation:
@@ -65,8 +55,6 @@ class ArcNotificationManager
   void OnNotificationPosted(mojom::ArcNotificationDataPtr data) override;
   void OnNotificationUpdated(mojom::ArcNotificationDataPtr data) override;
   void OnNotificationRemoved(const std::string& key) override;
-  void OnToastPosted(mojom::ArcToastDataPtr data) override;
-  void OnToastCancelled(mojom::ArcToastDataPtr data) override;
 
   // Methods called from ArcNotificationItem:
   void SendNotificationRemovedFromChrome(const std::string& key);
@@ -79,20 +67,21 @@ class ArcNotificationManager
   bool IsOpeningSettingsSupported() const;
   void SendNotificationToggleExpansionOnChrome(const std::string& key);
 
-  // Overridden from KeyedService:
-  void Shutdown() override;
-
  private:
-  ArcNotificationManager(ArcBridgeService* bridge_service,
-                         const AccountId& main_profile_id,
-                         message_center::MessageCenter* message_center);
+  // Helper class to own MojoChannel and ConnectionHolder.
+  class InstanceOwner;
 
   bool ShouldIgnoreNotification(mojom::ArcNotificationData* data);
 
-  // Calls |get_app_id_callback_| to retrieve the app id from ArcAppListPrefs.
-  std::string GetAppId(const std::string& package_name) const;
+  // Calls |get_app_id_callback_| to retrieve the app id. |callback| will be
+  // invoked with the app id or an empty string.
+  void GetAppId(const std::string& package_name,
+                GetAppIdResponseCallback callback) const;
 
-  ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
+  // Invoked when |get_app_id_callback_| gets back the app id.
+  void OnGotAppId(mojom::ArcNotificationDataPtr data,
+                  const std::string& app_id);
+
   const AccountId main_profile_id_;
   message_center::MessageCenter* const message_center_;
 
@@ -100,9 +89,13 @@ class ArcNotificationManager
       std::unordered_map<std::string, std::unique_ptr<ArcNotificationItem>>;
   ItemMap items_;
 
-  base::RepeatingCallback<std::string(const std::string&)> get_app_id_callback_;
+  GetAppIdCallback get_app_id_callback_;
 
   bool ready_ = false;
+
+  std::unique_ptr<InstanceOwner> instance_owner_;
+
+  base::WeakPtrFactory<ArcNotificationManager> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ArcNotificationManager);
 };

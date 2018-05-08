@@ -166,8 +166,6 @@ component("browser") {
     "fileapi/sandbox_quota_observer.cc",
     "fileapi/sandbox_quota_observer.h",
     "fileapi/task_runner_bound_observer_list.h",
-    "fileapi/timed_task_helper.cc",
-    "fileapi/timed_task_helper.h",
     "fileapi/transient_file_util.cc",
     "fileapi/transient_file_util.h",
     "fileapi/watcher_manager.h",
@@ -208,6 +206,7 @@ component("browser") {
   ]
 
   public_deps = [
+    "//components/services/filesystem/public/interfaces",
     "//storage/common",
   ]
   deps = [
@@ -291,7 +290,6 @@ source_set("unittests") {
     "fileapi/sandbox_isolated_origin_database_unittest.cc",
     "fileapi/sandbox_origin_database_unittest.cc",
     "fileapi/sandbox_prioritized_origin_database_unittest.cc",
-    "fileapi/timed_task_helper_unittest.cc",
     "fileapi/transient_file_util_unittest.cc",
     "quota/quota_database_unittest.cc",
     "quota/quota_manager_unittest.cc",
@@ -305,7 +303,7 @@ source_set("unittests") {
     ":browser",
     ":test_support",
     "//base/test:test_support",
-    "//mojo/common",
+    "//components/services/filesystem/public/interfaces",
     "//mojo/edk",
     "//net:test_support",
     "//services/network/public/cpp",
@@ -321,6 +319,8 @@ static_library("test_support") {
   sources = [
     "test/async_file_test_helper.cc",
     "test/async_file_test_helper.h",
+    "test/fake_progress_client.cc",
+    "test/fake_progress_client.h",
     "test/fileapi_test_file_set.cc",
     "test/fileapi_test_file_set.h",
     "test/mock_blob_registry_delegate.cc",
@@ -356,7 +356,6 @@ static_library("test_support") {
   deps = [
     ":browser",
     "//base/test:test_support",
-    "//mojo/common",
     "//net:test_support",
     "//testing/gtest",
     "//third_party/leveldatabase",

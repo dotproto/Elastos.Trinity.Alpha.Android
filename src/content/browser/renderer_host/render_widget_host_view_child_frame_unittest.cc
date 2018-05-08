@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -28,11 +27,13 @@
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/common/frame_visual_properties.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/fake_renderer_compositor_frame_sink.h"
 #include "content/test/mock_render_widget_host_delegate.h"
 #include "content/test/mock_widget_impl.h"
@@ -81,9 +82,7 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
 
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
  public:
-  RenderWidgetHostViewChildFrameTest()
-      : scoped_task_environment_(
-            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+  RenderWidgetHostViewChildFrameTest() {}
 
   void SetUp() override {
     SetUpEnvironment(false /* use_zoom_for_device_scale_factor */);
@@ -150,7 +149,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   }
 
  protected:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  TestBrowserThreadBundle thread_bundle_;
 
   std::unique_ptr<BrowserContext> browser_context_;
   MockRenderWidgetHostDelegate delegate_;
@@ -352,21 +351,25 @@ TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
 
   process->sink().ClearMessages();
 
-  test_frame_connector_->UpdateResizeParams(screen_space_rect,
-                                            compositor_viewport_pixel_size,
-                                            ScreenInfo(), 1u, surface_id);
+  FrameVisualProperties visual_properties;
+  visual_properties.screen_space_rect = screen_space_rect;
+  visual_properties.local_frame_size = compositor_viewport_pixel_size;
+  visual_properties.capture_sequence_number = 123u;
+  test_frame_connector_->SynchronizeVisualProperties(surface_id,
+                                                     visual_properties);
 
   ASSERT_EQ(1u, process->sink().message_count());
 
-  const IPC::Message* resize_msg =
-      process->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID);
+  const IPC::Message* resize_msg = process->sink().GetUniqueMessageMatching(
+      ViewMsg_SynchronizeVisualProperties::ID);
   ASSERT_NE(nullptr, resize_msg);
-  ViewMsg_Resize::Param params;
-  ViewMsg_Resize::Read(resize_msg, &params);
+  ViewMsg_SynchronizeVisualProperties::Param params;
+  ViewMsg_SynchronizeVisualProperties::Read(resize_msg, &params);
   EXPECT_EQ(compositor_viewport_pixel_size,
             std::get<0>(params).compositor_viewport_pixel_size);
   EXPECT_EQ(screen_space_rect.size(), std::get<0>(params).new_size);
   EXPECT_EQ(local_surface_id, std::get<0>(params).local_surface_id);
+  EXPECT_EQ(123u, std::get<0>(params).capture_sequence_number);
 }
 
 }  // namespace content

@@ -471,12 +471,17 @@ TEST(SetupUtilTest, DecodeDMTokenSwitchValue) {
             *installer::DecodeDMTokenSwitchValue(base::UTF8ToUTF16(encoded)));
 }
 
-TEST(SetupUtilTest, StoreDMTokenToRegistry) {
+TEST(SetupUtilTest, StoreDMTokenToRegistrySuccess) {
   install_static::ScopedInstallDetails scoped_install_details(true);
   registry_util::RegistryOverrideManager registry_override_manager;
   registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
 
-  std::string token("tokens are \0 binary data");
+  // Use the 2 argument std::string constructor so that the length of the string
+  // is not calculated by assuming the input char array is null terminated.
+  static constexpr char kTokenData[] = "tokens are \0 binary data";
+  static constexpr DWORD kExpectedSize = sizeof(kTokenData) - 1;
+  std::string token(&kTokenData[0], kExpectedSize);
+  ASSERT_EQ(kExpectedSize, token.length());
   EXPECT_TRUE(installer::StoreDMToken(token));
 
   std::wstring path;
@@ -486,14 +491,25 @@ TEST(SetupUtilTest, StoreDMTokenToRegistry) {
   ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_LOCAL_MACHINE, path.c_str(),
                                     KEY_QUERY_VALUE | KEY_WOW64_64KEY));
 
-  DWORD size = 64;
+  DWORD size = kExpectedSize;
   std::vector<char> raw_value(size);
   DWORD dtype;
   ASSERT_EQ(ERROR_SUCCESS,
             key.ReadValue(name.c_str(), raw_value.data(), &size, &dtype));
   EXPECT_EQ(REG_BINARY, dtype);
-  ASSERT_EQ(token.length(), size);
-  EXPECT_EQ(0, memcmp(token.data(), raw_value.data(), size));
+  ASSERT_EQ(kExpectedSize, size);
+  EXPECT_EQ(0, memcmp(token.data(), raw_value.data(), kExpectedSize));
+}
+
+TEST(SetupUtilTest, StoreDMTokenToRegistryShouldFailWhenDMTokenTooLarge) {
+  install_static::ScopedInstallDetails scoped_install_details(true);
+  registry_util::RegistryOverrideManager registry_override_manager;
+  registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
+
+  std::string token_too_large(installer::kMaxDMTokenLength + 1, 'x');
+  ASSERT_GT(token_too_large.size(), installer::kMaxDMTokenLength);
+
+  EXPECT_FALSE(installer::StoreDMToken(token_too_large));
 }
 
 namespace installer {

@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "dbus/bus.h"
@@ -41,8 +40,8 @@ class SMSProxy {
         modemmanager::kModemManagerSMSInterface,
         modemmanager::kSMSReceivedSignal,
         base::Bind(&SMSProxy::OnSmsReceived, weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&SMSProxy::OnSignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SMSProxy::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Sets SmsReceived signal handler.

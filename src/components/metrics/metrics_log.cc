@@ -149,7 +149,7 @@ void MetricsLog::RecordCoreSystemProfile(MetricsServiceClient* client,
   system_profile->set_channel(client->GetChannel());
   system_profile->set_application_locale(client->GetApplicationLocale());
 
-#if defined(SYZYASAN)
+#if defined(ADDRESS_SANITIZER)
   system_profile->set_is_asan_build(true);
 #endif
 
@@ -173,6 +173,9 @@ void MetricsLog::RecordCoreSystemProfile(MetricsServiceClient* client,
 #if defined(OS_ANDROID)
   os->set_build_fingerprint(
       base::android::BuildInfo::GetInstance()->android_build_fp());
+  std::string package_name = client->GetAppPackageName();
+  if (!package_name.empty() && package_name != "com.android.chrome")
+    system_profile->set_app_package_name(package_name);
 #endif
 }
 

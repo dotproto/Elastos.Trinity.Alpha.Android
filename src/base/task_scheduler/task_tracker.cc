@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "base/base_switches.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -103,6 +105,19 @@ void RecordNumBlockShutdownTasksPostedDuringShutdown(
   UMA_HISTOGRAM_CUSTOM_COUNTS(
       "TaskScheduler.BlockShutdownTasksPostedDuringShutdown", value, 1,
       kMaxBlockShutdownTasksPostedDuringShutdown, 50);
+}
+
+// Returns the maximum number of TaskPriority::BACKGROUND sequences that can be
+// scheduled concurrently based on command line flags.
+int GetMaxNumScheduledBackgroundSequences() {
+  // The CommandLine might not be initialized if TaskScheduler is initialized
+  // in a dynamic library which doesn't have access to argc/argv.
+  if (CommandLine::InitializedForCurrentProcess() &&
+      CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableBackgroundTasks)) {
+    return 0;
+  }
+  return std::numeric_limits<int>::max();
 }
 
 }  // namespace
@@ -226,6 +241,9 @@ struct TaskTracker::PreemptedBackgroundSequence {
   DISALLOW_COPY_AND_ASSIGN(PreemptedBackgroundSequence);
 };
 
+TaskTracker::TaskTracker(StringPiece histogram_label)
+    : TaskTracker(histogram_label, GetMaxNumScheduledBackgroundSequences()) {}
+
 TaskTracker::TaskTracker(StringPiece histogram_label,
                          int max_num_scheduled_background_sequences)
     : state_(new State),
@@ -242,7 +260,8 @@ TaskTracker::TaskTracker(StringPiece histogram_label,
                                    "UserVisibleTaskPriority_MayBlock")},
           {GetTaskLatencyHistogram(histogram_label, "UserBlockingTaskPriority"),
            GetTaskLatencyHistogram(histogram_label,
-                                   "UserBlockingTaskPriority_MayBlock")}} {
+                                   "UserBlockingTaskPriority_MayBlock")}},
+      tracked_ref_factory_(this) {
   // Confirm that all |task_latency_histograms_| have been initialized above.
   DCHECK(*(&task_latency_histograms_[static_cast<int>(TaskPriority::HIGHEST) +
                                      1][0] -

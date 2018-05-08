@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
@@ -33,26 +32,27 @@
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
-#include "blink/public/resources/grit/blink_image_resources.h"
-#include "blink/public/resources/grit/blink_resources.h"
-#include "blink/public/resources/grit/media_controls_resources.h"
 #include "build/build_config.h"
 #include "content/app/resources/grit/content_resources.h"
 #include "content/app/strings/grit/content_strings.h"
 #include "content/child/child_thread_impl.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/features.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebGestureCurve.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/scheduler/child/webthread_base.h"
+#include "third_party/blink/public/platform/scheduler/child/webthread_base.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_float_point.h"
+#include "third_party/blink/public/platform/web_gesture_curve.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/resources/grit/blink_image_resources.h"
+#include "third_party/blink/public/resources/grit/blink_resources.h"
+#include "third_party/blink/public/resources/grit/media_controls_resources.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/base/layout.h"
 #include "ui/events/gestures/blink/web_gesture_curve_impl.h"
@@ -538,6 +538,8 @@ const DataResource kDataResources[] = {
     {"validation_bubble.css", IDR_VALIDATION_BUBBLE_CSS, ui::SCALE_FACTOR_NONE,
      true},
     {"placeholderIcon", IDR_PLACEHOLDER_ICON, ui::SCALE_FACTOR_100P, false},
+    {"brokenCanvas", IDR_BROKENCANVAS, ui::SCALE_FACTOR_100P, false},
+    {"brokenCanvas@2x", IDR_BROKENCANVAS, ui::SCALE_FACTOR_200P, false},
 };
 
 class NestedMessageLoopRunnerImpl
@@ -745,11 +747,13 @@ size_t BlinkPlatformImpl::NumberOfProcessors() {
 }
 
 size_t BlinkPlatformImpl::MaxDecodedImageBytes() {
+  const int kMB = 1024 * 1024;
+  const int kMaxNumberOfBytesPerPixel = 4;
 #if defined(OS_ANDROID)
   if (base::SysInfo::IsLowEndDevice()) {
     // Limit image decoded size to 3M pixels on low end devices.
     // 4 is maximum number of bytes per pixel.
-    return 3 * 1024 * 1024 * 4;
+    return 3 * kMB * kMaxNumberOfBytesPerPixel;
   }
   // For other devices, limit decoded image size based on the amount of physical
   // memory.
@@ -760,18 +764,21 @@ size_t BlinkPlatformImpl::MaxDecodedImageBytes() {
   // common texture size.
   return base::SysInfo::AmountOfPhysicalMemory() / 25;
 #else
-  return kNoDecodedImageByteLimit;
+  size_t max_decoded_image_byte_limit = kNoDecodedImageByteLimit;
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kMaxDecodedImageSizeMb)) {
+    if (base::StringToSizeT(
+            command_line.GetSwitchValueASCII(switches::kMaxDecodedImageSizeMb),
+            &max_decoded_image_byte_limit)) {
+      max_decoded_image_byte_limit *= kMB * kMaxNumberOfBytesPerPixel;
+    }
+  }
+  return max_decoded_image_byte_limit;
 #endif
 }
 
 bool BlinkPlatformImpl::IsLowEndDevice() {
   return base::SysInfo::IsLowEndDevice();
-}
-
-uint32_t BlinkPlatformImpl::GetUniqueIdForProcess() {
-  // TODO(rickyz): Replace this with base::GetUniqueIdForProcess when that's
-  // ready.
-  return base::trace_event::TraceLog::GetInstance()->process_id();
 }
 
 bool BlinkPlatformImpl::IsMainThread() const {

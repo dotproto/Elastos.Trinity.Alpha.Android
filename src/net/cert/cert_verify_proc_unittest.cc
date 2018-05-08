@@ -67,6 +67,8 @@ const char kTLSFeatureExtensionHistogram[] =
 const char kTLSFeatureExtensionOCSPHistogram[] =
     "Net.Certificate.TLSFeatureExtensionWithPrivateRootHasOCSP";
 const char kTrustAnchorVerifyHistogram[] = "Net.Certificate.TrustAnchor.Verify";
+const char kTrustAnchorVerifyOutOfDateHistogram[] =
+    "Net.Certificate.TrustAnchor.VerifyOutOfDate";
 
 // Mock CertVerifyProc that sets the CertVerifyResult to a given value for
 // all certificates that are Verify()'d
@@ -236,27 +238,14 @@ class CertVerifyProcInternalTest
 
   bool SupportsReturningVerifiedChain() const {
 #if defined(OS_ANDROID)
-    // Before API level 17, Android does not expose the APIs necessary to get at
-    // the verified certificate chain.
+    // Before API level 17 (SDK_VERSION_JELLY_BEAN_MR1), Android does
+    // not expose the APIs necessary to get at the verified
+    // certificate chain.
     if (verify_proc_type() == CERT_VERIFY_PROC_ANDROID &&
-        base::android::BuildInfo::GetInstance()->sdk_int() < 17)
+        base::android::BuildInfo::GetInstance()->sdk_int() <
+            base::android::SDK_VERSION_JELLY_BEAN_MR1)
       return false;
 #endif
-    return true;
-  }
-
-  bool SupportsDetectingKnownRoots() const {
-#if defined(OS_ANDROID)
-    // Before API level 17, Android does not expose the APIs necessary to get at
-    // the verified certificate chain and detect known roots.
-    if (verify_proc_type() == CERT_VERIFY_PROC_ANDROID)
-      return base::android::BuildInfo::GetInstance()->sdk_int() >= 17;
-#endif
-
-    // iOS does not expose the APIs necessary to get the known system roots.
-    if (verify_proc_type() == CERT_VERIFY_PROC_IOS)
-      return false;
-
     return true;
   }
 
@@ -344,7 +333,7 @@ TEST_P(CertVerifyProcInternalTest, EVVerificationMultipleOID) {
       CRLSet::ForTesting(false, &spki_sha256, "", "", {}));
 
   CertVerifyResult verify_result;
-  int flags = CertVerifier::VERIFY_EV_CERT;
+  int flags = 0;
   int error = Verify(chain.get(), "trustcenter.websecurity.symantec.com", flags,
                      crl_set.get(), CertificateList(), &verify_result);
   EXPECT_THAT(error, IsOk());
@@ -366,7 +355,7 @@ TEST_P(CertVerifyProcInternalTest, TrustedTargetCertWithEVPolicy) {
   ScopedTestRoot scoped_test_root(cert.get());
 
   CertVerifyResult verify_result;
-  int flags = CertVerifier::VERIFY_EV_CERT;
+  int flags = 0;
   int error = Verify(cert.get(), "policy_test.example", flags,
                      nullptr /*crl_set*/, CertificateList(), &verify_result);
   if (ScopedTestRootCanTrustTargetCert(verify_proc_type())) {
@@ -403,7 +392,7 @@ TEST_P(CertVerifyProcInternalTest,
   ScopedTestRoot scoped_test_root(cert.get());
 
   CertVerifyResult verify_result;
-  int flags = CertVerifier::VERIFY_EV_CERT;
+  int flags = 0;
   int error = Verify(cert.get(), "policy_test.example", flags,
                      nullptr /*crl_set*/, CertificateList(), &verify_result);
   if (ScopedTestRootCanTrustTargetCert(verify_proc_type())) {
@@ -1223,7 +1212,7 @@ TEST(CertVerifyProcTest, TestHasTooLongValidity) {
     const char* const file;
     bool is_valid_too_long;
   } tests[] = {
-      {"twitter-chain.pem", false},
+      {"daltonridgeapts.com-chain.pem", false},
       {"start_after_expiry.pem", true},
       {"pre_br_validity_ok.pem", false},
       {"pre_br_validity_bad_121.pem", true},
@@ -1237,6 +1226,7 @@ TEST(CertVerifyProcTest, TestHasTooLongValidity) {
       {"825_days_after_2018_03_01.pem", false},
       {"826_days_after_2018_03_01.pem", true},
       {"825_days_1_second_after_2018_03_01.pem", true},
+      {"39_months_based_on_last_day.pem", false},
   };
 
   base::FilePath certs_dir = GetTestCertsDirectory();
@@ -1251,33 +1241,20 @@ TEST(CertVerifyProcTest, TestHasTooLongValidity) {
   }
 }
 
-// TODO(crbug.com/610546): Fix and re-enable this test.
-TEST_P(CertVerifyProcInternalTest, DISABLED_TestKnownRoot) {
-  if (!SupportsDetectingKnownRoots()) {
-    LOG(INFO) << "Skipping this test on this platform.";
-    return;
-  }
-
+TEST_P(CertVerifyProcInternalTest, TestKnownRoot) {
   base::FilePath certs_dir = GetTestCertsDirectory();
-  CertificateList certs = CreateCertificateListFromFile(
-      certs_dir, "twitter-chain.pem", X509Certificate::FORMAT_AUTO);
-  ASSERT_EQ(3U, certs.size());
-
-  std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediates;
-  intermediates.push_back(x509_util::DupCryptoBuffer(certs[1]->cert_buffer()));
-
-  scoped_refptr<X509Certificate> cert_chain = X509Certificate::CreateFromBuffer(
-      x509_util::DupCryptoBuffer(certs[0]->cert_buffer()),
-      std::move(intermediates));
+  scoped_refptr<X509Certificate> cert_chain = CreateCertificateChainFromFile(
+      certs_dir, "daltonridgeapts.com-chain.pem", X509Certificate::FORMAT_AUTO);
   ASSERT_TRUE(cert_chain);
 
   int flags = 0;
   CertVerifyResult verify_result;
-  // This will blow up, May 9th, 2016. Sorry! Please disable and file a bug
-  // against agl.
-  int error = Verify(cert_chain.get(), "twitter.com", flags, NULL,
+  int error = Verify(cert_chain.get(), "daltonridgeapts.com", flags, NULL,
                      CertificateList(), &verify_result);
-  EXPECT_THAT(error, IsOk());
+  EXPECT_THAT(error, IsOk()) << "This test relies on a real certificate that "
+                             << "expires on May 28, 2021. If failing on/after "
+                             << "that date, please disable and file a bug "
+                             << "against rsleevi.";
   EXPECT_TRUE(verify_result.is_issued_by_known_root);
 }
 
@@ -2082,7 +2059,8 @@ TEST_P(CertVerifyProcInternalTest, CRLSetDuringPathBuilding) {
             x509_util::DupCryptoBuffer(verified_intermediates[1].get()), {});
     ASSERT_TRUE(intermediate);
 
-    EXPECT_TRUE(testcase.expected_intermediate->Equals(intermediate.get()))
+    EXPECT_TRUE(testcase.expected_intermediate->EqualsExcludingChain(
+        intermediate.get()))
         << "Expected: " << testcase.expected_intermediate->subject().common_name
         << " issued by " << testcase.expected_intermediate->issuer().common_name
         << "; Got: " << intermediate->subject().common_name << " issued by "
@@ -2659,7 +2637,6 @@ TEST(CertVerifyProcTest, HasTrustAnchorVerifyUMA) {
   int error = verify_proc->Verify(cert.get(), "127.0.0.1", std::string(), flags,
                                   NULL, CertificateList(), &verify_result);
   EXPECT_EQ(OK, error);
-  histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 1);
   histograms.ExpectUniqueSample(kTrustAnchorVerifyHistogram,
                                 kGTSRootR4HistogramID, 1);
 }
@@ -2708,9 +2685,45 @@ TEST(CertVerifyProcTest, LogsOnlyMostSpecificTrustAnchorUMA) {
   EXPECT_EQ(OK, error);
 
   // Only GTS Root R3 should be recorded.
-  histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 1);
   histograms.ExpectUniqueSample(kTrustAnchorVerifyHistogram,
                                 kGTSRootR3HistogramID, 1);
+}
+
+// Test that trust anchors histograms record whether or not
+// is_issued_by_known_root was derived from the OS.
+TEST(CertVerifyProcTest, HasTrustAnchorVerifyOutOfDateUMA) {
+  base::HistogramTester histograms;
+  scoped_refptr<X509Certificate> cert(ImportCertFromFile(
+      GetTestCertsDirectory(), "39_months_based_on_last_day.pem"));
+  ASSERT_TRUE(cert);
+
+  CertVerifyResult result;
+
+  // Simulate a certificate chain that is recognized as trusted (from a known
+  // root), but no certificates in the chain are tracked as known trust
+  // anchors.
+  SHA256HashValue leaf_hash = {{0}};
+  SHA256HashValue intermediate_hash = {{1}};
+  SHA256HashValue root_hash = {{2}};
+  result.public_key_hashes.push_back(HashValue(leaf_hash));
+  result.public_key_hashes.push_back(HashValue(intermediate_hash));
+  result.public_key_hashes.push_back(HashValue(root_hash));
+  result.is_issued_by_known_root = true;
+
+  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+
+  histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 0);
+  histograms.ExpectTotalCount(kTrustAnchorVerifyOutOfDateHistogram, 0);
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = verify_proc->Verify(cert.get(), "127.0.0.1", std::string(), flags,
+                                  NULL, CertificateList(), &verify_result);
+  EXPECT_EQ(OK, error);
+  const base::HistogramBase::Sample kUnknownRootHistogramID = 0;
+  histograms.ExpectUniqueSample(kTrustAnchorVerifyHistogram,
+                                kUnknownRootHistogramID, 1);
+  histograms.ExpectUniqueSample(kTrustAnchorVerifyOutOfDateHistogram, true, 1);
 }
 
 }  // namespace net

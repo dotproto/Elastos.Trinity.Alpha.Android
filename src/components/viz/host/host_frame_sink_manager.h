@@ -67,6 +67,9 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // on |frame_sink_manager_ptr_| is lost.
   void SetConnectionLostCallback(base::RepeatingClosure callback);
 
+  // Sets a callback to be notified after Viz sent bad message to Viz host.
+  void SetBadMessageReceivedFromGpuCallback(base::RepeatingClosure callback);
+
   // Registers |frame_sink_id| will be used. This must be called before
   // CreateCompositorFrameSink(Support) is called.
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id,
@@ -111,9 +114,15 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
                                  mojom::CompositorFrameSinkRequest request,
                                  mojom::CompositorFrameSinkClientPtr client);
 
-  // Registers frame sink hierarchy. Both parent and child FrameSinkIds must be
-  // registered before calling. A frame sink can have multiple parents.
-  void RegisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
+  // Registers FrameSink hierarchy. It's expected that the parent will embed
+  // the child. If |parent_frame_sink_id| is registered then it will be added as
+  // a parent of |child_frame_sink_id| and the function will return true. If
+  // |parent_frame_sink_id| is not registered then the function will return
+  // false.
+  //
+  // |child_frame_sink_id| must be registered before calling. A frame sink
+  // can have multiple parents.
+  bool RegisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
                                   const FrameSinkId& child_frame_sink_id);
 
   // Unregisters FrameSink hierarchy. Client must have registered frame sink
@@ -137,10 +146,13 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // Marks the given SurfaceIds for destruction.
   void EvictSurfaces(const std::vector<SurfaceId>& surface_ids);
 
-  // Takes a snapshot of |frame_sink_id|. Next time a display frame is
-  // generated, the snapshot will be taken from the Surface belonging to
-  // |frame_sink_id| that is reachable from the root Surface.
-  void RequestCopyOfOutput(const FrameSinkId& frame_sink_id,
+  // Takes snapshot of a |surface_id| or a newer surface with the same
+  // FrameSinkId. The FrameSinkId is used to identify which frame we're
+  // interested in. The snapshot will only be taken if the LocalSurfaceId is at
+  // least the given LocalSurfaceId (|surface_id.local_frame_id()|). If the
+  // LocalSurfaceId is lower than the given id, then the request is queued up to
+  // be executed later.
+  void RequestCopyOfOutput(const SurfaceId& surface_id,
                            std::unique_ptr<CopyOutputRequest> request);
 
   // CompositorFrameSinkSupportManager:
@@ -220,7 +232,6 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // mojom::FrameSinkManagerClient:
   void OnSurfaceCreated(const SurfaceId& surface_id) override;
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
-  void OnClientConnectionClosed(const FrameSinkId& frame_sink_id) override;
   void OnAggregatedHitTestRegionListUpdated(
       const FrameSinkId& frame_sink_id,
       mojo::ScopedSharedBufferHandle active_handle,
@@ -260,6 +271,8 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   bool assign_temporary_references_ = true;
 
   base::RepeatingClosure connection_lost_callback_;
+
+  base::RepeatingClosure bad_message_received_from_gpu_callback_;
 
   DisplayHitTestQueryMap display_hit_test_query_;
 

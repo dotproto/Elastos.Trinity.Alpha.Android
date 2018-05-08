@@ -11,10 +11,10 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
@@ -160,9 +160,7 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
   void ReportCrash(bool oom) {
 #if defined(OS_ANDROID)
     breakpad::CrashDumpManager::CrashDumpDetails details = {
-        kCrashProcessId, content::PROCESS_TYPE_RENDERER,
-        oom ? base::TERMINATION_STATUS_OOM_PROTECTED
-            : base::TERMINATION_STATUS_ABNORMAL_TERMINATION,
+        kCrashProcessId, content::PROCESS_TYPE_RENDERER, oom,
         base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES};
     details.file_size = oom ? 0 : 1;
     static_cast<breakpad::CrashDumpManager::Observer*>(pingback_client_.get())

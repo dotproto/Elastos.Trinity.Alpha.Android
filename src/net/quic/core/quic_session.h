@@ -308,10 +308,6 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // Set transmission type of next sending packets.
   void SetTransmissionType(TransmissionType type);
 
-  bool can_use_slices() const { return can_use_slices_; }
-
-  bool session_unblocks_stream() const { return session_unblocks_stream_; }
-
   bool register_streams_early() const { return register_streams_early_; }
 
   bool session_decides_what_to_write() const;
@@ -482,6 +478,9 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // May be null.
   Visitor* visitor_;
 
+  // Latched value of quic_reloadable_flag_quic_register_streams_early2.
+  const bool register_streams_early_;
+
   // A list of streams which need to write more data.  Stream register
   // themselves in their constructor, and unregisterm themselves in their
   // destructors, so the write blocked list must outlive all streams.
@@ -549,20 +548,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
 
   QuicControlFrameManager control_frame_manager_;
 
-  // QUIC stream can take ownership of application data provided in reference
-  // counted memory to avoid data copy.
-  const bool can_use_slices_;
-
   // TODO(fayang): switch to linked_hash_set when chromium supports it. The bool
   // is not used here.
   // List of streams with pending retransmissions.
   QuicLinkedHashMap<QuicStreamId, bool> streams_with_pending_retransmission_;
-
-  // Latched value of quic_reloadable_flag_quic_streams_unblocked_by_session2.
-  const bool session_unblocks_stream_;
-
-  // Latched value of quic_reloadable_flag_quic_register_streams_early2.
-  const bool register_streams_early_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSession);
 };

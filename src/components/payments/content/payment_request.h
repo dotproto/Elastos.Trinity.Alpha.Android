@@ -16,7 +16,7 @@
 #include "components/payments/core/journey_logger.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -65,7 +65,7 @@ class PaymentRequest : public mojom::PaymentRequest,
             std::vector<mojom::PaymentMethodDataPtr> method_data,
             mojom::PaymentDetailsPtr details,
             mojom::PaymentOptionsPtr options) override;
-  void Show() override;
+  void Show(bool is_user_gesture) override;
   void UpdateWith(mojom::PaymentDetailsPtr details) override;
   void NoUpdatedPaymentDetails() override;
   void Abort() override;
@@ -164,6 +164,9 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // Whether a completion was already recorded for this Payment Request.
   bool has_recorded_completion_ = false;
+
+  // Whether PaymentRequest.show() was invoked with a user gesture.
+  bool is_show_user_gesture_ = false;
 
   base::WeakPtrFactory<PaymentRequest> weak_ptr_factory_;
 

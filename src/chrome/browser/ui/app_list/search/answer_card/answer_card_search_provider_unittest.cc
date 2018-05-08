@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/app_list/model/search/search_result.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
@@ -19,13 +19,13 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
 #include "chrome/browser/ui/app_list/search/answer_card/answer_card_search_provider.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/template_url_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_features.h"
 
 using ::testing::_;
 using ::testing::Return;
@@ -94,7 +94,7 @@ class AnswerCardSearchProviderTest : public AppListTestBase {
                                     has_error, has_answer_card, title,
                                     issued_query);
 
-    provider()->DidStopLoading(contents);
+    provider()->OnContentsReady(contents);
 
     EXPECT_EQ(expected_result_count, results().size());
 
@@ -108,7 +108,7 @@ class AnswerCardSearchProviderTest : public AppListTestBase {
     SCOPED_TRACE(message);
 
     EXPECT_EQ(1UL, results().size());
-    SearchResult* result = results()[0].get();
+    ChromeSearchResult* result = results()[0].get();
     EXPECT_EQ(ash::SearchResultDisplayType::kCard, result->display_type());
     EXPECT_EQ(id, result->id());
     EXPECT_EQ(1, result->relevance());
@@ -191,7 +191,7 @@ TEST_F(AnswerCardSearchProviderTest, Basic) {
   provider()->Start(base::UTF8ToUTF16(kCatQuery));
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Basic Result", kCatCardId, token1(), kCatCardTitle);
 
@@ -215,7 +215,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueries) {
   provider()->Start(base::UTF8ToUTF16(kCatQuery));
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Cat Result 1", kCatCardId, token1(), kCatCardTitle);
 
@@ -232,7 +232,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueries) {
   // The cat still stays.
   VerifyResult("Cat Result 3", kCatCardId, token1(), kCatCardTitle);
 
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   // Once the dog finishes loading, it replaces the cat.
   VerifyResult("Dog Result 1", kDogCardId, token0(), kDogCardTitle);
@@ -249,7 +249,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueries) {
 
   VerifyResult("Dog Result 3", kDogCardId, token0(), kDogCardTitle);
 
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Shark Result", kSharkCardId, token1(), kSharkCardTitle);
 }
@@ -261,7 +261,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondErrors) {
   provider()->Start(base::UTF8ToUTF16(kCatQuery));
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Cat Result 1", kCatCardId, token1(), kCatCardTitle);
 
@@ -276,7 +276,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondErrors) {
 
   EXPECT_EQ(0UL, results().size());
 
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   EXPECT_EQ(0UL, results().size());
 
@@ -291,7 +291,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondErrors) {
 
   EXPECT_EQ(0UL, results().size());
 
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   VerifyResult("Shark Result", kSharkCardId, token0(), kSharkCardTitle);
 }
@@ -304,7 +304,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondNoCard) {
   provider()->Start(base::UTF8ToUTF16(kCatQuery));
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Cat Result 1", kCatCardId, token1(), kCatCardTitle);
 
@@ -319,7 +319,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondNoCard) {
 
   EXPECT_EQ(0UL, results().size());
 
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   EXPECT_EQ(0UL, results().size());
 
@@ -334,7 +334,7 @@ TEST_F(AnswerCardSearchProviderTest, ThreeQueriesSecondNoCard) {
 
   EXPECT_EQ(0UL, results().size());
 
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   VerifyResult("Shark Result", kSharkCardId, token0(), kSharkCardTitle);
 }
@@ -357,17 +357,17 @@ TEST_F(AnswerCardSearchProviderTest, InterruptedRequest) {
 
   provider()->DidFinishNavigation(contents1(), GetSearchUrl("c"), false, true,
                                   "Title c", "c");
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
   EXPECT_EQ(0UL, results().size());
 
   provider()->DidFinishNavigation(contents1(), GetSearchUrl("ca"), false, true,
                                   "Title ca", "ca");
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
   EXPECT_EQ(0UL, results().size());
 
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Cat Result", kCatCardId, token1(), kCatCardTitle);
 }
@@ -379,7 +379,7 @@ TEST_F(AnswerCardSearchProviderTest, InterruptedRequestAfterResult) {
   provider()->Start(base::UTF8ToUTF16(kCatQuery));
   provider()->DidFinishNavigation(contents1(), GetSearchUrl(kCatQuery), false,
                                   true, kCatCardTitle, kCatQuery);
-  provider()->DidStopLoading(contents1());
+  provider()->OnContentsReady(contents1());
 
   VerifyResult("Cat Result 1", kCatCardId, token1(), kCatCardTitle);
 
@@ -400,19 +400,19 @@ TEST_F(AnswerCardSearchProviderTest, InterruptedRequestAfterResult) {
 
   provider()->DidFinishNavigation(contents0(), GetSearchUrl("d"), false, true,
                                   "Title d", "d");
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   VerifyResult("Cat Result 5", kCatCardId, token1(), kCatCardTitle);
 
   provider()->DidFinishNavigation(contents0(), GetSearchUrl("do"), false, true,
                                   "Title do", "do");
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   VerifyResult("Cat Result 5", kCatCardId, token1(), kCatCardTitle);
 
   provider()->DidFinishNavigation(contents0(), GetSearchUrl(kDogQuery), false,
                                   true, kDogCardTitle, kDogQuery);
-  provider()->DidStopLoading(contents0());
+  provider()->OnContentsReady(contents0());
 
   VerifyResult("Dog Result", kDogCardId, token0(), kDogCardTitle);
 }

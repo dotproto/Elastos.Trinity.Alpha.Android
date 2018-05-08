@@ -12,7 +12,7 @@
 @interface OmniboxPopupPresenter : NSObject
 
 - (instancetype)initWithPopupPositioner:(id<OmniboxPopupPositioner>)positioner
-                    popupViewController:(UITableViewController*)viewController;
+                    popupViewController:(UIViewController*)viewController;
 
 // Updates appearance depending on the content size of the presented view
 // controller by changing the visible height of the popup. When the popup was

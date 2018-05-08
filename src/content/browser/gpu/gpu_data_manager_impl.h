@@ -79,40 +79,37 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   // callbacks, should probably be required to occur on the UI thread.
   void AddObserver(GpuDataManagerObserver* observer) override;
   void RemoveObserver(GpuDataManagerObserver* observer) override;
-  void UnblockDomainFrom3DAPIs(const GURL& url) override;
   void DisableHardwareAcceleration() override;
   bool HardwareAccelerationEnabled() const override;
-  void GetDisabledExtensions(std::string* disabled_extensions) const override;
 
-  void GetDisabledWebGLExtensions(std::string* disabled_webgl_extensions) const;
+  void RequestGpuSupportedRuntimeVersion() const;
+  bool GpuProcessStartAllowed() const;
 
   bool IsGpuFeatureInfoAvailable() const;
   gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) const;
 
   // Only update if the current GPUInfo is not finalized.  If blacklist is
   // loaded, run through blacklist and update blacklisted features.
-  void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
+  void UpdateGpuInfo(
+      const gpu::GPUInfo& gpu_info,
+      const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu);
 
   // Update the GPU feature info. This updates the blacklist and enabled status
   // of GPU rasterization. In the future this will be used for more features.
-  void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info);
+  void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info,
+                            const base::Optional<gpu::GpuFeatureInfo>&
+                                gpu_feature_info_for_hardware_gpu);
 
   gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
+
+  gpu::GPUInfo GetGPUInfoForHardwareGpu() const;
+  gpu::GpuFeatureInfo GetGpuFeatureInfoForHardwareGpu() const;
 
   // Insert switches into gpu process command line: kUseGL, etc.
   void AppendGpuCommandLine(base::CommandLine* command_line) const;
 
   // Update GpuPreferences based on blacklisting decisions.
   void UpdateGpuPreferences(gpu::GpuPreferences* gpu_preferences) const;
-
-  // Returns the reasons for the latest run of blacklisting decisions.
-  // For the structure of returned value, see documentation for
-  // GpuBlacklist::GetBlacklistedReasons().
-  void GetBlacklistReasons(base::ListValue* reasons) const;
-
-  // Returns the workarounds that are applied to the current system as
-  // a vector of strings.
-  std::vector<std::string> GetDriverBugWorkarounds() const;
 
   void AddLogMessage(int level,
                      const std::string& header,
@@ -134,31 +131,33 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   //
   // The given URL may be a partial URL (including at least the host)
   // or a full URL to a page.
-  //
-  // Note that the unblocking API must be part of the content API
-  // because it is called from Chrome side code.
   void BlockDomainFrom3DAPIs(const GURL& url, DomainGuilt guilt);
   bool Are3DAPIsBlocked(const GURL& top_origin_url,
                         int render_process_id,
                         int render_frame_id,
                         ThreeDAPIType requester);
+  void UnblockDomainFrom3DAPIs(const GURL& url);
 
   // Disables domain blocking for 3D APIs. For use only in tests.
   void DisableDomainBlockingFor3DAPIsForTesting();
-
-  void Notify3DAPIBlocked(const GURL& top_origin_url,
-                          int render_process_id,
-                          int render_frame_id,
-                          ThreeDAPIType requester);
 
   // Set the active gpu.
   // Return true if it's a different GPU from the previous active one.
   bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
 
+  // Notify all observers whenever there is a GPU info or GPU feature
+  // status update.
+  void NotifyGpuInfoUpdate();
+
   // Called when GPU process initialization failed.
   void OnGpuProcessInitFailure();
 
   void BlockSwiftShader();
+  bool SwiftShaderAllowed() const;
+
+  // Returns false if the latest GPUInfo gl_renderer is from SwiftShader or
+  // Disabled (in the viz case).
+  bool IsGpuProcessUsingHardwareGpu() const;
 
  private:
   friend class GpuDataManagerImplPrivate;

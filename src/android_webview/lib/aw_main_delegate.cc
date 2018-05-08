@@ -20,6 +20,7 @@
 #include "android_webview/common/crash_reporter/crash_keys.h"
 #include "android_webview/gpu/aw_content_gpu_client.h"
 #include "android_webview/renderer/aw_content_renderer_client.h"
+#include "android_webview/utility/aw_content_utility_client.h"
 #include "base/android/apk_assets.h"
 #include "base/android/build_info.h"
 #include "base/command_line.h"
@@ -47,7 +48,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/ipc/gl_in_process_context.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
@@ -187,7 +188,7 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Used only if the argument filter is enabled in tracing config,
   // as is the case by default in aw_tracing_controller.cc
   base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
-      base::Bind(&IsTraceEventArgsWhitelisted));
+      base::BindRepeating(&IsTraceEventArgsWhitelisted));
 
   return false;
 }
@@ -294,13 +295,18 @@ gpu::SyncPointManager* GetSyncPointManager() {
 
 content::ContentGpuClient* AwMainDelegate::CreateContentGpuClient() {
   content_gpu_client_.reset(
-      new AwContentGpuClient(base::Bind(&GetSyncPointManager)));
+      new AwContentGpuClient(base::BindRepeating(&GetSyncPointManager)));
   return content_gpu_client_.get();
 }
 
 content::ContentRendererClient* AwMainDelegate::CreateContentRendererClient() {
   content_renderer_client_.reset(new AwContentRendererClient());
   return content_renderer_client_.get();
+}
+
+content::ContentUtilityClient* AwMainDelegate::CreateContentUtilityClient() {
+  content_utility_client_.reset(new AwContentUtilityClient());
+  return content_utility_client_.get();
 }
 
 }  // namespace android_webview

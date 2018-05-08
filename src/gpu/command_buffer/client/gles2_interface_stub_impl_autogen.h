@@ -817,7 +817,7 @@ GLboolean GLES2InterfaceStub::IsVertexArrayOES(GLuint /* array */) {
   return 0;
 }
 void GLES2InterfaceStub::BindVertexArrayOES(GLuint /* array */) {}
-void GLES2InterfaceStub::SwapBuffers() {}
+void GLES2InterfaceStub::SwapBuffers(GLbitfield /* flags */) {}
 GLuint GLES2InterfaceStub::GetMaxValueInBufferCHROMIUM(GLuint /* buffer_id */,
                                                        GLsizei /* count */,
                                                        GLenum /* type */,
@@ -907,7 +907,8 @@ void GLES2InterfaceStub::GetTranslatedShaderSourceANGLE(GLuint /* shader */,
 void GLES2InterfaceStub::PostSubBufferCHROMIUM(GLint /* x */,
                                                GLint /* y */,
                                                GLint /* width */,
-                                               GLint /* height */) {}
+                                               GLint /* height */,
+                                               GLbitfield /* flags */) {}
 void GLES2InterfaceStub::CopyTextureCHROMIUM(
     GLuint /* source_id */,
     GLint /* source_level */,
@@ -1003,7 +1004,8 @@ void GLES2InterfaceStub::ScheduleOverlayPlaneCHROMIUM(
     GLfloat /* uv_x */,
     GLfloat /* uv_y */,
     GLfloat /* uv_width */,
-    GLfloat /* uv_height */) {}
+    GLfloat /* uv_height */,
+    GLboolean /* enable_blend */) {}
 void GLES2InterfaceStub::ScheduleCALayerSharedStateCHROMIUM(
     GLfloat /* opacity */,
     GLboolean /* is_clipped */,
@@ -1020,7 +1022,7 @@ void GLES2InterfaceStub::ScheduleCALayerCHROMIUM(
 void GLES2InterfaceStub::ScheduleCALayerInUseQueryCHROMIUM(
     GLsizei /* count */,
     const GLuint* /* textures */) {}
-void GLES2InterfaceStub::CommitOverlayPlanesCHROMIUM() {}
+void GLES2InterfaceStub::CommitOverlayPlanesCHROMIUM(GLbitfield /* flags */) {}
 void GLES2InterfaceStub::FlushDriverCachesCHROMIUM() {}
 GLuint GLES2InterfaceStub::GetLastFlushIdCHROMIUM() {
   return 0;
@@ -1183,9 +1185,10 @@ void GLES2InterfaceStub::OverlayPromotionHintCHROMIUM(
     GLint /* display_y */,
     GLint /* display_width */,
     GLint /* display_height */) {}
-void GLES2InterfaceStub::SwapBuffersWithBoundsCHROMIUM(
-    GLsizei /* count */,
-    const GLint* /* rects */) {}
+void GLES2InterfaceStub::SwapBuffersWithBoundsCHROMIUM(GLsizei /* count */,
+                                                       const GLint* /* rects */,
+                                                       GLbitfield /* flags */) {
+}
 void GLES2InterfaceStub::SetDrawRectangleCHROMIUM(GLint /* x */,
                                                   GLint /* y */,
                                                   GLint /* width */,
@@ -1204,7 +1207,6 @@ void GLES2InterfaceStub::BeginRasterCHROMIUM(
     GLuint /* sk_color */,
     GLuint /* msaa_sample_count */,
     GLboolean /* can_use_lcd_text */,
-    GLboolean /* use_distance_field_text */,
     GLint /* color_type */,
     GLuint /* color_space_transfer_cache_id */) {}
 void* GLES2InterfaceStub::MapRasterCHROMIUM(GLsizeiptr /* size */) {

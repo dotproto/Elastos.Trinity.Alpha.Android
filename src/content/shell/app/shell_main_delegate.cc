@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/crash/core/common/crash_key.h"
+#include "components/viz/common/switches.h"
 #include "content/common/content_constants_internal.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
@@ -37,10 +38,10 @@
 #include "content/shell/renderer/shell_content_renderer_client.h"
 #include "content/shell/utility/shell_content_utility_client.h"
 #include "gpu/config/gpu_switches.h"
-#include "ipc/ipc_features.h"
+#include "ipc/ipc_buildflags.h"
 #include "media/base/media_switches.h"
 #include "net/cookies/cookie_monster.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -115,7 +116,7 @@ void InitLogging(const base::CommandLine& command_line) {
   base::FilePath log_filename;
   std::string filename = command_line.GetSwitchValueASCII(switches::kLogFile);
   if (filename.empty()) {
-    PathService::Get(base::DIR_EXE, &log_filename);
+    base::PathService::Get(base::DIR_EXE, &log_filename);
     log_filename = log_filename.AppendASCII("content_shell.log");
   } else {
     log_filename = base::FilePath::FromUTF8Unsafe(filename);
@@ -218,6 +219,15 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
       command_line.AppendSwitch(cc::switches::kDisableThreadedAnimation);
     }
 
+    // If we're doing a display compositor pixel dump we ensure that
+    // we complete all stages of compositing before draw. We also can't have
+    // checker imaging, since it's imcompatible with single threaded compositor
+    // and display compositor pixel dumps.
+    if (command_line.HasSwitch(switches::kEnableDisplayCompositorPixelDump)) {
+      command_line.AppendSwitch(switches::kRunAllCompositorStagesBeforeDraw);
+      command_line.AppendSwitch(cc::switches::kDisableCheckerImaging);
+    }
+
     command_line.AppendSwitch(switches::kEnableInbandTextTracks);
     command_line.AppendSwitch(switches::kMuteAudio);
 
@@ -227,6 +237,7 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
                                    "MAP *.test 127.0.0.1");
 
     command_line.AppendSwitch(switches::kEnablePartialRaster);
+    command_line.AppendSwitch(switches::kEnableWebAuthTestingAPI);
 
     if (!command_line.HasSwitch(switches::kForceGpuRasterization) &&
         !command_line.HasSwitch(switches::kEnableGpuRasterization)) {
@@ -349,7 +360,7 @@ void ShellMainDelegate::InitializeResourceBundle() {
     // Loaded from disk for browsertests.
     if (pak_fd < 0) {
       base::FilePath pak_file;
-      bool r = PathService::Get(base::DIR_ANDROID_APP_DATA, &pak_file);
+      bool r = base::PathService::Get(base::DIR_ANDROID_APP_DATA, &pak_file);
       DCHECK(r);
       pak_file = pak_file.Append(FILE_PATH_LITERAL("paks"));
       pak_file = pak_file.Append(FILE_PATH_LITERAL("content_shell.pak"));
@@ -369,7 +380,7 @@ void ShellMainDelegate::InitializeResourceBundle() {
   ui::ResourceBundle::InitSharedInstanceWithPakPath(GetResourcesPakFilePath());
 #else
   base::FilePath pak_file;
-  bool r = PathService::Get(base::DIR_ASSETS, &pak_file);
+  bool r = base::PathService::Get(base::DIR_ASSETS, &pak_file);
   DCHECK(r);
   pak_file = pak_file.Append(FILE_PATH_LITERAL("content_shell.pak"));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(pak_file);

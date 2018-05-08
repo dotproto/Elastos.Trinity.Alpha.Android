@@ -24,6 +24,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "base/stl_util.h"
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_database.h"
@@ -32,7 +33,7 @@
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/quota/storage_observer.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace base {
 class FilePath;
@@ -185,7 +186,7 @@ class STORAGE_EXPORT QuotaManager
   void NotifyOriginInUse(const GURL& origin);
   void NotifyOriginNoLongerInUse(const GURL& origin);
   bool IsOriginInUse(const GURL& origin) const {
-    return origins_in_use_.find(origin) != origins_in_use_.end();
+    return base::ContainsKey(origins_in_use_, origin);
   }
 
   void SetUsageCacheEnabled(QuotaClient::ID client_id,

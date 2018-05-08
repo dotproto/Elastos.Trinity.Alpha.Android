@@ -6,10 +6,13 @@
 
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/event.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -37,7 +40,15 @@ BubbleIconView::BubbleIconView(CommandUpdater* command_updater,
       delegate_(delegate),
       command_id_(command_id),
       active_(false),
-      suppress_mouse_released_action_(false) {}
+      suppress_mouse_released_action_(false) {
+  SetBorder(views::CreateEmptyBorder(
+      gfx::Insets(GetLayoutConstant(LOCATION_BAR_ICON_INTERIOR_PADDING))));
+  if (ui::MaterialDesignController::IsNewerMaterialUi()) {
+    // Ink drop ripple opacity.
+    set_ink_drop_visible_opacity(
+        GetOmniboxStateAlpha(OmniboxPartState::SELECTED));
+  }
+}
 
 BubbleIconView::~BubbleIconView() {}
 
@@ -61,10 +72,6 @@ const gfx::ImageSkia& BubbleIconView::GetImage() const {
   return image_->GetImage();
 }
 
-void BubbleIconView::SetTooltipText(const base::string16& tooltip) {
-  image_->SetTooltipText(tooltip);
-}
-
 void BubbleIconView::SetHighlighted(bool bubble_visible) {
   AnimateInkDrop(bubble_visible ? views::InkDropState::ACTIVATED
                                 : views::InkDropState::DEACTIVATED,
@@ -83,29 +90,26 @@ bool BubbleIconView::Refresh() {
 }
 
 void BubbleIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  image_->GetAccessibleNodeData(node_data);
   node_data->role = ax::mojom::Role::kButton;
+  node_data->SetName(GetTextForTooltipAndAccessibleName());
 }
 
 bool BubbleIconView::GetTooltipText(const gfx::Point& p,
                                     base::string16* tooltip) const {
-  return !IsBubbleShowing() && image_->GetTooltipText(p, tooltip);
+  if (IsBubbleShowing())
+    return false;
+  *tooltip = GetTextForTooltipAndAccessibleName();
+  return true;
 }
 
 gfx::Size BubbleIconView::CalculatePreferredSize() const {
-  gfx::Rect image_rect(image_->GetPreferredSize());
-  image_rect.Inset(
-      -gfx::Insets(GetLayoutConstant(LOCATION_BAR_ICON_INTERIOR_PADDING)));
-  DCHECK_EQ(image_rect.height(),
-            GetLayoutConstant(LOCATION_BAR_HEIGHT) -
-                2 * (GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
-                     BackgroundWith1PxBorder::kLocationBarBorderThicknessDip));
-  return image_rect.size();
+  gfx::Size image_rect(image_->GetPreferredSize());
+  image_rect.Enlarge(GetInsets().width(), GetInsets().height());
+  return image_rect;
 }
 
 void BubbleIconView::Layout() {
-  View::Layout();
-  image_->SetBoundsRect(GetLocalBounds());
+  image_->SetBoundsRect(GetContentsBounds());
 }
 
 bool BubbleIconView::OnMousePressed(const ui::MouseEvent& event) {
@@ -198,17 +202,29 @@ std::unique_ptr<views::InkDropRipple> BubbleIconView::CreateInkDropRipple()
 
 std::unique_ptr<views::InkDropHighlight>
 BubbleIconView::CreateInkDropHighlight() const {
-  return CreateDefaultInkDropHighlight(
-      gfx::RectF(GetMirroredRect(GetContentsBounds())).CenterPoint(), size());
+  std::unique_ptr<views::InkDropHighlight> highlight =
+      CreateDefaultInkDropHighlight(
+          gfx::RectF(GetMirroredRect(GetContentsBounds())).CenterPoint(),
+          size());
+  if (ui::MaterialDesignController::IsNewerMaterialUi()) {
+    highlight->set_visible_opacity(
+        GetOmniboxStateAlpha(OmniboxPartState::HOVERED));
+  }
+  return highlight;
 }
 
 SkColor BubbleIconView::GetInkDropBaseColor() const {
-  return color_utils::DeriveDefaultIconColor(GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_TextfieldDefaultColor));
+  const SkColor ink_color_opaque = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_TextfieldDefaultColor);
+  if (ui::MaterialDesignController::IsNewerMaterialUi()) {
+    // Opacity of the ink drop is set elsewhere, so just use full opacity here.
+    return ink_color_opaque;
+  }
+  return color_utils::DeriveDefaultIconColor(ink_color_opaque);
 }
 
 std::unique_ptr<views::InkDropMask> BubbleIconView::CreateInkDropMask() const {
-  if (!BackgroundWith1PxBorder::IsRounded())
+  if (!LocationBarView::IsRounded())
     return nullptr;
   return std::make_unique<views::RoundRectInkDropMask>(size(), gfx::Insets(),
                                                        height() / 2.f);

@@ -17,6 +17,7 @@
 #include "headless/public/headless_browser_context.h"
 #include "headless/public/util/url_request_dispatcher.h"
 #include "net/base/io_buffer.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -136,6 +137,7 @@ void GenericURLRequestJob::OnFetchComplete(
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     const char* body,
     size_t body_size,
+    scoped_refptr<net::IOBufferWithSize> metadata,
     const net::LoadTimingInfo& load_timing_info,
     size_t total_received_bytes) {
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
@@ -144,6 +146,7 @@ void GenericURLRequestJob::OnFetchComplete(
   body_size_ = body_size;
   load_timing_info_ = load_timing_info;
   total_received_bytes_ = total_received_bytes;
+  metadata_ = metadata;
 
   // Save any cookies from the response.
   if (!(request_->load_flags() & net::LOAD_DO_NOT_SAVE_COOKIES) &&
@@ -195,6 +198,7 @@ int GenericURLRequestJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
 
 void GenericURLRequestJob::GetResponseInfo(net::HttpResponseInfo* info) {
   info->headers = response_headers_;
+  info->metadata = metadata_;
 
   // Important we need to set this so we can detect if a navigation request got
   // canceled by DevTools.

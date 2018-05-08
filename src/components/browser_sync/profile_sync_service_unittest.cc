@@ -8,22 +8,17 @@
 
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/browser_sync/profile_sync_test_util.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
-#include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/sync/base/pref_names.h"
+#include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/driver/fake_data_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -33,7 +28,7 @@
 #include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
-#include "google_apis/gaia/gaia_constants.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -46,9 +41,6 @@ using testing::Return;
 namespace browser_sync {
 
 namespace {
-
-const char kGaiaId[] = "12345";
-const char kEmail[] = "test_user@gmail.com";
 
 class FakeDataTypeManager : public syncer::DataTypeManager {
  public:
@@ -90,6 +82,7 @@ class TestSyncServiceObserver : public syncer::SyncServiceObserver {
  public:
   TestSyncServiceObserver()
       : setup_in_progress_(false), auth_error_(GoogleServiceAuthError()) {}
+
   void OnStateChanged(syncer::SyncService* sync) override {
     setup_in_progress_ = sync->IsSetupInProgress();
     auth_error_ = sync->GetAuthError();
@@ -142,6 +135,22 @@ class SyncEngineCaptureClearServerData : public FakeSyncEngine {
   ClearServerDataCalled clear_server_data_called_;
 };
 
+// FakeSyncEngine that calls an external callback when InvalidateCredentials is
+// called.
+class SyncEngineCaptureInvalidateCredentials : public FakeSyncEngine {
+ public:
+  explicit SyncEngineCaptureInvalidateCredentials(
+      const base::RepeatingClosure& invalidate_credentials_called)
+      : invalidate_credentials_called_(invalidate_credentials_called) {}
+
+  void InvalidateCredentials() override {
+    invalidate_credentials_called_.Run();
+  }
+
+ private:
+  base::RepeatingClosure invalidate_credentials_called_;
+};
+
 ACTION(ReturnNewFakeSyncEngine) {
   return new FakeSyncEngine();
 }
@@ -162,6 +171,10 @@ void OnClearServerDataCalled(base::Closure* captured_callback,
 ACTION_P(ReturnNewMockHostCaptureClearServerData, captured_callback) {
   return new SyncEngineCaptureClearServerData(base::Bind(
       &OnClearServerDataCalled, base::Unretained(captured_callback)));
+}
+
+ACTION_P(ReturnNewMockHostCaptureInvalidateCredentials, callback) {
+  return new SyncEngineCaptureInvalidateCredentials(callback);
 }
 
 // A test harness that uses a real ProfileSyncService and in most cases a
@@ -188,13 +201,12 @@ class ProfileSyncServiceTest : public ::testing::Test {
   }
 
   void IssueTestTokens() {
-    std::string account_id =
-        account_tracker()->SeedAccountInfo(kGaiaId, kEmail);
-    auth_service()->UpdateCredentials(account_id, "oauth2_login_token");
+    identity::MakePrimaryAccountAvailable(signin_manager(), auth_service(),
+                                          identity_manager(),
+                                          "test_user@gmail.com");
   }
 
   void CreateService(ProfileSyncService::StartBehavior behavior) {
-    signin_manager()->SetAuthenticatedAccountInfo(kGaiaId, kEmail);
     component_factory_ = profile_sync_service_bundle_.component_factory();
     ProfileSyncServiceBundle::SyncClientBuilder builder(
         &profile_sync_service_bundle_);
@@ -308,6 +320,13 @@ class ProfileSyncServiceTest : public ::testing::Test {
         .WillOnce(ReturnNewMockHostCaptureClearServerData(captured_callback));
   }
 
+  void ExpectSyncEngineCreationCaptureInvalidateCredentials(
+      const base::RepeatingClosure& callback) {
+    EXPECT_CALL(*component_factory_, CreateSyncEngine(_, _, _, _))
+        .Times(1)
+        .WillOnce(ReturnNewMockHostCaptureInvalidateCredentials(callback));
+  }
+
   void PrepareDelayedInitSyncEngine() {
     EXPECT_CALL(*component_factory_, CreateSyncEngine(_, _, _, _))
         .WillOnce(ReturnNewSyncEngineNoReturn());
@@ -318,9 +337,9 @@ class ProfileSyncServiceTest : public ::testing::Test {
   }
 
 #if defined(OS_CHROMEOS)
-  SigninManagerBase* signin_manager()
+  FakeSigninManagerBase* signin_manager()
 #else
-  SigninManager* signin_manager()
+  FakeSigninManager* signin_manager()
 #endif
   // Opening brace is outside of macro to avoid confusing lint.
   {
@@ -329,6 +348,10 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
   FakeProfileOAuth2TokenService* auth_service() {
     return profile_sync_service_bundle_.auth_service();
+  }
+
+  identity::IdentityManager* identity_manager() {
+    return profile_sync_service_bundle_.identity_manager();
   }
 
   ProfileSyncService* service() { return service_.get(); }
@@ -453,8 +476,8 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
 
-  EXPECT_FALSE(service()->IsManaged());
-  EXPECT_TRUE(service()->IsSyncActive());
+  ASSERT_FALSE(service()->IsManaged());
+  ASSERT_TRUE(service()->IsSyncActive());
 
   prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
                           std::make_unique<base::Value>(true));
@@ -471,7 +494,7 @@ TEST_F(ProfileSyncServiceTest, AbortedByShutdown) {
 
   IssueTestTokens();
   InitializeForNthSync();
-  EXPECT_FALSE(service()->IsSyncActive());
+  ASSERT_FALSE(service()->IsSyncActive());
 
   ShutdownAndDeleteService();
 }
@@ -505,8 +528,8 @@ TEST_F(ProfileSyncServiceTest, DisableAndEnableSyncTemporarily) {
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
 
-  EXPECT_TRUE(service()->IsSyncActive());
-  EXPECT_FALSE(prefs()->GetBoolean(syncer::prefs::kSyncSuppressStart));
+  ASSERT_TRUE(service()->IsSyncActive());
+  ASSERT_FALSE(prefs()->GetBoolean(syncer::prefs::kSyncSuppressStart));
 
   testing::Mock::VerifyAndClearExpectations(component_factory());
 
@@ -551,10 +574,10 @@ TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
   // Initial status.
   ProfileSyncService::SyncTokenStatus token_status =
       service()->GetSyncTokenStatus();
-  EXPECT_EQ(syncer::CONNECTION_NOT_ATTEMPTED, token_status.connection_status);
-  EXPECT_TRUE(token_status.connection_status_update_time.is_null());
-  EXPECT_TRUE(token_status.token_request_time.is_null());
-  EXPECT_TRUE(token_status.token_receive_time.is_null());
+  ASSERT_EQ(syncer::CONNECTION_NOT_ATTEMPTED, token_status.connection_status);
+  ASSERT_TRUE(token_status.connection_status_update_time.is_null());
+  ASSERT_TRUE(token_status.token_request_time.is_null());
+  ASSERT_TRUE(token_status.token_receive_time.is_null());
 
   // Simulate an auth error.
   service()->OnConnectionStatusChange(syncer::CONNECTION_AUTH_ERROR);
@@ -584,13 +607,13 @@ TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
-  EXPECT_TRUE(service()->IsSyncActive());
+  ASSERT_TRUE(service()->IsSyncActive());
 
   std::string primary_account_id =
       signin_manager()->GetAuthenticatedAccountId();
   auth_service()->LoadCredentials(primary_account_id);
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(service()->GetAccessTokenForTest().empty());
+  ASSERT_FALSE(service()->GetAccessTokenForTest().empty());
 
   std::string secondary_account_gaiaid = "1234567";
   std::string secondary_account_name = "test_user2@gmail.com";
@@ -603,6 +626,44 @@ TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
 
   auth_service()->RevokeCredentials(primary_account_id);
   EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
+}
+
+// Checks that CREDENTIALS_REJECTED_BY_CLIENT resets the access token and stops
+// Sync. Regression test for https://crbug.com/824791.
+TEST_F(ProfileSyncServiceTest, CredentialsRejectedByClient) {
+  bool invalidate_credentials_called = false;
+  base::RepeatingClosure invalidate_credentials_callback =
+      base::BindRepeating([](bool* called) { *called = true; },
+                          base::Unretained(&invalidate_credentials_called));
+  CreateService(ProfileSyncService::AUTO_START);
+  IssueTestTokens();
+  ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
+  ExpectSyncEngineCreationCaptureInvalidateCredentials(
+      invalidate_credentials_callback);
+  InitializeForNthSync();
+  ASSERT_TRUE(service()->IsSyncActive());
+
+  std::string primary_account_id =
+      signin_manager()->GetAuthenticatedAccountId();
+  auth_service()->LoadCredentials(primary_account_id);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_FALSE(service()->GetAccessTokenForTest().empty());
+
+  GoogleServiceAuthError rejected_by_client =
+      GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_CLIENT);
+  auth_service()->UpdateAuthErrorForTesting(primary_account_id,
+                                            rejected_by_client);
+  // The access token is not yet invalidated, it will be invalidated when
+  // OnRefreshTokenAvailable() is called.
+  EXPECT_FALSE(service()->GetAccessTokenForTest().empty());
+  EXPECT_FALSE(invalidate_credentials_called);
+  auth_service()->LoadCredentials(primary_account_id);
+  ASSERT_EQ(rejected_by_client,
+            auth_service()->GetAuthError(primary_account_id));
+  EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
+  EXPECT_TRUE(invalidate_credentials_called);
 }
 
 // CrOS does not support signout.
@@ -634,10 +695,10 @@ TEST_F(ProfileSyncServiceTest, ClearDataOnSignOut) {
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
-  EXPECT_TRUE(service()->IsSyncActive());
-  EXPECT_LT(base::Time::Now() - service()->GetLastSyncedTime(),
+  ASSERT_TRUE(service()->IsSyncActive());
+  ASSERT_LT(base::Time::Now() - service()->GetLastSyncedTime(),
             base::TimeDelta::FromMinutes(1));
-  EXPECT_TRUE(service()->GetLocalDeviceInfoProvider()->GetLocalDeviceInfo());
+  ASSERT_TRUE(service()->GetLocalDeviceInfoProvider()->GetLocalDeviceInfo());
 
   // Sign out.
   service()->RequestStop(ProfileSyncService::CLEAR_DATA);
@@ -649,6 +710,10 @@ TEST_F(ProfileSyncServiceTest, ClearDataOnSignOut) {
 
 // Verify that credential errors get returned from GetAuthError().
 TEST_F(ProfileSyncServiceTest, CredentialErrorReturned) {
+  // This test needs to manually send access tokens (or errors), so disable
+  // automatic replies to access token requests.
+  auth_service()->set_auto_post_fetch_response_on_message_loop(false);
+
   CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -662,14 +727,19 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorReturned) {
   std::string primary_account_id =
       signin_manager()->GetAuthenticatedAccountId();
   auth_service()->LoadCredentials(primary_account_id);
+  // Wait for PSS to be notified of the loaded credentials and send an access
+  // token request.
   base::RunLoop().RunUntilIdle();
+  auth_service()->IssueAllTokensForAccount(primary_account_id, "access token",
+                                           base::Time::Max());
   ASSERT_FALSE(service()->GetAccessTokenForTest().empty());
   ASSERT_EQ(GoogleServiceAuthError::NONE, service()->GetAuthError().state());
 
   // Emulate Chrome receiving a new, invalid LST. This happens when the user
   // signs out of the content area.
-  auth_service()->GetDelegate()->UpdateCredentials(primary_account_id,
-                                                   "not a valid token");
+  auth_service()->UpdateCredentials(primary_account_id, "not a valid token");
+  // Again, wait for PSS to be notified.
+  base::RunLoop().RunUntilIdle();
   auth_service()->IssueErrorForAllPendingRequests(
       GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
 
@@ -685,6 +755,10 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorReturned) {
 // Verify that credential errors get cleared when a new token is fetched
 // successfully.
 TEST_F(ProfileSyncServiceTest, CredentialErrorClearsOnNewToken) {
+  // This test needs to manually send access tokens (or errors), so disable
+  // automatic replies to access token requests.
+  auth_service()->set_auto_post_fetch_response_on_message_loop(false);
+
   CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -698,14 +772,20 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorClearsOnNewToken) {
   std::string primary_account_id =
       signin_manager()->GetAuthenticatedAccountId();
   auth_service()->LoadCredentials(primary_account_id);
+  // Wait for PSS to be notified of the loaded credentials and send an access
+  // token request.
   base::RunLoop().RunUntilIdle();
+  auth_service()->IssueAllTokensForAccount(primary_account_id, "access token",
+                                           base::Time::Max());
   ASSERT_FALSE(service()->GetAccessTokenForTest().empty());
   ASSERT_EQ(GoogleServiceAuthError::NONE, service()->GetAuthError().state());
 
   // Emulate Chrome receiving a new, invalid LST. This happens when the user
   // signs out of the content area.
-  auth_service()->GetDelegate()->UpdateCredentials(primary_account_id,
-                                                   "not a valid token");
+  auth_service()->UpdateCredentials(primary_account_id, "not a valid token");
+  // Wait for PSS to be notified of the changed credentials and send a new
+  // access token request.
+  base::RunLoop().RunUntilIdle();
   auth_service()->IssueErrorForAllPendingRequests(
       GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
 
@@ -714,8 +794,9 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorClearsOnNewToken) {
             service()->GetAuthError().state());
 
   // Now emulate Chrome receiving a new, valid LST.
-  auth_service()->GetDelegate()->UpdateCredentials(primary_account_id,
-                                                   "totally valid token");
+  auth_service()->UpdateCredentials(primary_account_id, "totally valid token");
+  // Again, wait for PSS to be notified.
+  base::RunLoop().RunUntilIdle();
   auth_service()->IssueTokenForAllPendingRequests(
       "this one works", base::Time::Now() + base::TimeDelta::FromDays(10));
 
@@ -745,16 +826,16 @@ TEST_F(ProfileSyncServiceTest, MemoryPressureRecording) {
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
 
-  EXPECT_TRUE(service()->IsSyncActive());
-  EXPECT_FALSE(prefs()->GetBoolean(syncer::prefs::kSyncSuppressStart));
+  ASSERT_TRUE(service()->IsSyncActive());
+  ASSERT_FALSE(prefs()->GetBoolean(syncer::prefs::kSyncSuppressStart));
 
   testing::Mock::VerifyAndClearExpectations(component_factory());
 
   syncer::SyncPrefs sync_prefs(service()->GetSyncClient()->GetPrefService());
 
-  EXPECT_EQ(prefs()->GetInteger(syncer::prefs::kSyncMemoryPressureWarningCount),
+  ASSERT_EQ(prefs()->GetInteger(syncer::prefs::kSyncMemoryPressureWarningCount),
             0);
-  EXPECT_FALSE(sync_prefs.DidSyncShutdownCleanly());
+  ASSERT_FALSE(sync_prefs.DidSyncShutdownCleanly());
 
   // Simulate memory pressure notification.
   base::MemoryPressureListener::NotifyMemoryPressure(
@@ -797,9 +878,9 @@ TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
   ExpectDataTypeManagerCreation(
       1, GetRecordingConfigureCalledCallback(&configure_reason));
   InitializeForNthSync();
-  EXPECT_TRUE(service()->IsSyncActive());
+  ASSERT_TRUE(service()->IsSyncActive());
   testing::Mock::VerifyAndClearExpectations(component_factory());
-  EXPECT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
+  ASSERT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
   syncer::DataTypeManager::ConfigureResult result;
   result.status = syncer::DataTypeManager::OK;
   service()->OnConfigureDone(result);
@@ -846,7 +927,7 @@ TEST_F(ProfileSyncServiceTest,
       1, GetRecordingConfigureCalledCallback(&configure_reason));
   InitializeForNthSync();
   testing::Mock::VerifyAndClearExpectations(component_factory());
-  EXPECT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
+  ASSERT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
   syncer::DataTypeManager::ConfigureResult result;
   result.status = syncer::DataTypeManager::OK;
   service()->OnConfigureDone(result);
@@ -859,12 +940,13 @@ TEST_F(ProfileSyncServiceTest,
   EXPECT_EQ(syncer::CONFIGURE_REASON_CATCH_UP, configure_reason);
 
   // Simulate browser restart. First configuration is a regular one.
-  service()->Shutdown();
+  ShutdownAndDeleteService();
+  CreateService(ProfileSyncService::AUTO_START);
   base::Closure captured_callback;
   ExpectSyncEngineCreationCaptureClearServerData(&captured_callback);
   ExpectDataTypeManagerCreation(
       1, GetRecordingConfigureCalledCallback(&configure_reason));
-  service()->RequestStart();
+  InitializeForNthSync();
   testing::Mock::VerifyAndClearExpectations(component_factory());
   EXPECT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
   EXPECT_TRUE(captured_callback.is_null());
@@ -913,11 +995,12 @@ TEST_F(ProfileSyncServiceTest,
   captured_callback.Reset();
 
   // Simulate browser restart. First configuration is a regular one.
-  service()->Shutdown();
+  ShutdownAndDeleteService();
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectSyncEngineCreationCaptureClearServerData(&captured_callback);
   ExpectDataTypeManagerCreation(
       1, GetRecordingConfigureCalledCallback(&configure_reason));
-  service()->RequestStart();
+  InitializeForNthSync();
   testing::Mock::VerifyAndClearExpectations(component_factory());
   EXPECT_EQ(syncer::CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE, configure_reason);
   EXPECT_TRUE(captured_callback.is_null());
@@ -954,7 +1037,7 @@ TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
   InitializeForNthSync();
 
   syncer::SyncPrefs sync_prefs(service()->GetSyncClient()->GetPrefService());
-  EXPECT_EQ(PRODUCT_VERSION, sync_prefs.GetLastRunVersion());
+  ASSERT_EQ(PRODUCT_VERSION, sync_prefs.GetLastRunVersion());
 
   sync_prefs.SetPassphrasePrompted(true);
 
@@ -1000,10 +1083,10 @@ TEST_F(ProfileSyncServiceTest, DisableSyncOnClient) {
   ExpectSyncEngineCreation(1);
   InitializeForNthSync();
 
-  EXPECT_TRUE(service()->IsSyncActive());
-  EXPECT_LT(base::Time::Now() - service()->GetLastSyncedTime(),
+  ASSERT_TRUE(service()->IsSyncActive());
+  ASSERT_LT(base::Time::Now() - service()->GetLastSyncedTime(),
             base::TimeDelta::FromMinutes(1));
-  EXPECT_TRUE(service()->GetLocalDeviceInfoProvider()->GetLocalDeviceInfo());
+  ASSERT_TRUE(service()->GetLocalDeviceInfoProvider()->GetLocalDeviceInfo());
 
   syncer::SyncProtocolError client_cmd;
   client_cmd.action = syncer::DISABLE_SYNC_ON_CLIENT;
@@ -1056,7 +1139,15 @@ TEST_F(ProfileSyncServiceTest, LocalBackendDisabledByPolicy) {
 TEST_F(ProfileSyncServiceTest, ValidPointersInDTCMap) {
   CreateService(ProfileSyncService::AUTO_START);
   service()->OnSessionRestoreComplete();
-  service()->OnSyncCycleCompleted(syncer::SyncCycleSnapshot());
+  service()->OnSyncCycleCompleted(syncer::SyncCycleSnapshot(
+      syncer::ModelNeutralState(), syncer::ProgressMarkerMap(), false, 0, 0, 0,
+      false, 0, base::Time::Now(), base::Time::Now(),
+      std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+      std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+      sync_pb::SyncEnums::UNKNOWN_ORIGIN,
+      /*short_poll_interval=*/base::TimeDelta::FromMinutes(30),
+      /*long_poll_interval=*/base::TimeDelta::FromMinutes(180),
+      /*has_remaining_local_changes=*/false));
 }
 
 // The OpenTabsUIDelegate should only be accessable when PROXY_TABS is enabled.

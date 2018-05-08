@@ -73,9 +73,9 @@ OmniboxPopupViewMac::~OmniboxPopupViewMac() {
 // Background colors for different states of the popup elements.
 // static
 NSColor* OmniboxPopupViewMac::BackgroundColor(bool is_dark_theme) {
-  const CGFloat kMDDarkControlBackround = 40 / 255.;
+  const CGFloat kMDDarkControlBackground = 40 / 255.;
   return is_dark_theme
-             ? [NSColor colorWithGenericGamma22White:kMDDarkControlBackround
+             ? [NSColor colorWithGenericGamma22White:kMDDarkControlBackground
                                                alpha:1]
              : [NSColor controlBackgroundColor];
 }
@@ -105,9 +105,13 @@ void OmniboxPopupViewMac::UpdatePopupAppearance() {
   CreatePopupIfNeeded();
 
   NSImage* answerImage = nil;
-  if (!model_->answer_bitmap().isNull()) {
-    answerImage =
-        gfx::Image::CreateFrom1xBitmap(model_->answer_bitmap()).CopyNSImage();
+  const size_t result_size = model_->result().size();
+  for (size_t i = 0; i < result_size; ++i) {
+    const SkBitmap* bitmap = model_->RichSuggestionBitmapAt(i);
+    if (result.match_at(i).answer && bitmap != nullptr) {
+      answerImage = gfx::Image::CreateFrom1xBitmap(*bitmap).CopyNSImage();
+      break;
+    }
   }
   [matrix_ setController:[[[OmniboxPopupTableController alloc]
                              initWithMatchResults:result

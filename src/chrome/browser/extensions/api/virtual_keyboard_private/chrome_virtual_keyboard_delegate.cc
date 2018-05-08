@@ -126,7 +126,7 @@ void ChromeVirtualKeyboardDelegate::SetHotrodKeyboard(bool enable) {
   // keyboard gets the correct state of the hotrod keyboard through
   // chrome.virtualKeyboardPrivate.getKeyboardConfig.
   if (keyboard::IsKeyboardEnabled())
-    ash::Shell::Get()->CreateKeyboard();
+    ash::Shell::Get()->ReloadKeyboard();
 }
 
 bool ChromeVirtualKeyboardDelegate::LockKeyboard(bool state) {
@@ -182,6 +182,8 @@ ChromeVirtualKeyboardDelegate::ConvertKeyboardModeToContainerType(
       return keyboard::ContainerType::FULL_WIDTH;
     case keyboard_api::KEYBOARD_MODE_FLOATING:
       return keyboard::ContainerType::FLOATING;
+    case keyboard_api::KEYBOARD_MODE_FULLSCREEN:
+      return keyboard::ContainerType::FULLSCREEN;
   }
 
   NOTREACHED();
@@ -192,8 +194,10 @@ bool ChromeVirtualKeyboardDelegate::SetDraggableArea(
     const api::virtual_keyboard_private::Bounds& rect) {
   keyboard::KeyboardController* controller =
       keyboard::KeyboardController::GetInstance();
+  // Since controller will be destroyed when system switch from VK to
+  // physical keyboard, return true to avoid unneccessary exception.
   if (!controller)
-    return false;
+    return true;
   return controller->SetDraggableArea(
       gfx::Rect(rect.top, rect.left, rect.width, rect.height));
 }
@@ -249,6 +253,9 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "gestureediting", keyboard::IsGestureEditingEnabled()));
   features->AppendString(GenerateFeatureFlag(
       "experimental", keyboard::IsExperimentalInputViewEnabled()));
+  features->AppendString(GenerateFeatureFlag(
+      "fullscreenhandwriting",
+      keyboard::IsFullscreenHandwritingVirtualKeyboardEnabled()));
 
   const keyboard::KeyboardConfig config = keyboard::GetKeyboardConfig();
   // TODO(oka): Change this to use config.voice_input.
@@ -331,7 +338,7 @@ ChromeVirtualKeyboardDelegate::RestrictFeatures(
     // chrome.virtualKeyboardPrivate.getKeyboardConfig.
     // TODO(oka): Extension should reload on it's own by receiving event
     if (keyboard::IsKeyboardEnabled())
-      ash::Shell::Get()->CreateKeyboard();
+      ash::Shell::Get()->ReloadKeyboard();
   }
   return update;
 }

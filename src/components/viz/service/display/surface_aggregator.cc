@@ -12,8 +12,8 @@
 #include "base/containers/adapters.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
@@ -34,6 +34,10 @@ namespace {
 
 // Maximum bucket size for the UMA stats.
 constexpr int kUmaStatMaxSurfaces = 30;
+
+// Used for determine when to treat opacity close to 1.f as opaque. The value is
+// chosen to be smaller than 1/255.
+constexpr float kOpacityEpsilon = 0.001f;
 
 const char kUmaValidSurface[] =
     "Compositing.SurfaceAggregator.SurfaceDrawQuad.ValidSurface";
@@ -330,8 +334,9 @@ void SurfaceAggregator::EmitSurfaceContent(
                 : empty_map;
   gfx::Transform combined_transform = scaled_quad_to_target_transform;
   combined_transform.ConcatTransform(target_transform);
-  bool merge_pass = source_sqs->opacity == 1.f && copy_requests.empty() &&
-                    combined_transform.Preserves2dAxisAlignment();
+  bool merge_pass =
+      base::IsApproximatelyEqual(source_sqs->opacity, 1.f, kOpacityEpsilon) &&
+      copy_requests.empty() && combined_transform.Preserves2dAxisAlignment();
 
   const RenderPassList& referenced_passes = render_pass_list;
   // TODO(fsamuel): Move this to a separate helper function.
@@ -426,6 +431,12 @@ void SurfaceAggregator::EmitSurfaceContent(
   } else {
     auto* shared_quad_state = CopyAndScaleSharedQuadState(
         source_sqs, scaled_quad_to_target_transform, target_transform,
+        gfx::ScaleToEnclosingRect(source_sqs->quad_layer_rect,
+                                  layer_to_content_scale_x,
+                                  layer_to_content_scale_y),
+        gfx::ScaleToEnclosingRect(source_sqs->visible_quad_layer_rect,
+                                  layer_to_content_scale_x,
+                                  layer_to_content_scale_y),
         clip_rect, dest_pass, layer_to_content_scale_x,
         layer_to_content_scale_y);
 
@@ -489,15 +500,17 @@ void SurfaceAggregator::EmitGutterQuadsIfNecessary(
   if (has_transparent_background)
     return;
 
-  SharedQuadState* shared_quad_state = nullptr;
   if (fallback_rect.width() < primary_rect.width()) {
-    shared_quad_state = CopySharedQuadState(
-        primary_shared_quad_state, target_transform, clip_rect, dest_pass);
-
     // The right gutter also includes the bottom-right corner, if necessary.
     gfx::Rect right_gutter_rect(fallback_rect.right(), primary_rect.y(),
                                 primary_rect.width() - fallback_rect.width(),
                                 primary_rect.height());
+
+    SharedQuadState* shared_quad_state = CopyAndScaleSharedQuadState(
+        primary_shared_quad_state,
+        primary_shared_quad_state->quad_to_target_transform, target_transform,
+        right_gutter_rect, right_gutter_rect, clip_rect, dest_pass, 1.0f, 1.0f);
+
     auto* right_gutter =
         dest_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
     right_gutter->SetNew(shared_quad_state, right_gutter_rect,
@@ -505,14 +518,16 @@ void SurfaceAggregator::EmitGutterQuadsIfNecessary(
   }
 
   if (fallback_rect.height() < primary_rect.height()) {
-    if (!shared_quad_state) {
-      shared_quad_state = CopySharedQuadState(
-          primary_shared_quad_state, target_transform, clip_rect, dest_pass);
-    }
-
     gfx::Rect bottom_gutter_rect(
         primary_rect.x(), fallback_rect.bottom(), fallback_rect.width(),
         primary_rect.height() - fallback_rect.height());
+
+    SharedQuadState* shared_quad_state = CopyAndScaleSharedQuadState(
+        primary_shared_quad_state,
+        primary_shared_quad_state->quad_to_target_transform, target_transform,
+        bottom_gutter_rect, bottom_gutter_rect, clip_rect, dest_pass, 1.0f,
+        1.0f);
+
     auto* bottom_gutter =
         dest_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
     bottom_gutter->SetNew(shared_quad_state, bottom_gutter_rect,
@@ -526,12 +541,12 @@ void SurfaceAggregator::ReportMissingFallbackSurface(
   // If the fallback surface is unavailable then that's an error.
   std::stringstream error_stream;
   error_stream << fallback_surface_id;
-#if DCHECK_IS_ON()
   std::string frame_sink_debug_label(
       manager_->GetFrameSinkDebugLabel(fallback_surface_id.frame_sink_id()));
+  // Add the debug label, if available, to the error log to help diagnose a
+  // misbehaving client.
   if (!frame_sink_debug_label.empty())
     error_stream << " [" << frame_sink_debug_label << "]";
-#endif
   if (!fallback_surface) {
     error_stream << " is missing during aggregation";
     ++uma_stats_.missing_surface;
@@ -588,6 +603,7 @@ SharedQuadState* SurfaceAggregator::CopySharedQuadState(
     RenderPass* dest_render_pass) {
   return CopyAndScaleSharedQuadState(
       source_sqs, source_sqs->quad_to_target_transform, target_transform,
+      source_sqs->quad_layer_rect, source_sqs->visible_quad_layer_rect,
       clip_rect, dest_render_pass, 1.0f, 1.0f);
 }
 
@@ -595,6 +611,8 @@ SharedQuadState* SurfaceAggregator::CopyAndScaleSharedQuadState(
     const SharedQuadState* source_sqs,
     const gfx::Transform& scaled_quad_to_target_transform,
     const gfx::Transform& target_transform,
+    const gfx::Rect& quad_layer_rect,
+    const gfx::Rect& visible_quad_layer_rect,
     const ClipData& clip_rect,
     RenderPass* dest_render_pass,
     float x_scale,
@@ -613,14 +631,8 @@ SharedQuadState* SurfaceAggregator::CopyAndScaleSharedQuadState(
   gfx::Transform new_transform = scaled_quad_to_target_transform;
   new_transform.ConcatTransform(target_transform);
 
-  gfx::Rect scaled_quad_layer_rect(
-      gfx::ScaleToEnclosingRect(source_sqs->quad_layer_rect, x_scale, y_scale));
-
-  gfx::Rect scaled_visible_quad_layer_rect(gfx::ScaleToEnclosingRect(
-      source_sqs->visible_quad_layer_rect, x_scale, y_scale));
-
   shared_quad_state->SetAll(
-      new_transform, scaled_quad_layer_rect, scaled_visible_quad_layer_rect,
+      new_transform, quad_layer_rect, visible_quad_layer_rect,
       new_clip_rect.rect, new_clip_rect.is_clipped,
       source_sqs->are_contents_opaque, source_sqs->opacity,
       source_sqs->blend_mode, source_sqs->sorting_context_id);

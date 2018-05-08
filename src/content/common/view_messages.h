@@ -15,10 +15,10 @@
 #include <vector>
 
 #include "base/memory/shared_memory.h"
+#include "base/optional.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "cc/ipc/cc_param_traits.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/shared_bitmap.h"
@@ -27,9 +27,9 @@
 #include "content/common/date_time_suggestion.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/navigation_gesture.h"
-#include "content/common/resize_params.h"
 #include "content/common/text_input_state.h"
 #include "content/common/view_message_enums.h"
+#include "content/common/visual_properties.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/page_state.h"
@@ -44,17 +44,17 @@
 #include "media/base/ipc/media_param_traits.h"
 #include "media/capture/ipc/capture_param_traits.h"
 #include "net/base/network_change_notifier.h"
-#include "ppapi/features/features.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
-#include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebIntrinsicSizingInfo.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
-#include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
-#include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
-#include "third_party/WebKit/public/web/WebPluginAction.h"
-#include "third_party/WebKit/public/web/WebPopupType.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
+#include "third_party/blink/public/platform/web_display_mode.h"
+#include "third_party/blink/public/platform/web_float_point.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
+#include "third_party/blink/public/web/web_device_emulation_params.h"
+#include "third_party/blink/public/web/web_media_player_action.h"
+#include "third_party/blink/public/web/web_plugin_action.h"
+#include "third_party/blink/public/web/web_popup_type.h"
+#include "third_party/blink/public/web/web_text_direction.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
@@ -69,8 +69,8 @@
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 
 #if defined(OS_MACOSX)
-#include "third_party/WebKit/public/platform/WebScrollbarButtonsPlacement.h"
-#include "third_party/WebKit/public/platform/mac/WebScrollbarTheme.h"
+#include "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
+#include "third_party/blink/public/platform/web_scrollbar_buttons_placement.h"
 #endif
 
 #undef IPC_MESSAGE_EXPORT
@@ -160,8 +160,11 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
+IPC_STRUCT_TRAITS_BEGIN(content::VisualProperties)
   IPC_STRUCT_TRAITS_MEMBER(screen_info)
+  IPC_STRUCT_TRAITS_MEMBER(auto_resize_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(min_size_for_auto_resize)
+  IPC_STRUCT_TRAITS_MEMBER(max_size_for_auto_resize)
   IPC_STRUCT_TRAITS_MEMBER(new_size)
   IPC_STRUCT_TRAITS_MEMBER(compositor_viewport_pixel_size)
   IPC_STRUCT_TRAITS_MEMBER(browser_controls_shrink_blink_size)
@@ -174,6 +177,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
   IPC_STRUCT_TRAITS_MEMBER(display_mode)
   IPC_STRUCT_TRAITS_MEMBER(needs_resize_ack)
   IPC_STRUCT_TRAITS_MEMBER(content_source_id)
+  IPC_STRUCT_TRAITS_MEMBER(capture_sequence_number)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::MenuItem)
@@ -299,9 +303,9 @@ IPC_STRUCT_BEGIN(ViewHostMsg_ResizeOrRepaint_ACK_Params)
   // request messages.
   IPC_STRUCT_MEMBER(int, flags)
 
-  // A unique monotonically increasing sequence number used to identify this
-  // ACK.
-  IPC_STRUCT_MEMBER(uint64_t, sequence_number)
+  // The child-allocated local surface id for the parent to use.
+  IPC_STRUCT_MEMBER(base::Optional<viz::LocalSurfaceId>,
+                    child_allocated_local_surface_id)
 IPC_STRUCT_END()
 
 // Messages sent from the browser to the renderer.
@@ -336,25 +340,14 @@ IPC_MESSAGE_ROUTED1(ViewMsg_UpdateWebPreferences,
 // Expects a Close_ACK message when finished.
 IPC_MESSAGE_ROUTED0(ViewMsg_Close)
 
-// Tells the render view to change its size.  A ViewHostMsg_ResizeOrRepaint_ACK
-// message is generated in response provided new_size is not empty and not equal
-// to the view's current size.  The generated ViewHostMsg_ResizeOrRepaint_ACK
+// Tells the renderer to update visual properties.  A
+// ViewHostMsg_ResizeOrRepaint_ACK  message is generated in response provided
+// new_size is not empty and not equal to the view's current size.  The
+// generated ViewHostMsg_ResizeOrRepaint_ACK
 // message will have the IS_RESIZE_ACK flag set. It also receives the resizer
 // rect so that we don't have to fetch it every time WebKit asks for it.
-IPC_MESSAGE_ROUTED1(ViewMsg_Resize, content::ResizeParams /* params */)
-
-// Tells the widget to use the provided viz::LocalSurfaceId to submit
-// CompositorFrames for autosize.
-// TODO(fsamuel): Replace these parameters with ResizeParams eventually. After
-// surface sync is on by default everywhere, ResizeParams should be renamed to
-// SynchronizedVisualParams.
-IPC_MESSAGE_ROUTED(ViewMsg_SetLocalSurfaceIdForAutoResize,
-                   uint64_t /* sequence_number */,
-                   gfx::Size /* min_size */,
-                   gfx::Size /* max_size */,
-                   content::ScreenInfo /* screen_info */,
-                   uint32_t /* content_source_id */,
-                   viz::LocalSurfaceId /* local_surface_id */)
+IPC_MESSAGE_ROUTED1(ViewMsg_SynchronizeVisualProperties,
+                    content::VisualProperties /* params */)
 
 // Enables device emulation. See WebDeviceEmulationParams for description.
 IPC_MESSAGE_ROUTED1(ViewMsg_EnableDeviceEmulation,
@@ -445,16 +438,6 @@ IPC_MESSAGE_ROUTED0(ViewMsg_Move_ACK)
 // Used to instruct the RenderView to send back updates to the preferred size.
 IPC_MESSAGE_ROUTED0(ViewMsg_EnablePreferredSizeChangedMode)
 
-// Used to instruct the RenderView to automatically resize and send back
-// updates for the new size.
-IPC_MESSAGE_ROUTED2(ViewMsg_EnableAutoResize,
-                    gfx::Size /* min_size */,
-                    gfx::Size /* max_size */)
-
-// Used to instruct the RenderView to disalbe automatically resize.
-IPC_MESSAGE_ROUTED1(ViewMsg_DisableAutoResize,
-                    gfx::Size /* new_size */)
-
 // Changes the text direction of the currently selected input field (if any).
 IPC_MESSAGE_ROUTED1(ViewMsg_SetTextDirection,
                     blink::WebTextDirection /* direction */)
@@ -521,7 +504,7 @@ IPC_MESSAGE_ROUTED1(ViewMsg_PpapiBrokerPermissionResult,
 // inside the popup, instruct the renderer to generate a synthetic tap at that
 // offset.
 IPC_MESSAGE_ROUTED3(ViewMsg_ResolveTapDisambiguation,
-                    double /* timestamp_seconds */,
+                    base::TimeTicks /* timestamp */,
                     gfx::Point /* tap_viewport_offset */,
                     bool /* is_long_press */)
 

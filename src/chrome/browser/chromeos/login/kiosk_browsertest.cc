@@ -6,9 +6,7 @@
 #include <vector>
 
 #include "apps/test/app_window_waiter.h"
-#include "ash/shell.h"
-#include "ash/wallpaper/wallpaper_controller.h"
-#include "ash/wallpaper/wallpaper_controller_observer.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
@@ -46,6 +44,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_app_menu_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -79,6 +78,7 @@
 #include "media/audio/sounds/audio_stream_handler.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "media/audio/test_audio_thread.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/audio/public/cpp/fake_system_info.h"
 #include "ui/aura/window.h"
@@ -836,7 +836,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, ZoomSupport) {
   ExtensionTestMessageListener app_window_loaded_listener("appWindowLoaded",
                                                           false);
   StartAppLaunchFromLoginScreen(SimulateNetworkOnlineClosure());
-  app_window_loaded_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(app_window_loaded_listener.WaitUntilSatisfied());
 
   Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(app_profile);
@@ -941,7 +941,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest,
   ASSERT_TRUE(GetAppLaunchController()->showing_network_dialog());
 
   // Continue button should be visible since we are online.
-  JsExpect("$('continue-network-config-btn').hidden == false");
+  JsExpect("$('error-message-md-continue-button').hidden == false");
 
   // Let app launching resume.
   AppLaunchController::SetBlockAppLaunchForTesting(false);
@@ -951,7 +951,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest,
       GetLoginUI()->GetWebContents(),
       "(function() {"
       "var e = new Event('click');"
-      "$('continue-network-config-btn').dispatchEvent(e);"
+      "$('error-message-md-continue-button').dispatchEvent(e);"
       "})();"));
 
   WaitForAppLaunchSuccess();
@@ -2412,19 +2412,20 @@ IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
 // Specialized test fixture for testing kiosk mode on the
 // hidden WebUI initialization flow for slow hardware.
 class KioskHiddenWebUITest : public KioskTest,
-                             public ash::WallpaperControllerObserver {
+                             public ash::mojom::WallpaperObserver {
  public:
-  KioskHiddenWebUITest() : wallpaper_loaded_(false) {}
+  KioskHiddenWebUITest() : wallpaper_loaded_(false), observer_binding_(this) {}
 
   void SetUpOnMainThread() override {
     LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest();
 
     KioskTest::SetUpOnMainThread();
-    ash::Shell::Get()->wallpaper_controller()->AddObserver(this);
+    ash::mojom::WallpaperObserverAssociatedPtrInfo ptr_info;
+    observer_binding_.Bind(mojo::MakeRequest(&ptr_info));
+    WallpaperControllerClient::Get()->AddObserver(std::move(ptr_info));
   }
 
   void TearDownOnMainThread() override {
-    ash::Shell::Get()->wallpaper_controller()->RemoveObserver(this);
     KioskTest::TearDownOnMainThread();
   }
 
@@ -2437,17 +2438,25 @@ class KioskHiddenWebUITest : public KioskTest,
 
   bool wallpaper_loaded() const { return wallpaper_loaded_; }
 
-  // ash::WallpaperControllerObserver overrides:
-  void OnWallpaperDataChanged() override {
+  // ash::mojom::WallpaperObserver:
+  void OnWallpaperChanged(uint32_t image_id) override {
     wallpaper_loaded_ = true;
     if (runner_.get())
       runner_->Quit();
   }
 
+  void OnWallpaperColorsChanged(
+      const std::vector<SkColor>& prominent_colors) override {}
+
+  void OnWallpaperBlurChanged(bool blurred) override {}
+
   bool wallpaper_loaded_;
   scoped_refptr<content::MessageLoopRunner> runner_;
 
  private:
+  // The binding this instance uses to implement ash::mojom::WallpaperObserver.
+  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_;
+
   DISALLOW_COPY_AND_ASSIGN(KioskHiddenWebUITest);
 };
 

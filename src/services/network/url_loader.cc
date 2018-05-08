@@ -21,10 +21,10 @@
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/chunked_data_pipe_upload_data_stream.h"
 #include "services/network/data_pipe_element_reader.h"
 #include "services/network/loader_util.h"
+#include "services/network/network_usage_accumulator.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/net_adapters.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -41,6 +41,7 @@ constexpr size_t kDefaultAllocationSize = 512 * 1024;
 // content/browser/loader/resource_loader.cc
 void PopulateResourceResponse(net::URLRequest* request,
                               bool is_load_timing_enabled,
+                              bool include_ssl_info,
                               ResourceResponse* response) {
   response->head.request_time = request->request_time();
   response->head.response_time = request->response_time();
@@ -55,6 +56,8 @@ void PopulateResourceResponse(net::URLRequest* request,
       response_info.alpn_negotiated_protocol;
   response->head.connection_info = response_info.connection_info;
   response->head.socket_address = response_info.socket_address;
+  response->head.was_fetched_via_proxy = request->was_fetched_via_proxy();
+  response->head.network_accessed = response_info.network_accessed;
 
   response->head.effective_connection_type =
       net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
@@ -70,6 +73,9 @@ void PopulateResourceResponse(net::URLRequest* request,
          net::IsCertStatusMinorError(response->head.cert_status)) &&
         net::IsLegacySymantecCert(request->ssl_info().public_key_hashes);
     response->head.cert_status = request->ssl_info().cert_status;
+
+    if (include_ssl_info)
+      response->head.ssl_info = request->ssl_info();
   }
 
   response->head.request_start = request->creation_time();
@@ -255,8 +261,9 @@ class SSLPrivateKeyInternal : public net::SSLPrivateKey {
 }  // namespace
 
 URLLoader::URLLoader(
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+    net::URLRequestContext* url_request_context,
     mojom::NetworkServiceClient* network_service_client,
+    DeleteCallback delete_callback,
     mojom::URLLoaderRequest url_loader_request,
     int32_t options,
     const ResourceRequest& request,
@@ -266,18 +273,20 @@ URLLoader::URLLoader(
     uint32_t process_id,
     uint32_t request_id,
     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
-    base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder)
-    : url_request_context_getter_(url_request_context_getter),
+    base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder,
+    base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator)
+    : url_request_context_(url_request_context),
       network_service_client_(network_service_client),
+      delete_callback_(std::move(delete_callback)),
       options_(options),
       resource_type_(request.resource_type),
       is_load_timing_enabled_(request.enable_load_timing),
       process_id_(process_id),
       render_frame_id_(request.render_frame_id),
       request_id_(request_id),
-      connected_(true),
       keepalive_(request.keepalive),
       binding_(this, std::move(url_loader_request)),
+      auth_challenge_responder_binding_(this),
       url_loader_client_(std::move(url_loader_client)),
       writable_handle_watcher_(FROM_HERE,
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL,
@@ -288,8 +297,10 @@ URLLoader::URLLoader(
       report_raw_headers_(report_raw_headers),
       resource_scheduler_client_(std::move(resource_scheduler_client)),
       keepalive_statistics_recorder_(std::move(keepalive_statistics_recorder)),
+      network_usage_accumulator_(std::move(network_usage_accumulator)),
       first_auth_attempt_(true),
       weak_ptr_factory_(this) {
+  DCHECK(delete_callback_);
   if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
     CHECK(!url_loader_client_.internal_state()
                     ->handle()
@@ -299,15 +310,18 @@ URLLoader::URLLoader(
         << "disabled, as that skips security checks in ResourceDispatcherHost. "
         << "The only acceptable usage is the browser using SimpleURLLoader.";
   }
-  url_request_context_getter_->AddObserver(this);
+  if (report_raw_headers_) {
+    options_ |= mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+  }
   binding_.set_connection_error_handler(
       base::BindOnce(&URLLoader::OnConnectionError, base::Unretained(this)));
 
-  url_request_ =
-      url_request_context_getter_->GetURLRequestContext()->CreateRequest(
-          GURL(request.url), request.priority, this, traffic_annotation);
+  url_request_ = url_request_context_->CreateRequest(
+      GURL(request.url), request.priority, this, traffic_annotation);
   url_request_->set_method(request.method);
   url_request_->set_site_for_cookies(request.site_for_cookies);
+  url_request_->set_attach_same_site_cookies(request.attach_same_site_cookies);
   url_request_->SetReferrer(ComputeReferrer(request.referrer));
   url_request_->set_referrer_policy(request.referrer_policy);
   url_request_->SetExtraRequestHeaders(request.headers);
@@ -366,7 +380,6 @@ URLLoader::URLLoader(
 
 URLLoader::~URLLoader() {
   RecordBodyReadFromNetBeforePausedIfNeeded();
-  url_request_context_getter_->RemoveObserver(this);
 
   if (keepalive_ && keepalive_statistics_recorder_)
     keepalive_statistics_recorder_->OnLoadFinished(process_id_);
@@ -444,8 +457,9 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   *defer_redirect = true;
 
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
-  PopulateResourceResponse(url_request_.get(), is_load_timing_enabled_,
-                           response.get());
+  PopulateResourceResponse(
+      url_request_.get(), is_load_timing_enabled_,
+      options_ & mojom::kURLLoadOptionSendSSLInfoWithResponse, response.get());
   if (report_raw_headers_) {
     response->head.raw_request_response_info = BuildRawRequestResponseInfo(
         *url_request_, raw_request_headers_, raw_response_headers_.get());
@@ -458,15 +472,20 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
 void URLLoader::OnAuthRequired(net::URLRequest* unused,
                                net::AuthChallengeInfo* auth_info) {
   if (!network_service_client_) {
-    OnAuthRequiredResponse(base::nullopt);
+    OnAuthCredentials(base::nullopt);
     return;
   }
 
+  network::mojom::AuthChallengeResponderPtr auth_challenge_responder;
+  auto request = mojo::MakeRequest(&auth_challenge_responder);
+  DCHECK(!auth_challenge_responder_binding_.is_bound());
+  auth_challenge_responder_binding_.Bind(std::move(request));
+  auth_challenge_responder_binding_.set_connection_error_handler(
+      base::BindOnce(&URLLoader::DeleteSelf, base::Unretained(this)));
   network_service_client_->OnAuthRequired(
       process_id_, render_frame_id_, request_id_, url_request_->url(),
-      first_auth_attempt_, auth_info,
-      base::BindOnce(&URLLoader::OnAuthRequiredResponse,
-                     weak_ptr_factory_.GetWeakPtr()));
+      url_request_->site_for_cookies(), first_auth_attempt_, auth_info,
+      resource_type_, std::move(auth_challenge_responder));
 
   first_auth_attempt_ = false;
 }
@@ -513,6 +532,9 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
     return;
   }
 
+  // Do not account header bytes when reporting received body bytes to client.
+  reported_total_encoded_bytes_ = url_request_->GetTotalReceivedBytes();
+
   if (resource_scheduler_client_ && url_request->was_fetched_via_proxy() &&
       url_request->was_fetched_via_spdy() &&
       url_request->url().SchemeIs(url::kHttpScheme)) {
@@ -525,8 +547,9 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
   }
 
   response_ = new ResourceResponse();
-  PopulateResourceResponse(url_request_.get(), is_load_timing_enabled_,
-                           response_.get());
+  PopulateResourceResponse(
+      url_request_.get(), is_load_timing_enabled_,
+      options_ & mojom::kURLLoadOptionSendSSLInfoWithResponse, response_.get());
   if (report_raw_headers_) {
     response_->head.raw_request_response_info = BuildRawRequestResponseInfo(
         *url_request_, raw_request_headers_, raw_response_headers_.get());
@@ -573,8 +596,7 @@ void URLLoader::ReadMore() {
         &response_body_stream_, &pending_write_, &pending_write_buffer_size_);
     if (result != MOJO_RESULT_OK && result != MOJO_RESULT_SHOULD_WAIT) {
       // The response body stream is in a bad state. Bail.
-      // TODO: How should this be communicated to our client?
-      CloseResponseBodyStreamProducer();
+      NotifyCompleted(net::ERR_FAILED);
       return;
     }
 
@@ -607,8 +629,20 @@ void URLLoader::ReadMore() {
 }
 
 void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
-  if (num_bytes > 0)
+  if (num_bytes > 0) {
     pending_write_buffer_offset_ += num_bytes;
+
+    // Only notify client of download progress in case DevTools are attached
+    // and we're done sniffing and started sending response.
+    if (report_raw_headers_ && !consumer_handle_.is_valid()) {
+      int64_t total_encoded_bytes = url_request_->GetTotalReceivedBytes();
+      int64_t delta = total_encoded_bytes - reported_total_encoded_bytes_;
+      DCHECK_LE(0, delta);
+      if (delta)
+        url_loader_client_->OnTransferSizeUpdated(delta);
+      reported_total_encoded_bytes_ = total_encoded_bytes;
+    }
+  }
   if (update_body_read_before_paused_) {
     update_body_read_before_paused_ = false;
     body_read_before_paused_ = url_request_->GetRawBodyBytes();
@@ -637,9 +671,7 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
   if (!url_request_->status().is_success() || num_bytes == 0) {
     CompletePendingWrite();
     NotifyCompleted(url_request_->status().ToNetError());
-
-    CloseResponseBodyStreamProducer();
-    // |this| may have been deleted.
+    // |this| will have been deleted.
     return;
   }
 
@@ -662,20 +694,24 @@ void URLLoader::OnReadCompleted(net::URLRequest* url_request, int bytes_read) {
   // |this| may have been deleted.
 }
 
-void URLLoader::OnContextShuttingDown() {
-  // The associated network context is going away and we have to destroy
-  // net::URLRequest held by this loader.
-  delete this;
-}
-
 net::LoadState URLLoader::GetLoadStateForTesting() const {
   if (!url_request_)
     return net::LOAD_STATE_IDLE;
   return url_request_->GetLoadState().state;
 }
 
-base::WeakPtr<URLLoader> URLLoader::GetWeakPtrForTests() {
-  return weak_ptr_factory_.GetWeakPtr();
+void URLLoader::OnAuthCredentials(
+    const base::Optional<net::AuthCredentials>& credentials) {
+  auth_challenge_responder_binding_.Close();
+
+  if (!url_request_)
+    return;
+
+  if (!credentials.has_value()) {
+    url_request_->CancelAuth();
+  } else {
+    url_request_->SetAuth(credentials.value());
+  }
 }
 
 void URLLoader::NotifyCompleted(int error_code) {
@@ -709,58 +745,41 @@ void URLLoader::NotifyCompleted(int error_code) {
     status.ssl_info = url_request_->ssl_info();
   }
 
+  if (network_usage_accumulator_) {
+    network_usage_accumulator_->OnBytesTransferred(
+        process_id_, render_frame_id_, url_request_->GetTotalReceivedBytes(),
+        url_request_->GetTotalSentBytes());
+  }
+
   url_loader_client_->OnComplete(status);
-  DeleteIfNeeded();
+  DeleteSelf();
 }
 
 void URLLoader::OnConnectionError() {
-  connected_ = false;
-  DeleteIfNeeded();
+  NotifyCompleted(net::ERR_FAILED);
 }
 
 void URLLoader::OnResponseBodyStreamConsumerClosed(MojoResult result) {
-  CloseResponseBodyStreamProducer();
+  NotifyCompleted(net::ERR_FAILED);
 }
 
 void URLLoader::OnResponseBodyStreamReady(MojoResult result) {
   if (result != MOJO_RESULT_OK) {
-    CloseResponseBodyStreamProducer();
+    NotifyCompleted(net::ERR_FAILED);
     return;
   }
 
   ReadMore();
 }
 
-void URLLoader::CloseResponseBodyStreamProducer() {
-  RecordBodyReadFromNetBeforePausedIfNeeded();
-
-  resource_scheduler_request_handle_.reset();
-  url_request_.reset();
-  peer_closed_handle_watcher_.Cancel();
-  writable_handle_watcher_.Cancel();
-  response_body_stream_.reset();
-
-  pending_write_buffer_offset_ = 0;
-  pending_write_ = nullptr;
-
-  // Make sure if a ResumeReadingBodyFromNet() call is received later, we don't
-  // try to do ReadMore().
-  paused_reading_body_ = false;
-
-  DeleteIfNeeded();
-}
-
-void URLLoader::DeleteIfNeeded() {
-  if (!connected_ && !HasDataPipe())
-    delete this;
+void URLLoader::DeleteSelf() {
+  std::move(delete_callback_).Run(this);
 }
 
 void URLLoader::SendResponseToClient() {
   base::Optional<net::SSLInfo> ssl_info;
-  if (options_ & mojom::kURLLoadOptionSendSSLInfoWithResponse)
-    ssl_info = url_request_->ssl_info();
   mojom::DownloadedTempFilePtr downloaded_file_ptr;
-  url_loader_client_->OnReceiveResponse(response_->head, ssl_info,
+  url_loader_client_->OnReceiveResponse(response_->head,
                                         std::move(downloaded_file_ptr));
 
   net::IOBufferWithSize* metadata =
@@ -831,18 +850,6 @@ void URLLoader::OnCertificateRequestedResponse(
     } else {
       url_request_->ContinueWithCertificate(nullptr, nullptr);
     }
-  }
-}
-
-void URLLoader::OnAuthRequiredResponse(
-    const base::Optional<net::AuthCredentials>& credentials) {
-  if (!url_request_)
-    return;
-
-  if (!credentials.has_value()) {
-    url_request_->CancelAuth();
-  } else {
-    url_request_->SetAuth(credentials.value());
   }
 }
 

@@ -13,7 +13,7 @@
 #include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/pepper/fullscreen_container.h"
 #include "content/renderer/render_widget.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
+#include "third_party/blink/public/web/web_widget.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -69,7 +69,8 @@ class RenderWidgetFullscreenPepper : public RenderWidget,
   // RenderWidget API.
   void DidInitiatePaint() override;
   void Close() override;
-  void OnResize(const ResizeParams& params) override;
+  void OnSynchronizeVisualProperties(
+      const VisualProperties& visual_properties) override;
 
   // RenderWidget overrides.
   GURL GetURLForGraphicsContext3D() override;

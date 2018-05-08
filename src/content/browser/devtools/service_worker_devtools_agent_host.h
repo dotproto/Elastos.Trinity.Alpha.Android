@@ -14,7 +14,7 @@
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
-#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
+#include "third_party/blink/public/web/devtools_agent.mojom.h"
 
 namespace content {
 
@@ -71,6 +71,8 @@ class ServiceWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
 
   // Returns the time when the ServiceWorker was doomed.
   base::Time version_doomed_time() const { return version_doomed_time_; }
+
+  int64_t version_id() const { return version_id_; }
 
   bool Matches(const ServiceWorkerContextCore* context, int64_t version_id);
 

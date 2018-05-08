@@ -6,8 +6,13 @@
 
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/unguessable_token.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -44,26 +49,24 @@ class AshClientNotificationDelegate
     : public message_center::NotificationDelegate {
  public:
   AshClientNotificationDelegate(const std::string& notification_id,
+                                const base::UnguessableToken& display_token,
                                 mojom::AshMessageCenterClient* client)
-      : notification_id_(notification_id), client_(client) {}
+      : notification_id_(notification_id),
+        display_token_(display_token),
+        client_(client) {}
 
   void Close(bool by_user) override {
-    client_->HandleNotificationClosed(notification_id_, by_user);
+    client_->HandleNotificationClosed(display_token_, by_user);
   }
 
-  void Click() override {
-    client_->HandleNotificationClicked(notification_id_);
-  }
-
-  void ButtonClick(int button_index) override {
-    client_->HandleNotificationButtonClicked(notification_id_, button_index,
-                                             base::nullopt);
-  }
-
-  void ButtonClickWithReply(int button_index,
-                            const base::string16& reply) override {
-    client_->HandleNotificationButtonClicked(notification_id_, button_index,
-                                             reply);
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override {
+    if (button_index) {
+      client_->HandleNotificationButtonClicked(notification_id_, *button_index,
+                                               reply);
+    } else {
+      client_->HandleNotificationClicked(notification_id_);
+    }
   }
 
   void SettingsClick() override {
@@ -77,7 +80,12 @@ class AshClientNotificationDelegate
  private:
   ~AshClientNotificationDelegate() override = default;
 
-  std::string notification_id_;
+  // The ID of the notification.
+  const std::string notification_id_;
+
+  // The token that was generated for the ShowClientNotification() call.
+  const base::UnguessableToken display_token_;
+
   mojom::AshMessageCenterClient* client_;
 
   DISALLOW_COPY_AND_ASSIGN(AshClientNotificationDelegate);
@@ -85,7 +93,7 @@ class AshClientNotificationDelegate
 
 }  // namespace
 
-MessageCenterController::MessageCenterController() : binding_(this) {
+MessageCenterController::MessageCenterController() {
   message_center::MessageCenter::Initialize();
 
   fullscreen_notification_blocker_ =
@@ -105,10 +113,11 @@ MessageCenterController::MessageCenterController() : binding_(this) {
       {&kNotificationCaptivePortalIcon, &kNotificationCellularAlertIcon,
        &kNotificationDownloadIcon, &kNotificationEndOfSupportIcon,
        &kNotificationGoogleIcon, &kNotificationImageIcon,
-       &kNotificationInstalledIcon, &kNotificationMobileDataIcon,
-       &kNotificationMobileDataOffIcon, &kNotificationPlayPrismIcon,
-       &kNotificationPrintingDoneIcon, &kNotificationPrintingIcon,
-       &kNotificationPrintingWarningIcon, &kNotificationStorageFullIcon,
+       &kNotificationInstalledIcon, &kNotificationMultiDeviceSetupIcon,
+       &kNotificationMobileDataIcon, &kNotificationMobileDataOffIcon,
+       &kNotificationPlayPrismIcon, &kNotificationPrintingDoneIcon,
+       &kNotificationPrintingIcon, &kNotificationPrintingWarningIcon,
+       &kNotificationSettingsIcon, &kNotificationStorageFullIcon,
        &kNotificationVpnIcon, &kNotificationWarningIcon,
        &kNotificationWifiOffIcon});
 
@@ -129,7 +138,7 @@ MessageCenterController::~MessageCenterController() {
 
 void MessageCenterController::BindRequest(
     mojom::AshMessageCenterControllerRequest request) {
-  binding_.Bind(std::move(request));
+  binding_set_.AddBinding(this, std::move(request));
 }
 
 void MessageCenterController::SetNotifierEnabled(const NotifierId& notifier_id,
@@ -143,13 +152,31 @@ void MessageCenterController::SetClient(
   client_.Bind(std::move(client));
 }
 
+void MessageCenterController::SetArcNotificationsInstance(
+    arc::mojom::NotificationsInstancePtr arc_notification_instance) {
+  if (!arc_notification_manager_) {
+    arc_notification_manager_ = std::make_unique<arc::ArcNotificationManager>(
+        Shell::Get()
+            ->session_controller()
+            ->GetPrimaryUserSession()
+            ->user_info->account_id,
+        message_center::MessageCenter::Get());
+    arc_notification_manager_->set_get_app_id_callback(
+        base::BindRepeating(&MessageCenterController::GetArcAppIdByPackageName,
+                            base::Unretained(this)));
+  }
+  arc_notification_manager_->SetInstance(std::move(arc_notification_instance));
+}
+
 void MessageCenterController::ShowClientNotification(
-    const message_center::Notification& notification) {
+    const message_center::Notification& notification,
+    const base::UnguessableToken& display_token) {
   DCHECK(client_.is_bound());
   auto message_center_notification =
       std::make_unique<message_center::Notification>(notification);
-  message_center_notification->set_delegate(base::WrapRefCounted(
-      new AshClientNotificationDelegate(notification.id(), client_.get())));
+  message_center_notification->set_delegate(
+      base::WrapRefCounted(new AshClientNotificationDelegate(
+          notification.id(), display_token, client_.get())));
   MessageCenter::Get()->AddNotification(std::move(message_center_notification));
 }
 
@@ -170,6 +197,21 @@ void MessageCenterController::NotifierEnabledChanged(
     MessageCenter::Get()->RemoveNotificationsForNotifierId(notifier_id);
 }
 
+void MessageCenterController::GetActiveNotifications(
+    GetActiveNotificationsCallback callback) {
+  message_center::NotificationList::Notifications notification_set =
+      MessageCenter::Get()->GetVisibleNotifications();
+  std::vector<message_center::Notification> notification_vector;
+  notification_vector.reserve(notification_set.size());
+  for (auto* notification : notification_set) {
+    notification_vector.emplace_back(*notification);
+    // The client doesn't know how to de-serialize vector icons,
+    // nor does it need to.
+    notification_vector.back().set_vector_small_image(gfx::kNoneIcon);
+  }
+  std::move(callback).Run(notification_vector);
+}
+
 void MessageCenterController::SetNotifierSettingsListener(
     NotifierSettingsListener* listener) {
   DCHECK(!listener || !notifier_id_);
@@ -186,6 +228,13 @@ void MessageCenterController::OnGotNotifierList(
     std::vector<mojom::NotifierUiDataPtr> ui_data) {
   if (notifier_id_)
     notifier_id_->SetNotifierList(ui_data);
+}
+
+void MessageCenterController::GetArcAppIdByPackageName(
+    const std::string& package_name,
+    arc::ArcNotificationManager::GetAppIdResponseCallback callback) {
+  DCHECK(client_.is_bound());
+  client_->GetArcAppIdByPackageName(package_name, std::move(callback));
 }
 
 }  // namespace ash

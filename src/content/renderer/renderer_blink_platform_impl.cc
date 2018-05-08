@@ -4,8 +4,10 @@
 
 #include "content/renderer/renderer_blink_platform_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -15,7 +17,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/memory_coordinator_client_registry.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -32,7 +33,6 @@
 #include "content/child/thread_safe_sender.h"
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_stream_constants.h"
-#include "content/common/origin_trials/trial_policy_impl.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/wrapper_shared_url_loader_factory.h"
 #include "content/public/common/content_features.h"
@@ -74,7 +74,6 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/storage_util.h"
 #include "content/renderer/web_database_observer_impl.h"
-#include "content/renderer/webfileutilities_impl.h"
 #include "content/renderer/webgraphicscontext3d_provider_impl.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
 #include "content/renderer/worker_thread_registry.h"
@@ -90,39 +89,39 @@
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/generic_sensor/motion_data.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/database/database_identifier.h"
-#include "third_party/WebKit/public/common/origin_trials/trial_token_validator.h"
-#include "third_party/WebKit/public/platform/BlameContext.h"
-#include "third_party/WebKit/public/platform/FilePathConversion.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebAudioLatencyHint.h"
-#include "third_party/WebKit/public/platform/WebBlobRegistry.h"
-#include "third_party/WebKit/public/platform/WebFileInfo.h"
-#include "third_party/WebKit/public/platform/WebMediaRecorderHandler.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamCenterClient.h"
-#include "third_party/WebKit/public/platform/WebPluginListBuilder.h"
-#include "third_party/WebKit/public/platform/WebRTCCertificateGenerator.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebSocketHandshakeThrottle.h"
-#include "third_party/WebKit/public/platform/WebThread.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLLoaderFactory.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
-#include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
-#include "third_party/WebKit/public/platform/scheduler/child/webthread_base.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/platform/blame_context.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/public/platform/modules/device_orientation/web_device_motion_listener.h"
+#include "third_party/blink/public/platform/modules/device_orientation/web_device_orientation_listener.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor.h"
+#include "third_party/blink/public/platform/scheduler/child/webthread_base.h"
+#include "third_party/blink/public/platform/scheduler/web_main_thread_scheduler.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_audio_latency_hint.h"
+#include "third_party/blink/public/platform/web_blob_registry.h"
+#include "third_party/blink/public/platform/web_file_info.h"
+#include "third_party/blink/public/platform/web_media_recorder_handler.h"
+#include "third_party/blink/public/platform/web_media_stream_center.h"
+#include "third_party/blink/public/platform/web_media_stream_center_client.h"
+#include "third_party/blink/public/platform/web_plugin_list_builder.h"
+#include "third_party/blink/public/platform/web_rtc_certificate_generator.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_socket_handshake_throttle.h"
+#include "third_party/blink/public/platform/web_thread.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_loader_factory.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/sqlite/sqlite3.h"
 #include "url/gurl.h"
 
@@ -130,7 +129,7 @@
 #include "content/child/child_process_sandbox_support_impl_mac.h"
 #include "content/common/mac/font_loader.h"
 #include "content/renderer/webscrollbarbehavior_impl_mac.h"
-#include "third_party/WebKit/public/platform/mac/WebSandboxSupport.h"
+#include "third_party/blink/public/platform/mac/web_sandbox_support.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -141,8 +140,8 @@
 
 #include "base/synchronization/lock.h"
 #include "content/child/child_process_sandbox_support_impl_linux.h"
-#include "third_party/WebKit/public/platform/linux/WebFallbackFont.h"
-#include "third_party/WebKit/public/platform/linux/WebSandboxSupport.h"
+#include "third_party/blink/public/platform/linux/web_fallback_font.h"
+#include "third_party/blink/public/platform/linux/web_sandbox_support.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #endif
 #endif
@@ -150,7 +149,7 @@
 #if defined(USE_AURA)
 #include "content/renderer/webscrollbarbehavior_impl_aura.h"
 #elif !defined(OS_MACOSX)
-#include "third_party/WebKit/public/platform/WebScrollbarBehavior.h"
+#include "third_party/blink/public/platform/web_scrollbar_behavior.h"
 #define WebScrollbarBehaviorImpl blink::WebScrollbarBehavior
 #endif
 
@@ -202,8 +201,7 @@ media::AudioParameters GetAudioHardwareParams() {
     return media::AudioParameters::UnavailableDeviceParams();
 
   return AudioDeviceFactory::GetOutputDeviceInfo(render_frame->GetRoutingID(),
-                                                 0, std::string(),
-                                                 web_frame->GetSecurityOrigin())
+                                                 0, std::string())
       .output_params();
 }
 
@@ -232,21 +230,6 @@ gpu::ContextType ToGpuContextType(blink::Platform::ContextType type) {
 }  // namespace
 
 //------------------------------------------------------------------------------
-
-class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
- public:
-  explicit FileUtilities(
-      scoped_refptr<mojom::ThreadSafeFileUtilitiesHostPtr> host)
-      : file_utilities_host_(std::move(host)) {}
-  bool GetFileInfo(const WebString& path, WebFileInfo& result) override;
-
- private:
-  mojom::FileUtilitiesHost& GetFileUtilitiesHost() {
-    return **file_utilities_host_;
-  }
-
-  scoped_refptr<mojom::ThreadSafeFileUtilitiesHostPtr> file_utilities_host_;
-};
 
 #if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
 class RendererBlinkPlatformImpl::SandboxSupport
@@ -280,18 +263,18 @@ class RendererBlinkPlatformImpl::SandboxSupport
 //------------------------------------------------------------------------------
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
-    blink::scheduler::RendererScheduler* renderer_scheduler)
-    : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner(),
+    blink::scheduler::WebMainThreadScheduler* main_thread_scheduler)
+    : BlinkPlatformImpl(main_thread_scheduler->DefaultTaskRunner(),
                         RenderThreadImpl::current()
                             ? RenderThreadImpl::current()->GetIOTaskRunner()
                             : nullptr),
       compositor_thread_(nullptr),
-      main_thread_(renderer_scheduler->CreateMainThread()),
+      main_thread_(main_thread_scheduler->CreateMainThread()),
       sudden_termination_disables_(0),
       plugin_refresh_allowed_(true),
-      default_task_runner_(renderer_scheduler->DefaultTaskRunner()),
+      default_task_runner_(main_thread_scheduler->DefaultTaskRunner()),
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
-      renderer_scheduler_(renderer_scheduler) {
+      main_thread_scheduler_(main_thread_scheduler) {
 #if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
@@ -308,8 +291,6 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
                      ->Clone();
     sync_message_filter_ = RenderThreadImpl::current()->sync_message_filter();
     thread_safe_sender_ = RenderThreadImpl::current()->thread_safe_sender();
-    shared_bitmap_manager_ =
-        RenderThreadImpl::current()->shared_bitmap_manager();
     blob_registry_.reset(new WebBlobRegistryImpl(thread_safe_sender_.get()));
     web_idb_factory_.reset(new WebIDBFactoryImpl(
         sync_message_filter_,
@@ -324,19 +305,15 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
   blink_interface_provider_.reset(
       new BlinkInterfaceProviderImpl(connector_.get()));
   top_level_blame_context_.Initialize();
-  renderer_scheduler_->SetTopLevelBlameContext(&top_level_blame_context_);
+  main_thread_scheduler_->SetTopLevelBlameContext(&top_level_blame_context_);
 
   GetInterfaceProvider()->GetInterface(
       mojo::MakeRequest(&web_database_host_info_));
-
-  GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&file_utilities_host_info_));
 }
 
 RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
   WebFileSystemImpl::DeleteThreadSpecificInstance();
-  renderer_scheduler_->SetTopLevelBlameContext(nullptr);
-  shared_bitmap_manager_ = nullptr;
+  main_thread_scheduler_->SetTopLevelBlameContext(nullptr);
 }
 
 void RendererBlinkPlatformImpl::Shutdown() {
@@ -433,18 +410,6 @@ blink::WebClipboard* RendererBlinkPlatformImpl::Clipboard() {
     return clipboard;
 
   return BlinkPlatformImpl::Clipboard();
-}
-
-blink::WebFileUtilities* RendererBlinkPlatformImpl::GetFileUtilities() {
-  if (!file_utilities_) {
-    file_utilities_.reset(
-        new FileUtilities(mojom::ThreadSafeFileUtilitiesHostPtr::Create(
-            std::move(file_utilities_host_info_),
-            base::CreateSequencedTaskRunnerWithTraits(
-                {base::WithBaseSyncPrimitives()}))));
-    file_utilities_->set_sandbox_enabled(sandboxEnabled());
-  }
-  return file_utilities_.get();
 }
 
 blink::WebSandboxSupport* RendererBlinkPlatformImpl::GetSandboxSupport() {
@@ -568,7 +533,7 @@ RendererBlinkPlatformImpl::CreateLocalStorageNamespace() {
   if (!local_storage_cached_areas_) {
     local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
         RenderThreadImpl::current()->GetStoragePartitionService(),
-        renderer_scheduler_));
+        main_thread_scheduler_));
   }
   return std::make_unique<LocalStorageNamespace>(
       local_storage_cached_areas_.get());
@@ -581,7 +546,7 @@ RendererBlinkPlatformImpl::CreateSessionStorageNamespace(
     if (!local_storage_cached_areas_) {
       local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
           RenderThreadImpl::current()->GetStoragePartitionService(),
-          renderer_scheduler_));
+          main_thread_scheduler_));
     }
     return std::make_unique<SessionWebStorageNamespaceImpl>(
         namespace_id.as_string(), local_storage_cached_areas_.get());
@@ -596,7 +561,7 @@ void RendererBlinkPlatformImpl::CloneSessionStorageNamespace(
   if (!local_storage_cached_areas_) {
     local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
         RenderThreadImpl::current()->GetStoragePartitionService(),
-        renderer_scheduler_));
+        main_thread_scheduler_));
   }
   local_storage_cached_areas_->CloneNamespace(source_namespace,
                                               destination_namespace);
@@ -612,9 +577,10 @@ WebIDBFactory* RendererBlinkPlatformImpl::IdbFactory() {
 
 std::unique_ptr<blink::WebServiceWorkerCacheStorage>
 RendererBlinkPlatformImpl::CreateCacheStorage(
-    const blink::WebSecurityOrigin& security_origin) {
-  return std::make_unique<WebServiceWorkerCacheStorageImpl>(
-      thread_safe_sender_.get(), security_origin);
+    service_manager::InterfaceProvider* mojo_provider) {
+  // Requires the Interface Provider from ExecutionContext, because it can be
+  // different of RendererBlinkPlatformImpl::GetInterfaceProvider()
+  return std::make_unique<WebServiceWorkerCacheStorageImpl>(mojo_provider);
 }
 
 //------------------------------------------------------------------------------
@@ -627,22 +593,6 @@ WebString RendererBlinkPlatformImpl::FileSystemCreateOriginIdentifier(
     const blink::WebSecurityOrigin& origin) {
   return WebString::FromUTF8(
       storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin)));
-}
-
-//------------------------------------------------------------------------------
-
-bool RendererBlinkPlatformImpl::FileUtilities::GetFileInfo(
-    const WebString& path,
-    WebFileInfo& web_file_info) {
-  base::Optional<base::File::Info> file_info;
-  if (!GetFileUtilitiesHost().GetFileInfo(blink::WebStringToFilePath(path),
-                                          &file_info) ||
-      !file_info) {
-    return false;
-  }
-  FileInfoToWebFileInfo(file_info.value(), &web_file_info);
-  web_file_info.platform_path = path;
-  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -791,8 +741,7 @@ std::unique_ptr<WebAudioDevice> RendererBlinkPlatformImpl::CreateAudioDevice(
     unsigned channels,
     const blink::WebAudioLatencyHint& latency_hint,
     WebAudioDevice::RenderCallback* callback,
-    const blink::WebString& input_device_id,
-    const blink::WebSecurityOrigin& security_origin) {
+    const blink::WebString& input_device_id) {
   // Use a mock for testing.
   std::unique_ptr<blink::WebAudioDevice> mock_device =
       GetContentClient()->renderer()->OverrideCreateAudioDevice(latency_hint);
@@ -812,9 +761,8 @@ std::unique_ptr<WebAudioDevice> RendererBlinkPlatformImpl::CreateAudioDevice(
     session_id = 0;
   }
 
-  return RendererWebAudioDeviceImpl::Create(
-      layout, channels, latency_hint, callback, session_id,
-      static_cast<url::Origin>(security_origin));
+  return RendererWebAudioDeviceImpl::Create(layout, channels, latency_hint,
+                                            callback, session_id);
 }
 
 bool RendererBlinkPlatformImpl::DecodeAudioFileData(
@@ -851,7 +799,8 @@ void RendererBlinkPlatformImpl::GetPluginList(
   for (const WebPluginInfo& plugin : plugins) {
     builder->AddPlugin(WebString::FromUTF16(plugin.name),
                        WebString::FromUTF16(plugin.desc),
-                       blink::FilePathToWebString(plugin.path.BaseName()));
+                       blink::FilePathToWebString(plugin.path.BaseName()),
+                       plugin.background_color);
 
     for (const WebPluginMimeType& mime_type : plugin.mime_types) {
       builder->AddMediaTypeToLastPlugin(
@@ -1019,6 +968,8 @@ void RendererBlinkPlatformImpl::CreateHTMLAudioElementCapturer(
   blink::WebMediaStreamSource::Capabilities capabilities;
   capabilities.device_id = track_id;
   capabilities.echo_cancellation = std::vector<bool>({false});
+  capabilities.auto_gain_control = std::vector<bool>({false});
+  capabilities.noise_suppression = std::vector<bool>({false});
   web_media_stream_source.SetCapabilities(capabilities);
 
   media_stream_source->ConnectToTrack(web_media_stream_track);
@@ -1081,7 +1032,6 @@ std::unique_ptr<blink::WebGraphicsContext3DProvider>
 RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
     const blink::Platform::ContextAttributes& web_attributes,
     const blink::WebURL& top_document_web_url,
-    blink::WebGraphicsContext3DProvider* share_provider,
     blink::Platform::GraphicsInfo* gl_info) {
   DCHECK(gl_info);
   if (!RenderThreadImpl::current()) {
@@ -1099,22 +1049,6 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
     return nullptr;
   }
   Collect3DContextInformation(gl_info, gpu_channel_host->gpu_info());
-
-  content::WebGraphicsContext3DProviderImpl* share_provider_impl =
-      static_cast<content::WebGraphicsContext3DProviderImpl*>(share_provider);
-  ui::ContextProviderCommandBuffer* share_context = nullptr;
-
-  // WebGL contexts must fail creation if the share group is lost.
-  if (share_provider_impl) {
-    auto* gl = share_provider_impl->ContextGL();
-    if (gl->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
-      std::string error_message(
-          "OffscreenContext Creation failed, Shared context is lost");
-      gl_info->error_message = WebString::FromUTF8(error_message);
-      return nullptr;
-    }
-    share_context = share_provider_impl->context_provider();
-  }
 
   bool is_software_rendering = gpu_channel_host->gpu_info().software_rendering;
 
@@ -1152,7 +1086,7 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
           kGpuStreamIdDefault, kGpuStreamPriorityDefault,
           gpu::kNullSurfaceHandle, GURL(top_document_web_url),
           automatic_flushes, support_locking, web_attributes.support_grcontext,
-          gpu::SharedMemoryLimits(), attributes, share_context,
+          gpu::SharedMemoryLimits(), attributes,
           ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_WEBGL));
   return std::make_unique<WebGraphicsContext3DProviderImpl>(
       std::move(provider), is_software_rendering);
@@ -1191,15 +1125,6 @@ gpu::GpuMemoryBufferManager*
 RendererBlinkPlatformImpl::GetGpuMemoryBufferManager() {
   RenderThreadImpl* thread = RenderThreadImpl::current();
   return thread ? thread->GetGpuMemoryBufferManager() : nullptr;
-}
-
-//------------------------------------------------------------------------------
-
-std::unique_ptr<viz::SharedBitmap>
-RendererBlinkPlatformImpl::AllocateSharedBitmap(const blink::WebSize& size,
-                                                viz::ResourceFormat format) {
-  return shared_bitmap_manager_->AllocateSharedBitmap(
-      gfx::Size(size.width, size.height), format);
 }
 
 //------------------------------------------------------------------------------
@@ -1365,14 +1290,6 @@ void RendererBlinkPlatformImpl::StopListening(
 
 blink::WebPushProvider* RendererBlinkPlatformImpl::PushProvider() {
   return PushProvider::ThreadSpecificInstance(default_task_runner_);
-}
-
-//------------------------------------------------------------------------------
-
-std::unique_ptr<blink::WebTrialTokenValidator>
-RendererBlinkPlatformImpl::CreateTrialTokenValidator() {
-  return std::make_unique<WebTrialTokenValidatorImpl>(
-      TrialPolicyImpl::CreateValidatorForPolicy());
 }
 
 //------------------------------------------------------------------------------

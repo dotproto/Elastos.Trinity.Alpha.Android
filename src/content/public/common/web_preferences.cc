@@ -7,7 +7,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
+#include "third_party/blink/public/web/web_settings.h"
 
 using blink::WebSettings;
 
@@ -30,7 +30,12 @@ STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_DEFAULT,
                    WebSettings::kV8CacheOptionsDefault);
 STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_NONE, WebSettings::kV8CacheOptionsNone);
 STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_CODE, WebSettings::kV8CacheOptionsCode);
-STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_LAST, WebSettings::kV8CacheOptionsCode);
+STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_CODE_WITHOUT_HEAT_CHECK,
+                   WebSettings::kV8CacheOptionsCodeWithoutHeatCheck);
+STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_FULLCODE_WITHOUT_HEAT_CHECK,
+                   WebSettings::kV8CacheOptionsFullCodeWithoutHeatCheck);
+STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_LAST,
+                   WebSettings::kV8CacheOptionsFullCodeWithoutHeatCheck);
 
 STATIC_ASSERT_ENUM(SavePreviousDocumentResources::NEVER,
                    WebSettings::SavePreviousDocumentResources::kNever);
@@ -151,11 +156,13 @@ WebPreferences::WebPreferences()
       shrinks_viewport_contents_to_fit(true),
       viewport_style(ViewportStyle::MOBILE),
       always_show_context_menu_on_touch(false),
+      smooth_scroll_for_find_enabled(true),
 #else
       viewport_meta_enabled(false),
       shrinks_viewport_contents_to_fit(false),
       viewport_style(ViewportStyle::DEFAULT),
       always_show_context_menu_on_touch(true),
+      smooth_scroll_for_find_enabled(false),
 #endif
       main_frame_resizes_are_orientation_changes(false),
       initialize_at_minimum_page_scale(true),
@@ -195,7 +202,7 @@ WebPreferences::WebPreferences()
       clobber_user_agent_initial_scale_quirk(false),
       ignore_main_frame_overflow_hidden_quirk(false),
       report_screen_size_in_physical_pixels_quirk(false),
-      resue_global_for_unowned_main_frame(false),
+      reuse_global_for_unowned_main_frame(false),
       spellcheck_enabled_by_default(true),
       video_fullscreen_orientation_lock_enabled(false),
       video_rotate_to_fullscreen_enabled(false),

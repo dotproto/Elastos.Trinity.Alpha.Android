@@ -282,6 +282,55 @@ void SessionMetricsHelper::UpdateMode() {
     SetVrMode(mode);
 }
 
+void SessionMetricsHelper::RecordVrStartAction(VrStartAction action) {
+  if (!page_session_tracker_ || mode_ == Mode::kNoVr) {
+    pending_page_session_start_action_ = action;
+  } else {
+    LogVrStartAction(action);
+  }
+}
+
+void SessionMetricsHelper::RecordPresentationStartAction(
+    PresentationStartAction action) {
+  if (!presentation_session_tracker_ || mode_ != Mode::kWebXrVrPresentation) {
+    pending_presentation_start_action_ = action;
+  } else {
+    LogPresentationStartAction(action);
+  }
+}
+
+void SessionMetricsHelper::ReportRequestPresent() {
+  // If we're not in VR, log this as an entry into VR from 2D.
+  if (mode_ == Mode::kNoVr) {
+    RecordVrStartAction(VrStartAction::kPresentationRequest);
+    RecordPresentationStartAction(
+        PresentationStartAction::kRequestFrom2dBrowsing);
+  } else {
+    RecordPresentationStartAction(
+        PresentationStartAction::kRequestFromVrBrowsing);
+  }
+}
+
+void SessionMetricsHelper::LogVrStartAction(VrStartAction action) {
+  DCHECK(page_session_tracker_);
+
+  UMA_HISTOGRAM_ENUMERATION("XR.VRSession.StartAction", action);
+  if (action == VrStartAction::kHeadsetActivation ||
+      action == VrStartAction::kPresentationRequest) {
+    page_session_tracker_->ukm_entry()->SetEnteredVROnPageReason(
+        static_cast<int>(action));
+  }
+}
+
+void SessionMetricsHelper::LogPresentationStartAction(
+    PresentationStartAction action) {
+  DCHECK(presentation_session_tracker_);
+
+  UMA_HISTOGRAM_ENUMERATION("XR.WebXR.PresentationSession", action);
+
+  presentation_session_tracker_->ukm_entry()->SetStartAction(action);
+}
+
 void SessionMetricsHelper::SetWebVREnabled(bool is_webvr_presenting) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -381,6 +430,10 @@ void SessionMetricsHelper::OnEnterAnyVr() {
       std::make_unique<SessionTracker<ukm::builders::XR_PageSession>>(
           std::make_unique<ukm::builders::XR_PageSession>(
               ukm::GetSourceIdForWebContentsDocument(web_contents())));
+  if (pending_page_session_start_action_) {
+    LogVrStartAction(*pending_page_session_start_action_);
+    pending_page_session_start_action_ = base::nullopt;
+  }
 }
 
 void SessionMetricsHelper::OnExitAllVr() {
@@ -439,6 +492,13 @@ void SessionMetricsHelper::OnEnterPresentation() {
       SessionTracker<ukm::builders::XR_WebXR_PresentationSession>>(
       std::make_unique<ukm::builders::XR_WebXR_PresentationSession>(
           ukm::GetSourceIdForWebContentsDocument(web_contents())));
+
+  if (!pending_presentation_start_action_) {
+    pending_presentation_start_action_ = PresentationStartAction::kOther;
+  }
+
+  LogPresentationStartAction(*pending_presentation_start_action_);
+  pending_presentation_start_action_ = base::nullopt;
 }
 
 void SessionMetricsHelper::OnExitPresentation() {
@@ -558,6 +618,10 @@ void SessionMetricsHelper::DidFinishNavigation(
         std::make_unique<SessionTracker<ukm::builders::XR_PageSession>>(
             std::make_unique<ukm::builders::XR_PageSession>(
                 ukm::GetSourceIdForWebContentsDocument(web_contents())));
+    if (pending_page_session_start_action_) {
+      LogVrStartAction(*pending_page_session_start_action_);
+      pending_page_session_start_action_ = base::nullopt;
+    }
 
     // Check that the completed navigation is indeed the one that was requested
     // by either voice or omnibox entry, in case the requested navigation was
@@ -581,6 +645,11 @@ void SessionMetricsHelper::DidFinishNavigation(
           SessionTracker<ukm::builders::XR_WebXR_PresentationSession>>(
           std::make_unique<ukm::builders::XR_WebXR_PresentationSession>(
               ukm::GetSourceIdForWebContentsDocument(web_contents())));
+      if (pending_presentation_start_action_) {
+        presentation_session_tracker_->ukm_entry()->SetStartAction(
+            *pending_presentation_start_action_);
+        pending_presentation_start_action_ = base::nullopt;
+      }
     }
 
     num_session_navigation_++;

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "device/fido/u2f_parsing_utils.h"
+#include "device/fido/fido_parsing_utils.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
 
 namespace device {
@@ -16,6 +16,66 @@ namespace {
 constexpr char kFidoFormatName[] = "fido-u2f";
 constexpr char kSignatureKey[] = "sig";
 constexpr char kX509CertKey[] = "x5c";
+
+bool IsCertificateInappropriatelyIdentifying(
+    const std::vector<uint8_t>& der_bytes) {
+  constexpr int kVersionTag = 0;
+  CBS cert(der_bytes);
+  CBS top_level, to_be_signed_cert, issuer;
+  if (!CBS_get_asn1(&cert, &top_level, CBS_ASN1_SEQUENCE) ||
+      CBS_len(&cert) != 0 ||
+      !CBS_get_asn1(&top_level, &to_be_signed_cert, CBS_ASN1_SEQUENCE) ||
+      // version, explicitly tagged with tag zero.
+      !CBS_get_optional_asn1(
+          &to_be_signed_cert, NULL, NULL,
+          CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | kVersionTag) ||
+      // serialNumber
+      !CBS_get_asn1(&to_be_signed_cert, NULL, CBS_ASN1_INTEGER) ||
+      // signature algorithm
+      !CBS_get_asn1(&to_be_signed_cert, NULL, CBS_ASN1_SEQUENCE) ||
+      !CBS_get_asn1(&to_be_signed_cert, &issuer, CBS_ASN1_SEQUENCE)) {
+    return false;
+  }
+
+  while (CBS_len(&issuer) != 0) {
+    CBS relative_distinguished_names;
+    if (!CBS_get_asn1(&issuer, &relative_distinguished_names, CBS_ASN1_SET)) {
+      return false;
+    }
+    while (CBS_len(&relative_distinguished_names) != 0) {
+      CBS relative_distinguished_name, object_id;
+      if (!CBS_get_asn1(&relative_distinguished_names,
+                        &relative_distinguished_name, CBS_ASN1_SEQUENCE) ||
+          !CBS_get_asn1(&relative_distinguished_name, &object_id,
+                        CBS_ASN1_OBJECT)) {
+        return false;
+      }
+
+      // Encoding of OID 2.5.4.3 in DER form. See "OBJECT IDENTIFER" in
+      // http://luca.ntop.org/Teaching/Appunti/asn1.html
+      static constexpr uint8_t kCommonNameOID[] = {40 * 2 + 5, 4, 3};
+      if (!CBS_mem_equal(&object_id, kCommonNameOID, sizeof(kCommonNameOID))) {
+        continue;
+      }
+
+      CBS value;
+      unsigned tag;
+      if (!CBS_get_any_asn1(&relative_distinguished_name, &value, &tag)) {
+        return false;
+      }
+
+      static constexpr uint8_t kCommonName[] = "FT FIDO 0100";
+      if ((tag == CBS_ASN1_IA5STRING || tag == CBS_ASN1_UTF8STRING ||
+           tag == CBS_ASN1_PRINTABLESTRING) &&
+          CBS_mem_equal(&value, kCommonName, sizeof(kCommonName) - 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 // static
@@ -28,7 +88,8 @@ FidoAttestationStatement::CreateFromU2fRegisterResponse(
   // The format of |u2f_data| is specified here:
   // https://fidoalliance.org/specs/fido-u2f-v1.2-ps-20170411/fido-u2f-raw-message-formats-v1.2-ps-20170411.html#registration-response-message-success
   uint8_t credential_length;
-  if (!CBS_skip(&response, u2f_parsing_utils::kU2fResponseKeyHandleLengthPos) ||
+  if (!CBS_skip(&response,
+                fido_parsing_utils::kU2fResponseKeyHandleLengthPos) ||
       !CBS_get_u8(&response, &credential_length) ||
       !CBS_skip(&response, credential_length) ||
       !CBS_get_asn1_element(&response, &cert, CBS_ASN1_SEQUENCE)) {
@@ -57,7 +118,7 @@ FidoAttestationStatement::FidoAttestationStatement(
 
 FidoAttestationStatement::~FidoAttestationStatement() = default;
 
-cbor::CBORValue::MapValue FidoAttestationStatement::GetAsCBORMap() {
+cbor::CBORValue::MapValue FidoAttestationStatement::GetAsCBORMap() const {
   cbor::CBORValue::MapValue attestation_statement_map;
   attestation_statement_map[cbor::CBORValue(kSignatureKey)] =
       cbor::CBORValue(signature_);
@@ -71,6 +132,20 @@ cbor::CBORValue::MapValue FidoAttestationStatement::GetAsCBORMap() {
       cbor::CBORValue(std::move(certificate_array));
 
   return attestation_statement_map;
+}
+
+bool FidoAttestationStatement::
+    IsAttestationCertificateInappropriatelyIdentifying() {
+  // An attestation certificate is considered inappropriately identifying if it
+  // contains a common name of "FT FIDO 0100". See "Inadequately batched
+  // attestation certificates" on https://www.chromium.org/security-keys
+  for (const auto& der_bytes : x509_certificates_) {
+    if (IsCertificateInappropriatelyIdentifying(der_bytes)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace device

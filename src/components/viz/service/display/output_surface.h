@@ -18,7 +18,7 @@
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-#include "gpu/vulkan/features.h"
+#include "gpu/vulkan/buildflags.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "ui/gfx/color_space.h"
 #include "ui/latency/latency_info.h"
@@ -107,9 +107,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
 
   // Get the format for the main image's overlay.
   virtual gfx::BufferFormat GetOverlayBufferFormat() const = 0;
-
-  // If this returns true, then the surface will not attempt to draw.
-  virtual bool SurfaceIsSuspendForRecycle() const = 0;
 
   virtual void Reshape(const gfx::Size& size,
                        float device_scale_factor,

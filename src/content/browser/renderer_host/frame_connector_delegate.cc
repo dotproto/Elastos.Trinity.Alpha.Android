@@ -7,6 +7,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/frame_visual_properties.h"
 
 namespace content {
 
@@ -24,17 +25,15 @@ FrameConnectorDelegate::GetRootRenderWidgetHostView() {
   return nullptr;
 }
 
-void FrameConnectorDelegate::UpdateResizeParams(
-    const gfx::Rect& screen_space_rect,
-    const gfx::Size& local_frame_size,
-    const ScreenInfo& screen_info,
-    uint64_t sequence_number,
-    const viz::SurfaceId& surface_id) {
-  screen_info_ = screen_info;
+void FrameConnectorDelegate::SynchronizeVisualProperties(
+    const viz::SurfaceId& surface_id,
+    const FrameVisualProperties& resize_params) {
+  screen_info_ = resize_params.screen_info;
   local_surface_id_ = surface_id.local_surface_id();
+  capture_sequence_number_ = resize_params.capture_sequence_number;
 
-  SetScreenSpaceRect(screen_space_rect);
-  SetLocalFrameSize(local_frame_size);
+  SetScreenSpaceRect(resize_params.screen_space_rect);
+  SetLocalFrameSize(resize_params.local_frame_size);
 
   if (!view_)
     return;
@@ -45,12 +44,11 @@ void FrameConnectorDelegate::UpdateResizeParams(
   RenderWidgetHostImpl* render_widget_host = view_->host();
   DCHECK(render_widget_host);
 
-  if (render_widget_host->auto_resize_enabled()) {
-    render_widget_host->DidAllocateLocalSurfaceIdForAutoResize(sequence_number);
-    return;
-  }
+  render_widget_host->SetAutoResize(resize_params.auto_resize_enabled,
+                                    resize_params.min_size_for_auto_resize,
+                                    resize_params.max_size_for_auto_resize);
 
-  render_widget_host->WasResized();
+  render_widget_host->SynchronizeVisualProperties();
 }
 
 gfx::PointF FrameConnectorDelegate::TransformPointToRootCoordSpace(
@@ -82,6 +80,11 @@ bool FrameConnectorDelegate::HasFocus() {
 bool FrameConnectorDelegate::LockMouse() {
   return false;
 }
+
+void FrameConnectorDelegate::EnableAutoResize(const gfx::Size& min_size,
+                                              const gfx::Size& max_size) {}
+
+void FrameConnectorDelegate::DisableAutoResize() {}
 
 bool FrameConnectorDelegate::IsInert() const {
   return false;

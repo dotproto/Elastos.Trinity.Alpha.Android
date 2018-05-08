@@ -11,13 +11,15 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/cpu_surface_provider.h"
-#include "chrome/browser/vr/elements/exit_prompt.h"
+#include "chrome/browser/vr/elements/content_element.h"
+#include "chrome/browser/vr/elements/prompt.h"
 #include "chrome/browser/vr/elements/text_input.h"
 #include "chrome/browser/vr/ganesh_surface_provider.h"
 #include "chrome/browser/vr/keyboard_delegate.h"
 #include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
+#include "chrome/browser/vr/model/platform_toast.h"
 #include "chrome/browser/vr/model/sound_id.h"
 #include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
@@ -25,11 +27,16 @@
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
+#include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/ui_scene_creator.h"
+#include "chrome/browser/vr/ui_test_input.h"
 #include "chrome/common/chrome_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace vr {
+
+UiInitialState::UiInitialState() = default;
+UiInitialState::UiInitialState(const UiInitialState& other) = default;
 
 Ui::Ui(UiBrowserInterface* browser,
        ContentInputForwarder* content_input_forwarder,
@@ -74,9 +81,9 @@ base::WeakPtr<BrowserUiInterface> Ui::GetBrowserUiWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-void Ui::SetWebVrMode(bool enabled, bool show_toast) {
-  model_->web_vr.show_exit_toast = show_toast;
+void Ui::SetWebVrMode(bool enabled) {
   if (enabled) {
+    model_->web_vr.has_received_permissions = false;
     if (!model_->web_vr_autopresentation_enabled()) {
       // When auto-presenting, we transition into this state when the minimum
       // splash-screen duration has passed.
@@ -123,28 +130,13 @@ void Ui::SetIsExiting() {
 }
 
 void Ui::SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) {
-  // We don't yet support forward navigation so we ignore this parameter.
   model_->can_navigate_back = can_go_back;
+  model_->can_navigate_forward = can_go_forward;
 }
 
-void Ui::SetVideoCaptureEnabled(bool enabled) {
-  model_->capturing_state.video_capture_enabled = enabled;
-}
-
-void Ui::SetScreenCaptureEnabled(bool enabled) {
-  model_->capturing_state.screen_capture_enabled = enabled;
-}
-
-void Ui::SetAudioCaptureEnabled(bool enabled) {
-  model_->capturing_state.audio_capture_enabled = enabled;
-}
-
-void Ui::SetBluetoothConnected(bool enabled) {
-  model_->capturing_state.bluetooth_connected = enabled;
-}
-
-void Ui::SetLocationAccessEnabled(bool enabled) {
-  model_->capturing_state.location_access_enabled = enabled;
+void Ui::SetCapturingState(const CapturingStateModel& state) {
+  model_->capturing_state = state;
+  model_->web_vr.has_received_permissions = true;
 }
 
 void Ui::ShowExitVrPrompt(UiUnsupportedMode reason) {
@@ -154,27 +146,36 @@ void Ui::ShowExitVrPrompt(UiUnsupportedMode reason) {
   switch (reason) {
     case UiUnsupportedMode::kUnhandledCodePoint:
       NOTREACHED();  // This mode does not prompt.
-      return;
+      break;
     case UiUnsupportedMode::kUnhandledPageInfo:
       model_->active_modal_prompt_type = kModalPromptTypeExitVRForSiteInfo;
-      return;
+      break;
     case UiUnsupportedMode::kVoiceSearchNeedsRecordAudioOsPermission:
       model_->active_modal_prompt_type =
           kModalPromptTypeExitVRForVoiceSearchRecordAudioOsPermission;
-      return;
+      break;
     case UiUnsupportedMode::kGenericUnsupportedFeature:
       model_->active_modal_prompt_type =
           kModalPromptTypeGenericUnsupportedFeature;
-      return;
+      break;
     case UiUnsupportedMode::kNeedsKeyboardUpdate:
       model_->active_modal_prompt_type = kModalPromptTypeUpdateKeyboard;
-      return;
+      break;
+    case UiUnsupportedMode::kUnhandledConnectionInfo:
+      model_->active_modal_prompt_type =
+          kModalPromptTypeExitVRForConnectionInfo;
+      break;
+    // kSearchEnginePromo should DOFF directly. It should never try to change
+    // the state of UI.
+    case UiUnsupportedMode::kSearchEnginePromo:
     case UiUnsupportedMode::kCount:
       NOTREACHED();  // Should never be used as a mode (when |enabled| is true).
-      return;
+      break;
   }
 
-  NOTREACHED();
+  if (model_->active_modal_prompt_type != kModalPromptTypeNone) {
+    model_->push_mode(kModeModalPrompt);
+  }
 }
 
 void Ui::OnUiRequestedNavigation() {
@@ -183,14 +184,30 @@ void Ui::OnUiRequestedNavigation() {
 
 void Ui::SetSpeechRecognitionEnabled(bool enabled) {
   if (enabled) {
-    model_->push_mode(kModeVoiceSearch);
     model_->speech.recognition_result.clear();
+    DCHECK(!model_->has_mode_in_stack(kModeVoiceSearch));
+    model_->push_mode(kModeVoiceSearch);
+    model_->push_mode(kModeVoiceSearchListening);
   } else {
-    model_->pop_mode(kModeVoiceSearch);
-    if (model_->omnibox_editing_enabled() &&
-        !model_->speech.recognition_result.empty()) {
-      model_->pop_mode(kModeEditingOmnibox);
+    model_->pop_mode(kModeVoiceSearchListening);
+    if (model_->speech.recognition_result.empty()) {
+      OnSpeechRecognitionEnded();
+    } else {
+      auto sequence = std::make_unique<Sequence>();
+      sequence->Add(
+          base::BindOnce(&Ui::OnSpeechRecognitionEnded,
+                         weak_ptr_factory_.GetWeakPtr()),
+          base::TimeDelta::FromMilliseconds(kSpeechRecognitionResultTimeoutMs));
+      scene_->AddSequence(std::move(sequence));
     }
+  }
+}
+
+void Ui::OnSpeechRecognitionEnded() {
+  model_->pop_mode(kModeVoiceSearch);
+  if (model_->omnibox_editing_enabled() &&
+      !model_->speech.recognition_result.empty()) {
+    model_->pop_mode(kModeEditingOmnibox);
   }
 }
 
@@ -209,7 +226,8 @@ void Ui::SetOmniboxSuggestions(
 
 bool Ui::CanSendWebVrVSync() {
   return model_->web_vr_enabled() &&
-         !model_->web_vr.awaiting_min_splash_screen_duration();
+         !model_->web_vr.awaiting_min_splash_screen_duration() &&
+         !model_->web_vr.showing_hosted_ui;
 }
 
 void Ui::ShowSoftInput(bool show) {
@@ -235,21 +253,39 @@ void Ui::UpdateWebInputIndices(int selection_start,
 
 void Ui::SetAlertDialogEnabled(bool enabled,
                                ContentInputDelegate* delegate,
-                               int width,
-                               int height) {
-  model_->native_ui.hosted_ui_enabled = enabled;
-  model_->native_ui.size_ratio =
-      static_cast<float>(height) / static_cast<float>(width);
-  model_->native_ui.delegate = delegate;
+                               float width,
+                               float height) {
+  model_->web_vr.showing_hosted_ui = enabled;
+  model_->hosted_platform_ui.hosted_ui_enabled = enabled;
+  model_->hosted_platform_ui.rect.set_height(height);
+  model_->hosted_platform_ui.rect.set_width(width);
+  model_->hosted_platform_ui.delegate = delegate;
 }
 
-void Ui::SetAlertDialogSize(int width, int height) {
-  model_->native_ui.size_ratio =
-      static_cast<float>(height) / static_cast<float>(width);
+void Ui::SetAlertDialogSize(float width, float height) {
+  model_->hosted_platform_ui.rect.set_height(height);
+  model_->hosted_platform_ui.rect.set_width(width);
+}
+
+void Ui::SetDialogLocation(float x, float y) {
+  model_->hosted_platform_ui.rect.set_y(y);
+  model_->hosted_platform_ui.rect.set_x(x);
+}
+
+void Ui::SetDialogFloating(bool floating) {
+  model_->hosted_platform_ui.floating = floating;
+}
+
+void Ui::ShowPlatformToast(const base::string16& text) {
+  model_->platform_toast = std::make_unique<PlatformToast>(text);
+}
+
+void Ui::CancelPlatformToast() {
+  model_->platform_toast.reset();
 }
 
 bool Ui::ShouldRenderWebVr() {
-  return model_->web_vr.has_produced_frames();
+  return model_->web_vr.presenting_web_vr();
 }
 
 void Ui::OnGlInitialized(
@@ -272,7 +308,7 @@ void Ui::OnGlInitialized(
   model_->content_overlay_texture_id = content_overlay_texture_id;
   model_->content_location = content_location;
   model_->content_overlay_location = content_overlay_location;
-  model_->native_ui.texture_id = ui_texture_id;
+  model_->hosted_platform_ui.texture_id = ui_texture_id;
 }
 
 void Ui::RequestFocus(int element_id) {
@@ -311,6 +347,11 @@ void Ui::OnAppButtonClicked() {
     return;
   }
 
+  if (model_->hosted_platform_ui.hosted_ui_enabled) {
+    browser_->CloseHostedDialog();
+    return;
+  }
+
   // App button click exits the WebVR presentation and fullscreen.
   browser_->ExitPresent();
   browser_->ExitFullscreen();
@@ -327,9 +368,8 @@ void Ui::OnAppButtonClicked() {
   }
 }
 
-void Ui::OnAppButtonGesturePerformed(
-    PlatformController::SwipeDirection direction) {
-}
+void Ui::OnAppButtonSwipePerformed(
+    PlatformController::SwipeDirection direction) {}
 
 void Ui::OnControllerUpdated(const ControllerModel& controller_model,
                              const ReticleModel& reticle_model) {
@@ -374,6 +414,10 @@ void Ui::OnPlatformControllerInitialized(PlatformController* controller) {
 bool Ui::IsControllerVisible() const {
   UiElement* controller_group = scene_->GetUiElementByName(kControllerGroup);
   return controller_group && controller_group->GetTargetOpacity() > 0.0f;
+}
+
+bool Ui::IsAppButtonLongPressed() const {
+  return model_->controller.app_button_long_pressed;
 }
 
 bool Ui::SkipsRedrawWhenNotDirty() const {
@@ -435,6 +479,18 @@ void Ui::OnAssetsUnavailable() {
   model_->waiting_for_background = false;
 }
 
+void Ui::SetRegularTabsOpen(bool open) {
+  model_->regular_tabs_open = open;
+}
+
+void Ui::SetIncognitoTabsOpen(bool open) {
+  model_->incognito_tabs_open = open;
+}
+
+void Ui::SetOverlayTextureEmpty(bool empty) {
+  model_->content_overlay_texture_non_empty = !empty;
+}
+
 void Ui::ReinitializeForTest(const UiInitialState& ui_initial_state) {
   InitializeModel(ui_initial_state);
 }
@@ -448,6 +504,7 @@ void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
   model_->push_mode(kModeBrowsing);
   if (ui_initial_state.in_web_vr) {
     auto mode = kModeWebVr;
+    model_->web_vr.has_received_permissions = false;
     if (ui_initial_state.web_vr_autopresentation_expected) {
       mode = kModeWebVrAutopresented;
       model_->web_vr.state = kWebVrAwaitingMinSplashScreenDuration;
@@ -464,18 +521,68 @@ void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
   model_->waiting_for_background = ui_initial_state.assets_supported;
   model_->supports_selection = ui_initial_state.supports_selection;
   model_->needs_keyboard_update = ui_initial_state.needs_keyboard_update;
+  model_->standalone_vr_device = ui_initial_state.is_standalone_vr_device;
 }
 
 void Ui::AcceptDoffPromptForTesting() {
   DCHECK(model_->active_modal_prompt_type != kModalPromptTypeNone);
   if (model_->active_modal_prompt_type ==
       kModalPromptTypeExitVRForVoiceSearchRecordAudioOsPermission) {
-    static_cast<ExitPrompt*>(scene_->GetUiElementByName(kAudioPermissionPrompt))
+    static_cast<Prompt*>(scene_->GetUiElementByName(kAudioPermissionPrompt))
         ->ClickPrimaryButtonForTesting();
   } else {
-    static_cast<ExitPrompt*>(scene_->GetUiElementByName(kExitPrompt))
+    static_cast<Prompt*>(scene_->GetUiElementByName(kExitPrompt))
         ->ClickSecondaryButtonForTesting();
   }
+}
+
+void Ui::PerformUiActionForTesting(UiTestInput test_input) {
+  auto* element = scene()->GetUiElementByName(
+      UserFriendlyElementNameToUiElementName(test_input.element_name));
+  DCHECK(element) << "Unsupported test element";
+  switch (test_input.action) {
+    case VrUiTestAction::kHoverEnter:
+      element->OnHoverEnter(test_input.position);
+      break;
+    case VrUiTestAction::kHoverLeave:
+      element->OnHoverLeave();
+      break;
+    case VrUiTestAction::kMove:
+      element->OnMove(test_input.position);
+      break;
+    case VrUiTestAction::kButtonDown:
+      element->OnButtonDown(test_input.position);
+      break;
+    case VrUiTestAction::kButtonUp:
+      element->OnButtonUp(test_input.position);
+      break;
+    default:
+      NOTREACHED() << "Given unsupported action";
+  }
+}
+
+ContentElement* Ui::GetContentElement() {
+  if (!content_element_) {
+    content_element_ =
+        static_cast<ContentElement*>(scene()->GetUiElementByName(kContentQuad));
+  }
+  return content_element_;
+}
+
+bool Ui::IsContentVisibleAndOpaque() {
+  return GetContentElement()->IsVisibleAndOpaque();
+}
+
+bool Ui::IsContentOverlayTextureEmpty() {
+  return GetContentElement()->GetOverlayTextureEmpty();
+}
+
+void Ui::SetContentUsesQuadLayer(bool uses_quad_layer) {
+  return GetContentElement()->SetUsesQuadLayer(uses_quad_layer);
+}
+
+gfx::Transform Ui::GetContentWorldSpaceTransform() {
+  return GetContentElement()->world_space_transform();
 }
 
 }  // namespace vr

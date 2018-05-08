@@ -60,11 +60,25 @@ void OculusRenderLoop::CleanUp() {
   binding_.Close();
 }
 
+void OculusRenderLoop::SubmitFrameMissing(int16_t frame_index,
+                                          const gpu::SyncToken& sync_token) {
+  // Nothing to do. It's OK to start the next frame even if the current
+  // one didn't get sent to the ovrSession.
+}
+
 void OculusRenderLoop::SubmitFrame(int16_t frame_index,
                                    const gpu::MailboxHolder& mailbox,
                                    base::TimeDelta time_waited) {
   // There are two submit paths - one for Android, and one for Windows. This
   // method is called on Android, but this class isn't used on Android.
+  NOTREACHED();
+}
+
+void OculusRenderLoop::SubmitFrameDrawnIntoTexture(
+    int16_t frame_index,
+    const gpu::SyncToken& sync_token,
+    base::TimeDelta time_waited) {
+  // Not currently implemented for Windows.
   NOTREACHED();
 }
 
@@ -214,6 +228,8 @@ void OculusRenderLoop::RequestPresent(
 
 void OculusRenderLoop::ExitPresent() {
   is_presenting_ = false;
+  binding_.Close();
+  submit_client_ = nullptr;
 }
 
 void OculusRenderLoop::Init() {}
@@ -246,7 +262,8 @@ void OculusRenderLoop::GetVSync(
   base::TimeDelta time = base::TimeDelta::FromSecondsD(predicted_time);
 
   std::move(callback).Run(std::move(pose), time, frame,
-                          mojom::VRPresentationProvider::VSyncStatus::SUCCESS);
+                          mojom::VRPresentationProvider::VSyncStatus::SUCCESS,
+                          base::nullopt);
 }
 
 std::vector<mojom::XRInputSourceStatePtr> OculusRenderLoop::GetInputState(

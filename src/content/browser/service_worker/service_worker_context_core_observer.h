@@ -12,7 +12,7 @@
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/browser/service_worker/service_worker_version.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_provider_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_provider_type.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -89,8 +89,13 @@ class ServiceWorkerContextCoreObserver {
       blink::mojom::ServiceWorkerProviderType type) {}
   virtual void OnControlleeRemoved(int64_t version_id,
                                    const std::string& uuid) {}
-  virtual void OnRegistrationStored(int64_t registration_id,
-                                    const GURL& pattern) {}
+  // Called when the ServiceWorkerContainer.register() promise is resolved.
+  //
+  // This is called before the service worker registration is persisted to disk.
+  // The caller cannot assume that the ServiceWorkerContextCore will find the
+  // registration at this point.
+  virtual void OnRegistrationCompleted(int64_t registration_id,
+                                       const GURL& pattern) {}
   virtual void OnRegistrationDeleted(int64_t registration_id,
                                      const GURL& pattern) {}
 

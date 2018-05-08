@@ -29,6 +29,8 @@ class ArcObbMounterClient;
 class ArcOemCryptoClient;
 class AuthPolicyClient;
 class BiodClient;
+class CecServiceClient;
+class ConciergeClient;
 class CrasAudioClient;
 class CrosDisksClient;
 class CryptohomeClient;
@@ -133,6 +135,8 @@ class CHROMEOS_EXPORT DBusThreadManager {
   ArcOemCryptoClient* GetArcOemCryptoClient();
   AuthPolicyClient* GetAuthPolicyClient();
   BiodClient* GetBiodClient();
+  CecServiceClient* GetCecServiceClient();
+  ConciergeClient* GetConciergeClient();
   CrasAudioClient* GetCrasAudioClient();
   CrosDisksClient* GetCrosDisksClient();
   CryptohomeClient* GetCryptohomeClient();
@@ -195,6 +199,7 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
 
   void SetAuthPolicyClient(std::unique_ptr<AuthPolicyClient> client);
   void SetBiodClient(std::unique_ptr<BiodClient> client);
+  void SetConciergeClient(std::unique_ptr<ConciergeClient> client);
   void SetCrasAudioClient(std::unique_ptr<CrasAudioClient> client);
   void SetCrosDisksClient(std::unique_ptr<CrosDisksClient> client);
   void SetCryptohomeClient(std::unique_ptr<CryptohomeClient> client);

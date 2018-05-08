@@ -13,7 +13,6 @@
 #include "base/debug/stack_trace.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/process/launch.h"
@@ -167,7 +166,7 @@ void CommonSubprocessInit() {
   MSG msg;
   PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
 #endif
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && !defined(OS_ANDROID)
   // Various things break when you're using a locale where the decimal
   // separator isn't a period.  See e.g. bugs 22782 and 39964.  For
   // all processes except the browser process (where we call system

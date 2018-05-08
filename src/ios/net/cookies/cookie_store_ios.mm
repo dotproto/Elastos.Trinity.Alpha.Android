@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/ios/ios_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
@@ -28,7 +27,7 @@
 #include "ios/net/cookies/cookie_store_ios_client.h"
 #import "ios/net/cookies/ns_http_system_cookie_store.h"
 #import "ios/net/cookies/system_cookie_util.h"
-#include "ios/net/ios_net_features.h"
+#include "ios/net/ios_net_buildflags.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
@@ -39,6 +38,8 @@
 #endif
 
 namespace net {
+
+using CookieDeletionInfo = CookieDeletionInfo;
 
 namespace {
 
@@ -160,38 +161,6 @@ base::OnceClosure BindSetCookiesCallback(
     set_callback = base::BindOnce(std::move(*callback), success);
   }
   return set_callback;
-}
-
-// Tests whether the |cookie| is a session cookie.
-bool IsCookieSessionCookie(NSHTTPCookie* cookie, base::Time time) {
-  return [cookie isSessionOnly];
-}
-
-// Tests whether the |creation_time| of |cookie| is in the time range defined
-// by |time_begin| and |time_end|. A null |time_end| means end-of-time.
-bool IsCookieCreatedBetween(base::Time time_begin,
-                            base::Time time_end,
-                            NSHTTPCookie* cookie,
-                            base::Time creation_time) {
-  return time_begin <= creation_time &&
-         (time_end.is_null() || creation_time <= time_end);
-}
-
-// Tests whether the |creation_time| of |cookie| is in the time range defined
-// by |time_begin| and |time_end| and the cookie host match |host|. A null
-// |time_end| means end-of-time.
-bool IsCookieCreatedBetweenWithPredicate(
-    base::Time time_begin,
-    base::Time time_end,
-    const net::CookieStore::CookiePredicate& predicate,
-    NSHTTPCookie* cookie,
-    base::Time creation_time) {
-  if (predicate.is_null())
-    return false;
-  CanonicalCookie canonical_cookie =
-      CanonicalCookieFromSystemCookie(cookie, creation_time);
-  return IsCookieCreatedBetween(time_begin, time_end, cookie, creation_time) &&
-         predicate.Run(canonical_cookie);
 }
 
 // Adds cookies in |cookies| with name |name| to |filtered|.
@@ -435,14 +404,12 @@ void CookieStoreIOS::DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
   DCHECK(SystemCookiesAllowed());
 
   // This relies on the fact cookies are given unique creation dates.
-  CookieFilterFunction filter = base::Bind(
-      IsCookieCreatedBetween, cookie.CreationDate(), cookie.CreationDate());
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info(cookie.CreationDate(), cookie.CreationDate());
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
-void CookieStoreIOS::DeleteAllCreatedBetweenAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
+void CookieStoreIOS::DeleteAllCreatedInTimeRangeAsync(
+    const CookieDeletionInfo::TimeRange& creation_range,
     DeleteCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -453,16 +420,12 @@ void CookieStoreIOS::DeleteAllCreatedBetweenAsync(
   if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(
-      &IsCookieCreatedBetween, delete_begin, delete_end);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info(creation_range.start(), creation_range.end());
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
-void CookieStoreIOS::DeleteAllCreatedBetweenWithPredicateAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
-    const CookiePredicate& predicate,
-    DeleteCallback callback) {
+void CookieStoreIOS::DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
+                                                DeleteCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // If cookies are not allowed, a CookieStoreIOS subclass should be used
@@ -472,9 +435,7 @@ void CookieStoreIOS::DeleteAllCreatedBetweenWithPredicateAsync(
   if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(
-      IsCookieCreatedBetweenWithPredicate, delete_begin, delete_end, predicate);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
 void CookieStoreIOS::DeleteSessionCookiesAsync(DeleteCallback callback) {
@@ -487,8 +448,10 @@ void CookieStoreIOS::DeleteSessionCookiesAsync(DeleteCallback callback) {
   if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(&IsCookieSessionCookie);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info;
+  delete_info.session_control =
+      CookieDeletionInfo::SessionControl::SESSION_COOKIES;
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
 void CookieStoreIOS::FlushStore(base::OnceClosure closure) {
@@ -583,21 +546,23 @@ void CookieStoreIOS::WriteToCookieMonster(NSArray* system_cookies) {
     UMA_HISTOGRAM_COUNTS_10000("CookieIOS.CookieWrittenCount", cookie_count);
 }
 
-void CookieStoreIOS::DeleteCookiesWithFilterAsync(CookieFilterFunction filter,
-                                                  DeleteCallback callback) {
+void CookieStoreIOS::DeleteCookiesMatchingInfoAsync(
+    CookieDeletionInfo delete_info,
+    DeleteCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(!filter.is_null());
   __block DeleteCallback shared_callback = std::move(callback);
-  __block CookieFilterFunction shared_filter = std::move(filter);
+  __block CookieDeletionInfo shared_delete_info = std::move(delete_info);
   base::WeakPtr<SystemCookieStore> weak_system_store =
       system_store_->GetWeakPtr();
   system_store_->GetAllCookiesAsync(
       base::BindBlockArc(^(NSArray<NSHTTPCookie*>* cookies) {
         int to_delete_count = 0;
         for (NSHTTPCookie* cookie in cookies) {
-          if (weak_system_store &&
-              shared_filter.Run(
-                  cookie, weak_system_store->GetCookieCreationTime(cookie))) {
+          base::Time creation_time =
+              weak_system_store->GetCookieCreationTime(cookie);
+          CanonicalCookie cc =
+              CanonicalCookieFromSystemCookie(cookie, creation_time);
+          if (weak_system_store && shared_delete_info.Matches(cc)) {
             weak_system_store->DeleteCookieAsync(
                 cookie, SystemCookieStore::SystemCookieCallback());
             to_delete_count++;

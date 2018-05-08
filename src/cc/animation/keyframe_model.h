@@ -92,9 +92,6 @@ class CC_ANIMATION_EXPORT KeyframeModel {
     time_offset_ = monotonic_time;
   }
 
-  void Suspend(base::TimeTicks monotonic_time);
-  void Resume(base::TimeTicks monotonic_time);
-
   Direction direction() { return direction_; }
   void set_direction(Direction direction) { direction_ = direction; }
 
@@ -140,7 +137,8 @@ class CC_ANIMATION_EXPORT KeyframeModel {
   base::TimeDelta TrimTimeToCurrentIteration(
       base::TimeTicks monotonic_time) const;
 
-  base::TimeTicks ConvertFromActiveTime(base::TimeDelta active_time) const;
+  base::TimeTicks ConvertLocalTimeToMonotonicTime(
+      base::TimeDelta local_time) const;
 
   std::unique_ptr<KeyframeModel> CloneAndInitialize(
       RunState initial_run_state) const;
@@ -203,11 +201,6 @@ class CC_ANIMATION_EXPORT KeyframeModel {
 
   bool needs_synchronized_start_time_;
   bool received_finished_event_;
-
-  // When a keyframe model is suspended, it behaves as if it is paused and it
-  // also ignores all run state changes until it is resumed. This is used for
-  // testing purposes.
-  bool suspended_;
 
   // These are used in TrimTimeToCurrentIteration to account for time
   // spent while paused. This is not included in AnimationState since it

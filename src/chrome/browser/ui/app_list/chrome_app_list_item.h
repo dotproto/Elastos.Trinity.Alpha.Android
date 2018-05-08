@@ -41,7 +41,9 @@ class ChromeAppListItem {
     ChromeAppListItem* const item_;
   };
 
-  ChromeAppListItem(Profile* profile, const std::string& app_id);
+  ChromeAppListItem(Profile* profile,
+                    const std::string& app_id,
+                    AppListModelUpdater* model_updater);
   virtual ~ChromeAppListItem();
 
   // AppListControllerDelegate is not properly implemented in tests. Use mock
@@ -87,10 +89,12 @@ class ChromeAppListItem {
   // Pointers can be compared for quick type checking.
   virtual const char* GetItemType() const;
 
-  // Returns the context menu model for this item, or NULL if there is currently
-  // no menu for the item (e.g. during install).
-  // Note the returned menu model is owned by this item.
-  virtual ui::MenuModel* GetContextMenuModel();
+  // Returns the context menu model in |callback| for this item. NULL if there
+  // is currently no menu for the item (e.g. during install). Note |callback|
+  // takes the ownership of the returned menu model.
+  using GetMenuModelCallback =
+      base::OnceCallback<void(std::unique_ptr<ui::MenuModel>)>;
+  virtual void GetContextMenuModel(GetMenuModelCallback callback);
 
   // Returns true iff this item was badged because it's an extension app that
   // has its Android analog installed.
@@ -104,6 +108,8 @@ class ChromeAppListItem {
   std::string ToDebugString() const;
 
  protected:
+  ChromeAppListItem(Profile* profile, const std::string& app_id);
+
   Profile* profile() const { return profile_; }
 
   extensions::AppSorting* GetAppSorting();

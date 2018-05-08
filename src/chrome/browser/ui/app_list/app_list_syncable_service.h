@@ -31,6 +31,7 @@ class ArcAppModelBuilder;
 class ChromeAppListItem;
 class CrostiniAppModelBuilder;
 class ExtensionAppModelBuilder;
+class InternalAppModelBuilder;
 class Profile;
 
 namespace extensions {
@@ -98,8 +99,6 @@ class AppListSyncableService : public syncer::SyncableService,
                          extensions::ExtensionSystem* extension_system);
 
   ~AppListSyncableService() override;
-
-  static const char kOemFolderId[];
 
   // Registers prefs to support local storage.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -274,6 +273,7 @@ class AppListSyncableService : public syncer::SyncableService,
   std::unique_ptr<ExtensionAppModelBuilder> apps_builder_;
   std::unique_ptr<ArcAppModelBuilder> arc_apps_builder_;
   std::unique_ptr<CrostiniAppModelBuilder> crostini_apps_builder_;
+  std::unique_ptr<InternalAppModelBuilder> internal_apps_builder_;
   std::unique_ptr<syncer::SyncChangeProcessor> sync_processor_;
   std::unique_ptr<syncer::SyncErrorFactory> sync_error_handler_;
   SyncItemMap sync_items_;

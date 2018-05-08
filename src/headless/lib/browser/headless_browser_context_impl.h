@@ -19,14 +19,16 @@
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_browser_context.h"
+#include "headless/public/headless_export.h"
 
 namespace headless {
 class HeadlessBrowserImpl;
 class HeadlessResourceContext;
 class HeadlessWebContentsImpl;
 
-class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
-                                   public content::BrowserContext {
+class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+    : public HeadlessBrowserContext,
+      public content::BrowserContext {
  public:
   ~HeadlessBrowserContextImpl() override;
 
@@ -118,6 +120,10 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
                               int net_error,
                               DevToolsStatus devtools_status);
 
+  void NotifyMetadataForResource(const GURL& url,
+                                 net::IOBuffer* buf,
+                                 int buf_len);
+
   void SetNetworkConditions(HeadlessNetworkConditions conditions);
   HeadlessNetworkConditions GetNetworkConditions() override;
 
@@ -153,8 +159,6 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
       frame_tree_node_id_to_devtools_frame_token_map_;
 
   std::unique_ptr<content::PermissionManager> permission_manager_;
-
-  std::string id_;
 
   HeadlessNetworkConditions network_conditions_;
 

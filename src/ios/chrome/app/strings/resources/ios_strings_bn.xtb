@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">ঠিকানা ১</translation>
 <translation id="1545749641540134597">QR কোড স্ক্যান করুন</translation>
 <translation id="1580783302095112590">মেল পাঠানো হয়েছে৷</translation>
+<translation id="1582732959743469162">এর ফলে আপনি এখন যা ডাউনলোড করছেন সেগুলি সব বন্ধ হয়ে যাবে।</translation>
 <translation id="1612730193129642006">ট্যাব গ্রিড দেখান</translation>
 <translation id="1644574205037202324">ইতিহাস</translation>
 <translation id="1646446875146297738">‘ট্র্যাক করবেন না’ সক্ষম করার মানে হল যে আপনার ব্রাউজিং ট্রাফিকের সাথে একটি অনুরোধ অন্তর্ভুক্ত করা হবে৷ একটি ওয়েবসাইট অনুরোধটিতে সাড়া দেবে কিনা এবং কিভাবে অনুরোধটিকে ব্যাখ্যা করে তার উপর যেকোনো ফল নির্ভর করে৷
@@ -149,6 +150,7 @@
 <translation id="3588820906588687999">নতুন ট্যাবে ছবি খুলুন</translation>
 <translation id="3603009562372709545">লিঙ্ক URL কপি করুন</translation>
 <translation id="3607167657931203000">ডেটা স্বতঃপূর্ণ করুন</translation>
+<translation id="3609785682760573515">সিঙ্ক হচ্ছে...</translation>
 <translation id="3628119975092896051">আপনার পড়ার তালিকা অফলাইনে উপলব্ধ। আপনার পড়ার তালিকায় কোনো পৃষ্ঠা যোগ করতে <ph name="SHARE_OPENING_ICON" /> আলতো চাপুন।</translation>
 <translation id="3638472932233958418">পূর্বলোড ওয়েবপৃষ্ঠা</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> এ বুকমার্ক করা হয়েছে</translation>
@@ -158,6 +160,7 @@
 <translation id="3789841737615482174">ইনস্টল করুন</translation>
 <translation id="385051799172605136">ফিরুন</translation>
 <translation id="3897092660631435901">মেনু</translation>
+<translation id="3915450441834151894">সাইটের তথ্য</translation>
 <translation id="3928666092801078803">আমার ডেটা একত্রিত করুন</translation>
 <translation id="3950820424414687140">প্রবেশ করুন</translation>
 <translation id="3963231839620026525">নতুন ছদ্মবেশী ট্যাব</translation>
@@ -166,6 +169,7 @@
 <translation id="4002066346123236978">শিরোনাম</translation>
 <translation id="4038354071007134711">এই ডিভাইসের কোনো অ্যাপ্লিকেশান ফাইলটি খুলতে পারবে না।</translation>
 <translation id="4049507953662678203">আপনি একটি নেটওয়ার্ক সংযোগে আছেন কিনা তা নিশ্চিত করুন এবং আবার চেষ্টা করুন।</translation>
+<translation id="4084682180776658562">বুকমার্ক</translation>
 <translation id="411254640334432676">ডাউনলোড ব্যর্থ হয়েছে।</translation>
 <translation id="4121993058175073134">নেট-রপ্তানি ডেটা পাঠানোর জন্য, দয়া করে সিস্টেম অ্যাপ্লিকেশানে আপনার ইমেল অ্যাকাউন্ট কনফিগার করুন৷</translation>
 <translation id="4124987746317609294">সময় সীমা</translation>
@@ -221,6 +225,7 @@
 <translation id="5197255632782567636">ইন্টারনেট</translation>
 <translation id="5228579091201413441">সিঙ্ক সক্ষম করুন</translation>
 <translation id="5244474230056479698"><ph name="EMAIL" /> এ সিঙ্ক হচ্ছে</translation>
+<translation id="527973086555161537">গোপনে ইন্টারনেট ব্রাউজ করতে একটি ট্যাব খুলুন।</translation>
 <translation id="5300589172476337783">দেখান</translation>
 <translation id="5317780077021120954">সেভ করুন</translation>
 <translation id="5327248766486351172">নাম</translation>
@@ -285,6 +290,7 @@
 <translation id="633809752005859102">সত্যিই কিছু ভুল রয়েছে৷ আমরা এটির উপরে কাজ করব৷</translation>
 <translation id="6342069812937806050">এখনই</translation>
 <translation id="6344783595350022745">পাঠ্য সাফ করুন</translation>
+<translation id="6346549652287021269">নতুন ডাউনলোড শুরু করবেন?</translation>
 <translation id="6362362396625799311">কোনো ছদ্মবেশী ট্যাব নেই</translation>
 <translation id="6374469231428023295">আবার চেষ্টা করুন</translation>
 <translation id="6380866119319257197">আপনি যদি আপনার পাসফ্রেজ ভুলে যান বা এই সেটিং পরিবর্তন করতে চান, তাহলে <ph name="BEGIN_LINK" />সিঙ্ক পুনরায় সেট করুন<ph name="END_LINK" /></translation>
@@ -326,12 +332,14 @@
 <translation id="7031882061095297553">এতে সিঙ্ক করুন</translation>
 <translation id="7053983685419859001">ব্লক করুন</translation>
 <translation id="7062545763355031412">স্বীকার করে অ্যাকাউন্টগুলি সুইচ করুন</translation>
+<translation id="7102005569666697658"><ph name="FILE_SIZE" /> ডাউনলোড করা হচ্ছে…</translation>
 <translation id="7108338896283013870">লুকান</translation>
 <translation id="7133798577887235672">সম্পূর্ণ নাম</translation>
 <translation id="7136892417564438900">ক্যামেরা অনুপলব্ধ</translation>
 <translation id="7159472599653637159">মোবাইল সাইটের জন্য অনুরোধ করুন</translation>
 <translation id="7167621057293532233">ডেটা প্রকার</translation>
 <translation id="7175593937868963913">ইমেল লিখুন</translation>
+<translation id="7180611975245234373">রিফ্রেশ করুন</translation>
 <translation id="7189598951263744875">শেয়ার করুন...</translation>
 <translation id="7203585745079012652">আবার উত্তরগুলি বলে</translation>
 <translation id="722055596168483966">Google পরিষেবাগুলিকে ব্যক্তিগত করুন</translation>
@@ -350,6 +358,7 @@
 <translation id="750493650310597496">০টি নির্বাচিত</translation>
 <translation id="7514365320538308">ডাউনলোড করুন</translation>
 <translation id="7537586195939242955">দুঃখিত, এই সময়ে পাসবুকে আপনার পাস ইনস্টল করা যাবে না৷</translation>
+<translation id="7554791636758816595">নতুন ট্যাব</translation>
 <translation id="7561196759112975576">সবসময়</translation>
 <translation id="7603852183842204213">পপ-আপ ব্লক (<ph name="NUMBER_OF_BLOCKED_POPUPS" />টি)</translation>
 <translation id="7605594153474022051">সিঙ্ক কাজ করছে না</translation>
@@ -361,6 +370,7 @@
 <translation id="7769602470925380267">স্বীকার করে প্রস্থান করুন</translation>
 <translation id="7772032839648071052">পাসফ্রেজ নিশ্চিত করুন</translation>
 <translation id="780301667611848630">না থাক</translation>
+<translation id="7856733331829174190">ডাউনলোড করা যায়নি</translation>
 <translation id="7859704718976024901">ব্রাউজিং ইতিহাস</translation>
 <translation id="7938254975914653459">ফেসটাইম</translation>
 <translation id="7939128259257418052">পাসওয়ার্ড এক্সপোর্ট করুন...</translation>

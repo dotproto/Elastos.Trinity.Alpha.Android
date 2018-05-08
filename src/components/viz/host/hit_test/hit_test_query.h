@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "components/viz/common/hit_test/aggregated_hit_test_region.h"
 #include "components/viz/host/viz_host_export.h"
@@ -34,7 +35,8 @@ enum class EventSource {
 // TODO(riajiang): Handle 3d space cases correctly.
 class VIZ_HOST_EXPORT HitTestQuery {
  public:
-  HitTestQuery();
+  explicit HitTestQuery(
+      base::RepeatingClosure shut_down_gpu_callback = base::RepeatingClosure());
   ~HitTestQuery();
 
   // TODO(riajiang): Need to validate the data received.
@@ -92,6 +94,14 @@ class VIZ_HOST_EXPORT HitTestQuery {
       const gfx::PointF& location_in_root,
       gfx::PointF* transformed_location) const;
 
+  // Gets the transform from root to |target| in physical pixels. Returns true
+  // and stores the result into |transform| if successful, returns false
+  // otherwise. This is potentially a little more expensive than
+  // TransformLocationForTarget(). So if the path from root to target is known,
+  // then that is the preferred API.
+  bool GetTransformToTarget(const FrameSinkId& target,
+                            gfx::Transform* transform) const;
+
  private:
   // Helper function to find |target| for |location_in_parent| in the |region|,
   // returns true if a target is found and false otherwise. |location_in_parent|
@@ -111,11 +121,22 @@ class VIZ_HOST_EXPORT HitTestQuery {
       AggregatedHitTestRegion* region,
       gfx::PointF* location_in_target) const;
 
+  bool GetTransformToTargetRecursively(const FrameSinkId& target,
+                                       AggregatedHitTestRegion* region,
+                                       gfx::Transform* transform) const;
+
+  void ReceivedBadMessageFromGpuProcess() const;
+
+  bool CheckChildCount(AggregatedHitTestRegion* region) const;
+
   uint32_t handle_buffer_sizes_[2];
   mojo::ScopedSharedBufferMapping handle_buffers_[2];
 
   AggregatedHitTestRegion* active_hit_test_list_ = nullptr;
   uint32_t active_hit_test_list_size_ = 0;
+
+  // Log bad message and shut down Viz process when it is compromised.
+  base::RepeatingClosure bad_message_gpu_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(HitTestQuery);
 };

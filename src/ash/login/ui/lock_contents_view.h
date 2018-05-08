@@ -10,7 +10,8 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/login/lock_screen_apps_focus_observer.h"
+#include "ash/login/login_screen_controller.h"
+#include "ash/login/login_screen_controller_observer.h"
 #include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/non_accessible_view.h"
@@ -38,8 +39,12 @@ class StyledLabel;
 namespace ash {
 
 class LoginAuthUserView;
+class LoginBigUserView;
 class LoginBubble;
 class LoginDetachableBaseModel;
+class LoginExpandedPublicAccountView;
+class LoginPublicAccountUserView;
+class LoginUserView;
 class NoteActionLaunchButton;
 class ScrollableUsersListView;
 
@@ -52,7 +57,7 @@ enum class TrayActionState;
 // but it is always shown on the primary display. There is only one instance
 // at a time.
 class ASH_EXPORT LockContentsView : public NonAccessibleView,
-                                    public LockScreenAppsFocusObserver,
+                                    public LoginScreenControllerObserver,
                                     public LoginDataDispatcher::Observer,
                                     public SystemTrayFocusObserver,
                                     public display::DisplayObserver,
@@ -67,17 +72,27 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
     explicit TestApi(LockContentsView* view);
     ~TestApi();
 
-    LoginAuthUserView* primary_auth() const;
-    LoginAuthUserView* opt_secondary_auth() const;
+    LoginBigUserView* primary_big_view() const;
+    LoginBigUserView* opt_secondary_big_view() const;
     ScrollableUsersListView* users_list() const;
     views::View* note_action() const;
     LoginBubble* tooltip_bubble() const;
     LoginBubble* auth_error_bubble() const;
     LoginBubble* detachable_base_error_bubble() const;
     views::View* dev_channel_info() const;
+    LoginExpandedPublicAccountView* expanded_view() const;
+    views::View* main_view() const;
 
    private:
     LockContentsView* const view_;
+  };
+
+  enum class DisplayStyle {
+    // Display all the user views, top header view in LockContentsView.
+    kAll,
+    // Display only the public account expanded view, other views in
+    // LockContentsView are hidden.
+    kExclusivePublicAccountExpandedView,
   };
 
   LockContentsView(
@@ -93,7 +108,9 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
-  // LockScreenAppsFocusObserver:
+  // LoginScreenController::Observer:
+  void SetAvatarForUser(const AccountId& account_id,
+                        const mojom::UserAvatarPtr& avatar) override;
   void OnFocusLeavingLockScreenApps(bool reverse) override;
 
   // LoginDataDispatcher::Observer:
@@ -103,6 +120,7 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
   void OnClickToUnlockEnabledForUserChanged(const AccountId& user,
                                             bool enabled) override;
+  void OnForceOnlineSignInForUser(const AccountId& user) override;
   void OnShowEasyUnlockIcon(
       const AccountId& user,
       const mojom::EasyUnlockIconOptionsPtr& icon) override;
@@ -116,6 +134,10 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
                                      const base::ListValue& locales,
                                      const std::string& default_locale,
                                      bool show_advanced_view) override;
+  void OnPublicSessionKeyboardLayoutsChanged(
+      const AccountId& account_id,
+      const std::string& locale,
+      const std::vector<mojom::InputMethodItemPtr>& keyboard_layouts) override;
   void OnDetachableBasePairingStatusChanged(
       DetachableBasePairingStatus pairing_status) override;
 
@@ -150,6 +172,7 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
     AccountId account_id;
     bool show_pin = false;
     bool enable_tap_auth = false;
+    bool force_online_sign_in = false;
     mojom::EasyUnlockIconOptionsPtr easy_unlock_state;
 
    private:
@@ -179,6 +202,9 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   // change contents or visibility.
   void LayoutTopHeader();
 
+  // Lay out the expanded public session view.
+  void LayoutPublicSessionView();
+
   // Creates a new view with |landscape| and |portrait| preferred sizes.
   // |landscape| and |portrait| specify the width of the preferred size; the
   // height is an arbitrary non-zero value. The correct size is chosen
@@ -191,8 +217,8 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   void AddRotationAction(const OnRotate& on_rotate);
 
   // Change the active |auth_user_|. If |is_primary| is true, the active auth
-  // switches to |opt_secondary_auth_|. If |is_primary| is false, the active
-  // auth switches to |primary_auth_|.
+  // switches to |opt_secondary_big_view_|. If |is_primary| is false, the active
+  // auth switches to |primary_big_view_|.
   void SwapActiveAuthBetweenPrimaryAndSecondary(bool is_primary);
 
   // Called when an authentication check is complete.
@@ -203,29 +229,33 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   UserState* FindStateForUser(const AccountId& user);
 
   // Updates the auth methods for |to_update| and |to_hide|, if passed.
-  // |to_hide| will be set to LoginAuthUserView::AUTH_NONE. At minimum,
-  // |to_update| will show a password prompt.
-  void LayoutAuth(LoginAuthUserView* to_update,
-                  LoginAuthUserView* opt_to_hide,
+  // For auth users:
+  //   |to_hide| will be set to LoginAuthUserView::AUTH_NONE. At minimum,
+  //   |to_update| will show a password prompt.
+  // For pubic account users:
+  //   |to_hide| will set to disable auth.
+  //   |to_update| will show an arrow button.
+  void LayoutAuth(LoginBigUserView* to_update,
+                  LoginBigUserView* opt_to_hide,
                   bool animate);
 
-  // Make the user at |user_index| the auth user. We pass in the index because
-  // the actual user may change.
-  void SwapToAuthUser(int user_index);
+  // Make the user at |user_index| the big user with auth enabled.
+  // We pass in the index because the actual user may change.
+  void SwapToBigUser(int user_index);
 
   // Warning to remove a user is shown.
   void OnRemoveUserWarningShown(bool is_primary);
   // Remove one of the auth users.
   void RemoveUser(bool is_primary);
 
-  // Called after the auth user change has taken place.
-  void OnAuthUserChanged();
+  // Called after the big user change has taken place.
+  void OnBigUserChanged();
 
   // Shows the correct (cached) easy unlock icon for the given auth user.
   void UpdateEasyUnlockIconForUser(const AccountId& user);
 
-  // Get the LoginAuthUserView of the current auth user.
-  LoginAuthUserView* CurrentAuthUserView();
+  // Get the current active big user view.
+  LoginBigUserView* CurrentBigUserView();
 
   // Opens an error bubble to indicate authentication failure.
   void ShowAuthErrorMessage();
@@ -240,29 +270,50 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   // displayed in this window.
   keyboard::KeyboardController* GetKeyboardController() const;
 
-  // Helper method to allocate a LoginAuthUserView instance.
-  LoginAuthUserView* AllocateLoginAuthUserView(
+  // Called when the public account is tapped.
+  void OnPublicAccountTapped();
+
+  // Helper method to allocate a LoginBigUserView instance.
+  LoginBigUserView* AllocateLoginBigUserView(
       const mojom::LoginUserInfoPtr& user,
       bool is_primary);
 
-  // Returns the authentication view for |user| if |user| is one of the active
-  // authentication views. If |require_auth_active| is true then the view must
-  // also be actively displaying auth.
-  LoginAuthUserView* TryToFindAuthUser(const AccountId& user,
-                                       bool require_auth_active);
+  // Returns the big view for |user| if |user| is one of the active
+  // big views. If |require_auth_active| is true then the view must
+  // have auth enabled.
+  LoginBigUserView* TryToFindBigUser(const AccountId& user,
+                                     bool require_auth_active);
+
+  // Returns the user view for |user|.
+  LoginUserView* TryToFindUserView(const AccountId& user);
 
   // Returns scrollable view with initialized size and rows for all |users|.
   ScrollableUsersListView* BuildScrollableUsersListView(
       const std::vector<mojom::LoginUserInfoPtr>& users,
       LoginDisplayStyle display_style);
 
+  // Update the auth enable/disabled for public account user.
+  // Both |opt_to_update| and |opt_to_hide| could be null.
+  void UpdateAuthForPublicAccount(LoginPublicAccountUserView* opt_to_update,
+                                  LoginPublicAccountUserView* opt_to_hide,
+                                  bool animate);
+
+  // Update the auth method for regular user.
+  // Both |opt_to_update| and |opt_to_hide| could be null.
+  void UpdateAuthForAuthUser(LoginAuthUserView* opt_to_update,
+                             LoginAuthUserView* opt_to_hide,
+                             bool animate);
+
+  // Change the visibility of child views based on the |style|.
+  void SetDisplayStyle(DisplayStyle style);
+
   std::vector<UserState> users_;
 
   LoginDataDispatcher* const data_dispatcher_;  // Unowned.
   std::unique_ptr<LoginDetachableBaseModel> detachable_base_model_;
 
-  LoginAuthUserView* primary_auth_ = nullptr;
-  LoginAuthUserView* opt_secondary_auth_ = nullptr;
+  LoginBigUserView* primary_big_view_ = nullptr;
+  LoginBigUserView* opt_secondary_big_view_ = nullptr;
   ScrollableUsersListView* users_list_ = nullptr;
 
   // View that contains the note action button and the dev channel info labels,
@@ -305,6 +356,9 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   // Whether a lock screen app is currently active (i.e. lock screen note action
   // state is reported as kActive by the data dispatcher).
   bool lock_screen_apps_active_ = false;
+
+  // Expanded view for public account user to select language and keyboard.
+  LoginExpandedPublicAccountView* expanded_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(LockContentsView);
 };

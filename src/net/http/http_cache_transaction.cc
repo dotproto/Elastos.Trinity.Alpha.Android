@@ -190,8 +190,8 @@ HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
                     arraysize(kValidationHeaders),
                 "invalid number of validation headers");
 
-  io_callback_ = base::Bind(&Transaction::OnIOComplete,
-                              weak_factory_.GetWeakPtr());
+  io_callback_ = base::BindRepeating(&Transaction::OnIOComplete,
+                                     weak_factory_.GetWeakPtr());
 }
 
 HttpCache::Transaction::~Transaction() {
@@ -2510,8 +2510,9 @@ int HttpCache::Transaction::BeginPartialCacheValidation() {
 int HttpCache::Transaction::ValidateEntryHeadersAndContinue() {
   DCHECK_EQ(mode_, READ_WRITE);
 
-  if (!partial_->UpdateFromStoredHeaders(
-          response_.headers.get(), entry_->disk_entry, truncated_)) {
+  if (!partial_->UpdateFromStoredHeaders(response_.headers.get(),
+                                         entry_->disk_entry, truncated_,
+                                         cache_->IsWritingInProgress(entry_))) {
     return DoRestartPartialRequest();
   }
 

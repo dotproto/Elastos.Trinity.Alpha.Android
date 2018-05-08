@@ -50,7 +50,6 @@ import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.feature_engagement.TriggerState;
 import org.chromium.components.navigation_interception.NavigationParams;
-import org.chromium.content_public.browser.ContentViewCore;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationEntry;
@@ -235,7 +234,7 @@ public class ContextualSearchManager
             public void didAddTab(Tab tab, TabLaunchType type) {
                 // If we're in the process of promoting this tab, just return and don't mess with
                 // this state.
-                if (tab.getContentViewCore() == getSearchPanelContentViewCore()) return;
+                if (tab.getWebContents() == getSearchPanelWebContents()) return;
                 hideContextualSearch(StateChangeReason.UNKNOWN);
             }
         };
@@ -344,20 +343,11 @@ public class ContextualSearchManager
     }
 
     /**
-     * @return the {@link ContentViewCore} of the {@code mSearchPanel} or {@code null} if
-     *         {@code mSearchPanel} is null or the search panel doesn't currently hold a CVC.
-     */
-    private @Nullable ContentViewCore getSearchPanelContentViewCore() {
-        return mSearchPanel == null ? null : mSearchPanel.getContentViewCore();
-    }
-
-    /**
-     * @return the {@link WebContents} of the {@code mSearchPanel} or {@code null}.
+     * @return the {@link WebContents} of the {@code mSearchPanel} or {@code null} if
+     *         {@code mSearchPanel} is null or the search panel doesn't currently hold one.
      */
     private @Nullable WebContents getSearchPanelWebContents() {
-        return getSearchPanelContentViewCore() == null
-                ? null
-                : getSearchPanelContentViewCore().getWebContents();
+        return mSearchPanel == null ? null : mSearchPanel.getWebContents();
     }
 
     /** @return The Base Page's {@link WebContents}. */
@@ -815,14 +805,14 @@ public class ContextualSearchManager
         mSearchPanel.loadUrlInPanel(searchUrl);
         mDidStartLoadingResolvedSearchRequest = true;
 
-        // TODO(pedrosimonetti): If the user taps on a word and quickly after that taps on the
+        // TODO(donnd): If the user taps on a word and quickly after that taps on the
         // peeking Search Bar, the Search Content View will not be displayed. It seems that
-        // calling ContentViewCore.onShow() while it's being created has no effect. Need
+        // calling WebContents.onShow() while it's being created has no effect. Need
         // to coordinate with Chrome-Android folks to come up with a proper fix for this.
         // For now, we force the ContentView to be displayed by calling onShow() again
         // when a URL is being loaded. See: crbug.com/398206
-        if (mSearchPanel.isContentShowing() && getSearchPanelContentViewCore() != null) {
-            getSearchPanelContentViewCore().onShow();
+        if (mSearchPanel.isContentShowing() && getSearchPanelWebContents() != null) {
+            getSearchPanelWebContents().onShow();
         }
     }
 
@@ -1120,7 +1110,7 @@ public class ContextualSearchManager
         if (isFailure && mSearchRequest.isUsingLowPriority()) {
             // We're navigating to an error page, so we want to stop and retry.
             // Stop loading the page that displays the error to the user.
-            if (getSearchPanelContentViewCore() != null) {
+            if (getSearchPanelWebContents() != null) {
                 // When running tests the Content View might not exist.
                 mNetworkCommunicator.stopPanelContentsNavigation();
             }
@@ -1208,9 +1198,8 @@ public class ContextualSearchManager
         // the Panel to a Tab will result in creating a new tab with URL about:blank. To prevent
         // this problem, we are ignoring tap gestures in the Search Bar if we don't know what
         // to search for.
-        if (mSearchRequest != null && getSearchPanelContentViewCore() != null
-                && getSearchPanelContentViewCore().getWebContents() != null) {
-            String url = getContentViewUrl(getSearchPanelContentViewCore());
+        if (mSearchRequest != null && getSearchPanelWebContents() != null) {
+            String url = getContentViewUrl(getSearchPanelWebContents());
 
             // If it's a search URL, format it so the SearchBox becomes visible.
             if (mSearchRequest.isContextualSearchUrl(url)) {
@@ -1226,19 +1215,16 @@ public class ContextualSearchManager
     }
 
     /**
-     * Gets the currently loading or loaded URL in a ContentViewCore.
+     * Gets the currently loading or loaded URL in a WebContents.
      *
-     * @param searchContentViewCore The given ContentViewCore.
+     * @param searchWebContents The given WebContents.
      * @return The current loaded URL.
      */
-    private String getContentViewUrl(ContentViewCore searchContentViewCore) {
+    private String getContentViewUrl(WebContents searchWebContents) {
         // First, check the pending navigation entry, because there might be an navigation
         // not yet committed being processed. Otherwise, get the URL from the WebContents.
-        NavigationEntry entry =
-                searchContentViewCore.getWebContents().getNavigationController().getPendingEntry();
-        String url = entry != null ? entry.getUrl()
-                                   : searchContentViewCore.getWebContents().getLastCommittedUrl();
-        return url;
+        NavigationEntry entry = searchWebContents.getNavigationController().getPendingEntry();
+        return entry != null ? entry.getUrl() : searchWebContents.getLastCommittedUrl();
     }
 
     @Override
@@ -1321,9 +1307,10 @@ public class ContextualSearchManager
     }
 
     /** Shows the Unhandled Tap UI.  Called by {@link ContextualSearchTabHelper}. */
-    void onShowUnhandledTapUIIfNeeded(int x, int y) {
+    void onShowUnhandledTapUIIfNeeded(int x, int y, int fontSizeDips, int textRunLength) {
         if (!isOverlayVideoMode()) {
-            mSelectionController.handleShowUnhandledTapUIIfNeeded(x, y);
+            mSelectionController.handleShowUnhandledTapUIIfNeeded(
+                    x, y, fontSizeDips, textRunLength);
         }
     }
 

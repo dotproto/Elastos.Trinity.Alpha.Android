@@ -19,7 +19,6 @@ class ExternalProcessImporterBridge;
 class Importer;
 
 namespace base {
-class DictionaryValue;
 class Thread;
 }  // namespace base
 
@@ -35,10 +34,11 @@ class ProfileImportImpl : public chrome::mojom::ProfileImport {
 
  private:
   // chrome::mojom::ProfileImport:
-  void StartImport(const importer::SourceProfile& source_profile,
-                   uint16_t items,
-                   std::unique_ptr<base::DictionaryValue> localized_strings,
-                   chrome::mojom::ProfileImportObserverPtr observer) override;
+  void StartImport(
+      const importer::SourceProfile& source_profile,
+      uint16_t items,
+      const base::flat_map<uint32_t, std::string>& localized_strings,
+      chrome::mojom::ProfileImportObserverPtr observer) override;
   void CancelImport() override;
   void ReportImportItemFinished(importer::ImportItem item) override;
 

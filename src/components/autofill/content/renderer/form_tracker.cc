@@ -8,11 +8,11 @@
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "third_party/WebKit/public/web/modules/autofill/WebFormElementObserver.h"
-#include "third_party/WebKit/public/web/modules/autofill/WebFormElementObserverCallback.h"
+#include "third_party/blink/public/web/modules/autofill/web_form_element_observer.h"
+#include "third_party/blink/public/web/modules/autofill/web_form_element_observer_callback.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "ui/base/page_transition_types.h"
 
 using blink::WebDocumentLoader;
@@ -96,11 +96,14 @@ void FormTracker::TextFieldDidChange(const WebFormControlElement& element) {
   // properly at this point (http://bugs.webkit.org/show_bug.cgi?id=16976) and
   // it is needed to trigger autofill.
   weak_ptr_factory_.InvalidateWeakPtrs();
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindRepeating(&FormTracker::FormControlDidChangeImpl,
-                          weak_ptr_factory_.GetWeakPtr(), element,
-                          Observer::ElementChangeSource::TEXTFIELD_CHANGED));
+  render_frame()
+      ->GetWebFrame()
+      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->PostTask(FROM_HERE,
+                 base::BindRepeating(
+                     &FormTracker::FormControlDidChangeImpl,
+                     weak_ptr_factory_.GetWeakPtr(), element,
+                     Observer::ElementChangeSource::TEXTFIELD_CHANGED));
 }
 
 void FormTracker::SelectControlDidChange(const WebFormControlElement& element) {
@@ -111,11 +114,13 @@ void FormTracker::SelectControlDidChange(const WebFormControlElement& element) {
 
   // Post a task to avoid processing select control change while it is changing.
   weak_ptr_factory_.InvalidateWeakPtrs();
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindRepeating(&FormTracker::FormControlDidChangeImpl,
-                          weak_ptr_factory_.GetWeakPtr(), element,
-                          Observer::ElementChangeSource::SELECT_CHANGED));
+  render_frame()
+      ->GetWebFrame()
+      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->PostTask(FROM_HERE, base::BindRepeating(
+                                &FormTracker::FormControlDidChangeImpl,
+                                weak_ptr_factory_.GetWeakPtr(), element,
+                                Observer::ElementChangeSource::SELECT_CHANGED));
 }
 
 void FormTracker::FireProbablyFormSubmittedForTesting() {

@@ -16,7 +16,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -76,7 +75,7 @@ ResourceBundle* g_shared_instance_ = NULL;
 
 base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
   base::FilePath path;
-  if (PathService::Get(base::DIR_MODULE, &path))
+  if (base::PathService::Get(base::DIR_MODULE, &path))
     return path.AppendASCII(pak_name.c_str());
 
   // Return just the name of the pak file.
@@ -214,10 +213,8 @@ void ResourceBundle::InitSharedInstanceWithPakPath(const base::FilePath& path) {
 
 // static
 void ResourceBundle::CleanupSharedInstance() {
-  if (g_shared_instance_) {
-    delete g_shared_instance_;
-    g_shared_instance_ = NULL;
-  }
+  delete g_shared_instance_;
+  g_shared_instance_ = NULL;
 }
 
 // static
@@ -249,6 +246,18 @@ bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   return !GetLocaleFilePath(locale, true).empty();
 }
 #endif  // !defined(OS_ANDROID)
+
+void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
+#if DCHECK_IS_ON()
+  data_pack->CheckForDuplicateResources(data_packs_);
+#endif
+
+  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
+      GetScaleForScaleFactor(max_scale_factor_))
+    max_scale_factor_ = data_pack->GetScaleFactor();
+
+  data_packs_.push_back(std::move(data_pack));
+}
 
 void ResourceBundle::AddDataPackFromPath(const base::FilePath& path,
                                          ScaleFactor scale_factor) {
@@ -298,7 +307,7 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
 
   base::FilePath locale_file_path;
 
-  PathService::Get(ui::DIR_LOCALES, &locale_file_path);
+  base::PathService::Get(ui::DIR_LOCALES, &locale_file_path);
 
   if (!locale_file_path.empty()) {
 #if defined(OS_ANDROID)
@@ -806,18 +815,6 @@ void ResourceBundle::AddDataPackFromPathInternal(
     LOG(ERROR) << "Failed to load " << pack_path.value()
                << "\nSome features may not be available.";
   }
-}
-
-void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
-#if DCHECK_IS_ON()
-  data_pack->CheckForDuplicateResources(data_packs_);
-#endif
-
-  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
-      GetScaleForScaleFactor(max_scale_factor_))
-    max_scale_factor_ = data_pack->GetScaleFactor();
-
-  data_packs_.push_back(std::move(data_pack));
 }
 
 void ResourceBundle::InitDefaultFontList() {

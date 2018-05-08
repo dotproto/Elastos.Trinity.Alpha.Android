@@ -16,16 +16,8 @@
 #include "base/memory/ref_counted.h"
 #include "cc/blink/cc_blink_export.h"
 #include "cc/layers/layer_client.h"
-#include "third_party/WebKit/public/platform/WebColor.h"
-#include "third_party/WebKit/public/platform/WebDoublePoint.h"
-#include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebFloatSize.h"
-#include "third_party/WebKit/public/platform/WebLayer.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/blink/public/platform/web_layer.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
 
 namespace cc {
@@ -45,7 +37,7 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
 
   // WebLayer implementation.
   int Id() const override;
-  void InvalidateRect(const blink::WebRect&) override;
+  void InvalidateRect(const gfx::Rect&) override;
   void Invalidate() override;
   void AddChild(blink::WebLayer* child) override;
   void InsertChild(blink::WebLayer* child, size_t index) override;
@@ -53,8 +45,8 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
                     blink::WebLayer* new_layer) override;
   void RemoveFromParent() override;
   void RemoveAllChildren() override;
-  void SetBounds(const blink::WebSize& bounds) override;
-  blink::WebSize Bounds() const override;
+  void SetBounds(const gfx::Size& bounds) override;
+  const gfx::Size& Bounds() const override;
   void SetMasksToBounds(bool masks_to_bounds) override;
   bool MasksToBounds() const override;
   void SetMaskLayer(blink::WebLayer* mask) override;
@@ -69,28 +61,28 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
   void SetHitTestableWithoutDrawsContent(bool should_hit_test) override;
   void SetOpaque(bool opaque) override;
   bool Opaque() const override;
-  void SetPosition(const blink::WebFloatPoint& position) override;
-  blink::WebFloatPoint GetPosition() const override;
-  void SetTransform(const SkMatrix44& transform) override;
-  void SetTransformOrigin(const blink::WebFloatPoint3D& point) override;
-  blink::WebFloatPoint3D TransformOrigin() const override;
-  SkMatrix44 Transform() const override;
+  void SetPosition(const gfx::PointF& position) override;
+  const gfx::PointF& GetPosition() const override;
+  void SetTransform(const gfx::Transform& transform) override;
+  void SetTransformOrigin(const gfx::Point3F& point) override;
+  const gfx::Point3F& TransformOrigin() const override;
+  const gfx::Transform& Transform() const override;
   void SetDrawsContent(bool draws_content) override;
   bool DrawsContent() const override;
   void SetDoubleSided(bool double_sided) override;
   void SetShouldFlattenTransform(bool flatten) override;
   void SetRenderingContext(int context) override;
   void SetUseParentBackfaceVisibility(bool visible) override;
-  void SetBackgroundColor(blink::WebColor color) override;
-  blink::WebColor BackgroundColor() const override;
+  void SetBackgroundColor(SkColor color) override;
+  SkColor BackgroundColor() const override;
   void SetFilters(const cc::FilterOperations& filters) override;
-  void SetFiltersOrigin(const blink::WebFloatPoint& origin) override;
+  void SetFiltersOrigin(const gfx::PointF& origin) override;
   void SetBackgroundFilters(const cc::FilterOperations& filters) override;
   bool HasTickingAnimationForTesting() override;
-  void SetScrollable(const blink::WebSize&) override;
-  blink::WebSize ScrollContainerBoundsForTesting() const override;
-  void SetScrollPosition(blink::WebFloatPoint position) override;
-  blink::WebFloatPoint ScrollPosition() const override;
+  void SetScrollable(const gfx::Size&) override;
+  const gfx::Size& ScrollContainerBoundsForTesting() const override;
+  void SetScrollPosition(const gfx::ScrollOffset& position) override;
+  const gfx::ScrollOffset& ScrollPosition() const override;
   bool Scrollable() const override;
   void SetUserScrollable(bool horizontal, bool vertical) override;
   bool UserScrollableHorizontal() const override;
@@ -101,35 +93,32 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
       uint32_t main_thread_scrolling_reasons_to_clear) override;
   uint32_t MainThreadScrollingReasons() override;
   bool ShouldScrollOnMainThread() const override;
-  void SetNonFastScrollableRegion(
-      const blink::WebVector<blink::WebRect>& region) override;
-  blink::WebVector<blink::WebRect> NonFastScrollableRegion() const override;
-  void SetTouchEventHandlerRegion(
-      const blink::WebVector<blink::WebTouchInfo>& touch_info) override;
-  blink::WebVector<blink::WebRect> TouchEventHandlerRegion() const override;
-  blink::WebVector<blink::WebRect>
-      TouchEventHandlerRegionForTouchActionForTesting(
-          cc::TouchAction) const override;
+  void SetNonFastScrollableRegion(const cc::Region& region) override;
+  const cc::Region& NonFastScrollableRegion() const override;
+  void SetTouchEventHandlerRegion(const cc::TouchActionRegion& region) override;
+  const cc::TouchActionRegion& TouchEventHandlerRegion() const override;
+  const cc::Region& TouchEventHandlerRegionForTouchActionForTesting(
+      cc::TouchAction) const override;
   void SetIsContainerForFixedPositionLayers(bool is_container) override;
   bool IsContainerForFixedPositionLayers() const override;
   void SetIsResizedByBrowserControls(bool) override;
   void SetPositionConstraint(
-      const blink::WebLayerPositionConstraint& constraint) override;
-  blink::WebLayerPositionConstraint PositionConstraint() const override;
+      const cc::LayerPositionConstraint& constraint) override;
+  const cc::LayerPositionConstraint& PositionConstraint() const override;
   void SetStickyPositionConstraint(
-      const blink::WebLayerStickyPositionConstraint& constraint) override;
-  blink::WebLayerStickyPositionConstraint StickyPositionConstraint()
+      const cc::LayerStickyPositionConstraint& constraint) override;
+  const cc::LayerStickyPositionConstraint& StickyPositionConstraint()
       const override;
   void SetScrollClient(blink::WebLayerScrollClient* client) override;
   void SetScrollOffsetFromImplSideForTesting(const gfx::ScrollOffset&) override;
-  void SetLayerClient(cc::LayerClient* client) override;
+  void SetLayerClient(base::WeakPtr<cc::LayerClient> client) override;
   const cc::Layer* CcLayer() const override;
   cc::Layer* CcLayer() override;
   void SetElementId(const cc::ElementId&) override;
   cc::ElementId GetElementId() const override;
   void SetHasWillChangeTransformHint(bool has_will_change) override;
   void ShowScrollbars() override;
-  void SetOverscrollBehavior(const blink::WebOverscrollBehavior&) override;
+  void SetOverscrollBehavior(const cc::OverscrollBehavior&) override;
   void SetSnapContainerData(base::Optional<cc::SnapContainerData>) override;
 
   void SetScrollParent(blink::WebLayer* parent) override;

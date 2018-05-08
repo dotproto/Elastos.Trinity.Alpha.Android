@@ -35,6 +35,9 @@ class ASH_EXPORT AppListViewDelegateMash
   void InvokeSearchResultAction(const std::string& result_id,
                                 int action_index,
                                 int event_flags) override;
+  void GetSearchResultContextMenuModel(
+      const std::string& result_id,
+      GetContextMenuModelCallback callback) override;
   void ViewShown(int64_t display_id) override;
   void Dismiss() override;
   void ViewClosing() override;
@@ -50,8 +53,12 @@ class ASH_EXPORT AppListViewDelegateMash
   void AddObserver(app_list::AppListViewDelegateObserver* observer) override;
   void RemoveObserver(app_list::AppListViewDelegateObserver* observer) override;
 
+  void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
+                                ui::MenuSourceType source_type) override;
+
  private:
   ash::AppListControllerImpl* owner_;
+  base::string16 last_raw_query_;
   base::ObserverList<app_list::AppListViewDelegateObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListViewDelegateMash);

@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
@@ -40,7 +41,6 @@
 #include "ios/chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
-#include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 
 namespace {
 
@@ -103,7 +103,7 @@ void BrowserStateSizeTask(const base::FilePath& path) {
 // Gets the user data directory.
 base::FilePath GetUserDataDir() {
   base::FilePath user_data_dir;
-  bool result = PathService::Get(ios::DIR_USER_DATA, &user_data_dir);
+  bool result = base::PathService::Get(ios::DIR_USER_DATA, &user_data_dir);
   DCHECK(result);
   return user_data_dir;
 }
@@ -224,10 +224,6 @@ void ChromeBrowserStateManagerImpl::DoFinalInitForServices(
       ->SetupInvalidationsOnProfileLoad(invalidation_service);
   ios::AccountReconcilorFactory::GetForBrowserState(browser_state);
   DesktopPromotionSyncServiceFactory::GetForBrowserState(browser_state);
-  // TODO(crbug.com/709094), TODO(crbug.com/761485): Remove this following line
-  // when UserEventService will be initialized synchronously. Until then, the
-  // service has to be created as early as possible.
-  IOSUserEventServiceFactory::GetForBrowserState(browser_state);
 }
 
 void ChromeBrowserStateManagerImpl::AddBrowserStateToCache(

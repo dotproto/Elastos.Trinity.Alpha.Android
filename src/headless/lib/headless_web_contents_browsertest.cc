@@ -20,6 +20,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
+#include "headless/public/devtools/domains/browser.h"
 #include "headless/public/devtools/domains/dom_snapshot.h"
 #include "headless/public/devtools/domains/emulation.h"
 #include "headless/public/devtools/domains/headless_experimental.h"
@@ -33,7 +34,7 @@
 #include "headless/public/util/testing/test_in_memory_protocol_handler.h"
 #include "headless/test/headless_browser_test.h"
 #include "headless/test/tab_socket_test.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -42,7 +43,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 #include "base/strings/string_number_conversions.h"
 #include "pdf/pdf.h"
 #include "printing/pdf_render_settings.h"
@@ -70,7 +71,7 @@ class MockHeadlessBrowserContextObserver
                void(HeadlessWebContents*, HeadlessWebContents*));
 
   MockHeadlessBrowserContextObserver() = default;
-  virtual ~MockHeadlessBrowserContextObserver() = default;
+  ~MockHeadlessBrowserContextObserver() override = default;
 
   HeadlessWebContents* last_parent;
   HeadlessWebContents* last_child;
@@ -322,7 +323,8 @@ IN_PROC_BROWSER_TEST_F(HeadlessNoDevToolsTabSocketTest, Test) {
   RunAsynchronousTest();
 }
 
-IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, Focus) {
+IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest,
+                       FocusOfHeadlessWebContents_IsIndependent) {
   EXPECT_TRUE(embedded_test_server()->Start());
 
   HeadlessBrowserContext* browser_context =
@@ -333,6 +335,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, Focus) {
           .SetInitialURL(embedded_test_server()->GetURL("/hello.html"))
           .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
+  WaitForFocus(web_contents);
 
   std::unique_ptr<runtime::EvaluateResult> has_focus =
       EvaluateScript(web_contents, "document.hasFocus()");
@@ -343,6 +346,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, Focus) {
           .SetInitialURL(embedded_test_server()->GetURL("/hello.html"))
           .Build();
   EXPECT_TRUE(WaitForLoad(web_contents2));
+  WaitForFocus(web_contents2);
 
   // Focus of different WebContents is independent.
   has_focus = EvaluateScript(web_contents, "document.hasFocus()");
@@ -435,7 +439,43 @@ INSTANTIATE_TEST_CASE_P(HeadlessWebContentsScreenshotTests,
                         HeadlessWebContentsScreenshotTest,
                         ::testing::Bool());
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+// Regression test for crbug.com/832138.
+class HeadlessWebContentsScreenshotWindowPositionTest
+    : public HeadlessWebContentsScreenshotTest {
+ public:
+  void RunDevTooledTest() override {
+    browser_devtools_client_->GetBrowser()->GetExperimental()->SetWindowBounds(
+        browser::SetWindowBoundsParams::Builder()
+            .SetWindowId(
+                HeadlessWebContentsImpl::From(web_contents_)->window_id())
+            .SetBounds(browser::Bounds::Builder()
+                           .SetLeft(600)
+                           .SetTop(100)
+                           .SetWidth(800)
+                           .SetHeight(600)
+                           .Build())
+            .Build(),
+        base::BindOnce(
+            &HeadlessWebContentsScreenshotWindowPositionTest::OnWindowBoundsSet,
+            base::Unretained(this)));
+  }
+
+  void OnWindowBoundsSet(
+      std::unique_ptr<browser::SetWindowBoundsResult> result) {
+    EXPECT_TRUE(result);
+    HeadlessWebContentsScreenshotTest::RunDevTooledTest();
+  }
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_P(
+    HeadlessWebContentsScreenshotWindowPositionTest);
+
+// Instantiate test case for both software and gpu compositing modes.
+INSTANTIATE_TEST_CASE_P(HeadlessWebContentsScreenshotWindowPositionTests,
+                        HeadlessWebContentsScreenshotWindowPositionTest,
+                        ::testing::Bool());
+
+#if BUILDFLAG(ENABLE_PRINTING)
 class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
  public:
   const double kPaperWidth = 10;
@@ -498,14 +538,15 @@ class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
 
       gfx::Rect rect(kPaperWidth * kDpi, kPaperHeight * kDpi);
       printing::PdfRenderSettings settings(
-          rect, gfx::Point(0, 0), gfx::Size(kDpi, kDpi), true,
-          printing::PdfRenderSettings::Mode::NORMAL);
+          rect, gfx::Point(0, 0), gfx::Size(kDpi, kDpi), /*autorotate=*/true,
+          /*use_color=*/true, printing::PdfRenderSettings::Mode::NORMAL);
       std::vector<uint8_t> page_bitmap_data(kColorChannels *
                                             settings.area.size().GetArea());
       EXPECT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
           pdf_data.data(), pdf_data.size(), i, page_bitmap_data.data(),
           settings.area.size().width(), settings.area.size().height(),
-          settings.dpi.width(), settings.dpi.height(), settings.autorotate));
+          settings.dpi.width(), settings.dpi.height(), settings.autorotate,
+          settings.use_color));
       EXPECT_EQ(0x56, page_bitmap_data[0]);  // B
       EXPECT_EQ(0x34, page_bitmap_data[1]);  // G
       EXPECT_EQ(0x12, page_bitmap_data[2]);  // R

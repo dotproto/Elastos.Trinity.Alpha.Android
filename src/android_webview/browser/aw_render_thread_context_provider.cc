@@ -4,6 +4,8 @@
 
 #include "android_webview/browser/aw_render_thread_context_provider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -65,10 +67,10 @@ AwRenderThreadContextProvider::AwRenderThreadContextProvider(
 
   context_ = gpu::GLInProcessContext::CreateWithoutInit();
   context_->Initialize(service, surface, surface->IsOffscreen(),
-                       gpu::kNullSurfaceHandle, nullptr /* share_context */,
-                       attributes, limits, nullptr, nullptr, nullptr, nullptr);
+                       gpu::kNullSurfaceHandle, attributes, limits, nullptr,
+                       nullptr, nullptr, nullptr);
 
-  context_->GetImplementation()->SetLostContextCallback(base::Bind(
+  context_->GetImplementation()->SetLostContextCallback(base::BindOnce(
       &AwRenderThreadContextProvider::OnLostContext, base::Unretained(this)));
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

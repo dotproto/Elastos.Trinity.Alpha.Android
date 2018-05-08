@@ -15,7 +15,6 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
-#include "base/memory/linked_ptr.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -30,7 +29,6 @@ class GURL;
 
 namespace base {
 class FilePath;
-class Time;
 }
 
 namespace service_manager {
@@ -81,7 +79,7 @@ class SSLHostStateDelegate;
 // content.
 using ProtocolHandlerMap =
     std::map<std::string,
-             linked_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
+             std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
 
 // A owning vector of protocol interceptors.
 using URLRequestInterceptorScopedVector =
@@ -142,14 +140,6 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
                                      size_t length,
                                      const std::string& content_type,
                                      BlobCallback callback);
-
-  // |callback| returns a nullptr scoped_ptr on failure.
-  static void CreateFileBackedBlob(BrowserContext* browser_context,
-                                   const base::FilePath& path,
-                                   int64_t offset,
-                                   int64_t size,
-                                   const base::Time& expected_modification_time,
-                                   BlobCallback callback);
 
   // Get a BlobStorageContext getter that needs to run on IO thread.
   static BlobContextGetter GetBlobStorageContext(
@@ -302,6 +292,9 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // by the Service Manager.
   virtual void RegisterInProcessServices(StaticServiceMap* services) {}
 
+  // Returns a unique string associated with this browser context.
+  virtual const std::string& UniqueId() const;
+
   // Returns a random salt string that is used for creating media device IDs.
   // Returns a random string by default.
   virtual std::string GetMediaDeviceIDSalt();
@@ -318,7 +311,8 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   virtual media::VideoDecodePerfHistory* GetVideoDecodePerfHistory();
 
  private:
-  const std::string media_device_id_salt_;
+  const std::string unique_id_;
+  bool was_notify_will_be_destroyed_called_ = false;
 };
 
 }  // namespace content

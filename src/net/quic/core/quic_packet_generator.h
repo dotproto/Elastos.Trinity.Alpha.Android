@@ -137,6 +137,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
 
   // Creates a version negotiation packet which supports |supported_versions|.
   std::unique_ptr<QuicEncryptedPacket> SerializeVersionNegotiationPacket(
+      bool ietf_quic,
       const ParsedQuicVersionVector& supported_versions);
 
   // Creates a connectivity probing packet.
@@ -157,7 +158,8 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
   void SetConnectionIdLength(uint32_t length);
 
   // Sets the encrypter to use for the encryption level.
-  void SetEncrypter(EncryptionLevel level, QuicEncrypter* encrypter);
+  void SetEncrypter(EncryptionLevel level,
+                    std::unique_ptr<QuicEncrypter> encrypter);
 
   // Returns true if there are control frames or current constructed packet has
   // pending retransmittable frames.
@@ -183,6 +185,9 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
 
   // Set transmission type of next constructed packets.
   void SetTransmissionType(TransmissionType type);
+
+  // Set long header type of next constructed packets.
+  void SetLongHeaderType(QuicLongHeaderType type);
 
   // Allow/Disallow setting transmission type of next constructed packets.
   void SetCanSetTransmissionType(bool can_set_transmission_type);

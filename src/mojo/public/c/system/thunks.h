@@ -20,6 +20,7 @@
 #pragma pack(push, 8)
 struct MojoSystemThunks {
   size_t size;  // Should be set to sizeof(MojoSystemThunks).
+  MojoResult (*Initialize)(const struct MojoInitializeOptions* options);
   MojoTimeTicks (*GetTimeTicksNow)();
   MojoResult (*Close)(MojoHandle handle);
   MojoResult (*QueryHandleSignalsState)(
@@ -72,6 +73,9 @@ struct MojoSystemThunks {
                           void** buffer,
                           MojoMapBufferFlags flags);
   MojoResult (*UnmapBuffer)(void* buffer);
+  MojoResult (*GetBufferInfo)(MojoHandle buffer_handle,
+                              const struct MojoSharedBufferOptions* options,
+                              struct MojoSharedBufferInfo* info);
   MojoResult (*CreateTrap)(MojoTrapEventHandler handler,
                            const struct MojoCreateTrapOptions* options,
                            MojoHandle* trap_handle);
@@ -142,23 +146,12 @@ struct MojoSystemThunks {
   MojoResult (*NotifyBadMessage)(MojoMessageHandle message,
                                  const char* error,
                                  size_t error_num_bytes);
-  MojoResult (*GetProperty)(MojoPropertyType type, void* value);
 };
 #pragma pack(pop)
 
-// Use this type for the function found by dynamically discovering it in
-// a DSO linked with mojo_system. For example:
-// MojoSetSystemThunksFn mojo_set_system_thunks_fn =
-//     reinterpret_cast<MojoSetSystemThunksFn>(app_library.GetFunctionPointer(
-//         "MojoSetSystemThunks"));
-// The expected size of |system_thunks| is returned.
-// The contents of |system_thunks| are copied.
-typedef size_t (*MojoSetSystemThunksFn)(
-    const struct MojoSystemThunks* system_thunks);
-
 // A function for setting up the embedder's own system thunks. This should only
 // be called by Mojo embedder code.
-MOJO_SYSTEM_EXPORT size_t
-MojoEmbedderSetSystemThunks(const struct MojoSystemThunks* system_thunks);
+MOJO_SYSTEM_EXPORT void MojoEmbedderSetSystemThunks(
+    const struct MojoSystemThunks* system_thunks);
 
 #endif  // MOJO_PUBLIC_C_SYSTEM_THUNKS_H_

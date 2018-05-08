@@ -1,5 +1,8 @@
-# These tests fail when running browser_tests with mash
-# http://crbug.com/678687
+# These tests fail when running browser_tests with out-of-process ash
+# system UI on Chrome OS ("mash"). Most new features are expected to work
+# with mash, see //ash/README.md. If you need to disable more than
+# ~10 tests, please contact someone on mustash-team@ to discuss.
+# Meta-bug: http://crbug.com/678687
 
 # Unknown failure.
 -BrowserTabRestoreTest.*
@@ -36,23 +39,16 @@
 -AutomationApiTestWithDeviceScaleFactor.*
 -AutomationManagerAuraBrowserTest.*
 
-# Uses Shell::GetPrimaryRootWindow to create an EventGenerator
--LoginWebDialogTest.CloseDialogByAccelerator
-
 # Direct access to ash window frames, tablet mode, overview mode, etc.
 -BrowserNonClientFrameViewAshBackButtonTest.*
 -BrowserNonClientFrameViewAshTest.*
+-ExtensionUninstallDialogViewBrowserTest.BookmarkAppWindowAshCrash
 -HostedAppNonClientFrameViewAshTest.*
 -ImmersiveModeControllerAshHostedAppBrowserTest.*
 
-# Incorrect window bounds. Probably WindowSizerAsh problem.
--BrowserTestTabbedOrApp/BrowserTestParam.*
-
-# Timeout waiting for notification.
--CaptivePortalAuthenticationIgnoresProxy/NetworkPortalDetectorImplBrowserTestIgnoreProxy.*
-
 # ash::Shell access from ChromeViewsDelegate::CreateDefaultNonClientFrameView()
 # e.g. from chromeos::CaptivePortalWindowProxy::Show().
+# See https://crbug.com/838974
 -CaptivePortalWindowCtorDtorTest.*
 -CaptivePortalWindowTest.*
 -SimpleWebViewDialogTest.*
@@ -70,13 +66,11 @@
 # aura::CrashInFlightChange::ChangeFailed() when searching PDF.
 -ChromeFindRequestManagerTest.*
 -PDFExtensionTest.*
+-PDFExtensionHitTestTest.*
+-PDFExtensionLoadTest.*
 
-# Need screenshot support. http://crbug.com/754899
+# Need screenshot support. http://crbug.com/706246
 -ChromeScreenshotGrabberBrowserTest.*
-
-# ChromeBrowserMainExtraPartsAsh: Check failed: views::MusClient::Exists().
--ChromeMainTest.*
--ProfilingBrowserTest.*
 
 # Null immersive_fullscreen_controller_.
 -ChromeNativeAppWindowViewsAuraAshBrowserTest.*
@@ -90,16 +84,22 @@
 -SAMLPolicyTest.TransferCookiesAffiliated
 -SmartSessionRestoreTest.*
 
-# ash::Shell access in test for wallpaper images.
--CustomizationWallpaperDownloaderBrowserTest.*
--WallpaperManagerPolicyTest.*
-
 # Flaky: private_api_file_system.cc(811) Check failed: external_backend->CanHandleType(file_system_url.type()).
 -DefaultTaskDialog/FileManagerBrowserTest.*
 -QuickView/FileManagerBrowserTest.*
 
 # ash::Shell access for LogoutConfirmationController
 -DeviceLocalAccountTest.*
+
+# ash::PowerStatus access. https://crbug.com/770866.
+-PowerHandlerTest.*
+
+# DBusThreadManager initialized for testing in chrome is not recognized as
+# initialized in window manager service. https://crbug.com/830816.
+-PowerPolicyInSessionBrowserTest.AllowScreenWakeLocks
+-PowerPolicyInSessionBrowserTest.SetLegacyUserPolicy
+-PowerPolicyInSessionBrowserTest.SetUserPolicy
+-PowerPolicyLoginScreenBrowserTest.SetDevicePolicy
 
 # TODO: Very slow (>25 seconds) and occasional timeouts.
 -ExecuteScriptApiTest/DestructiveScriptTest.*
@@ -114,16 +114,15 @@
 # SystemLogsFetcher -> TouchLogSource -> ash::TouchHudDebug -> ash::Shell
 -FeedbackTest.*
 
-# FirstRunController -> ash::Shell
--FirstRunUIBrowserTest.*
-
 # ash::Shell::display_manager() to update displays.
+# http://crbug.com/831826
 -ForceMaximizeOnFirstRunTest.*
 -ForceMaximizePolicyFalseTest.*
 -PolicyDisplayRotationDefault/DisplayRotationBootTest.*
 -PolicyDisplayRotationDefault/DisplayRotationDefaultTest.*
 
 # ash::Shell::display_manager() to get display state.
+# http://crbug.com/831826
 -PolicyTest.UnifiedDesktopEnabledByDefault
 
 # Failures JS-side.
@@ -142,7 +141,6 @@
 # termination_observer_->terminated() is false.
 # Value of: login_display_host == NULL || login_display_host->GetNativeWindow()->layer()->GetTargetOpacity() == 0.0f
 # Check failed: !browser_client || browser_client->IsShuttingDown() || did_respond() || ignore_all_did_respond_for_testing_do_not_use. app.window.create
-# chromeos::KioskExternalUpdateNotification::CreateAndShowNotificationView() uses ash::Shell.
 -KioskAppManagerTest.*
 -KioskAppSettingsWebUITest.*
 -KioskCrashRestoreTest.*
@@ -174,7 +172,7 @@
 # OutputProtection problems:
 # interface_endpoint_client.cc(32) Check failed: !is_valid. The callback passed to OutputProtection::QueryStatus() was never run.
 # binder_registry.h(89) Failed to locate a binder for interface: display::mojom::OutputProtection
--ECKEncryptedMediaTest.OutputProtectionTest
+-*ECKEncryptedMediaTest.OutputProtectionTest*
 -OutOfProcessPPAPITest.*
 
 # ash::FocusRingController::SetVisible() from LoginDisplayHostWebUI.
@@ -188,13 +186,8 @@
 -NetworkingConfigTest.*
 -NetworkPortalDetectorImplBrowserTest.*
 
-# Crash in autofill::SaveCardBubbleViews::ShouldShowCloseButton().
--SaveCardBubbleControllerImplTest.*
-
-# WindowSizerAsh does not compute correct show state.
--ShelfAppBrowserTest.AppWindowRestoreBehaviorTest
-
 # ash::Shell access in test for display configuration.
+# http://crbug.com/831826
 -ShelfAppBrowserTest.LaunchAppFromDisplayWithoutFocus*
 
 # ash::Shell access in test.
@@ -202,6 +195,7 @@
 
 # content::WaitForChildFrameSurfaceReady hangs.
 -SitePerProcessDevToolsSanityTest.InputDispatchEventsToOOPIF
+-WebViewGuestTouchFocusBrowserPluginSpecificTest.TouchFocusesBrowserPluginInEmbedder
 
 # Function under test uses ash::Shell for window list.
 -SortWindowsByZIndexBrowserTest.*
@@ -232,11 +226,7 @@
 -TaskManagerUtilityProcessBrowserTest.*
 
 # ash::Shell access in test.
--TrayAccessibilityLoginScreenTest.*
 -TrayAccessibilityTestInstance/TrayAccessibilityTest.*
-
-# chromeos::UserAddingScreenImpl::Cancel() uses ash::Shell to enable system tray.
--UserAddingScreenTest.*
 
 # Virtual keyboard not supported.
 -AccessibilityManagerLoginTest.ResumeSavedPref
@@ -247,13 +237,10 @@
 -VirtualKeyboardStateTest.*
 -VirtualKeyboardWebContentTest.*
 
-# Also fails with mus. http://crbug.com/755318.
--WebViewScrollBubbling/WebViewGuestScrollTouchTest.*
-
-# Also fails with mus. http://crbug.com/755328
--WebViewTests/WebViewFocusTest.*
--WebViewTests/WebViewSizeTest.*
--WebViewTests/WebViewTest.*
+# Timeouts in content::WaitForChildFrameSurfaceReady()
+# Crashes in viz::HostFrameSinkManager::RegisterFrameSinkId()
+# http://crbug.com/755328
+-WebViewTest.*
 
 # Sending invalid FrameSinkIds crbug.com/796999
 -WebviewLoginTest.AllowNewUser
@@ -283,4 +270,75 @@
 -MediaRouterIntegrationOneUABrowserTest.*
 -MediaRouterIntegrationOneUANoReceiverBrowserTest.*
 
+# Segfaults after massive recursion setting ash::kWindowStateTypeKey:
+# crbug.com/824458
+-PresentationReceiverWindowViewBrowserTest.ChromeOSHardwareFullscreenButton
 
+# RenderFrameMetadata observation not supported: https://crbug.com/820974
+-WebViewFocusBrowserPluginSpecificTest.*
+-WebViewGuestScrollLatchingTest.ScrollLatchingPreservedInGuests
+-WebViewScrollBubbling/WebViewGuestScrollTouchTest.*
+-WebViewScrollGuestContentBrowserPluginSpecificTest.OverscrollControllerSeesConsumedScrollsInGuest
+-WebViewScrollBubbling/WebViewGuestScrollTest.TestGuestWheelScrollsBubble/*
+
+# Viz is not supported, https://crbug.com/827327
+-*ECKEncryptedMediaTest.*
+-MSE_ClearKey/EncryptedMediaTest.*
+-MSE_ExternalClearKey/EncryptedMediaTest.*
+-AudioPlayerBrowserTest.*
+-AudioPlayerBrowserTestInGuestMode.OpenAudioOnDownloads
+-AutoplayExtensionBrowserTest.AutoplayAllowed
+-MediaEngagementBrowserTest.*
+-MediaEngagementAutoplayBrowserTest.*
+-UnifiedAutoplayBrowserTest.*
+-AutoplayPolicyTest.*
+-ExtensionResourceRequestPolicyTest.Audio
+-ExtensionResourceRequestPolicyTest.Video
+-DeferredMediaBrowserTest.BackgroundMediaIsDeferred
+-DeclarativeNetRequestResourceTypeBrowserTest.Test1/0
+-VideoPlayerBrowserTest.*
+-VideoPlayerBrowserTestInGuestMode.OpenSingleVideoOnDownloads
+-IsolatedAppTest.SubresourceCookieIsolation
+-PageLoadMetricsBrowserTest.*
+-SRC_ExternalClearKey/EncryptedMediaTest.*
+-MultiProfileFileManagerBrowserTest.BasicDownloads
+-ChromeRenderProcessHostBackgroundingTest.ProcessPriorityAfterAudioStopsOnNotVisibleTab
+-ChromeRenderProcessHostBackgroundingTest.ProcessPriorityAfterAudioStartsFromBackgroundTab
+-ChromeRenderProcessHostBackgroundingTest.ProcessPriorityAfterStoppedAudio
+-DirectoryTreeContextMenu/FileManagerBrowserTest.*
+-RestoreGeometry/FileManagerBrowserTest.*
+-OpenAudioFiles/FileManagerBrowserTest.*
+-OpenImageFiles/FileManagerBrowserTest.*
+-Delete/FileManagerBrowserTest.*
+-SortColumns/FileManagerBrowserTest.*
+-KeyboardOperations/FileManagerBrowserTest.*
+-Transfer/FileManagerBrowserTest.*
+-GenericTask/FileManagerBrowserTest.*
+-RestorePrefs/FileManagerBrowserTest.*
+-ShowGridView/FileManagerBrowserTest.*
+-Providers/FileManagerBrowserTest.*
+-OpenFileDialog/FileManagerBrowserTest.*
+-FileDisplay/FileManagerBrowserTest.*
+-ExecuteDefaultTaskOnDownloads/FileManagerBrowserTest.*
+-OpenFileDialog/FileManagerBrowserTest.*
+-GearMenu/FileManagerBrowserTest.Test/3
+-GearMenu/FileManagerBrowserTest.Test/0
+-CreateNewFolder/FileManagerBrowserTest.*
+-FileDisplay/FileManagerBrowserTest.*
+-OpenVideoFiles/FileManagerBrowserTest.*
+-TabindexFocusDownloads/FileManagerBrowserTestWithLegacyEventDispatch.Test/0
+-TabindexFocusDownloads/FileManagerBrowserTestWithLegacyEventDispatch.Test/1
+-TabindexOpenDialog/FileManagerBrowserTest.*
+-TabindexSaveFileDialog/FileManagerBrowserTest.*
+-DeclarativeNetRequestResourceTypeBrowserTest.Test1/1
+-DeclarativeNetRequestResourceTypeBrowserTest.Test2/0
+-DeclarativeNetRequestResourceTypeBrowserTest.Test2/1
+-MediaEngagementSessionRestoreBrowserTest.RestoredSession_Playback_MEI
+-AutoplayExtensionBrowserTest.*
+-ChromeTracingDelegateBrowserTestOnStartup.StartupTracingThrottle
+
+# DisplayPrefs need to be loaded synchronously, which currently is not
+# supported in mash. crbug/834775
+-DisplayPrefsBrowserTest.*
+
+# See comment at top of file regarding adding test exclusions.

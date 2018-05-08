@@ -198,8 +198,7 @@ void MockInputMethodManager::NotifyImeMenuItemsChanged(
 
 void MockInputMethodManager::MaybeNotifyImeMenuActivationChanged() {}
 
-void MockInputMethodManager::OverrideKeyboardUrlRef(const std::string& keyset) {
-}
+void MockInputMethodManager::OverrideKeyboardKeyset(mojom::ImeKeyset keyset) {}
 
 void MockInputMethodManager::SetImeMenuFeatureEnabled(ImeMenuFeature feature,
                                                       bool enabled) {
@@ -215,6 +214,27 @@ bool MockInputMethodManager::GetImeMenuFeatureEnabled(
 }
 
 void MockInputMethodManager::NotifyObserversImeExtraInputStateChange() {}
+
+ui::InputMethodKeyboardController*
+MockInputMethodManager::GetInputMethodKeyboardController() {
+  return this;
+}
+
+bool MockInputMethodManager::DisplayVirtualKeyboard() {
+  return false;
+}
+
+void MockInputMethodManager::DismissVirtualKeyboard() {}
+
+void MockInputMethodManager::AddObserver(
+    ui::InputMethodKeyboardControllerObserver* observer) {}
+
+void MockInputMethodManager::RemoveObserver(
+    ui::InputMethodKeyboardControllerObserver* observer) {}
+
+bool MockInputMethodManager::IsKeyboardVisible() const {
+  return false;
+}
 
 }  // namespace input_method
 }  // namespace chromeos

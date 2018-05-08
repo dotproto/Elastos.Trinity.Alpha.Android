@@ -13,10 +13,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
+#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 #define WEBTESTRUNNER_NEW_HISTORY_CAPTURE
 
@@ -42,10 +42,6 @@ struct Manifest;
 namespace device {
 class MotionData;
 class OrientationData;
-}
-
-namespace viz {
-class SharedBitmapManager;
 }
 
 namespace test_runner {
@@ -261,8 +257,6 @@ class WebTestDelegate {
       blink::WebMediaStream* stream) = 0;
   virtual bool AddMediaStreamAudioSourceAndTrack(
       blink::WebMediaStream* stream) = 0;
-
-  virtual viz::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
   // Causes the beforeinstallprompt event to be sent to the renderer.
   // |event_platforms| are the platforms to be sent with the event. Once the

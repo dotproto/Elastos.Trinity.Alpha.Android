@@ -28,9 +28,6 @@ class PolicyToolUIHandler : public PolicyUIHandler {
     kRenamedSessionError,
   };
 
-  static const base::FilePath::CharType kPolicyToolSessionsDir[];
-  static const base::FilePath::CharType kPolicyToolDefaultSessionName[];
-  static const base::FilePath::CharType kPolicyToolSessionExtension[];
   // Reads the current session file (based on the session_name_) and sends the
   // contents to the UI.
   void ImportFile();
@@ -48,14 +45,15 @@ class PolicyToolUIHandler : public PolicyUIHandler {
 
   void HandleDeleteSession(const base::ListValue* args);
 
+  void HandleExportLinux(const base::ListValue* args);
+
   void OnSessionDeleted(bool is_successful);
 
   std::string ReadOrCreateFileCallback();
-  void OnFileRead(const std::string& contents);
+  void OnSessionContentReceived(const std::string& contents);
 
-  SessionErrors DoRenameSession(
-      const base::FilePath::StringType& old_session_name,
-      const base::FilePath::StringType& new_session_name);
+  static SessionErrors DoRenameSession(const base::FilePath& old_session_path,
+                                       const base::FilePath& new_session_path);
 
   void OnSessionRenamed(SessionErrors result);
 
@@ -67,18 +65,34 @@ class PolicyToolUIHandler : public PolicyUIHandler {
 
   base::FilePath GetSessionPath(const base::FilePath::StringType& name) const;
 
-  // Returns the current list of all sessions sorted by last access time in
-  // decreasing order.
-  base::ListValue GetSessionsList();
-
   void OnSessionsListReceived(base::ListValue list);
 
   void SetDefaultSessionName();
 
+  // ui::SelectFileDialog::Listener implementation.
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override;
+
+  void FileSelectionCanceled(void* params) override;
+
+  void WriteSessionPolicyToFile(const base::FilePath& path) const;
+
+  void ExportSessionToFile(const base::FilePath::StringType& file_extension);
+
   bool is_saving_enabled_ = true;
 
+  // Parses and checks policy types for all sources.
+  void ParsePolicyTypes(base::DictionaryValue* values);
+
+  // This string is filled when an export action occurs, it contains the current
+  // session dictionary in a specific format. This format will be JSON, PLIST,
+  // or REG; depending on the kind of export.
+  std::string session_dict_for_exporting_;
   base::FilePath sessions_dir_;
   base::FilePath::StringType session_name_;
+
+  scoped_refptr<ui::SelectFileDialog> export_policies_select_file_dialog_;
 
   base::WeakPtrFactory<PolicyToolUIHandler> callback_weak_ptr_factory_;
 

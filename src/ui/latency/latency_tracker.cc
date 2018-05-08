@@ -54,15 +54,12 @@ void RecordUmaEventLatencyScrollWheelTimeToScrollUpdateSwapBegin2Histogram(
 
 }  // namespace
 
-LatencyTracker::LatencyTracker(bool metric_sampling,
-                               ukm::SourceId ukm_source_id)
-    : metric_sampling_(metric_sampling), ukm_source_id_(ukm_source_id) {
-}
+LatencyTracker::LatencyTracker() = default;
 
-void LatencyTracker::OnEventStart(LatencyInfo* latency) {
-  static uint64_t global_trace_id = 0;
-  latency->set_trace_id(++global_trace_id);
-  latency->set_ukm_source_id(ukm_source_id_);
+void LatencyTracker::OnGpuSwapBuffersCompleted(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  for (const auto& latency : latency_info)
+    OnGpuSwapBuffersCompleted(latency);
 }
 
 void LatencyTracker::OnGpuSwapBuffersCompleted(const LatencyInfo& latency) {
@@ -104,6 +101,10 @@ void LatencyTracker::OnGpuSwapBuffersCompleted(const LatencyInfo& latency) {
   }
 }
 
+void LatencyTracker::DisableMetricSamplingForTesting() {
+  metric_sampling_ = false;
+}
+
 void LatencyTracker::ReportUkmScrollLatency(
     const InputMetricEvent& metric_event,
     const LatencyInfo::LatencyComponent& start_component,
@@ -140,20 +141,21 @@ void LatencyTracker::ReportUkmScrollLatency(
       event_name = "Event.ScrollUpdate.Wheel";
       break;
   }
-  std::unique_ptr<ukm::UkmEntryBuilder> builder =
-      ukm_recorder->GetEntryBuilder(ukm_source_id, event_name.c_str());
-  builder->AddMetric(
+
+  ukm::UkmEntryBuilder builder(ukm_source_id, event_name.c_str());
+  builder.SetMetric(
       "TimeToScrollUpdateSwapBegin",
       std::max(static_cast<int64_t>(0),
                (time_to_scroll_update_swap_begin_component.last_event_time -
                 start_component.first_event_time)
                    .InMicroseconds()));
-  builder->AddMetric("TimeToHandled",
-                     std::max(static_cast<int64_t>(0),
-                              (time_to_handled_component.last_event_time -
-                               start_component.first_event_time)
-                                  .InMicroseconds()));
-  builder->AddMetric("IsMainThread", is_main_thread);
+  builder.SetMetric("TimeToHandled",
+                    std::max(static_cast<int64_t>(0),
+                             (time_to_handled_component.last_event_time -
+                              start_component.first_event_time)
+                                 .InMicroseconds()));
+  builder.SetMetric("IsMainThread", is_main_thread);
+  builder.Record(ukm_recorder);
 }
 
 void LatencyTracker::ComputeEndToEndLatencyHistograms(

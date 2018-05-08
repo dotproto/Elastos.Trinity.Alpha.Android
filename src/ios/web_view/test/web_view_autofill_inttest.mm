@@ -79,6 +79,7 @@ class WebViewAutofillTest : public WebViewIntTest {
     [autofill_controller_
         fetchSuggestionsForFormWithName:kTestFormName
                               fieldName:kTestFieldName
+                        fieldIdentifier:kTestFieldID
                       completionHandler:^(
                           NSArray<CWVAutofillSuggestion*>* suggestions) {
                         fetched_suggestions = suggestions;
@@ -103,34 +104,34 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
 
   [[delegate expect] autofillController:autofill_controller_
                 didFocusOnFieldWithName:kTestFieldName
+                        fieldIdentifier:kTestFieldID
                                formName:kTestFormName
                                   value:kTestFieldValue];
-  NSString* focus_script =
-      [NSString stringWithFormat:
-                    @"var event = new Event('focus');"
-                     "document.getElementById('%@').dispatchEvent(event);",
-                    kTestFieldID];
+  NSString* focus_script = [NSString
+      stringWithFormat:@"document.getElementById('%@').focus();", kTestFieldID];
   NSError* focus_error = nil;
   test::EvaluateJavaScript(web_view_, focus_script, &focus_error);
   ASSERT_NSEQ(nil, focus_error);
-  [delegate verify];
+  [delegate verifyWithDelay:kWaitForActionTimeout];
 
   [[delegate expect] autofillController:autofill_controller_
                  didBlurOnFieldWithName:kTestFieldName
+                        fieldIdentifier:kTestFieldID
                                formName:kTestFormName
                                   value:kTestFieldValue];
   NSString* blur_script =
       [NSString stringWithFormat:
-                    @"var event = new Event('blur');"
+                    @"var event = new Event('blur', {bubbles:true});"
                      "document.getElementById('%@').dispatchEvent(event);",
                     kTestFieldID];
   NSError* blur_error = nil;
   test::EvaluateJavaScript(web_view_, blur_script, &blur_error);
   ASSERT_NSEQ(nil, blur_error);
-  [delegate verify];
+  [delegate verifyWithDelay:kWaitForActionTimeout];
 
   [[delegate expect] autofillController:autofill_controller_
                 didInputInFieldWithName:kTestFieldName
+                        fieldIdentifier:kTestFieldID
                                formName:kTestFormName
                                   value:kTestFieldValue];
   // The 'input' event listener defined in form.js is only called during the
@@ -143,7 +144,7 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
   NSError* input_error = nil;
   test::EvaluateJavaScript(web_view_, input_script, &input_error);
   ASSERT_NSEQ(nil, input_error);
-  [delegate verify];
+  [delegate verifyWithDelay:kWaitForActionTimeout];
 
   [[delegate expect] autofillController:autofill_controller_
                   didSubmitFormWithName:kTestFormName
@@ -159,7 +160,7 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
   NSError* submit_error = nil;
   test::EvaluateJavaScript(web_view_, submit_script, &submit_error);
   ASSERT_NSEQ(nil, submit_error);
-  [delegate verify];
+  [delegate verifyWithDelay:kWaitForActionTimeout];
 }
 
 // Tests that CWVAutofillController can fetch, fill, and clear suggestions.

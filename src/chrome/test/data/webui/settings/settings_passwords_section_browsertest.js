@@ -69,7 +69,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
           node.$$('#originUrl').href);
       assertEquals(
           passwordInfo.loginPair.username,
-          node.$$('#username').textContent.trim());
+          node.$$('#username').value);
       assertEquals(passwordInfo.numCharactersInPassword,
           node.$$('#password').value.length);
     }
@@ -120,7 +120,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
   /**
    * Helper method used to create a password section for the given lists.
-   * @param {!PasswordManager} passwordManager
+   * @param {!PasswordManagerProxy} passwordManager
    * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
    * @param {!Array<!chrome.passwordsPrivate.ExceptionEntry>} exceptionList
    * @return {!Object}
@@ -128,7 +128,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
    */
   function createPasswordsSection(passwordManager, passwordList,
       exceptionList) {
-    // Override the PasswordManager data for testing.
+    // Override the PasswordManagerProxy data for testing.
     passwordManager.data.passwords = passwordList;
     passwordManager.data.exceptions = exceptionList;
 

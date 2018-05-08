@@ -78,13 +78,49 @@ PermissionsData::AccessType GetMinimumAccessType(
   return access;
 }
 
+bool IsWebUIAllowedToMakeNetworkRequests(const url::Origin& origin) {
+  // Whitelist to work around exceptional cases. This is only used to elide a
+  // DCHECK.
+  //
+  // If you are adding a new host to this list, please file a corresponding bug
+  // to track its removal. See https://crbug.com/829412 for the metabug.
+  return
+      // https://crbug.com/829414
+      origin.host() == "print" ||
+      // https://crbug.com/831812
+      origin.host() == "sync-confirmation" ||
+      // https://crbug.com/831813
+      origin.host() == "inspect";
+}
+
 }  // namespace
 
-// Returns true if the URL is sensitive and requests to this URL must not be
+// Returns true if the given |request| is sensitive and must not be
 // modified/canceled by extensions, e.g. because it is targeted to the webstore
 // to check for updates, extension blacklisting, etc.
-bool IsSensitiveURL(const GURL& url,
-                    bool is_request_from_browser_or_webui_renderer) {
+bool IsSensitiveRequest(const extensions::WebRequestInfo& request,
+                        bool is_request_from_browser,
+                        bool is_request_from_webui_renderer) {
+  const bool is_request_from_sensitive_source =
+      is_request_from_browser || is_request_from_webui_renderer;
+  const GURL& url = request.url;
+
+  const bool is_network_request =
+      url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS();
+  if (is_network_request && is_request_from_webui_renderer) {
+    // WebUI renderers should never be making network requests, but we may make
+    // some exceptions for now. See https://crbug.com/829412 for details.
+    //
+    // The DCHECK helps avoid proliferation of such behavior. In any case, we
+    // treat the requests as sensitive to ensure that the Web Request API
+    // doesn't see them.
+    DCHECK(request.initiator.has_value());
+    DCHECK(IsWebUIAllowedToMakeNetworkRequests(*request.initiator))
+        << "Unsupported network request from "
+        << request.initiator->GetURL().spec() << " for " << url.spec();
+    return true;
+  }
+
   // TODO(battre) Merge this, CanExtensionAccessURL and
   // PermissionsData::CanAccessPage into one function.
   bool sensitive_chrome_url = false;
@@ -103,7 +139,7 @@ bool IsSensitiveURL(const GURL& url,
     // These URLs are only protected for requests from the browser and webui
     // renderers, not for requests from common renderers, because
     // clients*.google.com are also used by websites.
-    if (is_request_from_browser_or_webui_renderer) {
+    if (is_request_from_sensitive_source) {
       base::StringPiece::size_type pos = host.rfind(kClient);
       if (pos != base::StringPiece::npos) {
         bool match = true;
@@ -132,14 +168,10 @@ bool IsSensitiveURL(const GURL& url,
                                              base::CompareCase::SENSITIVE));
   }
 
-  if (is_request_from_browser_or_webui_renderer) {
-    sensitive_chrome_url =
-        sensitive_chrome_url ||
-        extensions::ExtensionsAPIClient::Get()->ShouldHideBrowserNetworkRequest(
-            url);
-  }
-
-  return sensitive_chrome_url || extension_urls::IsWebstoreUpdateUrl(url) ||
+  return sensitive_chrome_url ||
+         extensions::ExtensionsAPIClient::Get()
+             ->ShouldHideBrowserNetworkRequest(request) ||
+         extension_urls::IsWebstoreUpdateUrl(url) ||
          extension_urls::IsBlacklistUpdateUrl(url) ||
          extension_urls::IsSafeBrowsingUrl(origin, url.path_piece());
 }
@@ -185,8 +217,8 @@ bool WebRequestPermissions::HideRequest(
             request.render_process_id);
   }
 
-  return IsSensitiveURL(request.url, is_request_from_browser ||
-                                         is_request_from_webui_renderer) ||
+  return IsSensitiveRequest(request, is_request_from_browser,
+                            is_request_from_webui_renderer) ||
          !HasWebRequestScheme(request.url);
 }
 

@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/media/router/presentation/presentation_navigation_policy.h"
@@ -23,7 +22,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
-#include "third_party/WebKit/public/web/WebPresentationReceiverFlags.h"
+#include "third_party/blink/public/web/web_presentation_receiver_flags.h"
 
 using content::WebContents;
 
@@ -119,7 +118,7 @@ void OffscreenTab::Start(const GURL& start_url,
   if (!optional_presentation_id.empty())
     params.starting_sandbox_flags = blink::kPresentationReceiverSandboxFlags;
 
-  offscreen_tab_web_contents_.reset(WebContents::Create(params));
+  offscreen_tab_web_contents_ = WebContents::Create(params);
   offscreen_tab_web_contents_->SetDelegate(this);
   WebContentsObserver::Observe(offscreen_tab_web_contents_.get());
 
@@ -263,8 +262,10 @@ bool OffscreenTab::EmbedsFullscreenWidget() const {
   return true;
 }
 
-void OffscreenTab::EnterFullscreenModeForTab(WebContents* contents,
-                                             const GURL& origin) {
+void OffscreenTab::EnterFullscreenModeForTab(
+    WebContents* contents,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
 
   if (in_fullscreen_mode())

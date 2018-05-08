@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_QUICK_UNLOCK_QUICK_UNLOCK_STORAGE_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_QUICK_UNLOCK_QUICK_UNLOCK_STORAGE_H_
 
-#include "base/memory/ptr_util.h"
-#include "base/unguessable_token.h"
+#include "chrome/browser/chromeos/login/quick_unlock/auth_token.h"
 #include "chrome/browser/chromeos/login/quick_unlock/fingerprint_storage.h"
-#include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage_prefs.h"
+#include "chromeos/login/auth/user_context.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class PrefService;
@@ -57,7 +57,7 @@ class QuickUnlockStorage : public KeyedService {
   // Creates a new authentication token to be used by the quickSettingsPrivate
   // API for authenticating requests. Resets the expiration timer and
   // invalidates any previously issued tokens.
-  std::string CreateAuthToken();
+  std::string CreateAuthToken(const chromeos::UserContext& user_context);
 
   // Returns true if the current authentication token has expired.
   bool GetAuthTokenExpired();
@@ -66,12 +66,16 @@ class QuickUnlockStorage : public KeyedService {
   // token if valid, or an empty string if it has expired.
   std::string GetAuthToken();
 
+  // Fetch the user context if |auth_token| is valid. May return null.
+  UserContext* GetUserContext(const std::string& auth_token);
+
   FingerprintStorage* fingerprint_storage() {
     return fingerprint_storage_.get();
   }
-  PinStorage* pin_storage() { return pin_storage_.get(); }
 
-  static const int kTokenExpirationSeconds;
+  // Fetch the underlying pref pin storage. If iteracting with pin generally,
+  // use the PinBackend APIs.
+  PinStoragePrefs* pin_storage_prefs() { return pin_storage_prefs_.get(); }
 
  private:
   friend class chromeos::QuickUnlockStorageTestApi;
@@ -83,9 +87,8 @@ class QuickUnlockStorage : public KeyedService {
   PrefService* pref_service_;
   base::TimeTicks last_strong_auth_;
   std::unique_ptr<FingerprintStorage> fingerprint_storage_;
-  std::unique_ptr<PinStorage> pin_storage_;
-  base::UnguessableToken auth_token_;
-  base::TimeTicks auth_token_issue_time_;
+  std::unique_ptr<PinStoragePrefs> pin_storage_prefs_;
+  std::unique_ptr<AuthToken> auth_token_;
 
   DISALLOW_COPY_AND_ASSIGN(QuickUnlockStorage);
 };

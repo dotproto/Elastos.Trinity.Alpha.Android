@@ -19,8 +19,8 @@ import("//chrome/process_version_rc_template.gni")
 import("//components/nacl/features.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
-import("//ppapi/features/features.gni")
-import("//third_party/WebKit/public/public_features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/blink/public/public_features.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 import("//tools/resources/generate_resource_whitelist.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
@@ -155,7 +155,7 @@ if (!is_android && !is_mac) {
       public_deps = []
       deps += [
         "//build/config:exe_and_shlib_deps",
-        "//printing/features",
+        "//printing/buildflags",
       ]
 
       data += [ "$root_out_dir/resources.pak" ]
@@ -209,12 +209,13 @@ if (!is_android && !is_mac) {
           "//content/public/common:static_switches",
           "//crypto",
           "//sandbox",
+          "//services/service_manager/sandbox",
           "//third_party/breakpad:breakpad_handler",
           "//third_party/breakpad:breakpad_sender",
         ]
         data_deps = [
           "//chrome/app/version_assembly:version_assembly_manifest",
-          "//notification_helper",
+          "//chrome/notification_helper",
         ]
 
         if (win_console_app) {
@@ -295,6 +296,13 @@ if (!is_android && !is_mac) {
         if (enable_mus) {
           deps += [ "//mash/common" ]
         }
+      }
+
+      if (is_chromeos) {
+        data_deps += [
+          "//mojo/edk:mojo_core",
+          "//mojo/edk:mojo_core_for_arc",
+        ]
       }
 
       # These files are used by the installer so we need a public dep.
@@ -402,7 +410,7 @@ if (is_win) {
       "//crypto",
       "//headless:headless_shell_browser_lib",
       "//net:net_resources",
-      "//ppapi/features",
+      "//ppapi/buildflags",
       "//services/service_manager/embedder",
       "//third_party/cld_3/src/src:cld_3",
       "//third_party/wtl",
@@ -444,7 +452,7 @@ if (is_win) {
       deps += [ "//content/public/app:browser" ]
       assert_no_deps = [
         # The browser DLL may not depend on blink or v8.
-        "//third_party/WebKit/public:blink",
+        "//third_party/blink/public:blink",
         "//gin",
         "//v8",
       ]
@@ -935,7 +943,7 @@ if (is_win) {
         # Depend on :chrome_app to ensure that the bundle is produced before
         # creating or destroying the symlink.
         ":chrome_app",
-        "//third_party/WebKit/public:blink_devtools_frontend_resources",
+        "//third_party/blink/public:blink_devtools_frontend_resources",
       ]
     }
   } else {
@@ -965,26 +973,12 @@ if (is_win) {
     }
   }
 
-  if (use_egl) {
-    # We need to copy the ANGLE and SwiftShader libraries so that the
-    # bundle_data dependencies have a "copy" target type. Otherwise for
-    # "shared_library" target types it will try to link things into
-    # Chromium Framework when we want to keep the ANGLE and SwiftShader
-    # libraries separate instead.
-    copy("angle_library_copy") {
-      sources = [
-        "$root_out_dir/libEGL.dylib",
-        "$root_out_dir/libGLESv2.dylib",
-      ]
-      outputs = [
-        "$root_out_dir/egl_intermediates/{{source_file_part}}",
-      ]
-      deps = [
-        "//third_party/angle:libEGL",
-        "//third_party/angle:libGLESv2",
-      ]
-    }
+  # EGL on MacOS can be used in dev builds and on bots for test
+  # related purposes, but it is not yet desired to ship these
+  # libraries with official chrome (http://crbug.com/757974).
+  bundle_egl_libraries = use_egl && !(is_chrome_branded && is_official_build)
 
+  if (bundle_egl_libraries) {
     # Add the ANGLE .dylibs in the MODULE_DIR of Chromium.app
     bundle_data("angle_binaries") {
       sources = [
@@ -995,21 +989,7 @@ if (is_win) {
         "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
       ]
       public_deps = [
-        ":angle_library_copy",
-      ]
-    }
-
-    copy("swiftshader_library_copy") {
-      sources = [
-        "$root_out_dir/libswiftshader_libEGL.dylib",
-        "$root_out_dir/libswiftshader_libGLESv2.dylib",
-      ]
-      outputs = [
-        "$root_out_dir/egl_intermediates/{{source_file_part}}",
-      ]
-      deps = [
-        "//third_party/swiftshader/src/OpenGL/libEGL:swiftshader_libEGL",
-        "//third_party/swiftshader/src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+        "//ui/gl:angle_library_copy",
       ]
     }
 
@@ -1023,13 +1003,13 @@ if (is_win) {
         "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
       ]
       public_deps = [
-        ":swiftshader_library_copy",
+        "//ui/gl:swiftshader_library_copy",
       ]
     }
   }
 
   group("angle_library") {
-    if (use_egl) {
+    if (bundle_egl_libraries) {
       deps = [
         ":angle_binaries",
       ]
@@ -1037,7 +1017,7 @@ if (is_win) {
   }
 
   group("swiftshader_library") {
-    if (use_egl) {
+    if (bundle_egl_libraries) {
       deps = [
         ":swiftshader_binaries",
       ]
@@ -1460,7 +1440,7 @@ group("browser_dependencies") {
     public_deps += [ "//ppapi/host" ]
   }
 
-  if (enable_basic_printing || enable_print_preview) {
+  if (enable_basic_printing) {
     public_deps += [ "//printing" ]
     if (enable_print_preview && !is_chromeos) {
       public_deps += [ "//chrome/service" ]
@@ -1473,7 +1453,7 @@ group("browser_dependencies") {
       # is OK because all of content is linked into one library. Note that the
       # blink_headers target is OK, so we can't do a wildcard for all blink
       # targets.
-      "//third_party/WebKit/public:blink",
+      "//third_party/blink/public:blink",
     ]
 
     if (is_win) {
@@ -1492,13 +1472,13 @@ group("child_dependencies") {
     "//chrome/child",
     "//chrome/common",
     "//chrome/gpu",
-    "//chrome/profiling",
     "//chrome/renderer",
     "//chrome/utility",
+    "//components/services/heap_profiling",
     "//components/sync",
     "//content/public/child",
     "//pdf",
-    "//third_party/WebKit/public:blink_devtools_frontend_resources",
+    "//third_party/blink/public:blink_devtools_frontend_resources",
   ]
 
   if (enable_nacl) {
@@ -1564,11 +1544,19 @@ copy("visual_elements_resources") {
   if (is_chrome_branded) {
     sources += [
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoBeta.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanary.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoDev.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoDevLight.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBeta.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanary.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDev.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDevLight.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoLight.png",
     ]
   }
 
@@ -1605,6 +1593,7 @@ group("extra_resources") {
 
   if (is_chromeos) {
     public_deps += [
+      "//chrome/browser/resources/chromeos:multidevice_setup_resources",
       "//chrome/browser/resources/chromeos/chromevox",
       "//chrome/browser/resources/chromeos/select_to_speak",
       "//chrome/browser/resources/chromeos/switch_access",
@@ -1742,7 +1731,7 @@ if (is_android) {
 
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
-      "browser/ui/android/page_info/page_info_popup_android.h",
+      "browser/ui/android/page_info/page_info_controller_android.h",
     ]
   }
 
@@ -1784,6 +1773,7 @@ if (is_android) {
 
   java_cpp_enum("download_enum_javagen") {
     sources = [
+      "browser/download/download_location_dialog_type.h",
       "browser/download/download_prompt_status.h",
     ]
   }
@@ -1819,10 +1809,10 @@ if (is_android) {
       "//chrome/child",
       "//chrome/common",
       "//chrome/gpu",
-      "//chrome/profiling",
       "//chrome/renderer",
       "//chrome/utility",
       "//components/safe_browsing/android:safe_browsing_mobile",
+      "//components/services/heap_profiling",
       "//content/public/app:both",
       "//content/public/common:service_names",
       "//services/service_manager/embedder",
@@ -1835,6 +1825,10 @@ if (is_android) {
         "//device/gamepad",
         "//ui/events/devices",
       ]
+    }
+
+    if (enable_vr) {
+      deps += [ "//third_party/gvr-android-sdk:gvr_shim" ]
     }
   }
 }

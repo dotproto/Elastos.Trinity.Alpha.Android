@@ -37,10 +37,9 @@ class PrefRegistrySyncable;
 
 // Autocomplete provider for searches based on the current URL.
 //
-// The controller will call Start() with |on_focus| set when the user focuses
-// the omnibox. After construction, the autocomplete controller repeatedly calls
-// Start() with some user input, each time expecting to receive an updated set
-// of matches.
+// The controller will call Start() when the user focuses the omnibox. After
+// construction, the autocomplete controller repeatedly calls Start() with some
+// user input, each time expecting to receive an updated set of matches.
 //
 // TODO(jered): Consider deleting this class and building this functionality
 // into SearchProvider after dogfood and after we break the association between
@@ -67,6 +66,8 @@ class ZeroSuggestProvider : public BaseSearchProvider,
   void ResetSession() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ZeroSuggestProviderTest,
+                           TestStartWillStopForSomeInput);
   ZeroSuggestProvider(AutocompleteProviderClient* client,
                       HistoryURLProvider* history_url_provider,
                       AutocompleteProviderListener* listener);
@@ -131,7 +132,8 @@ class ZeroSuggestProvider : public BaseSearchProvider,
   // When the user is in the Most Visited field trial, we ask the TopSites
   // service for the most visited URLs. It then calls back to this function to
   // return those |urls|.
-  void OnMostVisitedUrlsAvailable(const history::MostVisitedURLList& urls);
+  void OnMostVisitedUrlsAvailable(size_t request_num,
+                                  const history::MostVisitedURLList& urls);
 
   // When the user is in the contextual omnibox suggestions field trial, we ask
   // the ContextualSuggestionsService for a fetcher to retrieve recommendations.
@@ -162,6 +164,9 @@ class ZeroSuggestProvider : public BaseSearchProvider,
   // The result type that is currently being processed by provider.
   // When the provider is not running, the result type is set to NONE.
   ResultType result_type_running_;
+
+  // For reconciling asynchronous requests for most visited URLs.
+  size_t most_visited_request_num_ = 0;
 
   // The URL for which a suggestion fetch is pending.
   std::string current_query_;

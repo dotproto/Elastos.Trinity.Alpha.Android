@@ -145,10 +145,6 @@ Polymer({
   /** @private {?ShowAtPositionConfig} */
   lastConfig_: null,
 
-  hostAttributes: {
-    tabindex: 0,
-  },
-
   properties: {
     // Setting this flag will make the menu listen for content size changes and
     // reposition to its anchor accordingly.
@@ -213,6 +209,8 @@ Polymer({
    * @private
    */
   onKeyDown_: function(e) {
+    e.stopPropagation();
+
     if (e.key == 'Tab' || e.key == 'Escape') {
       this.close();
       e.preventDefault();

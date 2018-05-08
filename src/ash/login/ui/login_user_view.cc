@@ -23,7 +23,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/user_manager/user_type.h"
-#include "mojo/common/values_struct_traits.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
@@ -71,11 +70,10 @@ constexpr char kLoginUserLabelClassName[] = "LoginUserLabel";
 constexpr char kLoginUserDomainClassName[] = "LoginUserDomain";
 
 // Color of the user domain text.
-constexpr SkColor kDomainTextColor =
-    SkColorSetARGBMacro(0xAB, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kDomainTextColor = SkColorSetARGB(0xAB, 0xFF, 0xFF, 0xFF);
 constexpr int kEnterpriseIconSizeDp = 12;
 constexpr int kBetweenEnterpriseIconAndDomainDp = 8;
-constexpr int kVerticalSpacingBetweenUserNameAndDomainDp = 17;
+constexpr int kVerticalSpacingBetweenUserNameAndDomainDp = 14;
 
 int GetImageSize(LoginDisplayStyle style) {
   switch (style) {
@@ -115,13 +113,13 @@ class LoginUserView::UserImage : public NonAccessibleView {
     // Set the initial image from |avatar| since we already have it available.
     // Then, decode the bytes via blink's PNG decoder and play any animated
     // frames if they are available.
-    if (!user->basic_user_info->avatar.isNull())
-      image_->SetImage(user->basic_user_info->avatar);
+    if (!user->basic_user_info->avatar->image.isNull())
+      image_->SetImage(user->basic_user_info->avatar->image);
 
     // Decode the avatar using blink, as blink's PNG decoder supports APNG,
     // which is the format used for the animated avators.
-    if (!user->basic_user_info->avatar_bytes.empty()) {
-      DecodeAnimation(user->basic_user_info->avatar_bytes,
+    if (!user->basic_user_info->avatar->bytes.empty()) {
+      DecodeAnimation(user->basic_user_info->avatar->bytes,
                       base::Bind(&LoginUserView::UserImage::OnImageDecoded,
                                  weak_factory_.GetWeakPtr()));
     }
@@ -521,6 +519,7 @@ void LoginUserView::UpdateCurrentUserState() {
   }
 
   if (user_domain_) {
+    DCHECK(current_user_->public_account_info);
     const base::Optional<std::string>& enterprise_domain =
         current_user_->public_account_info->enterprise_domain;
     if (enterprise_domain) {

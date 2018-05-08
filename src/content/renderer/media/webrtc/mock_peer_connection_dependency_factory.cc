@@ -10,7 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_impl.h"
 #include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
 
@@ -39,6 +39,19 @@ static typename V::iterator FindTrack(V* vector,
   }
   return it;
 };
+
+MockWebRtcAudioSource::MockWebRtcAudioSource(bool is_remote)
+    : is_remote_(is_remote) {}
+void MockWebRtcAudioSource::RegisterObserver(ObserverInterface* observer) {}
+void MockWebRtcAudioSource::UnregisterObserver(ObserverInterface* observer) {}
+
+MockWebRtcAudioSource::SourceState MockWebRtcAudioSource::state() const {
+  return SourceState::kLive;
+}
+
+bool MockWebRtcAudioSource::remote() const {
+  return is_remote_;
+}
 
 MockMediaStream::MockMediaStream(const std::string& id) : id_(id) {}
 
@@ -125,6 +138,7 @@ scoped_refptr<MockWebRtcAudioTrack> MockWebRtcAudioTrack::Create(
 
 MockWebRtcAudioTrack::MockWebRtcAudioTrack(const std::string& id)
     : id_(id),
+      source_(new rtc::RefCountedObject<MockWebRtcAudioSource>(true)),
       enabled_(true),
       state_(webrtc::MediaStreamTrackInterface::kLive) {}
 
@@ -135,8 +149,7 @@ std::string MockWebRtcAudioTrack::kind() const {
 }
 
 webrtc::AudioSourceInterface* MockWebRtcAudioTrack::GetSource() const {
-  NOTREACHED();
-  return nullptr;
+  return source_.get();
 }
 
 std::string MockWebRtcAudioTrack::id() const {

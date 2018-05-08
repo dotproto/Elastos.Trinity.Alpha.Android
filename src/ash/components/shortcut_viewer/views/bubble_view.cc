@@ -31,7 +31,7 @@ BubbleView::BubbleView() {
   constexpr int kShadowXOffset = 0;
   constexpr int kShadowYOffset = 2;
   constexpr int kShadowBlur = 4;
-  constexpr SkColor kShadowColor = SkColorSetARGBMacro(0x15, 0, 0, 0);
+  constexpr SkColor kShadowColor = SkColorSetARGB(0x15, 0, 0, 0);
   shadows_ = {gfx::ShadowValue(gfx::Vector2d(kShadowXOffset, kShadowYOffset),
                                kShadowBlur, kShadowColor)};
   // Preferred padding. The difference between the top and bottom paddings is to
@@ -60,8 +60,8 @@ void BubbleView::SetIcon(const gfx::VectorIcon& icon) {
     AddChildViewAt(icon_, 0);
   }
 
-  constexpr int kIconSize = 12;
-  constexpr SkColor kIconColor = SkColorSetARGBMacro(0xFF, 0x5C, 0x5D, 0x60);
+  constexpr int kIconSize = 16;
+  constexpr SkColor kIconColor = SkColorSetARGB(0xFF, 0x5C, 0x5D, 0x60);
   icon_->SetImage(gfx::CreateVectorIcon(icon, kIconColor));
   icon_->SetImageSize(gfx::Size(kIconSize, kIconSize));
 }
@@ -69,7 +69,7 @@ void BubbleView::SetIcon(const gfx::VectorIcon& icon) {
 void BubbleView::SetText(const base::string16& text) {
   if (!text_) {
     text_ = new views::Label();
-    constexpr SkColor kTextColor = SkColorSetARGBMacro(0xFF, 0x5F, 0x63, 0x68);
+    constexpr SkColor kTextColor = SkColorSetARGB(0xFF, 0x5F, 0x63, 0x68);
     text_->SetEnabledColor(kTextColor);
     text_->SetElideBehavior(gfx::NO_ELIDE);
     constexpr int kLabelFontSizeDelta = 1;
@@ -94,7 +94,7 @@ gfx::Size BubbleView::CalculatePreferredSize() const {
   preferred_size.Enlarge(GetInsets().width(), GetInsets().height());
 
   // To avoid text and icon bubbles have different heights in a row.
-  constexpr int kMinimumHeight = 24;
+  constexpr int kMinimumHeight = 32;
   preferred_size.SetToMax(gfx::Size(kMinimumHeight, kMinimumHeight));
   // Make the width to be at lease as large as the height.
   preferred_size.set_width(
@@ -105,8 +105,7 @@ gfx::Size BubbleView::CalculatePreferredSize() const {
 void BubbleView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
 
-  constexpr SkColor kBackgroundColor =
-      SkColorSetARGBMacro(0xFF, 0xE8, 0xEA, 0xED);
+  constexpr SkColor kBackgroundColor = SkColorSetARGB(0xFF, 0xF1, 0xF3, 0xF4);
   constexpr int kCornerRadius = 22;
   // Draw a round rect with background color and shadow.
   cc::PaintFlags flags;

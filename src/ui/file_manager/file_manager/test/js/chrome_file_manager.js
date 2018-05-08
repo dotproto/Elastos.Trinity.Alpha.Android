@@ -70,7 +70,17 @@ chrome.fileManagerPrivate = {
   },
   getFileTasks: (entries, callback) => {
     // Returns FileTask[].
-    setTimeout(callback, 0, []);
+    var results = [];
+    // Support for view-in-browser on single text file used by QuickView.
+    if (entries.length == 1 &&
+        entries[0].metadata.contentMimeType == 'text/plain') {
+      results.push({
+        taskId: '|file|view-in-browser',
+        title: '__MSG_OPEN_ACTION__',
+        isDefault: true,
+      });
+    }
+    setTimeout(callback, 0, results);
   },
   getPreferences: (callback) => {
     setTimeout(callback, 0, chrome.fileManagerPrivate.preferences_);
@@ -114,6 +124,15 @@ chrome.fileManagerPrivate = {
   onAppsUpdated: {
     addListener: () => {},
   },
+  onCopyProgress: {
+    listeners_: [],
+    addListener: function(l) {
+      this.listeners_.push(l);
+    },
+    removeListener: function(l) {
+      this.listeners_ = this.listeners_.filter(e => e !== l);
+    },
+  },
   onDeviceChanged: {
     addListener: () => {},
   },
@@ -138,6 +157,8 @@ chrome.fileManagerPrivate = {
   onPreferencesChanged: {
     addListener: () => {},
   },
+  openInspector: (type) => {},
+  openSettingsSubpage: (sub_page) => {},
   removeFileWatch: (entry, callback) => {
     setTimeout(callback, 0, true);
   },
@@ -151,6 +172,40 @@ chrome.fileManagerPrivate = {
     // Returns SearchResult[].
     // SearchResult { entry: Entry, highlightedBaseName: string }
     setTimeout(callback, 0, []);
+  },
+  nextCopyId_: 0,
+  startCopy: (entry, parentEntry, newName, callback) => {
+    // Returns copyId immediately.
+    var copyId = chrome.fileManagerPrivate.nextCopyId_++;
+    callback(copyId);
+    chrome.fileManagerPrivate.onCopyProgress.listeners_.forEach(l => {
+      l(copyId, {type: 'begin_copy_entry', sourceUrl: entry.toURL()});
+    });
+    entry.copyTo(
+        parentEntry, newName,
+        // Success.
+        (copied) => {
+          chrome.fileManagerPrivate.onCopyProgress.listeners_.forEach(l => {
+            l(copyId, {
+              type: 'end_copy_entry',
+              sourceUrl: entry.toURL(),
+              destinationUrl: copied.toURL()
+            });
+          });
+          chrome.fileManagerPrivate.onCopyProgress.listeners_.forEach(l => {
+            l(copyId, {
+              type: 'success',
+              sourceUrl: entry.toURL(),
+              destinationUrl: copied.toURL()
+            });
+          });
+        },
+        // Error.
+        (error) => {
+          chrome.fileManagerPrivate.onCopyProgress.listeners_.forEach(l => {
+            l(copyId, {type: 'error', error: error});
+          });
+        });
   },
   validatePathNameLength: (parentEntry, name, callback) => {
     setTimeout(callback, 0, true);

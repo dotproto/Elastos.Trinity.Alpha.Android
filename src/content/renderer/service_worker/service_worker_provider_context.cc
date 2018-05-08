@@ -15,7 +15,6 @@
 #include "content/child/child_thread_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
 #include "content/renderer/service_worker/service_worker_dispatcher.h"
@@ -29,8 +28,8 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -110,16 +109,8 @@ ServiceWorkerProviderContext::ServiceWorkerProviderContext(
   state_for_client_ = std::make_unique<ProviderStateForClient>(
       std::move(default_loader_factory));
 
-  if (!CanCreateSubresourceLoaderFactory() &&
-      !IsNavigationMojoResponseEnabled()) {
-    return;
-  }
-
-  // S13nServiceWorker/NavigationMojoResponse:
   // Set up the URL loader factory for sending subresource requests to
   // the controller.
-  DCHECK(ServiceWorkerUtils::IsServicificationEnabled() ||
-         IsNavigationMojoResponseEnabled());
   if (controller_info) {
     SetController(std::move(controller_info),
                   std::vector<blink::mojom::WebFeature>(),
@@ -156,8 +147,7 @@ void ServiceWorkerProviderContext::SetRegistrationForServiceWorkerGlobalScope(
 }
 
 scoped_refptr<WebServiceWorkerRegistrationImpl>
-ServiceWorkerProviderContext::TakeRegistrationForServiceWorkerGlobalScope(
-    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
+ServiceWorkerProviderContext::TakeRegistrationForServiceWorkerGlobalScope() {
   DCHECK_EQ(blink::mojom::ServiceWorkerProviderType::kForServiceWorker,
             provider_type_);
   ProviderStateForServiceWorker* state = state_for_service_worker_.get();
@@ -170,7 +160,7 @@ ServiceWorkerProviderContext::TakeRegistrationForServiceWorkerGlobalScope(
   DCHECK(state->registration->request.is_pending());
   scoped_refptr<WebServiceWorkerRegistrationImpl> registration =
       WebServiceWorkerRegistrationImpl::CreateForServiceWorkerGlobalScope(
-          std::move(state->registration), std::move(io_task_runner));
+          std::move(state->registration));
   return registration;
 }
 
@@ -199,9 +189,8 @@ ServiceWorkerProviderContext::GetSubresourceLoaderFactory() {
   }
   DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
   if (!state->subresource_loader_factory) {
-    mojo::MakeStrongBinding(
-        std::make_unique<ServiceWorkerSubresourceLoaderFactory>(
-            state->controller_connector, state->default_loader_factory),
+    ServiceWorkerSubresourceLoaderFactory::Create(
+        state->controller_connector, state->default_loader_factory,
         mojo::MakeRequest(&state->subresource_loader_factory));
   }
   return state->subresource_loader_factory.get();
@@ -261,12 +250,10 @@ ServiceWorkerProviderContext::GetOrCreateRegistrationForServiceWorkerClient(
 
   auto found = state_for_client_->registrations_.find(info->registration_id);
   if (found != state_for_client_->registrations_.end()) {
-    DCHECK(!info->request.is_pending());
     found->second->AttachForServiceWorkerClient(std::move(info));
     return found->second;
   }
 
-  DCHECK(info->request.is_pending());
   // WebServiceWorkerRegistrationImpl constructor calls
   // AddServiceWorkerRegistration to add itself into
   // |state_for_client_->registrations_|.
@@ -280,6 +267,12 @@ void ServiceWorkerProviderContext::OnNetworkProviderDestroyed() {
   container_host_.reset();
   if (state_for_client_ && state_for_client_->controller_connector)
     state_for_client_->controller_connector->OnContainerHostConnectionClosed();
+}
+
+void ServiceWorkerProviderContext::PingContainerHost(
+    base::OnceClosure callback) {
+  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  container_host_->Ping(std::move(callback));
 }
 
 void ServiceWorkerProviderContext::UnregisterWorkerFetchContext(
@@ -421,9 +414,7 @@ bool ServiceWorkerProviderContext::CanCreateSubresourceLoaderFactory() const {
   // Expected that it is called only for clients.
   DCHECK(state_for_client_);
   // |state_for_client_->default_loader_factory| could be null
-  // for SharedWorker case (which is not supported by S13nServiceWorker
-  // yet, https://crbug.com/796819) and in unit tests, return early in such
-  // cases too.
+  // in unit tests.
   return (ServiceWorkerUtils::IsServicificationEnabled() &&
           state_for_client_->default_loader_factory);
 }

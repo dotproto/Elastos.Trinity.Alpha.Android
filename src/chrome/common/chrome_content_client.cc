@@ -12,10 +12,10 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -32,28 +32,31 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pepper_flash.h"
-#include "chrome/common/profiling/profiling_client.h"
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/common_resources.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/dom_distiller/core/url_constants.h"
+#include "components/services/heap_profiling/public/cpp/client.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/cdm_info.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/simple_connection_filter.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_util.h"
+#include "media/base/decrypt_config.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "net/http/http_util.h"
-#include "pdf/features.h"
-#include "ppapi/features/features.h"
+#include "pdf/buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -112,8 +115,8 @@ const char kPDFPluginExtension[] = "pdf";
 const char kPDFPluginDescription[] = "Portable Document Format";
 const char kPDFPluginOutOfProcessMimeType[] =
     "application/x-google-chrome-pdf";
-const uint32_t kPDFPluginPermissions =
-    ppapi::PERMISSION_PRIVATE | ppapi::PERMISSION_DEV;
+const uint32_t kPDFPluginPermissions = ppapi::PERMISSION_PDF |
+                                       ppapi::PERMISSION_DEV;
 #endif  // BUILDFLAG(ENABLE_PDF)
 
 content::PepperPluginInfo::GetInterfaceFunc g_pdf_get_interface;
@@ -127,16 +130,18 @@ content::PepperPluginInfo::PPP_ShutdownModuleFunc g_nacl_shutdown_module;
 #endif
 
 #if defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
-bool IsWidevineAvailable(base::FilePath* cdm_path,
-                         std::vector<media::VideoCodec>* codecs_supported,
-                         bool* supports_persistent_license) {
+bool IsWidevineAvailable(
+    base::FilePath* cdm_path,
+    std::vector<media::VideoCodec>* codecs_supported,
+    bool* supports_persistent_license,
+    base::flat_set<media::EncryptionMode>* modes_supported) {
   static enum {
     NOT_CHECKED,
     FOUND,
     NOT_FOUND,
   } widevine_cdm_file_check = NOT_CHECKED;
 
-  if (PathService::Get(chrome::FILE_WIDEVINE_CDM, cdm_path)) {
+  if (base::PathService::Get(chrome::FILE_WIDEVINE_CDM, cdm_path)) {
     if (widevine_cdm_file_check == NOT_CHECKED)
       widevine_cdm_file_check = base::PathExists(*cdm_path) ? FOUND : NOT_FOUND;
 
@@ -156,6 +161,10 @@ bool IsWidevineAvailable(base::FilePath* cdm_path,
 #else
       *supports_persistent_license = false;
 #endif  // defined(OS_CHROMEOS)
+
+      // TODO(crbug.com/835009): Update once Widevine on Linux supports more
+      // encryption schemes.
+      modes_supported->insert(media::EncryptionMode::kCenc);
 
       return true;
     }
@@ -197,7 +206,7 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   // from the Chrome Web Store to use NaCl even if the command line switch
   // isn't set.  For other uses of NaCl we check for the command line switch.
   base::FilePath path;
-  if (PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
+  if (base::PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
     content::PepperPluginInfo nacl;
     // The nacl plugin is now built into the Chromium binary.
     nacl.is_internal = true;
@@ -368,8 +377,8 @@ bool GetSystemPepperFlash(content::PepperPluginInfo* plugin) {
     return false;
 
   base::FilePath flash_filename;
-  if (!PathService::Get(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
-                        &flash_filename))
+  if (!base::PathService::Get(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
+                              &flash_filename))
     return false;
 
   return TryCreatePepperFlashInfo(flash_filename, plugin);
@@ -523,15 +532,18 @@ void ChromeContentClient::AddContentDecryptionModules(
     base::FilePath cdm_path;
     std::vector<media::VideoCodec> video_codecs_supported;
     bool supports_persistent_license = false;
+    base::flat_set<media::EncryptionMode> encryption_modes_supported;
     if (IsWidevineAvailable(&cdm_path, &video_codecs_supported,
-                            &supports_persistent_license)) {
+                            &supports_persistent_license,
+                            &encryption_modes_supported)) {
       const base::Version version(WIDEVINE_CDM_VERSION_STRING);
       DCHECK(version.IsValid());
 
       cdms->push_back(content::CdmInfo(
           kWidevineCdmDisplayName, kWidevineCdmGuid, version, cdm_path,
           kWidevineCdmFileSystemId, video_codecs_supported,
-          supports_persistent_license, kWidevineKeySystem, false));
+          supports_persistent_license, encryption_modes_supported,
+          kWidevineKeySystem, false));
     }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
 
@@ -555,10 +567,13 @@ void ChromeContentClient::AddContentDecryptionModules(
       // Otherwise, it'll be treated as a sub-key-system of normal
       // kExternalClearKeyKeySystem. See MultipleCdmTypes test in
       // ECKEncryptedMediaTest.
+      // TODO(crbug.com/835009): Update when ECK supports more encryption
+      // schemes.
       cdms->push_back(content::CdmInfo(
           media::kClearKeyCdmDisplayName, media::kClearKeyCdmDifferentGuid,
           base::Version("0.1.0.0"), clear_key_cdm_path,
           media::kClearKeyCdmFileSystemId, {}, supports_persistent_license,
+          {media::EncryptionMode::kCenc},
           kExternalClearKeyDifferentGuidTestKeySystem, false));
 
       // Supported codecs are hard-coded in ExternalClearKeyProperties.
@@ -566,7 +581,7 @@ void ChromeContentClient::AddContentDecryptionModules(
           media::kClearKeyCdmDisplayName, media::kClearKeyCdmGuid,
           base::Version("0.1.0.0"), clear_key_cdm_path,
           media::kClearKeyCdmFileSystemId, {}, supports_persistent_license,
-          kExternalClearKeyKeySystem, true));
+          {media::EncryptionMode::kCenc}, kExternalClearKeyKeySystem, true));
     }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
   }
@@ -691,7 +706,7 @@ bool ChromeContentClient::AllowScriptExtensionForServiceWorker(
 #endif
 }
 
-content::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {
+blink::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {
   // Prevent initialization race (see crbug.com/721144). There may be a
   // race when the policy is needed for worker startup (which happens on a
   // separate worker thread).
@@ -709,7 +724,14 @@ media::MediaDrmBridgeClient* ChromeContentClient::GetMediaDrmBridgeClient() {
 
 void ChromeContentClient::OnServiceManagerConnected(
     content::ServiceManagerConnection* connection) {
-  static base::LazyInstance<profiling::ProfilingClient>::Leaky
-      profiling_client = LAZY_INSTANCE_INITIALIZER;
-  profiling_client.Get().OnServiceManagerConnected(connection);
+  static base::LazyInstance<heap_profiling::Client>::Leaky profiling_client =
+      LAZY_INSTANCE_INITIALIZER;
+
+  std::unique_ptr<service_manager::BinderRegistry> registry(
+      new service_manager::BinderRegistry);
+  registry->AddInterface(
+      base::BindRepeating(&heap_profiling::Client::BindToInterface,
+                          base::Unretained(&profiling_client.Get())));
+  connection->AddConnectionFilter(
+      std::make_unique<content::SimpleConnectionFilter>(std::move(registry)));
 }

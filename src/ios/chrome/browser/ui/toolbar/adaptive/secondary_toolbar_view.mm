@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -24,7 +25,7 @@
 @property(nonatomic, strong, readwrite) NSArray<ToolbarButton*>* allButtons;
 
 // The blur visual effect view, redefined as readwrite.
-@property(nonatomic, strong, readwrite) UIVisualEffectView* blur;
+@property(nonatomic, strong, readwrite) UIView* blur;
 
 // The stack view containing the buttons.
 @property(nonatomic, strong) UIStackView* stackView;
@@ -84,7 +85,13 @@
   self.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIBlurEffect* blurEffect = self.buttonFactory.toolbarConfiguration.blurEffect;
-  self.blur = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+  if (blurEffect) {
+    self.blur = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+  } else {
+    self.blur = [[UIView alloc] init];
+  }
+  self.blur.backgroundColor =
+      self.buttonFactory.toolbarConfiguration.blurBackgroundColor;
   [self addSubview:self.blur];
   self.blur.translatesAutoresizingMaskIntoConstraints = NO;
   AddSameConstraints(self.blur, self);
@@ -143,7 +150,7 @@
   return nil;
 }
 
-- (MDCProgressView*)progressBar {
+- (ToolbarButton*)shareButton {
   return nil;
 }
 
@@ -151,7 +158,7 @@
   return nil;
 }
 
-- (ToolbarButton*)shareButton {
+- (MDCProgressView*)progressBar {
   return nil;
 }
 

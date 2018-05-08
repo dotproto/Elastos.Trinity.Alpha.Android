@@ -24,6 +24,19 @@ struct StructTraits<content::mojom::RenderFrameMetadataDataView,
     return metadata.root_scroll_offset;
   }
 
+  static bool is_scroll_offset_at_top(const cc::RenderFrameMetadata& metadata) {
+    return metadata.is_scroll_offset_at_top;
+  }
+
+  static const viz::Selection<gfx::SelectionBound>& selection(
+      const cc::RenderFrameMetadata& metadata) {
+    return metadata.selection;
+  }
+
+  static bool is_mobile_optimized(const cc::RenderFrameMetadata& metadata) {
+    return metadata.is_mobile_optimized;
+  }
+
   static bool Read(content::mojom::RenderFrameMetadataDataView data,
                    cc::RenderFrameMetadata* out);
 };

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -83,7 +84,7 @@ class TestChromeUserManager : public FakeChromeUserManager {
           chromeos::ProfileHelper::Get()->GetProfileByUser(user);
       // Skip if user has a profile and kAllowScreenLock is set to false.
       if (user_profile &&
-          !user_profile->GetPrefs()->GetBoolean(prefs::kAllowScreenLock)) {
+          !user_profile->GetPrefs()->GetBoolean(ash::prefs::kAllowScreenLock)) {
         continue;
       }
 
@@ -477,7 +478,8 @@ TEST_F(SessionControllerClientTest, SendUserSession) {
   // Simulate login.
   const AccountId account_id(
       AccountId::FromUserEmailGaiaId("user@test.com", "5555555555"));
-  user_manager()->AddUser(account_id);
+  const user_manager::User* user = user_manager()->AddUser(account_id);
+  TestingProfile* user_profile = CreateTestingProfile(user);
   session_manager_.CreateSession(
       account_id,
       chromeos::ProfileHelper::GetUserIdHashByUserIdForTesting(
@@ -488,6 +490,9 @@ TEST_F(SessionControllerClientTest, SendUserSession) {
 
   // User session was sent.
   EXPECT_EQ(1, session_controller.update_user_session_count());
+  ASSERT_TRUE(session_controller.last_user_session());
+  EXPECT_EQ(content::BrowserContext::GetServiceUserIdFor(user_profile),
+            session_controller.last_user_session()->user_info->service_user_id);
 
   // Simulate a request for an update where nothing changed.
   client.SendUserSession(*user_manager()->GetLoggedInUsers()[0]);
@@ -587,18 +592,18 @@ TEST_F(SessionControllerClientTest, UserPrefsChange) {
   // Manipulate user prefs and verify SessionController is updated.
   PrefService* const user_prefs = user_profile->GetPrefs();
 
-  user_prefs->SetBoolean(prefs::kAllowScreenLock, true);
+  user_prefs->SetBoolean(ash::prefs::kAllowScreenLock, true);
   SessionControllerClient::FlushForTesting();
   EXPECT_TRUE(session_controller.last_session_info()->can_lock_screen);
-  user_prefs->SetBoolean(prefs::kAllowScreenLock, false);
+  user_prefs->SetBoolean(ash::prefs::kAllowScreenLock, false);
   SessionControllerClient::FlushForTesting();
   EXPECT_FALSE(session_controller.last_session_info()->can_lock_screen);
 
-  user_prefs->SetBoolean(prefs::kEnableAutoScreenLock, true);
+  user_prefs->SetBoolean(ash::prefs::kEnableAutoScreenLock, true);
   SessionControllerClient::FlushForTesting();
   EXPECT_TRUE(
       session_controller.last_session_info()->should_lock_screen_automatically);
-  user_prefs->SetBoolean(prefs::kEnableAutoScreenLock, false);
+  user_prefs->SetBoolean(ash::prefs::kEnableAutoScreenLock, false);
   SessionControllerClient::FlushForTesting();
   EXPECT_FALSE(
       session_controller.last_session_info()->should_lock_screen_automatically);

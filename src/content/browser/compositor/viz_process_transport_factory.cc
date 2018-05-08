@@ -5,11 +5,14 @@
 #include "content/browser/compositor/viz_process_transport_factory.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "components/viz/client/client_layer_tree_frame_sink.h"
+#include "components/viz/client/hit_test_data_provider_draw_quad.h"
 #include "components/viz/client/local_surface_id_provider.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
@@ -20,6 +23,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/external_begin_frame_controller_client_impl.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/public/browser/browser_thread.h"
@@ -27,7 +31,6 @@
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
-#include "gpu/command_buffer/common/context_result.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/compositor/reflector.h"
@@ -70,7 +73,7 @@ scoped_refptr<ui::ContextProviderCommandBuffer> CreateContextProviderImpl(
       std::move(gpu_channel_host), gpu_memory_buffer_manager,
       kGpuStreamIdDefault, kGpuStreamPriorityUI, gpu::kNullSurfaceHandle,
       std::move(url), kAutomaticFlushes, support_locking, support_grcontext,
-      gpu::SharedMemoryLimits(), attributes, nullptr /* share_context */, type);
+      gpu::SharedMemoryLimits(), attributes, type);
 }
 
 bool IsContextLost(viz::ContextProvider* context_provider) {
@@ -81,6 +84,23 @@ bool IsContextLost(viz::ContextProvider* context_provider) {
 bool IsWorkerContextLost(viz::RasterContextProvider* context_provider) {
   viz::RasterContextProvider::ScopedRasterContextLock lock(context_provider);
   return lock.RasterInterface()->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
+}
+
+// Provided as a callback to crash the GPU process.
+void ReceivedBadMessageFromGpuProcess() {
+  GpuProcessHost::CallOnIO(
+      GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+      base::BindRepeating([](GpuProcessHost* host) {
+        // There should always be a GpuProcessHost instance, and GPU process,
+        // for running the compositor thread. The exception is during shutdown
+        // the GPU process won't be restarted and GpuProcessHost::Get() can
+        // return null.
+        if (host)
+          host->ForceShutdown();
+
+        LOG(ERROR) << "Bad message received, terminating gpu process.";
+        base::debug::DumpWithoutCrashing();
+      }));
 }
 
 }  // namespace
@@ -102,11 +122,13 @@ VizProcessTransportFactory::VizProcessTransportFactory(
   GetHostFrameSinkManager()->SetConnectionLostCallback(
       base::BindRepeating(&VizProcessTransportFactory::OnGpuProcessLost,
                           weak_ptr_factory_.GetWeakPtr()));
+  GetHostFrameSinkManager()->SetBadMessageReceivedFromGpuCallback(
+      base::BindRepeating(&ReceivedBadMessageFromGpuProcess));
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDisableGpu) ||
       command_line->HasSwitch(switches::kDisableGpuCompositing)) {
-    CompositingModeFallbackToSoftware();
+    DisableGpuCompositing(nullptr);
   }
 }
 
@@ -173,8 +195,15 @@ VizProcessTransportFactory::SharedMainThreadContextProvider() {
     return nullptr;
 
   if (!main_context_provider_) {
-    CreateContextProviders(
-        gpu_channel_establish_factory_->EstablishGpuChannelSync());
+    auto context_result = gpu::ContextResult::kTransientFailure;
+    while (context_result == gpu::ContextResult::kTransientFailure) {
+      context_result = TryCreateContextsForGpuCompositing(
+          gpu_channel_establish_factory_->EstablishGpuChannelSync());
+
+      if (context_result == gpu::ContextResult::kFatalFailure)
+        DisableGpuCompositing(nullptr);
+    }
+    // On kFatalFailure |main_context_provider_| will be null.
   }
 
   return main_context_provider_;
@@ -337,19 +366,16 @@ viz::GLHelper* VizProcessTransportFactory::GetGLHelper() {
   return nullptr;
 }
 
-#if defined(OS_MACOSX)
-void VizProcessTransportFactory::SetCompositorSuspendedForRecycle(
-    ui::Compositor* compositor,
-    bool suspended) {
-  NOTIMPLEMENTED();
+void VizProcessTransportFactory::OnContextLost() {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VizProcessTransportFactory::OnLostMainThreadSharedContext,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
-#endif
 
-void VizProcessTransportFactory::CompositingModeFallbackToSoftware() {
-  // This may happen multiple times, since when the viz process (re)starts, it
-  // will send this notification if gpu is disabled.
-  if (is_gpu_compositing_disabled_)
-    return;
+void VizProcessTransportFactory::DisableGpuCompositing(
+    ui::Compositor* guilty_compositor) {
+  DLOG(ERROR) << "Switching to software compositing.";
 
   // Change the result of IsGpuCompositingDisabled() before notifying anything.
   is_gpu_compositing_disabled_ = true;
@@ -379,8 +405,15 @@ void VizProcessTransportFactory::CompositingModeFallbackToSoftware() {
   to_release.reserve(compositor_data_map_.size());
   for (auto& pair : compositor_data_map_) {
     ui::Compositor* compositor = pair.first;
-    if (!compositor->force_software_compositor())
+    // The |guilty_compositor| is in the process of setting up its FrameSink
+    // so removing it from |compositor_data_map_| would be both pointless and
+    // the cause of a crash.
+    // Compositors with force_software_compositor() do not follow the global
+    // compositing mode, so they do not need to changed.
+    if (compositor != guilty_compositor &&
+        !compositor->force_software_compositor()) {
       to_release.push_back(compositor);
+    }
   }
   for (ui::Compositor* compositor : to_release) {
     // Compositor expects to be not visible when releasing its FrameSink.
@@ -391,13 +424,8 @@ void VizProcessTransportFactory::CompositingModeFallbackToSoftware() {
     if (visible)
       compositor->SetVisible(true);
   }
-}
 
-void VizProcessTransportFactory::OnContextLost() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VizProcessTransportFactory::OnLostMainThreadSharedContext,
-                     weak_ptr_factory_.GetWeakPtr()));
+  GpuDataManagerImpl::GetInstance()->NotifyGpuInfoUpdate();
 }
 
 void VizProcessTransportFactory::OnGpuProcessLost() {
@@ -415,18 +443,18 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   bool gpu_compositing =
       !is_gpu_compositing_disabled_ && !compositor->force_software_compositor();
 
-  // Only try to make contexts for gpu compositing.
   if (gpu_compositing) {
-    // TODO(kylechar): Check GPU compositing status from GpuFeatureInfo.
-
-    if (!gpu_channel_host ||
-        !CreateContextProviders(std::move(gpu_channel_host))) {
-      // Retry on failure. If this isn't possible we should hear that we're
-      // falling back to software compositing from the viz process eventually.
+    auto context_result =
+        TryCreateContextsForGpuCompositing(std::move(gpu_channel_host));
+    if (context_result == gpu::ContextResult::kTransientFailure) {
+      // Get a new GpuChannelHost and retry context creation.
       gpu_channel_establish_factory_->EstablishGpuChannel(
           base::BindOnce(&VizProcessTransportFactory::OnEstablishedGpuChannel,
                          weak_ptr_factory_.GetWeakPtr(), compositor_weak_ptr));
       return;
+    } else if (context_result == gpu::ContextResult::kFatalFailure) {
+      DisableGpuCompositing(compositor);
+      gpu_compositing = false;
     }
   }
 
@@ -487,16 +515,14 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   viz::ClientLayerTreeFrameSink::InitParams params;
   params.compositor_task_runner = compositor->task_runner();
   params.gpu_memory_buffer_manager = GetGpuMemoryBufferManager();
-  // TODO(crbug.com/730660): Adding ServerSharedBitmapManager here is just to
-  // stop software compositing from crashing the browser process. Software
-  // composited areas will be blank since the ShareBitmaps aren't shared with
-  // the viz process. This mechanism is being rewritten currently.
-  params.shared_bitmap_manager = viz::ServerSharedBitmapManager::current();
   params.pipes.compositor_frame_sink_associated_info = std::move(sink_info);
   params.pipes.client_request = std::move(client_request);
   params.local_surface_id_provider =
       std::make_unique<viz::DefaultLocalSurfaceIdProvider>();
   params.enable_surface_synchronization = true;
+  params.hit_test_data_provider =
+      std::make_unique<viz::HitTestDataProviderDrawQuad>(
+          /*should_ask_for_child_region=*/false);
 
   scoped_refptr<viz::ContextProvider> compositor_context;
   scoped_refptr<viz::RasterContextProvider> worker_context;
@@ -515,27 +541,32 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
 #endif
 }
 
-bool VizProcessTransportFactory::CreateContextProviders(
+gpu::ContextResult
+VizProcessTransportFactory::TryCreateContextsForGpuCompositing(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
-  constexpr bool kSharedWorkerContextSupportsLocking = true;
-  constexpr bool kSharedWorkerContextSupportsGLES2 = false;
-  constexpr bool kSharedWorkerContextSupportsRaster = true;
-  constexpr bool kSharedWorkerContextSupportsGrContext = false;
-  constexpr bool kCompositorContextSupportsLocking = false;
-  constexpr bool kCompositorContextSupportsGLES2 = true;
-  constexpr bool kCompositorContextSupportsRaster = false;
-  constexpr bool kCompositorContextSupportsGrContext = true;
+  DCHECK(!is_gpu_compositing_disabled_);
 
-  if (main_context_provider_ && IsContextLost(main_context_provider_.get())) {
-    main_context_provider_->RemoveObserver(this);
-    main_context_provider_ = nullptr;
-  }
+  // Fallback to software compositing if there is no IPC channel.
+  if (!gpu_channel_host)
+    return gpu::ContextResult::kFatalFailure;
+
+  // Fallback to software compositing if GPU compositing is blacklisted.
+  auto gpu_compositing_status =
+      gpu_channel_host->gpu_feature_info()
+          .status_values[gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING];
+  if (gpu_compositing_status != gpu::kGpuFeatureStatusEnabled)
+    return gpu::ContextResult::kFatalFailure;
 
   if (worker_context_provider_ &&
       IsWorkerContextLost(worker_context_provider_.get()))
     worker_context_provider_ = nullptr;
 
   if (!worker_context_provider_) {
+    constexpr bool kSharedWorkerContextSupportsLocking = true;
+    constexpr bool kSharedWorkerContextSupportsGLES2 = false;
+    constexpr bool kSharedWorkerContextSupportsRaster = true;
+    constexpr bool kSharedWorkerContextSupportsGrContext = false;
+
     worker_context_provider_ = CreateContextProviderImpl(
         gpu_channel_host, GetGpuMemoryBufferManager(),
         kSharedWorkerContextSupportsLocking, kSharedWorkerContextSupportsGLES2,
@@ -546,32 +577,42 @@ bool VizProcessTransportFactory::CreateContextProviders(
     // Don't observer context loss on |worker_context_provider_| here, that is
     // already observered by LayerTreeFrameSink. The lost context will be caught
     // when recreating LayerTreeFrameSink(s).
-    auto result = worker_context_provider_->BindToCurrentThread();
-    if (result != gpu::ContextResult::kSuccess) {
+    auto context_result = worker_context_provider_->BindToCurrentThread();
+    if (context_result != gpu::ContextResult::kSuccess) {
       worker_context_provider_ = nullptr;
-      return false;
+      return context_result;
     }
   }
 
+  if (main_context_provider_ && IsContextLost(main_context_provider_.get())) {
+    main_context_provider_->RemoveObserver(this);
+    main_context_provider_ = nullptr;
+  }
+
   if (!main_context_provider_) {
+    constexpr bool kCompositorContextSupportsLocking = false;
+    constexpr bool kCompositorContextSupportsGLES2 = true;
+    constexpr bool kCompositorContextSupportsRaster = false;
+    constexpr bool kCompositorContextSupportsGrContext = true;
+
     main_context_provider_ = CreateContextProviderImpl(
         std::move(gpu_channel_host), GetGpuMemoryBufferManager(),
         kCompositorContextSupportsLocking, kCompositorContextSupportsGLES2,
         kCompositorContextSupportsRaster, kCompositorContextSupportsGrContext,
         ui::command_buffer_metrics::UI_COMPOSITOR_CONTEXT);
     main_context_provider_->SetDefaultTaskRunner(resize_task_runner_);
-    main_context_provider_->AddObserver(this);
 
-    auto result = main_context_provider_->BindToCurrentThread();
-    if (result != gpu::ContextResult::kSuccess) {
-      main_context_provider_->RemoveObserver(this);
-      main_context_provider_ = nullptr;
+    auto context_result = main_context_provider_->BindToCurrentThread();
+    if (context_result != gpu::ContextResult::kSuccess) {
       worker_context_provider_ = nullptr;
-      return false;
+      main_context_provider_ = nullptr;
+      return context_result;
     }
+
+    main_context_provider_->AddObserver(this);
   }
 
-  return true;
+  return gpu::ContextResult::kSuccess;
 }
 
 void VizProcessTransportFactory::OnLostMainThreadSharedContext() {

@@ -180,6 +180,18 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON" desc="Title of the button to skip the selection of an account. [Length: 20em] [iOS only]">
         Cancel
       </message>
+      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_ADD_ACCOUNT" desc="Title of the button to add an account [Length: 15m] [iOS only]">
+        ADD ACCOUNT
+      </message>
+      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_OK_BUTTON" desc="Title of the button to validate the user consent [Length: 15m] [iOS only]">
+        YES, I'M IN
+      </message>
+      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_PERSONALIZED" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]" translateable="false">
+      Personalized Google services like Google Pay
+      </message>
+      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_DATA" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]" translateable="false">
+      Your passwords, history &amp; more on all devices
+      </message>
       <message name="IDS_IOS_APPEX_PASSWORD_FORM_FILLED_SUCCESS" desc="Message displayed when an App Extension has successfully filled a sign-in form with username and password. [Length: 30em] [iOS only]">
         Forms filled.
       </message>
@@ -595,7 +607,13 @@ locale.  The strings in this file are specific to iOS.
         Install
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_CANCEL_CONFIRMATION" desc="Alert title to confirm download cancellation [Length: 30em] [iOS only]">
-        Cancel Download?
+        Stop Download?
+      </message>
+      <message name="IDS_IOS_DOWNLOAD_MANAGER_CONTINUE" desc="The title of Continue button in the Stop Download? confirmation dialog [30em]">
+        Continue
+      </message>
+      <message name="IDS_IOS_DOWNLOAD_MANAGER_STOP" desc="The title of Stop button in the Stop Download? confirmation dialog [30em]">
+        Stop
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_REPLACE_CONFIRMATION" desc="Alert title to confirm download old download replacement [Length: 30em] [iOS only]">
         Start New Download?
@@ -628,10 +646,10 @@ locale.  The strings in this file are specific to iOS.
         Download failed
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_SUCCEEDED_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement read by Voice Over when the download has sucessfully finished. [Length: unlimited] [iOS only]">
-        Download successfully finished
+        Download finished
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_REQUESTED_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement read by Voice Over when the Download Manager UI is shown to the user. [Length: unlimited] [iOS only]">
-        File download is available
+        File download is available. Options available near bottom of screen.
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_UPLOAD_TO_GOOGLE_DRIVE" desc="Button for uploading a downloaded file to Google Drive. It's displayed on the dialog presented when no app on the device can open the file. [Length: 25em] [iOS only]">
         Upload to Google Drive
@@ -801,6 +819,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_OPEN_TABS_ENABLE_SYNC_MOBILE" desc="Button label to enable Sync for user. [Length: 30em]">
         Enable sync
       </message>
+      <message name="IDS_IOS_RECENT_TABS_SYNC_IN_PROGRESS" desc="Section header subtitle label while loading tabs in other devices. [Length: 30em] [iOS only]">
+        Syncing...
+      </message>
       <message name="IDS_IOS_OPEN_TABS_LAST_USED" desc="Last used timestamp label [Length: 20em] [iOS only]">
         Last synced: <ph name="LAST_USED_TIME">$1<ex>3 mins ago</ex></ph>
       </message>
@@ -900,6 +921,15 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_OPTIONS_WEB_SERVICES_LABEL" desc="Title for group of web services items in Privacy settings table, including Show Suggestions, Preload Webpages, and Send Usage Data. [Length: 10em] [iOS only]">
         Web Services
+      </message>
+      <message name="IDS_IOS_OVERSCROLL_NEW_TAB_LABEL" desc="The text to use for the tooltip for the overscroll new tab action. [Length: 20em] [iOS only]">
+        New Tab
+      </message>
+      <message name="IDS_IOS_OVERSCROLL_CLOSE_TAB_LABEL" desc="The text to use for the tooltip for the overscroll close tab action. [Length: 20em] [iOS only]">
+        Close Tab
+      </message>
+      <message name="IDS_IOS_OVERSCROLL_REFRESH_LABEL" desc="The text to use for the tooltip for the overscroll refresh action. [Length: 20em] [iOS only]">
+        Refresh
       </message>
       <message name="IDS_IOS_PAGE_INFO_OFFLINE_PAGE" desc="Message to display in the page info bubble when the page you are on is an offline page.">
         This page has been saved to your Reading List.
@@ -1454,6 +1484,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON" desc="Title of the button in the tab grid UI that closes all the tabs in the grid. [iOS only]">
         Close All
       </message>
+      <message name="IDS_IOS_TAB_GRID_UNDO_CLOSE_ALL_BUTTON" desc="Title of the button in the tab grid UI that revert the close all action recently taken by the user. [iOS only]">
+        Undo
+      </message>
       <message name="IDS_IOS_TAB_GRID_INCOGNITO_TABS_TITLE" desc="The accessibility label of the Incognito Tabs page in the tab grid UI. [iOS only]">
         Incognito Tabs
       </message>
@@ -1547,6 +1580,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TOOLS_MENU" desc="The accessibility label for the iOS tools menu [iOS only]">
         Tools Menu
       </message>
+      <message name="IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS" desc="The iOS menu item for adding the current page to the bookmarks [Length: 15em] [iOS only]">
+        Bookmark
+      </message>
       <message name="IDS_IOS_TOOLS_MENU_BOOKMARKS" desc="The iOS menu item for opening the bookmarks manager [Length: 15em] [iOS only]">
         Bookmarks
       </message>
@@ -1587,7 +1623,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Recent Tabs
       </message>
       <message name="IDS_IOS_TOOLS_MENU_RELOAD" desc="The title of the button in the menu allowing the user to reload the page.">
-        Reload This Page
+        Reload
       </message>
       <message name="IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE" desc="The iOS menu item for requesting the desktop site [Length: 15em] [iOS only]">
         Request Desktop Site
@@ -1603,6 +1639,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_TOOLS_MENU_SITE_INFORMATION" desc="The iOS menu item for getting the site informations.">
         Site Information
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_STOP" desc="The iOS menu item for stoping the loading of the page.">
+        Stop
       </message>
       <message name="IDS_IOS_TRANSLATE_SETTING" desc="Title for the view and option in Settings for Translate. [Length: 25em] [iOS only]">
         Google Translate

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
@@ -18,8 +19,10 @@
 
 namespace content {
 
+class SignedExchangeDevToolsProxy;
+
 // Provide parsers for signed-exchange headers.
-// https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html
+// https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html
 class CONTENT_EXPORT SignedExchangeHeaderParser {
  public:
   struct CONTENT_EXPORT Signature {
@@ -40,9 +43,10 @@ class CONTENT_EXPORT SignedExchangeHeaderParser {
   };
 
   // Parses a value of the Signature header.
-  // https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#rfc.section.3.2
+  // https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html#signature-header
   static base::Optional<std::vector<Signature>> ParseSignature(
-      base::StringPiece signature_str);
+      base::StringPiece signature_str,
+      SignedExchangeDevToolsProxy* devtools_proxy);
 
   // Parses |content_type| to get the value of "v=" parameter of the signed
   // exchange. Example: "b0" for "application/signed-exchange;v=b0". Returns

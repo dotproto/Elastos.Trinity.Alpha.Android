@@ -23,7 +23,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "chrome/browser/sync/glue/theme_data_type_controller.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -56,7 +55,6 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_model_worker.h"
 #include "components/search_engines/search_engine_data_type_controller.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/report_unrecoverable_error.h"
@@ -69,6 +67,7 @@
 #include "components/sync/user_events/user_event_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
+#include "components/sync_sessions/session_sync_bridge.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/storage/backend_task_runner.h"
@@ -76,9 +75,9 @@
 #include "ui/base/device_form_factor.h"
 
 #if BUILDFLAG(ENABLE_APP_LIST)
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
-#include "ui/app_list/app_list_switches.h"
 #endif  // BUILDFLAG(ENABLE_APP_LIST)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -89,10 +88,6 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service_factory.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
@@ -220,22 +215,14 @@ void ChromeSyncClient::Initialize() {
 
   // Component factory may already be set in tests.
   if (!GetSyncApiComponentFactory()) {
-    const GURL sync_service_url = syncer::GetSyncServiceURL(
-        *base::CommandLine::ForCurrentProcess(), chrome::GetChannel());
-    ProfileOAuth2TokenService* token_service =
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-    net::URLRequestContextGetter* url_request_context_getter =
-        profile_->GetRequestContext();
-
     component_factory_ = std::make_unique<ProfileSyncComponentsFactoryImpl>(
         this, chrome::GetChannel(), chrome::GetVersionString(),
         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET,
         *base::CommandLine::ForCurrentProcess(),
-        prefs::kSavingBrowserHistoryDisabled, sync_service_url,
+        prefs::kSavingBrowserHistoryDisabled,
         content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::UI),
-        db_thread_, token_service, url_request_context_getter,
-        web_data_service_, password_store_);
+        db_thread_, web_data_service_, password_store_);
   }
 }
 
@@ -413,14 +400,6 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
     case syncer::SUPERVISED_USER_SETTINGS:
       return SupervisedUserSettingsServiceFactory::GetForProfile(profile_)->
           AsWeakPtr();
-#if !defined(OS_ANDROID)
-    case syncer::SUPERVISED_USERS:
-      return SupervisedUserSyncServiceFactory::GetForProfile(profile_)->
-          AsWeakPtr();
-    case syncer::SUPERVISED_USER_SHARED_SETTINGS:
-      return SupervisedUserSharedSettingsServiceFactory::GetForBrowserContext(
-          profile_)->AsWeakPtr();
-#endif  // !defined(OS_ANDROID)
     case syncer::SUPERVISED_USER_WHITELISTS: {
       // Unlike other types here, ProfileSyncServiceFactory does not declare a
       // DependsOn the SupervisedUserServiceFactory (in order to avoid circular
@@ -466,8 +445,8 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   }
 }
 
-base::WeakPtr<syncer::ModelTypeSyncBridge>
-ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
+base::WeakPtr<syncer::ModelTypeControllerDelegate>
+ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
       return ProfileSyncServiceFactory::GetForProfile(profile_)
@@ -502,6 +481,11 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
       return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
           ->GetSyncBridge()
           ->AsWeakPtr();
+    case syncer::SESSIONS: {
+      return ProfileSyncServiceFactory::GetForProfile(profile_)
+          ->GetSessionSyncBridge()
+          ->AsWeakPtr();
+    }
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
@@ -663,13 +647,6 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
   sync_service->RegisterDataTypeController(
       std::make_unique<SupervisedUserSyncDataTypeController>(
           syncer::SUPERVISED_USER_WHITELISTS, error_callback, this, profile_));
-  sync_service->RegisterDataTypeController(
-      std::make_unique<SupervisedUserSyncDataTypeController>(
-          syncer::SUPERVISED_USERS, error_callback, this, profile_));
-  sync_service->RegisterDataTypeController(
-      std::make_unique<SupervisedUserSyncDataTypeController>(
-          syncer::SUPERVISED_USER_SHARED_SETTINGS, error_callback, this,
-          profile_));
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if defined(OS_CHROMEOS)

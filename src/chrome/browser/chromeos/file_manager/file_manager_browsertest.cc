@@ -10,30 +10,49 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/session_manager/core/session_manager.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user_manager.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 namespace file_manager {
 
-// Parameter of FileManagerBrowserTest.
-// The second value is the case name of JavaScript.
-typedef std::tr1::tuple<GuestMode, const char*> TestParameter;
+// FileManagerBrowserTest parameters: first controls IN_GUEST_MODE or not, the
+// second is the JS test case name.
+typedef std::tuple<GuestMode, const char*> TestParameter;
 
-// Test fixture class for normal (not multi-profile related) tests.
+// FileManager browser test class.
 class FileManagerBrowserTest :
       public FileManagerBrowserTestBase,
       public ::testing::WithParamInterface<TestParameter> {
-  GuestMode GetGuestModeParam() const override {
-    return std::tr1::get<0>(GetParam());
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    FileManagerBrowserTestBase::SetUpCommandLine(command_line);
+
+    if (shouldEnableLegacyEventDispatch()) {
+      command_line->AppendSwitchASCII("disable-blink-features",
+                                      "TrustedEventsDefaultAction");
+    }
   }
-  const char* GetTestManifestName() const override {
+
+  GuestMode GetGuestModeParam() const override {
+    return std::get<0>(GetParam());
+  }
+
+  const char* GetTestCaseNameParam() const override {
+    return std::get<1>(GetParam());
+  }
+
+  const char* GetTestExtensionManifestName() const override {
     return "file_manager_test_manifest.json";
   }
-  const char* GetTestCaseNameParam() const override {
-    return std::tr1::get<1>(GetParam());
+
+ private:
+  bool shouldEnableLegacyEventDispatch() {
+    const std::string test_case_name = GetTestCaseNameParam();
+    // crbug.com/482121 crbug.com/480491
+    return test_case_name.find("tabindex") != std::string::npos;
   }
 };
 
@@ -41,10 +60,11 @@ IN_PROC_BROWSER_TEST_P(FileManagerBrowserTest, Test) {
   StartTest();
 }
 
-// Test fixture class for tests that rely on deprecated event dispatch that send
-// tests.
+// FileManager browser test class for tests that rely on deprecated event
+// dispatch that send tests.
 class FileManagerBrowserTestWithLegacyEventDispatch
     : public FileManagerBrowserTest {
+ public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     FileManagerBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII("disable-blink-features",
@@ -83,15 +103,8 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       TestParameter(NOT_IN_GUEST_MODE, "searchCaseInsensitive"),
                       TestParameter(NOT_IN_GUEST_MODE, "searchNotFound")));
 
-// Fails on official build. http://crbug.com/429294
-// Disabled due to flakiness. https://crbug.com/701451
-#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
-#define MAYBE_OpenVideoFiles DISABLED_OpenVideoFiles
-#else
-#define MAYBE_OpenVideoFiles OpenVideoFiles
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_OpenVideoFiles,
+    OpenVideoFiles,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(IN_GUEST_MODE, "videoOpenDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "videoOpenDownloads"),
@@ -114,25 +127,26 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "audioRepeatAllModeSingleFileDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "audioNoRepeatModeSingleFileDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "audioRepeatOneModeSingleFileDrive"),
-        // TODO(crbug.com/701922) Revive this flaky test.
-        // TestParameter(NOT_IN_GUEST_MODE,
-        //               "audioRepeatAllModeMultipleFileDrive"),
+        TestParameter(NOT_IN_GUEST_MODE, "audioRepeatAllModeMultipleFileDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "audioNoRepeatModeMultipleFileDrive"),
         TestParameter(NOT_IN_GUEST_MODE,
                       "audioRepeatOneModeMultipleFileDrive")));
 
-// Fails on official build. http://crbug.com/429294
-// Flaky: http://crbug.com/711290
+// Fails on the MSAN bots, https://crbug.com/837551
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_OpenImageFiles DISABLED_OpenImageFiles
+#else
+#define MAYBE_OpenImageFiles OpenImageFiles
+#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_OpenImageFiles,
+    MAYBE_OpenImageFiles,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(IN_GUEST_MODE, "imageOpenDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "imageOpenDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "imageOpenDrive")));
 
-// Flaky: crbug.com/715963
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_CreateNewFolder,
+    CreateNewFolder,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "createNewFolderAfterSelectFile"),
@@ -176,10 +190,8 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       "deleteMenuItemIsDisabledWhenNoItemIsSelected"),
         TestParameter(NOT_IN_GUEST_MODE, "deleteOneItemFromToolbar")));
 
-// TODO(yamaguchi):Enable after removing root cause of the test flakiness.
-// http://crbug.com/804413.
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_QuickView,
+    QuickView,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "openQuickView"),
                       TestParameter(NOT_IN_GUEST_MODE, "closeQuickView")));
@@ -281,28 +293,16 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "transferFromOfflineToDownloads"),
         TestParameter(NOT_IN_GUEST_MODE, "transferFromOfflineToDrive")));
 
-// Fails on official build. http://crbug.com/429294
-// Disabled due to flakiness. https://crbug.com/701924
-#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
-#define MAYBE_RestorePrefs DISABLED_RestorePrefs
-#else
-#define MAYBE_RestorePrefs RestorePrefs
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_RestorePrefs,
+    RestorePrefs,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(IN_GUEST_MODE, "restoreSortColumn"),
                       TestParameter(NOT_IN_GUEST_MODE, "restoreSortColumn"),
                       TestParameter(IN_GUEST_MODE, "restoreCurrentView"),
                       TestParameter(NOT_IN_GUEST_MODE, "restoreCurrentView")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_ShareDialog DISABLED_ShareDialog
-#else
-#define MAYBE_ShareDialog ShareDialog
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_ShareDialog,
+    ShareDialog,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "shareFile"),
                       TestParameter(NOT_IN_GUEST_MODE, "shareDirectory")));
@@ -320,25 +320,15 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       TestParameter(NOT_IN_GUEST_MODE,
                                     "restoreGeometryMaximizedState")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_Traverse DISABLED_Traverse
-#else
-#define MAYBE_Traverse Traverse
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_Traverse,
+    Traverse,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(IN_GUEST_MODE, "traverseDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "traverseDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "traverseDrive")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_SuggestAppDialog DISABLED_SuggestAppDialog
-#else
-#define MAYBE_SuggestAppDialog SuggestAppDialog
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_SuggestAppDialog,
+    SuggestAppDialog,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "suggestAppDialog")));
 
@@ -391,7 +381,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "genericTaskIsNotExecuted"),
         TestParameter(NOT_IN_GUEST_MODE, "genericAndNonGenericTasksAreMixed")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)
 #define MAYBE_FolderShortcuts DISABLED_FolderShortcuts
 #else
 #define MAYBE_FolderShortcuts FolderShortcuts
@@ -425,13 +415,8 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
     FileManagerBrowserTestWithLegacyEventDispatch,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "searchBoxFocus")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_TabindexFocus DISABLED_TabindexFocus
-#else
-#define MAYBE_TabindexFocus TabindexFocus
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_TabindexFocus,
+    TabindexFocus,
     FileManagerBrowserTestWithLegacyEventDispatch,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "tabindexFocus")));
 
@@ -459,28 +444,26 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE,
                                     "tabindexFocusDirectorySelected")));
 
-// Fails on official cros trunk build. http://crbug.com/480491
 #if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
 #define MAYBE_TabindexOpenDialog DISABLED_TabindexOpenDialog
 #else
 #define MAYBE_TabindexOpenDialog TabindexOpenDialog
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_TabindexOpenDialog,
+    MAYBE_TabindexOpenDialog,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "tabindexOpenDialogDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "tabindexOpenDialogDownloads"),
         TestParameter(IN_GUEST_MODE, "tabindexOpenDialogDownloads")));
 
-// Fails on official build. http://crbug.com/482121.
 #if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
 #define MAYBE_TabindexSaveFileDialog DISABLED_TabindexSaveFileDialog
 #else
 #define MAYBE_TabindexSaveFileDialog TabindexSaveFileDialog
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_TabindexSaveFileDialog,
+    MAYBE_TabindexSaveFileDialog,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "tabindexSaveFileDialogDrive"),
@@ -537,13 +520,8 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       TestParameter(IN_GUEST_MODE, "showGridViewDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "showGridViewDrive")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_Providers DISABLED_Providers
-#else
-#define MAYBE_Providers Providers
-#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_Providers,
+    Providers,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "requestMount"),
@@ -618,8 +596,13 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
   // This is used for preparing all accounts in PRE_ test setup, and for testing
   // actual login behavior.
   void AddAllUsers() {
-    for (size_t i = 0; i < arraysize(kTestAccounts); ++i)
+    for (size_t i = 0; i < arraysize(kTestAccounts); ++i) {
+      // The primary account was already set up in SetUpOnMainThread, so skip it
+      // here.
+      if (i == PRIMARY_ACCOUNT_INDEX)
+        continue;
       AddUser(kTestAccounts[i], i >= SECONDARY_ACCOUNT_INDEX_START);
+    }
   }
 
   // Returns primary profile (if it is already created.)
@@ -644,20 +627,29 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
     }
     user_manager::UserManager::Get()->SaveUserDisplayName(
         account_id, base::UTF8ToUTF16(info.display_name));
-    SigninManagerFactory::GetForProfile(
-        chromeos::ProfileHelper::GetProfileByUserIdHashForTest(info.hash))
-        ->SetAuthenticatedAccountInfo(info.gaia_id, info.email);
+    Profile* profile =
+        chromeos::ProfileHelper::GetProfileByUserIdHashForTest(info.hash);
+    // TODO(https://crbug.com/814307): We can't use
+    // identity::MakePrimaryAccountAvailable from identity_test_utils.h here
+    // because that DCHECKs that the SigninManager isn't authenticated yet.
+    // Here, it *can* be already authenticated if a PRE_ test previously set up
+    // the user.
+    IdentityManagerFactory::GetForProfile(profile)
+        ->SetPrimaryAccountSynchronouslyForTests(info.gaia_id, info.email,
+                                                 "refresh_token");
   }
 
- private:
   GuestMode GetGuestModeParam() const override { return NOT_IN_GUEST_MODE; }
-  const char* GetTestManifestName() const override {
-    return "file_manager_test_manifest.json";
-  }
+
   const char* GetTestCaseNameParam() const override {
     return test_case_name_.c_str();
   }
 
+  const char* GetTestExtensionManifestName() const override {
+    return "file_manager_test_manifest.json";
+  }
+
+ private:
   std::string test_case_name_;
 };
 

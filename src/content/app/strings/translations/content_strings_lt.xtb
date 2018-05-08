@@ -94,6 +94,7 @@
 <translation id="5034860022980953847">eigos indikatorius</translation>
 <translation id="5117590920725113268">Rodyti kitą mėnesį</translation>
 <translation id="512758898067543763">eilutės antraštė</translation>
+<translation id="5153163864850940242">Šis vaizdo įrašas leidžiamas kaip vaizdas vaizde</translation>
 <translation id="5164977714490026579">Vertė turi būti <ph name="MINIMUM" /> arba didesnė.</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Įveskite el. pašto adreso dalį iki „<ph name="ATSIGN" />“. „<ph name="INVALIDADDRESS" />“ nėra visas el. pašto adresas.</translation>
@@ -124,7 +125,6 @@
 <translation id="6404546809543547843">garso laiko valdiklis</translation>
 <translation id="648732519525291180">laiko rinkiklis</translation>
 <translation id="6550675742724504774">Parinktys</translation>
-<translation id="6564313821541007458">Dabar įjungtas vaizdo vaizde režimas</translation>
 <translation id="658823671542763450">įjungti viso ekrano režimą</translation>
 <translation id="663493177488814956">sklaidos kanalas</translation>
 <translation id="6637586476836377253">log</translation>

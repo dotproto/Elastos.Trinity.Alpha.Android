@@ -93,6 +93,12 @@ class HardwareDisplayPlaneManager {
   // plane_list->old_plane_list.
   virtual bool DisableOverlayPlanes(HardwareDisplayPlaneList* plane_list) = 0;
 
+  // Set the drm_color_ctm contained in |ctm_blob_data| to all planes' KMS
+  // states
+  virtual bool SetColorCorrectionOnAllCrtcPlanes(
+      uint32_t crtc_id,
+      ScopedDrmColorCtmPtr ctm_blob_data) = 0;
+
   // Check that the primary plane is valid for this
   // PlaneManager. Specifically, legacy can't support primary planes
   // that don't have the same size as the current mode of the crtc.
@@ -137,9 +143,9 @@ class HardwareDisplayPlaneManager {
 
   // Returns true if |plane| can support |overlay| and compatible with
   // |crtc_index|.
-  bool IsCompatible(HardwareDisplayPlane* plane,
-                    const OverlayPlane& overlay,
-                    uint32_t crtc_index) const;
+  virtual bool IsCompatible(HardwareDisplayPlane* plane,
+                            const OverlayPlane& overlay,
+                            uint32_t crtc_index) const;
 
   void ResetCurrentPlaneList(HardwareDisplayPlaneList* plane_list) const;
 

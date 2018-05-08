@@ -16,6 +16,7 @@
 #include "chrome/browser/extensions/chrome_app_icon_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/accelerator_table.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/zoom/page_zoom.h"
@@ -34,12 +35,6 @@ const int kMinPanelWidth = 100;
 const int kMinPanelHeight = 100;
 const int kDefaultPanelWidth = 200;
 const int kDefaultPanelHeight = 300;
-
-struct AcceleratorMapping {
-  ui::KeyboardCode keycode;
-  int modifiers;
-  int command_id;
-};
 
 const AcceleratorMapping kAppWindowAcceleratorMap[] = {
   { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
@@ -124,7 +119,7 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
     const AppWindow::CreateParams& create_params) {
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
   init_params.delegate = this;
-  init_params.remove_standard_frame = IsFrameless() || has_frame_color_;
+  init_params.remove_standard_frame = ShouldRemoveStandardFrame();
   init_params.use_system_default_icon = true;
   if (create_params.alpha_enabled) {
     init_params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
@@ -230,6 +225,10 @@ void ChromeNativeAppWindowViews::InitializePanelWindow(
 views::NonClientFrameView*
 ChromeNativeAppWindowViews::CreateStandardDesktopAppFrame() {
   return views::WidgetDelegateView::CreateNonClientFrameView(widget());
+}
+
+bool ChromeNativeAppWindowViews::ShouldRemoveStandardFrame() {
+  return IsFrameless() || has_frame_color_;
 }
 
 // ui::BaseWindow implementation.

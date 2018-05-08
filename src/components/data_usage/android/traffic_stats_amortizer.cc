@@ -165,7 +165,7 @@ int64_t GetTotalRxBytes(const DataUseBuffer& data_use_sequence) {
 }
 
 void RecordConcurrentTabsHistogram(const DataUseBuffer& data_use_buffer) {
-  std::set<int32_t> unique_tabs;
+  std::set<SessionID> unique_tabs;
   for (const auto& data_use_buffer_pair : data_use_buffer)
     unique_tabs.insert(data_use_buffer_pair.first->tab_id);
   UMA_HISTOGRAM_COUNTS_100("TrafficStatsAmortizer.ConcurrentTabs",
@@ -219,7 +219,7 @@ base::WeakPtr<TrafficStatsAmortizer> TrafficStatsAmortizer::GetWeakPtr() {
 }
 
 TrafficStatsAmortizer::TrafficStatsAmortizer(
-    base::TickClock* tick_clock,
+    const base::TickClock* tick_clock,
     std::unique_ptr<base::Timer> traffic_stats_query_timer,
     const base::TimeDelta& traffic_stats_query_delay,
     const base::TimeDelta& max_amortization_delay,

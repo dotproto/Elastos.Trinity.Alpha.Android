@@ -207,6 +207,8 @@ const char kDeleted[] = "deleted";
 const char kFile[] = "file";
 const char kTeamDrive[] = "teamDrive";
 const char kTeamDriveId[] = "teamDriveId";
+const char kStartPageToken[] = "startPageToken";
+const char kNewStartPageToken[] = "newStartPageToken";
 
 // Changes List
 // https://developers.google.com/drive/v2/reference/changes/list
@@ -456,7 +458,7 @@ TeamDriveCapabilities::TeamDriveCapabilities()
 TeamDriveCapabilities::TeamDriveCapabilities(const TeamDriveCapabilities& src) =
     default;
 
-TeamDriveCapabilities::~TeamDriveCapabilities(){}
+TeamDriveCapabilities::~TeamDriveCapabilities() = default;
 
 // static
 void TeamDriveCapabilities::RegisterJSONConverter(
@@ -789,9 +791,9 @@ bool ChangeResource::GetType(base::StringPiece type_name,
 ////////////////////////////////////////////////////////////////////////////////
 // ChangeList implementation
 
-ChangeList::ChangeList() : largest_change_id_(0) {}
+ChangeList::ChangeList() = default;
 
-ChangeList::~ChangeList() {}
+ChangeList::~ChangeList() = default;
 
 // static
 void ChangeList::RegisterJSONConverter(
@@ -801,6 +803,8 @@ void ChangeList::RegisterJSONConverter(
                                        GetGURLFromString);
   converter->RegisterCustomField<int64_t>(
       kLargestChangeId, &ChangeList::largest_change_id_, &base::StringToInt64);
+  converter->RegisterStringField(kNewStartPageToken,
+                                 &ChangeList::new_start_page_token_);
   converter->RegisterRepeatedMessage<ChangeResource>(kItems,
                                                      &ChangeList::items_);
 }
@@ -901,6 +905,42 @@ bool ImageMediaMetadata::Parse(const base::Value& value) {
   base::JSONValueConverter<ImageMediaMetadata> converter;
   if (!converter.Convert(value, this)) {
     LOG(ERROR) << "Unable to parse: Invalid ImageMediaMetadata.";
+    return false;
+  }
+  return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// StartPageToken implementation
+
+StartPageToken::StartPageToken() = default;
+
+StartPageToken::~StartPageToken() = default;
+
+// static
+void StartPageToken::RegisterJSONConverter(
+    base::JSONValueConverter<StartPageToken>* converter) {
+  converter->RegisterStringField(kStartPageToken,
+                                 &StartPageToken::start_page_token_);
+}
+
+// static
+std::unique_ptr<StartPageToken> StartPageToken::CreateFrom(
+    const base::Value& value) {
+  std::unique_ptr<StartPageToken> result = std::make_unique<StartPageToken>();
+
+  if (!result->Parse(value)) {
+    LOG(ERROR) << "Unable to parse: Invalid StartPageToken JSON.";
+    return nullptr;
+  }
+
+  return result;
+}
+
+bool StartPageToken::Parse(const base::Value& value) {
+  base::JSONValueConverter<StartPageToken> converter;
+  if (!converter.Convert(value, this)) {
+    LOG(ERROR) << "Unable to parse: Invalid StartPageToken.";
     return false;
   }
   return true;

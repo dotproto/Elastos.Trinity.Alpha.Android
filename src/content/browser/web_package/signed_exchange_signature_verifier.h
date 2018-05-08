@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
@@ -21,6 +22,7 @@ class Time;
 namespace content {
 
 class SignedExchangeHeader;
+class SignedExchangeDevToolsProxy;
 
 // SignedExchangeSignatureVerifier verifies the signature of the given
 // signed exchange. This is done by reconstructing the signed message
@@ -31,7 +33,7 @@ class SignedExchangeHeader;
 // of the certificate used to generate the signature, which can't be done
 // synchronously. (See SignedExchangeCertFetcher for this logic.)
 //
-// https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#rfc.section.3.6
+// https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html#signature-validity
 class CONTENT_EXPORT SignedExchangeSignatureVerifier final {
  public:
   enum class Result {
@@ -47,7 +49,8 @@ class CONTENT_EXPORT SignedExchangeSignatureVerifier final {
 
   static Result Verify(const SignedExchangeHeader& header,
                        scoped_refptr<net::X509Certificate> certificate,
-                       const base::Time& verification_time);
+                       const base::Time& verification_time,
+                       SignedExchangeDevToolsProxy* devtools_proxy);
 
   static base::Optional<std::vector<uint8_t>> EncodeCanonicalExchangeHeaders(
       const SignedExchangeHeader& header);

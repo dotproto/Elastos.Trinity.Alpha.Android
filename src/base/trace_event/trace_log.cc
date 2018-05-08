@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/no_destructor.h"
 #include "base/process/process_info.h"
 #include "base/process/process_metrics.h"
@@ -189,7 +190,7 @@ class TraceLog::OptionalAutoLock {
 };
 
 class TraceLog::ThreadLocalEventBuffer
-    : public MessageLoop::DestructionObserver,
+    : public MessageLoopCurrent::DestructionObserver,
       public MemoryDumpProvider {
  public:
   explicit ThreadLocalEventBuffer(TraceLog* trace_log);
@@ -209,7 +210,7 @@ class TraceLog::ThreadLocalEventBuffer
   int generation() const { return generation_; }
 
  private:
-  // MessageLoop::DestructionObserver
+  // MessageLoopCurrent::DestructionObserver
   void WillDestroyCurrentMessageLoop() override;
 
   // MemoryDumpProvider implementation.
@@ -316,6 +317,12 @@ void TraceLog::ThreadLocalEventBuffer::FlushWhileLocked() {
   // find the generation mismatch and delete this buffer soon.
 }
 
+void TraceLog::SetAddTraceEventOverride(
+    const AddTraceEventOverrideCallback& override) {
+  subtle::NoBarrier_Store(&trace_event_override_,
+                          reinterpret_cast<subtle::AtomicWord>(override));
+}
+
 struct TraceLog::RegisteredAsyncObserver {
   explicit RegisteredAsyncObserver(WeakPtr<AsyncEnabledStateObserver> observer)
       : observer(observer), task_runner(ThreadTaskRunnerHandle::Get()) {}
@@ -356,6 +363,7 @@ TraceLog::TraceLog()
       thread_shared_chunk_index_(0),
       generation_(0),
       use_worker_thread_(false),
+      trace_event_override_(0),
       filter_factory_for_testing_(nullptr) {
   CategoryRegistry::Initialize();
 
@@ -389,7 +397,7 @@ void TraceLog::InitializeThreadLocalEventBufferIfSupported() {
   // - to handle the final flush.
   // For a thread without a message loop or the message loop may be blocked, the
   // trace events will be added into the main buffer directly.
-  if (thread_blocks_message_loop_.Get() || !MessageLoop::current())
+  if (thread_blocks_message_loop_.Get() || !MessageLoopCurrent::IsSet())
     return;
   HEAP_PROFILER_SCOPED_IGNORE;
   auto* thread_local_event_buffer = thread_local_event_buffer_.Get();
@@ -1237,6 +1245,20 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
                                   num_args, arg_names, arg_types, arg_values,
                                   convertable_values);
 #endif  // OS_WIN
+
+  AddTraceEventOverrideCallback trace_event_override =
+      reinterpret_cast<AddTraceEventOverrideCallback>(
+          subtle::NoBarrier_Load(&trace_event_override_));
+  if (trace_event_override) {
+    TraceEvent new_trace_event;
+    new_trace_event.Initialize(thread_id, offset_event_timestamp, thread_now,
+                               phase, category_group_enabled, name, scope, id,
+                               bind_id, num_args, arg_names, arg_types,
+                               arg_values, convertable_values, flags);
+
+    trace_event_override(new_trace_event);
+    return handle;
+  }
 
   std::string console_message;
   std::unique_ptr<TraceEvent> filtered_trace_event;

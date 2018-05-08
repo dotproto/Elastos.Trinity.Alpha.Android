@@ -8,6 +8,7 @@
 
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/sequenced_task_runner.h"
 #include "chrome/browser/media/media_engagement_preloaded_list.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_session.h"
@@ -16,8 +17,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/media_engagement.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/autoplay.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -29,9 +30,10 @@ namespace {
 
 void SendEngagementLevelToFrame(const url::Origin& origin,
                                 content::RenderFrameHost* render_frame_host) {
-  blink::mojom::MediaEngagementClientAssociatedPtr client;
+  blink::mojom::AutoplayConfigurationClientAssociatedPtr client;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
-  client->SetHasHighMediaEngagement(origin);
+  client->AddAutoplayFlags(origin,
+                           blink::mojom::kAutoplayFlagHighMediaEngagement);
 }
 
 }  // namespace.
@@ -503,7 +505,12 @@ void MediaEngagementContentsObserver::SetTaskRunnerForTest(
 void MediaEngagementContentsObserver::ReadyToCommitNavigation(
     content::NavigationHandle* handle) {
   // TODO(beccahughes): Convert MEI API to using origin.
-  GURL url = handle->GetWebContents()->GetURL();
+  // If the navigation is occuring in the main frame we should use the URL
+  // provided by |handle| as the navigation has not committed yet. If the
+  // navigation is in a sub frame then use the URL from the main frame.
+  GURL url = handle->IsInMainFrame()
+                 ? handle->GetURL()
+                 : handle->GetWebContents()->GetLastCommittedURL();
   MediaEngagementScore score = service_->CreateEngagementScore(url);
   bool has_high_engagement = score.high_score();
 

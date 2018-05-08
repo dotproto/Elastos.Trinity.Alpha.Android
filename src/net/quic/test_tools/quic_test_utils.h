@@ -107,7 +107,7 @@ QuicEncryptedPacket* ConstructEncryptedPacket(
     QuicPacketNumberLength packet_number_length);
 
 // This form assumes |connection_id_length| == PACKET_8BYTE_CONNECTION_ID,
-// |packet_number_length| == PACKET_6BYTE_PACKET_NUMBER and
+// |packet_number_length| == PACKET_4BYTE_PACKET_NUMBER and
 // |versions| == nullptr.
 QuicEncryptedPacket* ConstructEncryptedPacket(QuicConnectionId connection_id,
                                               bool version_flag,
@@ -260,6 +260,9 @@ class MockFramerVisitor : public QuicFramerVisitorInterface {
   MOCK_METHOD1(OnWindowUpdateFrame, bool(const QuicWindowUpdateFrame& frame));
   MOCK_METHOD1(OnBlockedFrame, bool(const QuicBlockedFrame& frame));
   MOCK_METHOD0(OnPacketComplete, void());
+  MOCK_CONST_METHOD1(IsValidStatelessResetToken, bool(QuicUint128));
+  MOCK_METHOD1(OnAuthenticatedIetfStatelessResetPacket,
+               void(const QuicIetfStatelessResetPacket&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockFramerVisitor);
@@ -295,6 +298,9 @@ class NoOpFramerVisitor : public QuicFramerVisitorInterface {
   bool OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) override;
   bool OnBlockedFrame(const QuicBlockedFrame& frame) override;
   void OnPacketComplete() override {}
+  bool IsValidStatelessResetToken(QuicUint128 token) const override;
+  void OnAuthenticatedIetfStatelessResetPacket(
+      const QuicIetfStatelessResetPacket& packet) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NoOpFramerVisitor);
@@ -507,11 +513,15 @@ class PacketSavingConnection : public MockQuicConnection {
 class MockQuicSession : public QuicSession {
  public:
   // Takes ownership of |connection|.
+  MockQuicSession(QuicConnection* connection, bool create_mock_crypto_stream);
+
+  // Takes ownership of |connection|.
   explicit MockQuicSession(QuicConnection* connection);
   ~MockQuicSession() override;
 
   QuicCryptoStream* GetMutableCryptoStream() override;
   const QuicCryptoStream* GetCryptoStream() const override;
+  void SetCryptoStream(QuicCryptoStream* crypto_stream);
 
   MOCK_METHOD3(OnConnectionClosed,
                void(QuicErrorCode error,
@@ -563,6 +573,7 @@ class MockQuicCryptoStream : public QuicCryptoStream {
 
   ~MockQuicCryptoStream() override;
 
+  QuicLongHeaderType GetLongHeaderType(QuicStreamOffset offset) const override;
   bool encryption_established() const override;
   bool handshake_confirmed() const override;
   const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
@@ -578,10 +589,14 @@ class MockQuicSpdySession : public QuicSpdySession {
  public:
   // Takes ownership of |connection|.
   explicit MockQuicSpdySession(QuicConnection* connection);
+  // Takes ownership of |connection|.
+  MockQuicSpdySession(QuicConnection* connection,
+                      bool create_mock_crypto_stream);
   ~MockQuicSpdySession() override;
 
   QuicCryptoStream* GetMutableCryptoStream() override;
   const QuicCryptoStream* GetCryptoStream() const override;
+  void SetCryptoStream(QuicCryptoStream* crypto_stream);
   const SpdyHeaderBlock& GetWriteHeaders() { return write_headers_; }
 
   // From QuicSession.
@@ -771,6 +786,8 @@ class MockSendAlgorithm : public SendAlgorithmInterface {
   MOCK_METHOD2(SetFromConfig,
                void(const QuicConfig& config, Perspective perspective));
   MOCK_METHOD1(SetNumEmulatedConnections, void(int num_connections));
+  MOCK_METHOD1(SetInitialCongestionWindowInPackets,
+               void(QuicPacketCount packets));
   MOCK_METHOD1(SetMaxCongestionWindow,
                void(QuicByteCount max_congestion_window));
   MOCK_METHOD5(OnCongestionEvent,
@@ -854,6 +871,8 @@ class MockNetworkChangeVisitor
   ~MockNetworkChangeVisitor() override;
 
   MOCK_METHOD0(OnCongestionChange, void());
+  // TODO(b/76462509): remove OnPathDegrading() once
+  // FLAGS_quic_reloadable_flag_quic_path_degrading_alarm is deprecated.
   MOCK_METHOD0(OnPathDegrading, void());
   MOCK_METHOD1(OnPathMtuIncreased, void(QuicPacketLength));
 

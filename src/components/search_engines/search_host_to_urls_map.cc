@@ -16,7 +16,7 @@ SearchHostToURLsMap::~SearchHostToURLsMap() {
 }
 
 void SearchHostToURLsMap::Init(
-    const TemplateURLService::OwnedTemplateURLVector& template_urls,
+    const TemplateURL::OwnedTemplateURLVector& template_urls,
     const SearchTermsData& search_terms_data) {
   DCHECK(!initialized_);
   initialized_ = true;  // Set here so Add doesn't assert.
@@ -45,8 +45,7 @@ void SearchHostToURLsMap::Remove(const TemplateURL* template_url) {
   auto set_with_url =
       std::find_if(host_to_urls_map_.begin(), host_to_urls_map_.end(),
                    [&](std::pair<const std::string, TemplateURLSet>& entry) {
-                     return entry.second.erase(
-                         const_cast<TemplateURL*>(template_url));
+                     return entry.second.erase(template_url);
                    });
 
   if (set_with_url != host_to_urls_map_.end() && set_with_url->second.empty())
@@ -74,7 +73,7 @@ SearchHostToURLsMap::TemplateURLSet* SearchHostToURLsMap::GetURLsForHost(
 }
 
 void SearchHostToURLsMap::Add(
-    const TemplateURLService::OwnedTemplateURLVector& template_urls,
+    const TemplateURL::OwnedTemplateURLVector& template_urls,
     const SearchTermsData& search_terms_data) {
   for (const auto& turl : template_urls)
     Add(turl.get(), search_terms_data);

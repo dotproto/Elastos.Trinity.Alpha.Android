@@ -12,6 +12,8 @@ import android.view.View;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 
 /**
  * A phone specific version of the {@link FindToolbar}.
@@ -27,23 +29,24 @@ public class FindToolbarPhone extends FindToolbar {
     }
 
     @Override
-    public void activate() {
-        if (!isViewAvailable()) return;
+    protected void handleActivate() {
+        assert isWebContentAvailable();
         setVisibility(View.VISIBLE);
-        super.activate();
+        super.handleActivate();
     }
 
     @Override
-    public void deactivate(boolean clearSelection) {
-        super.deactivate(clearSelection);
+    protected void handleDeactivation(boolean clearSelection) {
         setVisibility(View.GONE);
+        super.handleDeactivation(clearSelection);
     }
 
     @Override
     protected void updateVisualsForTabModel(boolean isIncognito) {
         int queryTextColorId;
         if (isIncognito) {
-            setBackgroundResource(R.color.incognito_primary_color);
+            setBackgroundColor(ColorUtils.getDefaultThemeColor(
+                    getResources(), FeatureUtilities.isChromeModernDesignEnabled(), true));
             ColorStateList white = ApiCompatibilityUtils.getColorStateList(getResources(),
                     R.color.light_mode_tint);
             mFindNextButton.setTint(white);

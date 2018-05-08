@@ -15,13 +15,12 @@
 #include "base/memory/weak_ptr.h"
 #include "media/base/eme_constants.h"
 #include "media/blink/media_blink_export.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 namespace blink {
 
 struct WebMediaKeySystemConfiguration;
 struct WebMediaKeySystemMediaCapability;
-class WebSecurityOrigin;
 class WebString;
 
 }  // namespace blink
@@ -43,7 +42,6 @@ class MEDIA_BLINK_EXPORT KeySystemConfigSelector {
       const blink::WebString& key_system,
       const blink::WebVector<blink::WebMediaKeySystemConfiguration>&
           candidate_configurations,
-      const blink::WebSecurityOrigin& security_origin,
       base::Callback<void(const blink::WebMediaKeySystemConfiguration&,
                           const CdmConfig&)> succeeded_cb,
       base::Closure not_supported_cb);

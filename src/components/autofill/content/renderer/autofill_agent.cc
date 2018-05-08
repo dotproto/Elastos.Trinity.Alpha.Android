@@ -45,18 +45,18 @@
 #include "content/public/renderer/render_view.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElementCollection.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebOptionElement.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element_collection.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_option_element.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -80,6 +80,10 @@ using blink::WebVector;
 namespace autofill {
 
 namespace {
+
+// Time to wait, in ms, o ensure that only a single select change will be acted
+// upon, instead of multiple in close succession (debounce time).
+size_t kWaitTimeForSelectOptionsChangesMs = 50;
 
 // Whether the "single click" autofill feature is enabled, through command-line
 // or field trial.
@@ -209,8 +213,10 @@ void AutofillAgent::DidChangeScrollOffset() {
     // Post a task here since scroll offset may change during layout.
     // (https://crbug.com/804886)
     weak_ptr_factory_.InvalidateWeakPtrs();
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&AutofillAgent::DidChangeScrollOffsetImpl,
+    render_frame()
+        ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(&AutofillAgent::DidChangeScrollOffsetImpl,
                                   weak_ptr_factory_.GetWeakPtr(), element_));
   } else if (!IsKeyboardAccessoryEnabled()) {
     HidePopup();
@@ -427,6 +433,11 @@ void AutofillAgent::FillForm(int32_t id, const FormData& form) {
   if (id != autofill_query_id_ && id != kNoQueryId)
     return;
 
+  was_last_action_fill_ = true;
+
+  if (base::FeatureList::IsEnabled(features::kAutofillDynamicForms))
+    ReplaceElementIfNowInvalid(form);
+
   was_query_node_autofilled_ = element_.IsAutofilled();
   form_util::FillForm(form, element_);
   if (!element_.Form().IsNull())
@@ -450,9 +461,6 @@ void AutofillAgent::PreviewForm(int32_t id, const FormData& form) {
 
 void AutofillAgent::FieldTypePredictionsAvailable(
     const std::vector<FormDataPredictions>& forms) {
-  if (element_.IsNull())
-    return;
-
   bool attach_predictions_to_dom =
       base::FeatureList::IsEnabled(features::kAutofillShowTypePredictions);
   for (const auto& form : forms) {
@@ -790,11 +798,45 @@ void AutofillAgent::SelectControlDidChange(
   form_tracker_.SelectControlDidChange(element);
 }
 
+void AutofillAgent::SelectFieldOptionsChanged(
+    const blink::WebFormControlElement& element) {
+  if (!was_last_action_fill_ || element_.IsNull())
+    return;
+
+  // Since a change of a select options often come in batches, use a timer
+  // to wait for other changes. Stop the timer if it was already running. It
+  // will be started again for this change.
+  if (on_select_update_timer_.IsRunning())
+    on_select_update_timer_.AbandonAndStop();
+
+  // Start the timer to notify the driver that the select field was updated
+  // after the options have finished changing,
+  on_select_update_timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromMilliseconds(kWaitTimeForSelectOptionsChangesMs),
+      base::BindRepeating(&AutofillAgent::SelectWasUpdated,
+                          weak_ptr_factory_.GetWeakPtr(), element));
+}
+
+void AutofillAgent::SelectWasUpdated(
+    const blink::WebFormControlElement& element) {
+  // Look for the form and field associated with the select element. If they are
+  // found, notify the driver that the the form was modified dynamically.
+  FormData form;
+  FormFieldData field;
+  if (form_util::FindFormAndFieldForFormControlElement(element, &form,
+                                                       &field) &&
+      !field.option_values.empty()) {
+    GetAutofillDriver()->SelectFieldOptionsDidChange(form);
+  }
+}
+
 void AutofillAgent::FormControlElementClicked(
     const WebFormControlElement& element,
     bool was_focused) {
   last_clicked_form_control_element_for_testing_ = element;
   last_clicked_form_control_element_was_focused_for_testing_ = was_focused;
+  was_last_action_fill_ = false;
 
   const WebInputElement* input_element = ToWebInputElement(&element);
   if (!input_element && !form_util::IsTextAreaElement(element))
@@ -984,6 +1026,47 @@ void AutofillAgent::UpdateLastInteractedForm(blink::WebFormElement form) {
 
 void AutofillAgent::OnFormNoLongerSubmittable() {
   submitted_forms_.clear();
+}
+
+void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
+  // If the document is invalid, bail out.
+  if (element_.GetDocument().IsNull())
+    return;
+
+  if (!element_.Form().IsNull()) {
+    // If |element_|'s parent form has no elements, |element_| is now invalid
+    // and should be updated.
+    WebVector<WebFormControlElement> form_elements;
+    element_.Form().GetFormControlElements(form_elements);
+    if (!form_elements.empty())
+      return;
+  }
+
+  // Try to find the new version of the form.
+  WebFormElement form_element;
+  WebVector<WebFormElement> forms;
+  element_.GetDocument().Forms(forms);
+  for (const WebFormElement& form : forms) {
+    if (original_form.name == form.GetName().Utf16() ||
+        original_form.name == form.GetAttribute("id").Utf16()) {
+      form_element = form;
+      break;
+    }
+  }
+
+  // Could not find the new version of the form, bail out.
+  if (form_element.IsNull())
+    return;
+
+  // Try to find the new version of the last interacted element.
+  WebVector<WebFormControlElement> elements;
+  form_element.GetFormControlElements(elements);
+  for (const WebFormControlElement& element : elements) {
+    if (element_.NameForAutofill() == element.NameForAutofill()) {
+      element_ = element;
+      return;
+    }
+  }
 }
 
 const mojom::AutofillDriverPtr& AutofillAgent::GetAutofillDriver() {

@@ -18,13 +18,14 @@
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_metrics.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/proximity_auth/screenlock_bridge.h"
-#include "components/proximity_auth/screenlock_state.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/screenlock_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using proximity_auth::ScreenlockState;
 
+namespace chromeos {
 namespace {
 
 // Icons used by EasyUnlockScreenlockStateHandler. The icon id values are the
@@ -56,7 +57,8 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
   ~TestLockHandler() override {}
 
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
-  void ShowBannerMessage(const base::string16& message) override {
+  void ShowBannerMessage(const base::string16& message,
+                         bool is_warning) override {
     ASSERT_FALSE(true) << "Should not be reached.";
   }
 
@@ -221,8 +223,8 @@ class EasyUnlockScreenlockStateHandlerTest : public testing::Test {
     screenlock_bridge->SetLockHandler(lock_handler_.get());
 
     // Create the screenlock state handler object that will be tested.
-    state_handler_.reset(new chromeos::EasyUnlockScreenlockStateHandler(
-        account_id_, chromeos::EasyUnlockScreenlockStateHandler::NO_HARDLOCK,
+    state_handler_.reset(new EasyUnlockScreenlockStateHandler(
+        account_id_, EasyUnlockScreenlockStateHandler::NO_HARDLOCK,
         screenlock_bridge));
   }
 
@@ -234,7 +236,7 @@ class EasyUnlockScreenlockStateHandlerTest : public testing::Test {
 
  protected:
   // The state handler that is being tested.
-  std::unique_ptr<chromeos::EasyUnlockScreenlockStateHandler> state_handler_;
+  std::unique_ptr<EasyUnlockScreenlockStateHandler> state_handler_;
 
   // The user associated with |state_handler_|.
   const AccountId account_id_ = AccountId::FromUserEmail("test_user@gmail.com");
@@ -311,7 +313,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, HardlockedState) {
             lock_handler_->GetAuthType(account_id_));
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
 
   EXPECT_EQ(1u, lock_handler_->GetAndResetShowIconCount());
   EXPECT_EQ(proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
@@ -324,7 +326,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, HardlockedState) {
   EXPECT_FALSE(lock_handler_->CustomIconHardlocksOnClick());
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
 
   EXPECT_EQ(0u, lock_handler_->GetAndResetShowIconCount());
   ASSERT_TRUE(lock_handler_->HasCustomIcon());
@@ -338,7 +340,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, HardlockedStateNoPairing) {
             lock_handler_->GetAuthType(account_id_));
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::NO_PAIRING);
+      EasyUnlockScreenlockStateHandler::NO_PAIRING);
 
   EXPECT_FALSE(lock_handler_->HasCustomIcon());
   EXPECT_EQ(proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
@@ -497,7 +499,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, NoPairingHardlockClearsIcon) {
   EXPECT_EQ(kLockedIconId, lock_handler_->GetCustomIconId());
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::NO_PAIRING);
+      EasyUnlockScreenlockStateHandler::NO_PAIRING);
 
   EXPECT_EQ(0u, lock_handler_->GetAndResetShowIconCount());
   ASSERT_FALSE(lock_handler_->HasCustomIcon());
@@ -511,7 +513,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, PairingChangedHardlock) {
   EXPECT_EQ(kLockedIconId, lock_handler_->GetCustomIconId());
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
+      EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
 
   EXPECT_EQ(1u, lock_handler_->GetAndResetShowIconCount());
   ASSERT_TRUE(lock_handler_->HasCustomIcon());
@@ -535,7 +537,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest,
   EXPECT_EQ(kLockedIconId, lock_handler_->GetCustomIconId());
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
+      EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
 
   EXPECT_EQ(1u, lock_handler_->GetAndResetShowIconCount());
   ASSERT_TRUE(lock_handler_->HasCustomIcon());
@@ -593,7 +595,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, StateChangesIgnoredIfHardlocked) {
             lock_handler_->GetAuthType(account_id_));
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
 
   EXPECT_EQ(1u, lock_handler_->GetAndResetShowIconCount());
   EXPECT_EQ(proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
@@ -617,11 +619,11 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest,
   state_handler_->ChangeState(ScreenlockState::AUTHENTICATED);
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
   EXPECT_EQ(2u, lock_handler_->GetAndResetShowIconCount());
 
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::NO_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::NO_HARDLOCK);
 
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(NULL);
   lock_handler_.reset(new TestLockHandler(account_id_));
@@ -655,7 +657,7 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest,
 TEST_F(EasyUnlockScreenlockStateHandlerTest, HardlockStatePersistsOverUnlocks) {
   state_handler_->ChangeState(ScreenlockState::AUTHENTICATED);
   state_handler_->SetHardlockState(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+      EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
   EXPECT_EQ(2u, lock_handler_->GetAndResetShowIconCount());
 
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(NULL);
@@ -701,20 +703,13 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, NoOverrideOnlineSignin) {
     EXPECT_FALSE(lock_handler_->HasCustomIcon());
   }
 
-  std::vector<chromeos::EasyUnlockScreenlockStateHandler::HardlockState>
-      hardlock_states;
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::NO_HARDLOCK);
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::PAIRING_ADDED);
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::NO_PAIRING);
-  hardlock_states.push_back(
-      chromeos::EasyUnlockScreenlockStateHandler::LOGIN_FAILED);
+  std::vector<EasyUnlockScreenlockStateHandler::HardlockState> hardlock_states;
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::NO_HARDLOCK);
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::USER_HARDLOCK);
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::PAIRING_ADDED);
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::NO_PAIRING);
+  hardlock_states.push_back(EasyUnlockScreenlockStateHandler::LOGIN_FAILED);
 
   for (size_t i = 0; i < hardlock_states.size(); ++i) {
     state_handler_->SetHardlockState(hardlock_states[i]);
@@ -739,12 +734,12 @@ TEST_F(EasyUnlockScreenlockStateHandlerTest, TrialRunMetrics) {
   state_handler_->RecordClickOnLockIcon();
   state_handler_->RecordClickOnLockIcon();
   histogram_tester.ExpectTotalCount("EasyUnlock.TrialRun.Events", 4);
+  histogram_tester.ExpectBucketCount("EasyUnlock.TrialRun.Events",
+                                     EASY_UNLOCK_TRIAL_RUN_EVENT_LAUNCHED, 1);
   histogram_tester.ExpectBucketCount(
       "EasyUnlock.TrialRun.Events",
-      chromeos::EASY_UNLOCK_TRIAL_RUN_EVENT_LAUNCHED, 1);
-  histogram_tester.ExpectBucketCount(
-      "EasyUnlock.TrialRun.Events",
-      chromeos::EASY_UNLOCK_TRIAL_RUN_EVENT_CLICKED_LOCK_ICON, 3);
+      EASY_UNLOCK_TRIAL_RUN_EVENT_CLICKED_LOCK_ICON, 3);
 }
 
 }  // namespace
+}  // namespace chromeos

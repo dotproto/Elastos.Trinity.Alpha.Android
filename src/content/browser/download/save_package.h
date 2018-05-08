@@ -30,12 +30,16 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
 #include "net/base/net_errors.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
 
 class GURL;
 
-namespace content {
+namespace download {
 class DownloadItemImpl;
+}
+
+namespace content {
 class DownloadManagerImpl;
 class FrameTreeNode;
 class RenderFrameHostImpl;
@@ -156,7 +160,7 @@ class CONTENT_EXPORT SavePackage
 
   void InitWithDownloadItem(
       const SavePackageDownloadCreatedCallback& download_created_callback,
-      DownloadItemImpl* item);
+      download::DownloadItemImpl* item);
 
   // Callback for WebContents::GenerateMHTML().
   void OnMHTMLGenerated(int64_t size);
@@ -369,7 +373,7 @@ class CONTENT_EXPORT SavePackage
 
   // DownloadManager owns the download::DownloadItem and handles history and UI.
   DownloadManagerImpl* download_manager_ = nullptr;
-  DownloadItemImpl* download_ = nullptr;
+  download::DownloadItemImpl* download_ = nullptr;
 
   // The URL of the page the user wants to save.
   const GURL page_url_;
@@ -414,6 +418,10 @@ class CONTENT_EXPORT SavePackage
 
   // Unique ID for this SavePackage.
   const SavePackageId unique_id_;
+
+  // UKM IDs for reporting.
+  ukm::SourceId ukm_source_id_;
+  uint64_t ukm_download_id_;
 
   DISALLOW_COPY_AND_ASSIGN(SavePackage);
 };

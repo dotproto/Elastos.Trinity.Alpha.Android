@@ -7,29 +7,45 @@
 
 #import <UIKit/UIKit.h>
 
-@class PopupMenuTableViewController;
+#import "ios/chrome/browser/ui/popup_menu/public/popup_menu_ui_updating.h"
 
-// Type of popup menus.
-typedef NS_ENUM(NSInteger, PopupMenuType) {
-  PopupMenuTypeToolsMenu,
-  PopupMenuTypeNavigationBackward,
-  PopupMenuTypeNavigationForward,
-  PopupMenuTypeTabGrid,
-  PopupMenuTypeSearch,
-};
+namespace bookmarks {
+class BookmarkModel;
+}
+namespace feature_engagement {
+class Tracker;
+}
+@protocol BrowserCommands;
+@class PopupMenuTableViewController;
+class ReadingListModel;
+class WebStateList;
 
 // Mediator for the popup menu. This object is in charge of creating and
 // updating the items of the popup menu.
 @interface PopupMenuMediator : NSObject
 
-- (instancetype)initWithType:(PopupMenuType)type NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithType:(PopupMenuType)type
+                 isIncognito:(BOOL)isIncognito
+            readingListModel:(ReadingListModel*)readingListModel
+    NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-// Sets this mediator up.
-- (void)setUp;
+// The WebStateList that this mediator listens for any changes on the current
+// WebState.
+@property(nonatomic, assign) WebStateList* webStateList;
+// The TableView to be configured with this mediator.
+@property(nonatomic, strong) PopupMenuTableViewController* popupMenu;
+// Dispatcher.
+@property(nonatomic, weak) id<BrowserCommands> dispatcher;
+// Records events for the use of in-product help. The mediator does not take
+// ownership of tracker. Tracker must not be destroyed during lifetime of the
+// object.
+@property(nonatomic, assign) feature_engagement::Tracker* engagementTracker;
+// The bookmarks model to know if the page is bookmarked.
+@property(nonatomic, assign) bookmarks::BookmarkModel* bookmarkModel;
 
-// Configures the items of |popupMenu|.
-- (void)configurePopupMenu:(PopupMenuTableViewController*)popupMenu;
+// Disconnect the mediator.
+- (void)disconnect;
 
 @end
 

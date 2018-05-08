@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/test/scoped_task_environment.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
@@ -33,6 +32,8 @@ class FakeOneGoogleBarFetcher : public OneGoogleBarFetcher {
   void Fetch(OneGoogleCallback callback) override {
     callbacks_.push_back(std::move(callback));
   }
+
+  GURL GetFetchURLForTesting() const override { return GURL(); }
 
   size_t GetCallbackCount() const { return callbacks_.size(); }
 

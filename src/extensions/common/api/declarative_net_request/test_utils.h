@@ -71,10 +71,12 @@ TestRule CreateGenericRule();
 
 // Helper to build an extension manifest which uses the
 // kDeclarativeNetRequestKey manifest key. |hosts| specifies the host
-// permissions to grant.
+// permissions to grant. If |has_background_script| is true, the manifest
+// returned will have "background.js" as its background script.
 std::unique_ptr<base::DictionaryValue> CreateManifest(
     const std::string& json_rules_filename,
-    const std::vector<std::string>& hosts = {URLPattern::kAllUrlsPattern});
+    const std::vector<std::string>& hosts = {URLPattern::kAllUrlsPattern},
+    bool has_background_script = false);
 
 // Returns a ListValue corresponding to a vector of strings.
 std::unique_ptr<base::ListValue> ToListValue(
@@ -82,19 +84,24 @@ std::unique_ptr<base::ListValue> ToListValue(
 
 // Writes the declarative |rules| in the given |extension_dir| together with the
 // manifest file. |hosts| specifies the host permissions, the extensions should
-// have.
+// have. If |has_background_script| is true, a background script
+// ("background.js") will also be persisted for the extension. Clients can
+// listen in to the "ready" message from the background page to detect its
+// loading.
 void WriteManifestAndRuleset(
     const base::FilePath& extension_dir,
     const base::FilePath::CharType* json_rules_filepath,
     const std::string& json_rules_filename,
     const std::vector<TestRule>& rules,
-    const std::vector<std::string>& hosts);
+    const std::vector<std::string>& hosts,
+    bool has_background_script = false);
 void WriteManifestAndRuleset(
     const base::FilePath& extension_dir,
     const base::FilePath::CharType* json_rules_filepath,
     const std::string& json_rules_filename,
     const base::Value& rules,
-    const std::vector<std::string>& hosts);
+    const std::vector<std::string>& hosts,
+    bool has_background_script = false);
 
 }  // namespace declarative_net_request
 }  // namespace extensions

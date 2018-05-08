@@ -12,6 +12,7 @@
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/common/content_export.h"
+#include "content/common/frame_visual_properties.h"
 
 namespace IPC {
 class Message;
@@ -19,7 +20,6 @@ class Message;
 
 namespace content {
 class RenderFrameProxyHost;
-struct ScreenInfo;
 
 // CrossProcessFrameConnector provides the platform view abstraction for
 // RenderWidgetHostViewChildFrame allowing RWHVChildFrame to remain ignorant
@@ -100,6 +100,9 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void FocusRootView() override;
   bool LockMouse() override;
   void UnlockMouse() override;
+  void EnableAutoResize(const gfx::Size& min_size,
+                        const gfx::Size& max_size) override;
+  void DisableAutoResize() override;
   bool IsInert() const override;
   bool IsHidden() const override;
   bool IsThrottled() const override;
@@ -108,8 +111,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void EmbedRendererWindowTreeClientInParent(
       ui::mojom::WindowTreeClientPtr window_tree_client) override;
 #endif
-  void ResizeDueToAutoResize(const gfx::Size& new_size,
-                             uint64_t sequence_number) override;
+  void ResizeDueToAutoResize(
+      const viz::LocalSurfaceId& child_allocated_surface_id) override;
 
   // Set the visibility of immediate child views, i.e. views whose parent view
   // is |view_|.
@@ -130,11 +133,9 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void ResetScreenSpaceRect();
 
   // Handlers for messages received from the parent frame.
-  void OnUpdateResizeParams(const gfx::Rect& screen_space_rect,
-                            const gfx::Size& local_frame_size,
-                            const ScreenInfo& screen_info,
-                            uint64_t sequence_number,
-                            const viz::SurfaceId& surface_id);
+  void OnSynchronizeVisualProperties(
+      const viz::SurfaceId& surface_id,
+      const FrameVisualProperties& visual_properties);
   void OnUpdateViewportIntersection(const gfx::Rect& viewport_intersection,
                                     const gfx::Rect& compositor_visible_rect);
   void OnVisibilityChanged(bool visible);

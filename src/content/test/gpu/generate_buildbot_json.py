@@ -36,6 +36,9 @@ LINUX_QUADRO_P400_STABLE_DRIVER = '10de:1cb3-384.90'
 
 # Intel HD 630 (both Windows and Linux).
 INTEL_HD_630 = '8086:5912'
+WIN10_INTEL_HD_630_STABLE_DRIVER = '8086:5912-23.20.16.4877'
+# TODO(zmo): Add the following bot.
+# WIN10_INTEL_HD_630_EXPERIMENTAL_DRIVER = '8086:5912-24.20.100.6025'
 
 # "Types" of waterfalls and bots. A bot's type is the union of its own
 # type and the type of its waterfall. Predicates can apply to these
@@ -393,7 +396,7 @@ FYI_WATERFALL = {
     'Win10 FYI Release (Intel HD 630)': {
       'swarming_dimensions': [
         {
-          'gpu': INTEL_HD_630,
+          'gpu': WIN10_INTEL_HD_630_STABLE_DRIVER,
           'os': 'Windows-10',
           'pool': 'Chrome-GPU',
         },
@@ -870,7 +873,7 @@ FYI_WATERFALL = {
     'Optional Win10 Release (Intel HD 630)': {
       'swarming_dimensions': [
         {
-          'gpu': INTEL_HD_630,
+          'gpu': WIN10_INTEL_HD_630_STABLE_DRIVER,
           'os': 'Windows-10',
           'pool': 'Chrome-GPU',
         },
@@ -1015,14 +1018,12 @@ V8_FYI_WATERFALL = {
         "gfx_unittests",
         "gn_unittests",
         "google_apis_unittests",
-        "gpu_ipc_service_unittests",
         "gpu_unittests",
         "interactive_ui_tests",
         "ipc_tests",
         "jingle_unittests",
         "media_unittests",
         "media_blink_unittests",
-        "mojo_common_unittests",
         "mojo_unittests",
         "nacl_loader_unittests",
         "net_unittests",
@@ -1832,7 +1833,7 @@ COMMON_GTESTS = {
             'os': WIN10_NVIDIA_QUADRO_P400_STABLE_OS,
           },
           {
-            'gpu': INTEL_HD_630,
+            'gpu': WIN10_INTEL_HD_630_STABLE_DRIVER,
             'os': 'Windows-10',
           }
         ],
@@ -1842,7 +1843,8 @@ COMMON_GTESTS = {
       '--enable-gpu',
       '--test-launcher-bot-mode',
       '--test-launcher-jobs=1',
-      '--gtest_filter=VrBrowserTest*',
+      '--gtest_filter=VrBrowserTest*:XrBrowserTest*',
+      '--enable-pixel-output-in-tests',
       '--gtest_also_run_disabled_tests',
     ],
     'test': 'browser_tests',
@@ -2298,7 +2300,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
          # the Debug bots, which is too long.
         'build_configs': ['Release'],
         'predicate': Predicates.FYI_ONLY,
-        # Only run on the NVIDIA Release and Intel Release Linux bots.
+        # Run on the NVIDIA Release Windows/Linux and Intel Release Linux bots
         'swarming_dimension_sets': [
           {
             'gpu': LINUX_QUADRO_P400_STABLE_DRIVER,
@@ -2312,47 +2314,6 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
             'gpu': '8086:1912',
             'os': 'Ubuntu'
           },
-        ],
-        'disabled_instrumentation_types': ['tsan'],
-      },
-    ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux FYI Ozone (Intel)',
-        ],
-      },
-    ],
-    'target_name': 'webgl_conformance',
-    'extra_browser_args': [
-      '--use-gl=angle',
-      '--use-angle=gl',
-      '--use-cmd-decoder=passthrough',
-    ],
-    'args': [
-      '--webgl-conformance-version=2.0.1',
-      # The current working directory when run via isolate is
-      # out/Debug or out/Release. Reference this file relatively to
-      # it.
-      '--read-abbreviated-json-results-from=' + \
-      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
-    ],
-    'asan_args': ['--is-asan'],
-    'swarming': {
-      # These tests currently take about an hour and fifteen minutes
-      # to run serially.
-      'shards': 20,
-    },
-  },
-  'webgl2_conformance_gl_tests': {
-    'tester_configs': [
-      {
-         # The WebGL 2.0 conformance tests take over an hour to run on
-         # the Debug bots, which is too long.
-        'build_configs': ['Release'],
-        'predicate': Predicates.FYI_ONLY,
-        # Only run on the NVIDIA Release Windows bots.
-        'swarming_dimension_sets': [
           {
             'gpu': NVIDIA_QUADRO_P400_ALL_DRIVERS,
             'os': WIN10_NVIDIA_QUADRO_P400_STABLE_OS,
@@ -2370,8 +2331,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
+      '--use-gl=angle',
       '--use-angle=gl',
-      '--use-cmd-decoder=validating',
+      '--use-cmd-decoder=passthrough',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',
@@ -2435,7 +2397,7 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
     'tester_configs': [
       {
         'predicate': Predicates.FYI_AND_OPTIONAL,
-        # Run on the Win/Linux Release NVIDIA bots and Nexus 5X and 6P
+        # Run on the Win/Linux Release NVIDIA bots and Android
         'build_configs': ['Release', 'android-chromium'],
         'swarming_dimension_sets': [
           {
@@ -2446,19 +2408,9 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
             'gpu': LINUX_QUADRO_P400_STABLE_DRIVER,
             'os': 'Ubuntu'
           },
-          # Nexus 5X
           {
-            'device_type': 'bullhead',
-            'device_os': 'MMB29Q',
             'os': 'Android'
           },
-          # Nexus 6P
-          {
-            'device_type': 'angler',
-            'device_os': 'M',
-            'os': 'Android',
-            'pool': 'Chrome-GPU',
-          }
         ],
       },
     ],
@@ -2466,6 +2418,8 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
       {
         'names': [
           'Linux FYI Ozone (Intel)',
+          # anglebug.com/2433
+          'Android FYI Release (Nexus 6)',
         ],
       },
     ],

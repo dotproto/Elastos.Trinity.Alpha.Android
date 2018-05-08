@@ -16,9 +16,11 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.FileUtils;
@@ -30,19 +32,28 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BasicNativePage;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.preferences.PreferencesLauncher;
+import org.chromium.chrome.browser.preferences.download.DownloadPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.widget.ThumbnailProvider;
 import org.chromium.chrome.browser.widget.ThumbnailProviderImpl;
+import org.chromium.chrome.browser.widget.ViewHighlighter;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.chrome.browser.widget.textbubble.TextBubble;
+import org.chromium.components.feature_engagement.FeatureConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
+import org.chromium.ui.widget.ViewRectProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -199,6 +210,9 @@ public class DownloadManagerUi
     private SelectableListLayout<DownloadHistoryItemWrapper> mSelectableListLayout;
     private boolean mIsSeparateActivity;
 
+    private int mSearchMenuId;
+    private int mInfoMenuId;
+
     /**
      * Constructs a new DownloadManagerUi.
      * @param activity The {@link Activity} associated with the download manager.
@@ -247,15 +261,36 @@ public class DownloadManagerUi
         mFilterAdapter.initialize(this);
         addObserver(mFilterAdapter);
 
+        boolean isLocationEnabled =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE);
+        int normalGroupId =
+                isLocationEnabled ? R.id.with_settings_normal_menu_group : R.id.normal_menu_group;
+        mSearchMenuId = isLocationEnabled ? R.id.with_settings_search_menu_id : R.id.search_menu_id;
+        mInfoMenuId = isLocationEnabled ? R.id.with_settings_info_menu_id : R.id.info_menu_id;
+
         mToolbar = (DownloadManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.download_manager_toolbar, mBackendProvider.getSelectionDelegate(), 0, null,
-                R.id.normal_menu_group, R.id.selection_mode_menu_group,
-                R.color.modern_primary_color, this, true);
+                normalGroupId, R.id.selection_mode_menu_group, R.color.modern_primary_color, this,
+                true);
+        mToolbar.getMenu().setGroupVisible(normalGroupId, true);
         mToolbar.setManager(this);
         mToolbar.initializeFilterSpinner(mFilterAdapter);
-        mToolbar.initializeSearchView(this, R.string.download_manager_search, R.id.search_menu_id);
-        mToolbar.setInfoMenuItem(R.id.info_menu_id);
+
+        mToolbar.initializeSearchView(this, R.string.download_manager_search, mSearchMenuId);
+
+        mToolbar.setInfoMenuItem(mInfoMenuId);
         addObserver(mToolbar);
+
+        if (isLocationEnabled) {
+            mToolbar.setExtraMenuItem(R.id.extra_menu_id);
+            mToolbar.setInfoButtonText(R.string.download_manager_ui_show_storage,
+                    R.string.download_manager_ui_hide_storage);
+            mToolbar.setShowInfoIcon(false);
+            final Tracker tracker =
+                    TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+            tracker.addOnInitializedCallback(
+                    (Callback<Boolean>) success -> maybeShowDownloadSettingsTextBubble(tracker));
+        }
 
         mSelectableListLayout.configureWideDisplayStyle();
         mHistoryAdapter.initialize(mBackendProvider, mSelectableListLayout.getUiConfig());
@@ -283,7 +318,7 @@ public class DownloadManagerUi
 
     @Override
     public void shareItem(DownloadHistoryItemWrapper item) {
-        startShareIntent(DownloadUtils.createShareIntent(CollectionUtil.newArrayList(item)));
+        shareItems(CollectionUtil.newArrayList(item));
     }
 
     /**
@@ -342,7 +377,9 @@ public class DownloadManagerUi
 
     @Override
     public boolean onMenuItemClick(MenuItem item) {
-        if (item.getItemId() == R.id.close_menu_id && mIsSeparateActivity) {
+        if ((item.getItemId() == R.id.close_menu_id
+                    || item.getItemId() == R.id.with_settings_close_menu_id)
+                && mIsSeparateActivity) {
             recordMenuActionHistogram(MENU_ACTION_CLOSE);
             mActivity.finish();
             return true;
@@ -369,14 +406,14 @@ public class DownloadManagerUi
             RecordHistogram.recordCount100Histogram(
                     "Android.DownloadManager.Menu.Share.SelectedCount", items.size());
 
-            startShareIntent(DownloadUtils.createShareIntent(items));
+            shareItems(items);
             return true;
-        } else if (item.getItemId() == R.id.info_menu_id) {
+        } else if (item.getItemId() == mInfoMenuId) {
             boolean showInfo = !mHistoryAdapter.shouldShowStorageInfoHeader();
             recordMenuActionHistogram(showInfo ? MENU_ACTION_SHOW_INFO : MENU_ACTION_HIDE_INFO);
             enableStorageInfoHeader(showInfo);
             return true;
-        } else if (item.getItemId() == R.id.search_menu_id) {
+        } else if (item.getItemId() == mSearchMenuId) {
             recordMenuActionHistogram(MENU_ACTION_SEARCH);
             // The header should be removed as soon as a search is started. It will be added back in
             // DownloadHistoryAdatper#filter() when the search is ended.
@@ -384,6 +421,12 @@ public class DownloadManagerUi
             mSelectableListLayout.onStartSearch();
             mToolbar.showSearchView();
             RecordUserAction.record("Android.DownloadManager.Search");
+            return true;
+        } else if (item.getItemId() == R.id.settings_menu_id) {
+            Intent intent = PreferencesLauncher.createIntentForSettingsPage(
+                    mActivity, DownloadPreferences.class.getName());
+            mActivity.startActivity(intent);
+            RecordUserAction.record("Android.DownloadManager.Settings");
             return true;
         }
         return false;
@@ -501,7 +544,7 @@ public class DownloadManagerUi
     /**
      * @return True if info menu item should be shown on download toolbar, false otherwise.
      */
-    boolean shouldShowInfoButton() {
+    private boolean shouldShowInfoButton() {
         return mHistoryAdapter.getItemCount() > 0 && !mToolbar.isSearching()
                 && !mBackendProvider.getSelectionDelegate().isSelectionEnabled();
     }
@@ -514,6 +557,39 @@ public class DownloadManagerUi
         boolean infoHeaderIsVisible = layoutManager.findFirstVisibleItemPosition() == 0;
         mToolbar.updateInfoMenuItem(infoHeaderIsVisible && shouldShowInfoButton(),
                 mHistoryAdapter.shouldShowStorageInfoHeader());
+    }
+
+    private void maybeShowDownloadSettingsTextBubble(final Tracker tracker) {
+        // If the user doesn't have an SD card don't show the IPH.
+        File[] externalDirs = DownloadUtils.getAllDownloadDirectories(mActivity);
+        if (externalDirs.length < 2) return;
+
+        // Check to see if the help UI should be triggered.
+        if (!tracker.shouldTriggerHelpUI(FeatureConstants.DOWNLOAD_SETTINGS_FEATURE)) return;
+
+        // Build and show text bubble.
+        View anchorView = mToolbar.findViewById(R.id.extra_menu_id);
+        TextBubble textBubble =
+                new TextBubble(mActivity, (View) mToolbar, R.string.iph_download_settings_text,
+                        R.string.iph_download_settings_accessibility_text,
+                        new ViewRectProvider(anchorView));
+        textBubble.setDismissOnTouchInteraction(true);
+        textBubble.addOnDismissListener(() -> {
+            tracker.dismissed(FeatureConstants.DOWNLOAD_SETTINGS_FEATURE);
+            toggleHighlightForDownloadSettingsTextBubble(false);
+        });
+        toggleHighlightForDownloadSettingsTextBubble(true);
+        textBubble.show();
+    }
+
+    private void toggleHighlightForDownloadSettingsTextBubble(boolean shouldHighlight) {
+        View view = mToolbar.findViewById(R.id.extra_menu_id);
+
+        if (shouldHighlight) {
+            ViewHighlighter.turnOnHighlight(view, true);
+        } else {
+            ViewHighlighter.turnOffHighlight(view);
+        }
     }
 
     @VisibleForTesting
@@ -542,5 +618,13 @@ public class DownloadManagerUi
     private static void recordMenuActionHistogram(@MenuAction int action) {
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.DownloadManager.Menu.Action", action, MENU_ACTION_BOUNDARY);
+    }
+
+    private void shareItems(final List<DownloadHistoryItemWrapper> items) {
+        boolean done = DownloadUtils.prepareForSharing(items, (newFilePathMap) -> {
+            startShareIntent(DownloadUtils.createShareIntent(items, newFilePathMap));
+        });
+
+        if (done) startShareIntent(DownloadUtils.createShareIntent(items, null));
     }
 }

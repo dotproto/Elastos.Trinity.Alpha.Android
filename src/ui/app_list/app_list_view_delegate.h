@@ -14,6 +14,8 @@
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/app_list/app_list_export.h"
+#include "ui/base/ui_base_types.h"
+#include "ui/gfx/geometry/point.h"
 
 namespace gfx {
 class Size;
@@ -58,6 +60,15 @@ class APP_LIST_EXPORT AppListViewDelegate {
                                         int action_index,
                                         int event_flags) = 0;
 
+  // Returns the context menu model for a ChromeSearchResult with |result_id|,
+  // or NULL if there is currently no menu for the result.
+  // Note the returned menu model is owned by that result.
+  using GetContextMenuModelCallback =
+      base::OnceCallback<void(std::vector<ash::mojom::MenuItemPtr>)>;
+  virtual void GetSearchResultContextMenuModel(
+      const std::string& result_id,
+      GetContextMenuModelCallback callback) = 0;
+
   // Invoked when the app list is shown.
   virtual void ViewShown(int64_t display_id) = 0;
 
@@ -80,8 +91,6 @@ class APP_LIST_EXPORT AppListViewDelegate {
   // Returns the context menu model for a ChromeAppListItem with |id|, or NULL
   // if there is currently no menu for the item (e.g. during install).
   // Note the returned menu model is owned by that item.
-  using GetContextMenuModelCallback =
-      base::OnceCallback<void(std::vector<ash::mojom::MenuItemPtr>)>;
   virtual void GetContextMenuModel(const std::string& id,
                                    GetContextMenuModelCallback callback) = 0;
 
@@ -96,6 +105,10 @@ class APP_LIST_EXPORT AppListViewDelegate {
   // Add/remove observer for AppListViewDelegate.
   virtual void AddObserver(AppListViewDelegateObserver* observer) = 0;
   virtual void RemoveObserver(AppListViewDelegateObserver* observer) = 0;
+
+  // Show wallpaper context menu from the specified onscreen location.
+  virtual void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
+                                        ui::MenuSourceType source_type) = 0;
 };
 
 }  // namespace app_list

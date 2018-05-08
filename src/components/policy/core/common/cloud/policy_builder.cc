@@ -166,6 +166,7 @@ void SignData(const std::string& data,
 // Constants used as dummy data for filling the PolicyData protobuf.
 const char PolicyBuilder::kFakeDeviceId[] = "device-id";
 const char PolicyBuilder::kFakeDomain[] = "example.com";
+const char PolicyBuilder::kFakeGaiaId[] = "gaia-id";
 const char PolicyBuilder::kFakeMachineName[] = "machine-name";
 const char PolicyBuilder::kFakePolicyType[] = "policy type";
 const int PolicyBuilder::kFakePublicKeyVersion = 17;
@@ -179,6 +180,7 @@ PolicyBuilder::PolicyBuilder() {
   CreatePolicyData();
   policy_data_->set_policy_type(kFakePolicyType);
   policy_data_->set_timestamp(kFakeTimestamp);
+  policy_data_->set_gaia_id(kFakeGaiaId);
   policy_data_->set_request_token(kFakeToken);
   policy_data_->set_machine_name(kFakeMachineName);
   policy_data_->set_public_key_version(kFakePublicKeyVersion);
@@ -249,8 +251,7 @@ void PolicyBuilder::Build() {
     // The new public key must be signed by the old key.
     std::unique_ptr<crypto::RSAPrivateKey> old_signing_key = GetSigningKey();
     if (old_signing_key) {
-      SignData(policy_.new_public_key(),
-               old_signing_key.get(),
+      SignData(policy_.new_public_key(), old_signing_key.get(),
                policy_.mutable_new_public_key_signature());
     }
   } else {
@@ -363,7 +364,12 @@ std::vector<std::string> PolicyBuilder::GetUserAffiliationIds() {
   return {user_affiliation_id1, user_affiliation_id2};
 }
 
-template<>
+// static
+AccountId PolicyBuilder::GetFakeAccountIdForTesting() {
+  return AccountId::FromUserEmailGaiaId(kFakeUsername, kFakeGaiaId);
+}
+
+template <>
 TypedPolicyBuilder<em::CloudPolicySettings>::TypedPolicyBuilder()
     : payload_(new em::CloudPolicySettings()) {
   policy_data().set_policy_type(dm_protocol::kChromeUserPolicyType);
@@ -373,13 +379,22 @@ TypedPolicyBuilder<em::CloudPolicySettings>::TypedPolicyBuilder()
 template class TypedPolicyBuilder<em::CloudPolicySettings>;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-template<>
+template <>
 TypedPolicyBuilder<em::ExternalPolicyData>::TypedPolicyBuilder() {
   CreatePayload();
   policy_data().set_policy_type(dm_protocol::kChromeExtensionPolicyType);
 }
 
 template class TypedPolicyBuilder<em::ExternalPolicyData>;
+#endif
+
+#if defined(OS_CHROMEOS)
+StringPolicyBuilder::StringPolicyBuilder() = default;
+
+void StringPolicyBuilder::Build() {
+  policy_data().set_policy_value(payload_);
+  PolicyBuilder::Build();
+}
 #endif
 
 }  // namespace policy

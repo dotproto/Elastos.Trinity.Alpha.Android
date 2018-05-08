@@ -711,6 +711,12 @@ CommandHandler.onCommand = function(command) {
       if (end)
         current = cursors.Range.fromNode(end);
       break;
+    case 'scrollBackward':
+      current.start.node.scrollBackward();
+      break;
+    case 'scrollForward':
+      current.start.node.scrollForward();
+      break;
     default:
       return true;
   }
@@ -788,7 +794,7 @@ CommandHandler.onCommand = function(command) {
         current.start.node, ChromeVoxState.instance.currentRange.start.node);
     var scrollable = null;
     for (var i = 0; i < exited.length; i++) {
-      if (exited[i].scrollable) {
+      if (AutomationPredicate.autoScrollable(exited[i])) {
         scrollable = exited[i];
         break;
       }
@@ -927,7 +933,8 @@ CommandHandler.viewGraphicAsBraille_ = function(current) {
     return;
 
   imageNode.addEventListener(
-      EventType.IMAGE_FRAME_UPDATED, this.onImageFrameUpdated_, false);
+      EventType.IMAGE_FRAME_UPDATED, CommandHandler.onImageFrameUpdated_,
+      false);
   CommandHandler.imageNode_ = imageNode;
   if (imageNode.imageDataUrl) {
     var event = new CustomAutomationEvent(

@@ -15,17 +15,20 @@
 namespace device {
 
 PowerMonitorBroadcastSource::PowerMonitorBroadcastSource(
-    service_manager::Connector* connector,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
     : PowerMonitorBroadcastSource(std::make_unique<Client>(),
-                                  connector,
                                   task_runner) {}
 
 PowerMonitorBroadcastSource::PowerMonitorBroadcastSource(
     std::unique_ptr<Client> client,
-    service_manager::Connector* connector,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
-    : client_(std::move(client)), task_runner_(task_runner) {
+    : client_(std::move(client)), task_runner_(task_runner) {}
+
+PowerMonitorBroadcastSource::~PowerMonitorBroadcastSource() {
+  task_runner_->DeleteSoon(FROM_HERE, client_.release());
+}
+
+void PowerMonitorBroadcastSource::Init(service_manager::Connector* connector) {
   if (connector) {
     task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&PowerMonitorBroadcastSource::Client::Init,
@@ -34,16 +37,11 @@ PowerMonitorBroadcastSource::PowerMonitorBroadcastSource(
   }
 }
 
-PowerMonitorBroadcastSource::~PowerMonitorBroadcastSource() {
-  task_runner_->DeleteSoon(FROM_HERE, client_.release());
-}
-
 bool PowerMonitorBroadcastSource::IsOnBatteryPowerImpl() {
-  return client_->last_reported_battery_power_state();
+  return client_->last_reported_on_battery_power_state();
 }
 
-PowerMonitorBroadcastSource::Client::Client()
-    : last_reported_battery_power_state_(false), binding_(this) {}
+PowerMonitorBroadcastSource::Client::Client() : binding_(this) {}
 
 PowerMonitorBroadcastSource::Client::~Client() {}
 
@@ -58,14 +56,9 @@ void PowerMonitorBroadcastSource::Client::Init(
   power_monitor->AddClient(std::move(client));
 }
 
-bool PowerMonitorBroadcastSource::Client::last_reported_battery_power_state() {
-  return base::subtle::NoBarrier_Load(&last_reported_battery_power_state_) != 0;
-}
-
 void PowerMonitorBroadcastSource::Client::PowerStateChange(
     bool on_battery_power) {
-  base::subtle::NoBarrier_Store(&last_reported_battery_power_state_,
-                                on_battery_power);
+  last_reported_on_battery_power_state_ = on_battery_power;
   ProcessPowerEvent(PowerMonitorSource::POWER_STATE_EVENT);
 }
 

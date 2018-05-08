@@ -38,7 +38,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/base/filename_util.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/resource/resource_handle.h"
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -504,7 +504,7 @@ GURL WebUIBrowserTest::WebUITestDataPathToURL(
     const base::FilePath::StringType& path) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::FilePath dir_test_data;
-  EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &dir_test_data));
+  EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &dir_test_data));
   base::FilePath test_path(dir_test_data.Append(kWebUITestFolder).Append(path));
   EXPECT_TRUE(base::PathExists(test_path));
   return net::FilePathToFileURL(test_path);

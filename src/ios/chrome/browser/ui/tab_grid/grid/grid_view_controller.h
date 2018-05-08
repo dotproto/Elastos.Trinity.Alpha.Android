@@ -16,14 +16,19 @@
 
 // Protocol used to relay relevant user interactions from a grid UI.
 @protocol GridViewControllerDelegate
-// Tells the delegate that the item at |index| was selected in
+// Tells the delegate that the item with |itemID| was selected in
 // |gridViewController|.
 - (void)gridViewController:(GridViewController*)gridViewController
-      didSelectItemAtIndex:(NSUInteger)index;
-// Tells the delegate that the item at |index| was closed in
+       didSelectItemWithID:(NSString*)itemID;
+// Tells the delegate that the item with |itemID| was closed in
 // |gridViewController|.
 - (void)gridViewController:(GridViewController*)gridViewController
-       didCloseItemAtIndex:(NSUInteger)index;
+        didCloseItemWithID:(NSString*)itemID;
+// Tells the delegate that the item at |sourceIndex| was moved to
+// |destinationIndex|.
+- (void)gridViewController:(GridViewController*)gridViewController
+         didMoveItemWithID:(NSString*)itemID
+                   toIndex:(NSUInteger)destinationIndex;
 // Tells the delegate that the the number of items in |gridViewController|
 // changed to |count|.
 - (void)gridViewController:(GridViewController*)gridViewController

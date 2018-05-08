@@ -17,7 +17,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -62,19 +61,16 @@
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
-#include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/render_frame_metadata_observer_impl.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/WebKit/public/platform/WebCompositeAndReadbackAsyncCallback.h"
-#include "third_party/WebKit/public/platform/WebLayoutAndPaintAsyncCallback.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebSelection.h"
+#include "third_party/blink/public/platform/scheduler/web_main_thread_scheduler.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_selection.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
@@ -96,10 +92,12 @@ using blink::WebSelection;
 using blink::WebSize;
 using blink::WebBrowserControlsState;
 using blink::WebLayerTreeView;
-using blink::WebOverscrollBehavior;
 
 namespace content {
 namespace {
+
+const base::Feature kUnpremultiplyAndDitherLowBitDepthTiles = {
+    "UnpremultiplyAndDitherLowBitDepthTiles", base::FEATURE_ENABLED_BY_DEFAULT};
 
 using ReportTimeCallback =
     base::Callback<void(WebLayerTreeView::SwapResult, double)>;
@@ -288,7 +286,6 @@ RenderWidgetCompositor::RenderWidgetCompositor(
       threaded_(!!compositor_deps_->GetCompositorImplThreadTaskRunner()),
       never_visible_(false),
       is_for_oopif_(false),
-      layout_and_paint_async_callback_(nullptr),
       weak_factory_(this) {}
 
 void RenderWidgetCompositor::Initialize(
@@ -415,8 +412,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->IsGpuRasterizationForced();
 
   settings.can_use_lcd_text = compositor_deps->IsLcdTextEnabled();
-  settings.use_distance_field_text =
-      compositor_deps->IsDistanceFieldTextEnabled();
   settings.use_zero_copy = compositor_deps->IsZeroCopyEnabled();
   settings.use_partial_raster = compositor_deps->IsPartialRasterEnabled();
   settings.enable_elastic_overscroll =
@@ -550,12 +545,18 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     if (!cmd.HasSwitch(switches::kDisableRGBA4444Textures) &&
         base::SysInfo::AmountOfPhysicalMemoryMB() <= 512 &&
         !using_synchronous_compositor) {
-      settings.preferred_tile_format = viz::RGBA_4444;
-      // We need to allocate an additional RGBA_8888 intermediate for each tile
+      settings.use_rgba_4444 = viz::RGBA_4444;
+
+      // If we are going to unpremultiply and dither these tiles, we need to
+      // allocate an additional RGBA_8888 intermediate for each tile
       // rasterization when rastering to RGBA_4444 to allow for dithering.
       // Setting a reasonable sized max tile size allows this intermediate to
       // be consistently reused.
-      settings.max_gpu_raster_tile_size = gfx::Size(512, 256);
+      if (base::FeatureList::IsEnabled(
+              kUnpremultiplyAndDitherLowBitDepthTiles)) {
+        settings.max_gpu_raster_tile_size = gfx::Size(512, 256);
+        settings.unpremultiply_and_dither_low_bit_depth_tiles = true;
+      }
     }
   }
 
@@ -566,11 +567,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   if (cmd.HasSwitch(switches::kEnableRGBA4444Textures) &&
       !cmd.HasSwitch(switches::kDisableRGBA4444Textures)) {
-    settings.preferred_tile_format = viz::RGBA_4444;
-  }
-
-  if (cmd.HasSwitch(cc::switches::kEnableTileCompression)) {
-    settings.preferred_tile_format = viz::ETC1;
+    settings.use_rgba_4444 = true;
   }
 
   settings.max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;  // 32MB
@@ -812,7 +809,7 @@ WebFloatPoint RenderWidgetCompositor::adjustEventPointForPinchZoom(
   return point;
 }
 
-void RenderWidgetCompositor::SetBackgroundColor(blink::WebColor color) {
+void RenderWidgetCompositor::SetBackgroundColor(SkColor color) {
   layer_tree_host_->set_background_color(color);
 }
 
@@ -984,10 +981,9 @@ bool RenderWidgetCompositor::CompositeIsSynchronous() const {
   return false;
 }
 
-void RenderWidgetCompositor::LayoutAndPaintAsync(
-    blink::WebLayoutAndPaintAsyncCallback* callback) {
-  DCHECK(!layout_and_paint_async_callback_);
-  layout_and_paint_async_callback_ = callback;
+void RenderWidgetCompositor::LayoutAndPaintAsync(base::OnceClosure callback) {
+  DCHECK(layout_and_paint_async_callback_.is_null());
+  layout_and_paint_async_callback_ = std::move(callback);
 
   if (CompositeIsSynchronous()) {
     // The LayoutAndPaintAsyncCallback is invoked in WillCommit, which is
@@ -1012,32 +1008,27 @@ void RenderWidgetCompositor::SetLayerTreeFrameSink(
 }
 
 void RenderWidgetCompositor::InvokeLayoutAndPaintCallback() {
-  if (!layout_and_paint_async_callback_)
-    return;
-  layout_and_paint_async_callback_->DidLayoutAndPaint();
-  layout_and_paint_async_callback_ = nullptr;
+  if (!layout_and_paint_async_callback_.is_null())
+    std::move(layout_and_paint_async_callback_).Run();
 }
 
 void RenderWidgetCompositor::CompositeAndReadbackAsync(
-    blink::WebCompositeAndReadbackAsyncCallback* callback) {
-  DCHECK(!layout_and_paint_async_callback_);
+    base::OnceCallback<void(const SkBitmap&)> callback) {
+  DCHECK(layout_and_paint_async_callback_.is_null());
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
       layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner();
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
           viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(
-              [](blink::WebCompositeAndReadbackAsyncCallback* callback,
+              [](base::OnceCallback<void(const SkBitmap&)> callback,
                  scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                  std::unique_ptr<viz::CopyOutputResult> result) {
                 task_runner->PostTask(
                     FROM_HERE,
-                    base::BindOnce(
-                        &blink::WebCompositeAndReadbackAsyncCallback::
-                            DidCompositeAndReadback,
-                        base::Unretained(callback), result->AsSkBitmap()));
+                    base::BindOnce(std::move(callback), result->AsSkBitmap()));
               },
-              callback, std::move(main_thread_task_runner)));
+              std::move(callback), std::move(main_thread_task_runner)));
   auto swap_promise =
       delegate_->RequestCopyOfOutputForLayoutTest(std::move(request));
 
@@ -1067,6 +1058,10 @@ void RenderWidgetCompositor::SynchronouslyCompositeNoRasterForTesting() {
   SynchronouslyComposite(false /* raster */, nullptr /* swap_promise */);
 }
 
+void RenderWidgetCompositor::CompositeWithRasterForTesting() {
+  SynchronouslyComposite(true /* raster */, nullptr /* swap_promise */);
+}
+
 void RenderWidgetCompositor::SynchronouslyComposite(
     bool raster,
     std::unique_ptr<cc::SwapPromise> swap_promise) {
@@ -1078,8 +1073,7 @@ void RenderWidgetCompositor::SynchronouslyComposite(
     // LayoutTests can use a nested message loop to pump frames while inside a
     // frame, but the compositor does not support this. In this case, we only
     // run blink's lifecycle updates.
-    delegate_->BeginMainFrame(
-        (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF());
+    delegate_->BeginMainFrame(base::TimeTicks::Now());
     delegate_->UpdateVisualState(
         cc::LayerTreeHostClient::VisualStateUpdate::kAll);
     return;
@@ -1174,7 +1168,7 @@ void RenderWidgetCompositor::RequestDecode(
 }
 
 void RenderWidgetCompositor::SetOverscrollBehavior(
-    const WebOverscrollBehavior& behavior) {
+    const cc::OverscrollBehavior& behavior) {
   layer_tree_host_->SetOverscrollBehavior(behavior);
 }
 
@@ -1185,18 +1179,17 @@ void RenderWidgetCompositor::WillBeginMainFrame() {
 void RenderWidgetCompositor::DidBeginMainFrame() {}
 
 void RenderWidgetCompositor::BeginMainFrame(const viz::BeginFrameArgs& args) {
-  compositor_deps_->GetRendererScheduler()->WillBeginFrame(args);
-  double frame_time_sec = (args.frame_time - base::TimeTicks()).InSecondsF();
-  delegate_->BeginMainFrame(frame_time_sec);
+  compositor_deps_->GetWebMainThreadScheduler()->WillBeginFrame(args);
+  delegate_->BeginMainFrame(args.frame_time);
 }
 
 void RenderWidgetCompositor::BeginMainFrameNotExpectedSoon() {
-  compositor_deps_->GetRendererScheduler()->BeginFrameNotExpectedSoon();
+  compositor_deps_->GetWebMainThreadScheduler()->BeginFrameNotExpectedSoon();
 }
 
 void RenderWidgetCompositor::BeginMainFrameNotExpectedUntil(
     base::TimeTicks time) {
-  compositor_deps_->GetRendererScheduler()->BeginMainFrameNotExpectedUntil(
+  compositor_deps_->GetWebMainThreadScheduler()->BeginMainFrameNotExpectedUntil(
       time);
 }
 
@@ -1255,7 +1248,7 @@ void RenderWidgetCompositor::WillCommit() {
 
 void RenderWidgetCompositor::DidCommit() {
   delegate_->DidCommitCompositorFrame();
-  compositor_deps_->GetRendererScheduler()->DidCommitFrameToCompositor();
+  compositor_deps_->GetWebMainThreadScheduler()->DidCommitFrameToCompositor();
 }
 
 void RenderWidgetCompositor::DidCommitAndDrawFrame() {

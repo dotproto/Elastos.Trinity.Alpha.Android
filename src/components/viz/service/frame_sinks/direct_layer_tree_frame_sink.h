@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_SERVICE_FRAME_SINKS_DIRECT_LAYER_TREE_FRAME_SINK_H_
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -45,7 +46,6 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       scoped_refptr<RasterContextProvider> worker_context_provider,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      SharedBitmapManager* shared_bitmap_manager,
       bool use_viz_hit_test);
   ~DirectLayerTreeFrameSink() override;
 
@@ -65,6 +65,8 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   void DisplayDidDrawAndSwap() override;
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
+  void DidSwapAfterSnapshotRequestReceived(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
  private:
   // mojom::CompositorFrameSinkClient implementation:
@@ -88,6 +90,8 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
 
   mojom::HitTestRegionListPtr CreateHitTestData(
       const CompositorFrame& frame) const;
+  void DidReceiveCompositorFrameAckInternal(
+      const std::vector<ReturnedResource>& resources);
 
   // This class is only meant to be used on a single thread.
   THREAD_CHECKER(thread_checker_);
@@ -95,7 +99,6 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   std::unique_ptr<CompositorFrameSinkSupport> support_;
 
   const FrameSinkId frame_sink_id_;
-  LocalSurfaceId local_surface_id_;
   CompositorFrameSinkSupportManager* const support_manager_;
   FrameSinkManagerImpl* frame_sink_manager_;
   ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
@@ -107,6 +110,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   float device_scale_factor_ = 1.f;
   bool is_lost_ = false;
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
+  base::WeakPtrFactory<DirectLayerTreeFrameSink> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectLayerTreeFrameSink);
 };

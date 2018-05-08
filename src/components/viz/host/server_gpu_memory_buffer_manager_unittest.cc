@@ -61,16 +61,19 @@ class TestGpuService : public mojom::GpuService {
                            EstablishGpuChannelCallback callback) override {}
 
   void CloseChannel(int32_t client_id) override {}
-
+#if defined(OS_CHROMEOS)
   void CreateArcVideoDecodeAccelerator(
       arc::mojom::VideoDecodeAcceleratorRequest vda_request) override {}
 
   void CreateArcVideoEncodeAccelerator(
       arc::mojom::VideoEncodeAcceleratorRequest vea_request) override {}
 
+  void CreateArcVideoProtectedBufferAllocator(
+      arc::mojom::VideoProtectedBufferAllocatorRequest pba_request) override {}
+
   void CreateArcProtectedBufferManager(
       arc::mojom::ProtectedBufferManagerRequest pbm_request) override {}
-
+#endif  // defined(OS_CHROMEOS)
   void CreateJpegDecodeAccelerator(
       media::mojom::JpegDecodeAcceleratorRequest jda_request) override {}
 
@@ -103,6 +106,9 @@ class TestGpuService : public mojom::GpuService {
   void RequestCompleteGpuInfo(
       RequestCompleteGpuInfoCallback callback) override {}
 
+  void GetGpuSupportedRuntimeVersion(
+      GetGpuSupportedRuntimeVersionCallback callback) override {}
+
   void RequestHDRStatus(RequestHDRStatusCallback callback) override {}
 
   void LoadedShader(const std::string& key, const std::string& data) override {}
@@ -116,6 +122,8 @@ class TestGpuService : public mojom::GpuService {
   void GpuSwitched() override {}
 
   void DestroyAllChannels() override {}
+
+  void OnBackgrounded() override {}
 
   void Crash() override {}
 

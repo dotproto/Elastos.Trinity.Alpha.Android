@@ -41,15 +41,12 @@ enum NotificationType {
   // This message is sent after a window has been opened.  The source is a
   // Source<Browser> containing the affected Browser.  No details are
   // expected.
+  // DEPRECATED: Use BrowserListObserver::OnBrowserAdded()
   NOTIFICATION_BROWSER_OPENED = NOTIFICATION_CHROME_START,
 
-  // This message is sent soon after BROWSER_OPENED, and indicates that
-  // the Browser's |window_| is now non-NULL. The source is a Source<Browser>
-  // containing the affected Browser.  No details are expected.
-  NOTIFICATION_BROWSER_WINDOW_READY,
-
   // This message is sent after a window has been closed.  The source is a
-  // Source<Browser> containing the affected Browser.  No details are exptected.
+  // Source<Browser> containing the affected Browser.  No details are expected.
+  // DEPRECATED: Use BrowserListObserver::OnBrowserRemoved()
   NOTIFICATION_BROWSER_CLOSED,
 
   // This message is sent when closing a browser has been cancelled, either by
@@ -74,12 +71,6 @@ enum NotificationType {
   // The user has changed the browser theme. The source is a
   // Source<ThemeService>. There are no details.
   NOTIFICATION_BROWSER_THEME_CHANGED,
-
-#if defined(USE_AURA)
-  // The user has changed the fling curve configuration.
-  // Source<GesturePrefsObserver>. There are no details.
-  NOTIFICATION_BROWSER_FLING_CURVE_PARAMETERS_CHANGED,
-#endif  // defined(USE_AURA)
 
   // Sent when the renderer returns focus to the browser, as part of focus
   // traversal. The source is the browser, there are no details.
@@ -111,18 +102,6 @@ enum NotificationType {
   // will exit because the shutdown process can be cancelled by an unload
   // handler.  Use APP_TERMINATING for such needs.
   NOTIFICATION_CLOSE_ALL_BROWSERS_REQUEST,
-
-  // This message is sent when a new InfoBar has been added to an
-  // InfoBarService.  The source is a Source<InfoBarService> with a pointer to
-  // the InfoBarService the InfoBar was added to.  The details is a
-  // Details<InfoBar::AddedDetails>.
-  NOTIFICATION_TAB_CONTENTS_INFOBAR_ADDED,
-
-  // This message is sent when an InfoBar is about to be removed from an
-  // InfoBarService.  The source is a Source<InfoBarService> with a pointer to
-  // the InfoBarService the InfoBar was removed from.  The details is a
-  // Details<InfoBar::RemovedDetails>.
-  NOTIFICATION_TAB_CONTENTS_INFOBAR_REMOVED,
 
   // Tabs --------------------------------------------------------------------
 
@@ -367,10 +346,6 @@ enum NotificationType {
   NOTIFICATION_TAB_DRAG_LOOP_DONE,
 #endif
 
-  // Send when a context menu is shown. Used to notify tests that the context
-  // menu has been created and shown.
-  NOTIFICATION_RENDER_VIEW_CONTEXT_MENU_SHOWN,
-
   // Sent when the CaptivePortalService checks if we're behind a captive portal.
   // The Source is the Profile the CaptivePortalService belongs to, and the
   // Details are a Details<CaptivePortalService::CheckResults>.
@@ -411,11 +386,6 @@ enum NotificationType {
   // error. The detail is a GlobalError object that has changed or NULL if
   // all error UIs should update.
   NOTIFICATION_GLOBAL_ERRORS_CHANGED,
-
-  // The user accepted or dismissed a SSL client authentication request.
-  // The source is a Source<net::HttpNetworkSession>.  Details is a
-  // (std::pair<net::SSLCertRequestInfo*, net::X509Certificate*>).
-  NOTIFICATION_SSL_CLIENT_AUTH_CERT_SELECTED,
 
   // Note:-
   // Currently only Content and Chrome define and use notifications.

@@ -25,8 +25,10 @@ import android.util.Pair;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.blink_public.web.WebReferrerPolicy;
@@ -35,6 +37,7 @@ import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.AutocompleteController;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
@@ -43,6 +46,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
@@ -86,6 +90,11 @@ public class IntentHandler {
      * Tab ID to use when creating a new Tab.
      */
     public static final String EXTRA_TAB_ID = "com.android.chrome.tab_id";
+
+    /**
+     * Parcelable FullscreenOptions to use when creating a new Tab.
+     */
+    public static final String EXTRA_FULLSCREEN_OPTIONS = "com.android.chrome.fullscreen_options";
 
     /**
      * The tab id of the parent tab, if any.
@@ -413,6 +422,22 @@ public class IntentHandler {
 
         String referrerUrl = getReferrerUrlIncludingExtraHeaders(intent);
         String extraHeaders = getExtraHeadersFromIntent(intent);
+
+        if (isIntentForMhtmlFileOrContent(intent) && tabOpenType == TabOpenType.OPEN_NEW_TAB
+                && referrerUrl == null && extraHeaders == null) {
+            handleMhtmlFileOrContentIntent(url, intent);
+            return true;
+        }
+
+        processUrlViewIntent(url, referrerUrl, extraHeaders, tabOpenType,
+                IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID),
+                tabIdToBringToFront, hasUserGesture, intent);
+        return true;
+    }
+
+    private void processUrlViewIntent(String url, String referrerUrl, String extraHeaders,
+            TabOpenType tabOpenType, String externalAppId, int tabIdToBringToFront,
+            boolean hasUserGesture, Intent intent) {
         extraHeaders = maybeAddAdditionalExtraHeaders(intent, url, extraHeaders);
 
         // TODO(joth): Presumably this should check the action too.
@@ -421,7 +446,6 @@ public class IntentHandler {
                 tabIdToBringToFront, hasUserGesture, intent);
         recordExternalIntentSourceUMA(intent);
         recordAppHandlersForIntent(intent);
-        return true;
     }
 
     /**
@@ -559,7 +583,11 @@ public class IntentHandler {
                 results.add(testResult);
             }
         }
-        if (results == null || results.size() == 0) return null;
+        if (results == null || results.size() == 0
+                || !BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                            .isStartupSuccessfullyCompleted()) {
+            return null;
+        }
         String query = results.get(0);
         String url = AutocompleteController.nativeQualifyPartialURLQuery(query);
         if (url == null) {
@@ -588,6 +616,13 @@ public class IntentHandler {
 
         mDelegate.processWebSearchIntent(query);
         return true;
+    }
+
+    private void handleMhtmlFileOrContentIntent(final String url, final Intent intent) {
+        OfflinePageUtils.getLoadUrlParamsForOpeningMhtmlFileOrContent(url, (loadUrlParams) -> {
+            processUrlViewIntent(loadUrlParams.getUrl(), null, loadUrlParams.getVerbatimHeaders(),
+                    TabOpenType.OPEN_NEW_TAB, null, 0, false, intent);
+        });
     }
 
     private static PendingIntent getAuthenticationToken() {
@@ -1034,6 +1069,36 @@ public class IntentHandler {
 
         String typeHeader = "X-Chrome-intent-type: " + type;
         return (extraHeaders == null) ? typeHeader : (extraHeaders + "\n" + typeHeader);
+    }
+
+    /**
+     * @param intent An Intent to be checked.
+     * @return Whether the intent has an file:// or content:// URL with MHTML MIME type.
+     */
+    @VisibleForTesting
+    static boolean isIntentForMhtmlFileOrContent(Intent intent) {
+        String url = getUrlFromIntent(intent);
+        if (url == null) return false;
+        String scheme = getSanitizedUrlScheme(url);
+        boolean isContentUriScheme = TextUtils.equals(scheme, UrlConstants.CONTENT_SCHEME);
+        boolean isFileUriScheme = TextUtils.equals(scheme, UrlConstants.FILE_SCHEME);
+        if (!isContentUriScheme && !isFileUriScheme) return false;
+        String type = intent.getType();
+        if (type != null && (type.equals("multipart/related") || type.equals("message/rfc822"))) {
+            return true;
+        }
+        // Note that "application/octet-stream" type may be passed by some apps that do not know
+        // about MHTML file types.
+        if (!isFileUriScheme
+                || (!TextUtils.isEmpty(type) && !type.equals("application/octet-stream"))) {
+            return false;
+        }
+
+        // Get the file extension. We can't use MimeTypeMap.getFileExtensionFromUrl because it will
+        // reject urls with characters that are valid in filenames (such as "!").
+        String extension = FileUtils.getExtension(url);
+
+        return extension.equals("mhtml") || extension.equals("mht");
     }
 
     /**

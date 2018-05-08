@@ -37,8 +37,6 @@ js2gtest("browser_tests_js_webui") {
     "../../../browser/ui/webui/chromeos/bluetooth_pairing_dialog_browsertest.js",
     "../../../browser/ui/webui/chromeos/certificate_manager_dialog_browsertest.js",
     "../../../browser/ui/webui/chromeos/set_time_ui_browsertest.js",
-    "../../../browser/ui/webui/extensions/chromeos/kiosk_apps_browsertest.js",
-    "../../../browser/ui/webui/extensions/extension_settings_browsertest.js",
     "../../../browser/ui/webui/identity_internals_ui_browsertest.js",
     "../../../browser/ui/webui/sync_internals_browsertest.js",
     "../chromeos/oobe_webui_browsertest.js",
@@ -81,12 +79,15 @@ js2gtest("browser_tests_js_webui") {
     "polymer_browser_test_base.js",
     "sandboxstatus_browsertest.js",
     "settings/a11y/about_a11y_test.js",
+    "settings/a11y/accessibility_a11y_test.js",
     "settings/a11y/basic_a11y_test.js",
     "settings/a11y/edit_dictionary_a11y_test.js",
+    "settings/a11y/manage_accessibility_a11y_test.js",
     "settings/a11y/manage_profile_a11y_test.js",
     "settings/a11y/passwords_a11y_test.js",
     "settings/a11y/settings_accessibility_test.js",
     "settings/a11y/sign_out_a11y_test.js",
+    "settings/a11y/tts_subpage_a11y_test.js",
     "settings/advanced_page_browsertest.js",
     "settings/animation_browsertest.js",
     "settings/basic_page_browsertest.js",
@@ -115,6 +116,7 @@ js2gtest("browser_tests_js_webui") {
 
   if (is_chromeos) {
     sources += [
+      "multidevice_setup/multidevice_setup_browsertest.js",
       "settings/easy_unlock_browsertest_chromeos.js",
       "sys_internals/sys_internals_browsertest.js",
     ]

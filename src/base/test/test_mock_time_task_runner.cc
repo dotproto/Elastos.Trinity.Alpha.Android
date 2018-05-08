@@ -27,7 +27,7 @@ class LegacyMockTickClock : public TickClock {
       : task_runner_(std::move(task_runner)) {}
 
   // TickClock:
-  TimeTicks NowTicks() override { return task_runner_->NowTicks(); }
+  TimeTicks NowTicks() const override { return task_runner_->NowTicks(); }
 
  private:
   scoped_refptr<const TestMockTimeTaskRunner> task_runner_;
@@ -42,7 +42,7 @@ class LegacyMockClock : public Clock {
       : task_runner_(std::move(task_runner)) {}
 
   // Clock:
-  Time Now() override { return task_runner_->Now(); }
+  Time Now() const override { return task_runner_->Now(); }
 
  private:
   scoped_refptr<const TestMockTimeTaskRunner> task_runner_;
@@ -239,7 +239,7 @@ std::unique_ptr<TickClock> TestMockTimeTaskRunner::DeprecatedGetMockTickClock()
   return std::make_unique<LegacyMockTickClock>(this);
 }
 
-TickClock* TestMockTimeTaskRunner::GetMockTickClock() const {
+const TickClock* TestMockTimeTaskRunner::GetMockTickClock() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return &mock_clock_;
 }
@@ -413,11 +413,11 @@ void TestMockTimeTaskRunner::EnsureWorkScheduled() {
   // doesn't need an extra kick on nested runs.
 }
 
-TimeTicks TestMockTimeTaskRunner::MockClock::NowTicks() {
+TimeTicks TestMockTimeTaskRunner::MockClock::NowTicks() const {
   return task_runner_->NowTicks();
 }
 
-Time TestMockTimeTaskRunner::MockClock::Now() {
+Time TestMockTimeTaskRunner::MockClock::Now() const {
   return task_runner_->Now();
 }
 

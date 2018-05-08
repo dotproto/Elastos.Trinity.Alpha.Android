@@ -12,7 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "cc/layers/texture_layer.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
+#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
 
 class GURL;
 
@@ -20,6 +20,7 @@ namespace blink {
 class WebInputEvent;
 class WebLocalFrame;
 struct WebSize;
+class WebURL;
 class WebURLRequest;
 class WebView;
 class WebWidget;
@@ -153,8 +154,12 @@ gfx::ColorSpace GetTestingColorSpace(const std::string& name);
 void SetDeviceColorSpace(RenderView* render_view,
                          const gfx::ColorSpace& color_space);
 
-// Sets the scan duration to 0.
-void SetTestBluetoothScanDuration();
+// Sets the scan duration to reflect the given setting.
+enum class BluetoothTestScanDurationSetting {
+  kImmediateTimeout,  // Set the scan duration to 0 seconds.
+  kNeverTimeout,  // Set the scan duration to base::TimeDelta::Max() seconds.
+};
+void SetTestBluetoothScanDuration(BluetoothTestScanDurationSetting setting);
 
 // Enables or disables synchronous resize mode. When enabled, all window-sizing
 // machinery is short-circuited inside the renderer. This mode is necessary for
@@ -181,6 +186,12 @@ void ForceTextInputStateUpdateForRenderFrame(RenderFrame* render_frame);
 // Returns true if the navigation identified by the |request| was initiated by
 // the browser or renderer.
 bool IsNavigationInitiatedByRenderer(const blink::WebURLRequest& request);
+
+// RewriteURLFunction must be safe to call from any thread in the renderer
+// process.
+using RewriteURLFunction = blink::WebURL (*)(const std::string&,
+                                             bool is_wpt_mode);
+void SetWorkerRewriteURLFunction(RewriteURLFunction rewrite_url_function);
 
 }  // namespace content
 

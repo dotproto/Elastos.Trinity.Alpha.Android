@@ -58,7 +58,7 @@ const int kLocationAuthorizationStatusCount = 4;
 // Coordinator for the omnibox popup.
 @property(nonatomic, strong) OmniboxPopupCoordinator* omniboxPopupCoordinator;
 @property(nonatomic, strong) LocationBarLegacyMediator* mediator;
-// Redefined as readwrite and as LocationBarView.
+// Redefined as readwrite and as LocationBarEditView.
 @property(nonatomic, strong, readwrite) LocationBarLegacyView* locationBarView;
 
 @end
@@ -249,6 +249,12 @@ const int kLocationAuthorizationStatusCount = 4;
 // This will be OmniboxFocuser implementation, but it's not yet ready. Some
 // methods are already necessary though.
 #pragma mark - OmniboxFocuser
+
+- (void)focusOmniboxFromSearchButton {
+  OmniboxEditModel* model = _locationBarController->GetLocationEntry()->model();
+  model->set_focus_source(OmniboxEditModel::FocusSource::SEARCH_BUTTON);
+  [self focusOmnibox];
+}
 
 - (void)focusOmnibox {
   [self.locationBarView.textField becomeFirstResponder];

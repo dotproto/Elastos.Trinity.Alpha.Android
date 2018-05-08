@@ -22,6 +22,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -445,6 +446,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrashRecoveryTest, CrashAndUnloadAll) {
 // Regression test for issue 71629 and 763808.
 IN_PROC_BROWSER_TEST_F(ExtensionCrashRecoveryTest,
                        ReloadTabsWithBackgroundPage) {
+  // TODO(https://crbug.com/831078): Fix the test.
+  if (content::AreAllSitesIsolatedForTesting())
+    return;
+
   TabStripModel* tab_strip = browser()->tab_strip_model();
   const size_t count_before = GetEnabledExtensionCount();
   const size_t crash_count_before = GetTerminatedExtensionCount();

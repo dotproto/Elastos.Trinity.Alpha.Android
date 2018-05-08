@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -16,26 +15,6 @@ namespace viz {
 namespace {
 
 static uint32_t g_next_sequence_number = 1;
-
-class OwnedSharedBitmap : public SharedBitmap {
- public:
-  OwnedSharedBitmap(std::unique_ptr<base::SharedMemory> shared_memory,
-                    const SharedBitmapId& id)
-      : SharedBitmap(static_cast<uint8_t*>(shared_memory->memory()),
-                     id,
-                     g_next_sequence_number++),
-        shared_memory_(std::move(shared_memory)) {}
-
-  ~OwnedSharedBitmap() override = default;
-
-  // SharedBitmap:
-  base::UnguessableToken GetCrossProcessGUID() const override {
-    return shared_memory_->mapped_id();
-  }
-
- private:
-  std::unique_ptr<base::SharedMemory> shared_memory_;
-};
 
 class UnownedSharedBitmap : public SharedBitmap {
  public:
@@ -59,20 +38,6 @@ class UnownedSharedBitmap : public SharedBitmap {
 TestSharedBitmapManager::TestSharedBitmapManager() = default;
 
 TestSharedBitmapManager::~TestSharedBitmapManager() = default;
-
-std::unique_ptr<SharedBitmap> TestSharedBitmapManager::AllocateSharedBitmap(
-    const gfx::Size& size,
-    ResourceFormat resource_format) {
-  DCHECK(IsBitmapFormatSupported(resource_format));
-  base::AutoLock lock(lock_);
-  std::unique_ptr<base::SharedMemory> memory(new base::SharedMemory);
-  DCHECK_EQ(0, BitsPerPixel(resource_format) % 8);
-  size_t memory_size = size.GetArea() * BitsPerPixel(resource_format) / 8;
-  memory->CreateAndMapAnonymous(memory_size);
-  SharedBitmapId id = SharedBitmap::GenerateId();
-  bitmap_map_[id] = memory.get();
-  return std::make_unique<OwnedSharedBitmap>(std::move(memory), id);
-}
 
 std::unique_ptr<SharedBitmap> TestSharedBitmapManager::GetSharedBitmapFromId(
     const gfx::Size&,
@@ -115,9 +80,6 @@ bool TestSharedBitmapManager::ChildAllocatedSharedBitmap(
 
 void TestSharedBitmapManager::ChildDeletedSharedBitmap(
     const SharedBitmapId& id) {
-  // The bitmap id should previously have been given to
-  // ChildAllocatedSharedBitmap().
-  DCHECK_EQ(notified_set_.count(id), 1u);
   notified_set_.erase(id);
   bitmap_map_.erase(id);
   owned_map_.erase(id);

@@ -17,7 +17,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/public/mojom/feature_policy/feature_policy.mojom.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 using device::mojom::SensorType;
 
@@ -66,7 +66,8 @@ void SensorProviderProxyImpl::GetSensor(SensorType type,
 }
 
 bool SensorProviderProxyImpl::CheckPermission() const {
-  const GURL& requesting_origin = render_frame_host_->GetLastCommittedURL();
+  const GURL& requesting_origin =
+      render_frame_host_->GetLastCommittedURL().GetOrigin();
 
   blink::mojom::PermissionStatus permission_status =
       permission_manager_->GetPermissionStatusForFrame(

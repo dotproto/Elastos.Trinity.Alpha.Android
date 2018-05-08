@@ -20,7 +20,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -51,7 +50,7 @@
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -112,9 +111,7 @@ struct StoragePartitionRemovalData {
   base::Time remove_begin;
   base::Time remove_end;
   StoragePartition::OriginMatcherFunction origin_matcher;
-  StoragePartition::CookieMatcherFunction cookie_matcher;
-
-  StoragePartitionRemovalData() {}
+  net::CookieDeletionInfo cookie_delete_info;
 };
 
 net::CanonicalCookie CreateCookieWithHost(const GURL& source) {
@@ -162,7 +159,7 @@ class StoragePartitionRemovalTestStoragePartition
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
                  const OriginMatcherFunction& origin_matcher,
-                 const CookieMatcherFunction& cookie_matcher,
+                 net::CookieDeletionInfo cookie_delete_info,
                  const base::Time begin,
                  const base::Time end,
                  base::OnceClosure callback) override {
@@ -173,7 +170,8 @@ class StoragePartitionRemovalTestStoragePartition
     storage_partition_removal_data_.remove_begin = begin;
     storage_partition_removal_data_.remove_end = end;
     storage_partition_removal_data_.origin_matcher = origin_matcher;
-    storage_partition_removal_data_.cookie_matcher = cookie_matcher;
+    storage_partition_removal_data_.cookie_delete_info =
+        std::move(cookie_delete_info);
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
@@ -182,7 +180,7 @@ class StoragePartitionRemovalTestStoragePartition
             base::Unretained(this), std::move(callback)));
   }
 
-  StoragePartitionRemovalData GetStoragePartitionRemovalData() {
+  const StoragePartitionRemovalData& GetStoragePartitionRemovalData() const {
     return storage_partition_removal_data_;
   }
 
@@ -548,7 +546,7 @@ class BrowsingDataRemoverImplTest : public testing::Test {
 
   int GetOriginTypeMask() { return remover_->GetLastUsedOriginTypeMask(); }
 
-  StoragePartitionRemovalData GetStoragePartitionRemovalData() {
+  const StoragePartitionRemovalData& GetStoragePartitionRemovalData() const {
     return storage_partition_removal_data_;
   }
 
@@ -645,12 +643,16 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveCookiesDomainBlacklist) {
   // Even though it's a different origin, it's the same domain.
   EXPECT_FALSE(removal_data.origin_matcher.Run(kOrigin4, mock_policy()));
 
-  EXPECT_FALSE(removal_data.cookie_matcher.Run(CreateCookieWithHost(kOrigin1)));
-  EXPECT_TRUE(removal_data.cookie_matcher.Run(CreateCookieWithHost(kOrigin2)));
-  EXPECT_FALSE(removal_data.cookie_matcher.Run(CreateCookieWithHost(kOrigin3)));
+  EXPECT_FALSE(
+      removal_data.cookie_delete_info.Matches(CreateCookieWithHost(kOrigin1)));
+  EXPECT_TRUE(
+      removal_data.cookie_delete_info.Matches(CreateCookieWithHost(kOrigin2)));
+  EXPECT_FALSE(
+      removal_data.cookie_delete_info.Matches(CreateCookieWithHost(kOrigin3)));
   // This is false, because this is the same domain as 3, just with a different
   // scheme.
-  EXPECT_FALSE(removal_data.cookie_matcher.Run(CreateCookieWithHost(kOrigin4)));
+  EXPECT_FALSE(
+      removal_data.cookie_delete_info.Matches(CreateCookieWithHost(kOrigin4)));
 }
 
 // Test that removing cookies clears HTTP auth data.

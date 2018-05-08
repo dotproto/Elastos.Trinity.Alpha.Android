@@ -104,10 +104,11 @@ class SiteInstanceTest : public testing::Test {
 
   void SetUp() override {
     old_browser_client_ = SetBrowserClientForTesting(&browser_client_);
-    url::AddStandardScheme(kPrivilegedScheme, url::SCHEME_WITHOUT_PORT);
-    url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITHOUT_PORT);
+    url::AddStandardScheme(kPrivilegedScheme, url::SCHEME_WITH_HOST);
+    url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITH_HOST);
 
-    RenderProcessHostImpl::set_render_process_host_factory(&rph_factory_);
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(
+        &rph_factory_);
   }
 
   void TearDown() override {
@@ -115,7 +116,7 @@ class SiteInstanceTest : public testing::Test {
     EXPECT_TRUE(RenderProcessHost::AllHostsIterator().IsAtEnd());
 
     SetBrowserClientForTesting(old_browser_client_);
-    RenderProcessHostImpl::set_render_process_host_factory(nullptr);
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(nullptr);
 
     // http://crbug.com/143565 found SiteInstanceTest leaking an
     // AppCacheDatabase. This happens because some part of the test indirectly
@@ -127,6 +128,8 @@ class SiteInstanceTest : public testing::Test {
     // scheduled for deletion. Here, call DrainMessageLoop() again so the
     // AppCacheDatabase actually gets deleted.
     DrainMessageLoop();
+
+    ResetSchemesAndOriginsWhitelist();
   }
 
   void set_privileged_process_id(int process_id) {
@@ -192,10 +195,10 @@ TEST_F(SiteInstanceTest, SiteInstanceDestructor) {
   // Ensure that instances are deleted when their RenderViewHosts are gone.
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
   {
-    std::unique_ptr<WebContentsImpl> web_contents(static_cast<WebContentsImpl*>(
+    std::unique_ptr<WebContents> web_contents(
         WebContents::Create(WebContents::CreateParams(
             browser_context.get(),
-            SiteInstance::Create(browser_context.get())))));
+            SiteInstance::Create(browser_context.get()))));
     EXPECT_EQ(0, browser_client()->GetAndClearSiteInstanceDeleteCount());
     EXPECT_EQ(0, browser_client()->GetAndClearBrowsingInstanceDeleteCount());
   }
@@ -623,20 +626,22 @@ TEST_F(SiteInstanceTest, ProcessSharingByType) {
   if (AreAllSitesIsolatedForTesting())
     return;
 
-  // On Android by default the number of renderer hosts is unlimited and process
-  // sharing doesn't happen. We set the override so that the test can run
-  // everywhere.
-  RenderProcessHost::SetMaxRendererProcessCount(kMaxRendererProcessCount);
-
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
 
   // Make a bunch of mock renderers so that we hit the limit.
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
-  for (size_t i = 0; i < kMaxRendererProcessCount; ++i)
+  for (size_t i = 0; i < kMaxRendererProcessCount; ++i) {
     hosts.push_back(
         std::make_unique<MockRenderProcessHost>(browser_context.get()));
+    hosts[i]->SetIsUsed();
+  }
+
+  // On Android by default the number of renderer hosts is unlimited and process
+  // sharing doesn't happen. We set the override so that the test can run
+  // everywhere.
+  RenderProcessHost::SetMaxRendererProcessCount(kMaxRendererProcessCount);
 
   // Create some extension instances and make sure they share a process.
   scoped_refptr<SiteInstanceImpl> extension1_instance(

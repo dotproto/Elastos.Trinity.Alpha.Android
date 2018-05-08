@@ -19,7 +19,8 @@ bool ShouldUseTouchBounds(EventSource event_source) {
 
 }  // namespace
 
-HitTestQuery::HitTestQuery() = default;
+HitTestQuery::HitTestQuery(base::RepeatingClosure bad_message_gpu_callback)
+    : bad_message_gpu_callback_(std::move(bad_message_gpu_callback)) {}
 
 HitTestQuery::~HitTestQuery() = default;
 
@@ -28,7 +29,10 @@ void HitTestQuery::OnAggregatedHitTestRegionListUpdated(
     uint32_t active_handle_size,
     mojo::ScopedSharedBufferHandle idle_handle,
     uint32_t idle_handle_size) {
-  DCHECK(active_handle.is_valid() && idle_handle.is_valid());
+  if (!active_handle.is_valid() || !idle_handle.is_valid()) {
+    ReceivedBadMessageFromGpuProcess();
+    return;
+  }
   handle_buffer_sizes_[0] = active_handle_size;
   handle_buffers_[0] = active_handle->Map(handle_buffer_sizes_[0] *
                                           sizeof(AggregatedHitTestRegion));
@@ -36,8 +40,10 @@ void HitTestQuery::OnAggregatedHitTestRegionListUpdated(
   handle_buffers_[1] = idle_handle->Map(handle_buffer_sizes_[1] *
                                         sizeof(AggregatedHitTestRegion));
   if (!handle_buffers_[0] || !handle_buffers_[1]) {
-    // TODO(riajiang): Report security fault. http://crbug.com/746470
-    NOTREACHED();
+    handle_buffer_sizes_[0] = handle_buffer_sizes_[1] = 0;
+    handle_buffers_[0] = {};
+    handle_buffers_[1] = {};
+    ReceivedBadMessageFromGpuProcess();
     return;
   }
   SwitchActiveAggregatedHitTestRegionList(0);
@@ -45,7 +51,10 @@ void HitTestQuery::OnAggregatedHitTestRegionListUpdated(
 
 void HitTestQuery::SwitchActiveAggregatedHitTestRegionList(
     uint8_t active_handle_index) {
-  DCHECK(active_handle_index == 0u || active_handle_index == 1u);
+  if (active_handle_index != 0u && active_handle_index != 1u) {
+    ReceivedBadMessageFromGpuProcess();
+    return;
+  }
   active_hit_test_list_ = static_cast<AggregatedHitTestRegion*>(
       handle_buffers_[active_handle_index].get());
   active_hit_test_list_size_ = handle_buffer_sizes_[active_handle_index];
@@ -89,6 +98,15 @@ bool HitTestQuery::TransformLocationForTarget(
       active_hit_test_list_, transformed_location);
 }
 
+bool HitTestQuery::GetTransformToTarget(const FrameSinkId& target,
+                                        gfx::Transform* transform) const {
+  if (!active_hit_test_list_size_)
+    return false;
+
+  return GetTransformToTargetRecursively(target, active_hit_test_list_,
+                                         transform);
+}
+
 bool HitTestQuery::FindTargetInRegionForLocation(
     EventSource event_source,
     const gfx::PointF& location_in_parent,
@@ -99,11 +117,9 @@ bool HitTestQuery::FindTargetInRegionForLocation(
   if (!gfx::RectF(region->rect).Contains(location_transformed))
     return false;
 
-  if (region->child_count < 0 ||
-      region->child_count >
-          (active_hit_test_list_ + active_hit_test_list_size_ - region - 1)) {
+  if (!CheckChildCount(region))
     return false;
-  }
+
   AggregatedHitTestRegion* child_region = region + 1;
   AggregatedHitTestRegion* child_region_end =
       child_region + region->child_count;
@@ -157,11 +173,9 @@ bool HitTestQuery::TransformLocationForTargetRecursively(
   if (!target_ancestor)
     return true;
 
-  if (region->child_count < 0 ||
-      region->child_count >
-          (active_hit_test_list_ + active_hit_test_list_size_ - region - 1)) {
+  if (!CheckChildCount(region))
     return false;
-  }
+
   AggregatedHitTestRegion* child_region = region + 1;
   AggregatedHitTestRegion* child_region_end =
       child_region + region->child_count;
@@ -180,6 +194,55 @@ bool HitTestQuery::TransformLocationForTargetRecursively(
   }
 
   return false;
+}
+
+bool HitTestQuery::GetTransformToTargetRecursively(
+    const FrameSinkId& target,
+    AggregatedHitTestRegion* region,
+    gfx::Transform* transform) const {
+  // TODO(riajiang): Cache the matrix product such that the transform can be
+  // found immediately.
+  if (region->frame_sink_id == target) {
+    *transform = region->transform();
+    transform->Translate(-region->rect.x(), -region->rect.y());
+    return true;
+  }
+
+  if (!CheckChildCount(region))
+    return false;
+
+  AggregatedHitTestRegion* child_region = region + 1;
+  AggregatedHitTestRegion* child_region_end =
+      child_region + region->child_count;
+  while (child_region < child_region_end) {
+    gfx::Transform transform_to_child;
+    if (GetTransformToTargetRecursively(target, child_region,
+                                        &transform_to_child)) {
+      gfx::Transform region_transform(region->transform());
+      region_transform.Translate(-region->rect.x(), -region->rect.y());
+      *transform = transform_to_child * region_transform;
+      return true;
+    }
+
+    if (child_region->child_count < 0 ||
+        child_region->child_count >= region->child_count) {
+      return false;
+    }
+    child_region = child_region + child_region->child_count + 1;
+  }
+
+  return false;
+}
+
+void HitTestQuery::ReceivedBadMessageFromGpuProcess() const {
+  if (!bad_message_gpu_callback_.is_null())
+    bad_message_gpu_callback_.Run();
+}
+
+bool HitTestQuery::CheckChildCount(AggregatedHitTestRegion* region) const {
+  return (region->child_count >= 0) &&
+         (region->child_count <=
+          (active_hit_test_list_ + active_hit_test_list_size_ - region - 1));
 }
 
 }  // namespace viz

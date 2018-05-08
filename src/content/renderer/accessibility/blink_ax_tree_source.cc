@@ -21,22 +21,22 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_view_impl.h"
-#include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebAXEnums.h"
-#include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebPlugin.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_ax_enums.h"
+#include "third_party/blink/public/web/web_ax_object.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_plugin.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/accessibility/ax_enum_util.h"
 
 using base::ASCIIToUTF16;
@@ -772,9 +772,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
       int column_count = src.ColumnCount();
       int row_count = src.RowCount();
       if (column_count > 0 && row_count > 0) {
-        std::set<int32_t> unique_cell_id_set;
-        std::vector<int32_t> cell_ids;
-        std::vector<int32_t> unique_cell_ids;
         dst->AddIntAttribute(ax::mojom::IntAttribute::kTableColumnCount,
                              column_count);
         dst->AddIntAttribute(ax::mojom::IntAttribute::kTableRowCount,
@@ -783,23 +780,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
         if (!header.IsDetached())
           dst->AddIntAttribute(ax::mojom::IntAttribute::kTableHeaderId,
                                header.AxID());
-        for (int i = 0; i < column_count * row_count; ++i) {
-          WebAXObject cell =
-              src.CellForColumnAndRow(i % column_count, i / column_count);
-          int cell_id = -1;
-          if (!cell.IsDetached()) {
-            cell_id = cell.AxID();
-            if (unique_cell_id_set.find(cell_id) == unique_cell_id_set.end()) {
-              unique_cell_id_set.insert(cell_id);
-              unique_cell_ids.push_back(cell_id);
-            }
-          }
-          cell_ids.push_back(cell_id);
-        }
-        dst->AddIntListAttribute(ax::mojom::IntListAttribute::kCellIds,
-                                 cell_ids);
-        dst->AddIntListAttribute(ax::mojom::IntListAttribute::kUniqueCellIds,
-                                 unique_cell_ids);
       }
 
       int aria_colcount = src.AriaColumnCount();
@@ -957,21 +937,21 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   }
 
   if (src.IsScrollableContainer()) {
-    const gfx::Point& scrollOffset = src.GetScrollOffset();
-    dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollX, scrollOffset.x());
-    dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollY, scrollOffset.y());
+    const gfx::Point& scroll_offset = src.GetScrollOffset();
+    dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollX, scroll_offset.x());
+    dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollY, scroll_offset.y());
 
-    const gfx::Point& minScrollOffset = src.MinimumScrollOffset();
+    const gfx::Point& min_scroll_offset = src.MinimumScrollOffset();
     dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollXMin,
-                         minScrollOffset.x());
+                         min_scroll_offset.x());
     dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollYMin,
-                         minScrollOffset.y());
+                         min_scroll_offset.y());
 
-    const gfx::Point& maxScrollOffset = src.MaximumScrollOffset();
+    const gfx::Point& max_scroll_offset = src.MaximumScrollOffset();
     dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollXMax,
-                         maxScrollOffset.x());
+                         max_scroll_offset.x());
     dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollYMax,
-                         maxScrollOffset.y());
+                         max_scroll_offset.y());
   }
 
   if (dst->id == image_data_node_id_) {

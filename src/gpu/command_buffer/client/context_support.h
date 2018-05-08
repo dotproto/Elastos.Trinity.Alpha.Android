@@ -53,10 +53,12 @@ class ContextSupport {
   virtual void SetAggressivelyFreeResources(
       bool aggressively_free_resources) = 0;
 
-  virtual void Swap() = 0;
-  virtual void SwapWithBounds(const std::vector<gfx::Rect>& rects) = 0;
-  virtual void PartialSwapBuffers(const gfx::Rect& sub_buffer) = 0;
-  virtual void CommitOverlayPlanes() = 0;
+  virtual void Swap(uint32_t flags) = 0;
+  virtual void SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                              uint32_t flags) = 0;
+  virtual void PartialSwapBuffers(const gfx::Rect& sub_buffer,
+                                  uint32_t flags) = 0;
+  virtual void CommitOverlayPlanes(uint32_t flags) = 0;
 
   // Schedule a texture to be presented as an overlay synchronously with the
   // primary surface during the next buffer swap or CommitOverlayPlanes.
@@ -65,7 +67,8 @@ class ContextSupport {
                                     gfx::OverlayTransform plane_transform,
                                     unsigned overlay_texture_id,
                                     const gfx::Rect& display_bounds,
-                                    const gfx::RectF& uv_rect) = 0;
+                                    const gfx::RectF& uv_rect,
+                                    bool enable_blend) = 0;
 
   // Returns an ID that can be used to globally identify the share group that
   // this context's resources belong to.

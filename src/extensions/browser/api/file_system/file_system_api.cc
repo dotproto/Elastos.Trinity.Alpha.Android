@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
@@ -552,7 +551,7 @@ void FileSystemChooseEntryFunction::ConfirmDirectoryAccessAsync(
 
   for (size_t i = 0; i < arraysize(kGraylistedPaths); i++) {
     base::FilePath graylisted_path;
-    if (!PathService::Get(kGraylistedPaths[i], &graylisted_path))
+    if (!base::PathService::Get(kGraylistedPaths[i], &graylisted_path))
       continue;
     if (check_path != graylisted_path && !check_path.IsParent(graylisted_path))
       continue;

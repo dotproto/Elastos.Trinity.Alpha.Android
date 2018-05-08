@@ -419,7 +419,14 @@ void MediaInternals::MediaInternalsUMAHandler::SavePlayerState(
       if (event.params.HasKey("pipeline_buffering_state")) {
         std::string buffering_state;
         event.params.GetString("pipeline_buffering_state", &buffering_state);
-        if (buffering_state == "BUFFERING_HAVE_ENOUGH")
+
+        bool for_suspended_start;
+        event.params.GetBoolean("for_suspended_start", &for_suspended_start);
+
+        // Ignore the BUFFERING_HAVE_ENOUGH event if it was for a suspended
+        // start. Otherwise we won't reflect reductions to the HasEverPlayed
+        // statistic.
+        if (buffering_state == "BUFFERING_HAVE_ENOUGH" && !for_suspended_start)
           player_info.has_reached_have_enough = true;
       }
       break;
@@ -462,7 +469,8 @@ std::string MediaInternals::MediaInternalsUMAHandler::GetUMANameForAVStream(
     uma_name += "DDS.";
   }
 
-  if (player_info.video_decoder == media::GpuVideoDecoder::kDecoderName) {
+  if (player_info.video_decoder == media::GpuVideoDecoder::kDecoderName ||
+      player_info.video_decoder == "MojoVideoDecoder") {
     uma_name += "HW";
   } else {
     uma_name += "SW";

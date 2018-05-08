@@ -82,6 +82,10 @@ TestStoragePartition::GetPlatformNotificationContext() {
   return nullptr;
 }
 
+WebPackageContext* TestStoragePartition::GetWebPackageContext() {
+  return web_package_context_;
+}
+
 #if !defined(OS_ANDROID)
 HostZoomMap* TestStoragePartition::GetHostZoomMap() {
   return host_zoom_map_;
@@ -114,7 +118,7 @@ void TestStoragePartition::ClearData(
     uint32_t remove_mask,
     uint32_t quota_storage_remove_mask,
     const OriginMatcherFunction& origin_matcher,
-    const CookieMatcherFunction& cookie_matcher,
+    net::CookieDeletionInfo cookie_delete_info,
     const base::Time begin,
     const base::Time end,
     base::OnceClosure callback) {}

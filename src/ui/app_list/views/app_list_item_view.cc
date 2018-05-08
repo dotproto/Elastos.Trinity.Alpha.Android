@@ -10,17 +10,17 @@
 
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
-#include "ash/public/cpp/menu_utils.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/views/apps_grid_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/animation/throb_animation.h"
@@ -59,7 +59,7 @@ constexpr int kTouchLongpressDelayInMs = 300;
 constexpr SkColor kFolderGridTitleColor = SK_ColorBLACK;
 
 // The color of the selected item view within folder.
-constexpr SkColor kFolderGridSelectedColor = SkColorSetARGBMacro(31, 0, 0, 0);
+constexpr SkColor kFolderGridSelectedColor = SkColorSetARGB(31, 0, 0, 0);
 
 }  // namespace
 
@@ -78,6 +78,7 @@ AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
       icon_(new views::ImageView),
       title_(new views::Label),
       progress_bar_(new views::ProgressBar),
+      context_menu_(this),
       weak_ptr_factory_(this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
@@ -213,8 +214,7 @@ void AppListItemView::OnTouchDragTimer(
 }
 
 void AppListItemView::CancelContextMenu() {
-  if (context_menu_runner_)
-    context_menu_runner_->Cancel();
+  context_menu_.Cancel();
 }
 
 gfx::ImageSkia AppListItemView::GetDragImage() {
@@ -287,30 +287,42 @@ void AppListItemView::OnContextMenuModelReceived(
     const gfx::Point& point,
     ui::MenuSourceType source_type,
     std::vector<ash::mojom::MenuItemPtr> menu) {
-  if (menu.empty() ||
-      (context_menu_runner_ && context_menu_runner_->IsRunning()))
+  if (menu.empty() || context_menu_.IsRunning())
     return;
 
-  // Reset and populate the context menu model.
-  context_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
-  ash::menu_utils::PopulateMenuFromMojoMenuItems(
-      context_menu_model_.get(), this, menu, &context_submenu_models_);
-  context_menu_items_ = std::move(menu);
-
   UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSource.AppGrid", source_type,
-                            ui::MenuSourceType::MENU_SOURCE_TYPE_LAST);
+                            ui::MENU_SOURCE_TYPE_LAST);
 
   if (!apps_grid_view_->IsSelectedView(this))
     apps_grid_view_->ClearAnySelectedView();
-  int run_types = views::MenuRunner::HAS_MNEMONICS |
-                  views::MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER;
-  context_menu_runner_.reset(new views::MenuRunner(
-      context_menu_model_.get(), run_types,
+  int run_types = views::MenuRunner::HAS_MNEMONICS;
+
+  if (source_type == ui::MENU_SOURCE_TOUCH)
+    run_types |= views::MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER;
+
+  views::MenuAnchorPosition anchor_position = views::MENU_ANCHOR_TOPLEFT;
+  gfx::Rect anchor_rect = gfx::Rect(point, gfx::Size());
+
+  if (features::IsTouchableAppContextMenuEnabled()) {
+    run_types |= views::MenuRunner::USE_TOUCHABLE_LAYOUT |
+                 views::MenuRunner::FIXED_ANCHOR |
+                 views::MenuRunner::CONTEXT_MENU;
+    anchor_position = views::MENU_ANCHOR_BUBBLE_TOUCHABLE_LEFT;
+    if (source_type == ui::MENU_SOURCE_TOUCH) {
+      anchor_rect = apps_grid_view_->GetIdealBounds(this);
+      // Anchor the menu to the same rect that is used for selection highlight.
+      anchor_rect.ClampToCenteredSize(
+          gfx::Size(kGridSelectedSize, kGridSelectedSize));
+      views::View::ConvertRectToScreen(apps_grid_view_, &anchor_rect);
+    }
+  }
+
+  context_menu_.Build(
+      std::move(menu), run_types,
       base::Bind(&AppListItemView::OnContextMenuClosed,
-                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now())));
-  context_menu_runner_->RunMenuAt(GetWidget(), NULL,
-                                  gfx::Rect(point, gfx::Size()),
-                                  views::MENU_ANCHOR_TOPLEFT, source_type);
+                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+  context_menu_.Run(GetWidget(), nullptr, anchor_rect, anchor_position,
+                    source_type);
 }
 
 void AppListItemView::ShowContextMenuForView(views::View* source,
@@ -320,20 +332,6 @@ void AppListItemView::ShowContextMenuForView(views::View* source,
       item_weak_->id(),
       base::BindOnce(&AppListItemView::OnContextMenuModelReceived,
                      weak_ptr_factory_.GetWeakPtr(), point, source_type));
-
-  source->RequestFocus();
-}
-
-bool AppListItemView::IsCommandIdChecked(int command_id) const {
-  return ash::menu_utils::GetMenuItemByCommandId(context_menu_items_,
-                                                 command_id)
-      ->checked;
-}
-
-bool AppListItemView::IsCommandIdEnabled(int command_id) const {
-  return ash::menu_utils::GetMenuItemByCommandId(context_menu_items_,
-                                                 command_id)
-      ->enabled;
 }
 
 void AppListItemView::ExecuteCommand(int command_id, int event_flags) {
@@ -376,8 +374,7 @@ void AppListItemView::PaintButtonContents(gfx::Canvas* canvas) {
 
   gfx::Rect rect(GetContentsBounds());
   if (apps_grid_view_->IsSelectedView(this)) {
-    rect.Inset((rect.width() - kGridSelectedSize) / 2,
-               (rect.height() - kGridSelectedSize) / 2);
+    rect.ClampToCenteredSize(gfx::Size(kGridSelectedSize, kGridSelectedSize));
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(apps_grid_view_->is_in_folder() ? kFolderGridSelectedColor

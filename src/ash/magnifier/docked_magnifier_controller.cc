@@ -144,9 +144,16 @@ DockedMagnifierController::~DockedMagnifierController() {
 
 // static
 void DockedMagnifierController::RegisterProfilePrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kDockedMagnifierEnabled, false,
-                                PrefRegistry::PUBLIC);
+    PrefRegistrySimple* registry,
+    bool for_test) {
+  if (for_test) {
+    // In tests there is no remote pref service. Make ash own the prefs.
+    registry->RegisterBooleanPref(prefs::kDockedMagnifierEnabled, false,
+                                  PrefRegistry::PUBLIC);
+  } else {
+    // TODO(warx): move ownership to ash.
+    registry->RegisterForeignPref(prefs::kDockedMagnifierEnabled);
+  }
   registry->RegisterDoublePref(prefs::kDockedMagnifierScale,
                                kDefaultMagnifierScale, PrefRegistry::PUBLIC);
 }
@@ -188,12 +195,6 @@ void DockedMagnifierController::StepToNextScaleValue(int delta_index) {
       delta_index, GetScale(), kMinMagnifierScale, kMaxMagnifierScale));
 }
 
-void DockedMagnifierController::SetClient(
-    mojom::DockedMagnifierClientPtr client) {
-  client_ = std::move(client);
-  NotifyClientWithStatusChanged();
-}
-
 void DockedMagnifierController::CenterOnPoint(
     const gfx::Point& point_in_screen) {
   if (!GetEnabled())
@@ -201,8 +202,14 @@ void DockedMagnifierController::CenterOnPoint(
 
   auto* screen = display::Screen::GetScreen();
   auto* window = screen->GetWindowAtScreenPoint(point_in_screen);
-  if (!window)
-    return;
+  if (!window) {
+    // In tests and sometimes initially on signin screen, |point_in_screen|
+    // maybe invalid and doesn't belong to any existing root window. However, we
+    // are here because the Docked Magnifier is enabled. We need to create the
+    // viewport widget somewhere, so we'll use the primary root window until we
+    // get a valid cursor event.
+    window = Shell::GetPrimaryRootWindow();
+  }
 
   auto* root_window = window->GetRootWindow();
   DCHECK(root_window);
@@ -277,6 +284,11 @@ void DockedMagnifierController::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
   active_user_pref_service_ = pref_service;
   InitFromUserPrefs();
+}
+
+void DockedMagnifierController::OnSigninScreenPrefServiceInitialized(
+    PrefService* prefs) {
+  OnActiveUserPrefServiceChanged(prefs);
 }
 
 void DockedMagnifierController::OnMouseEvent(ui::MouseEvent* event) {
@@ -378,10 +390,6 @@ void DockedMagnifierController::SetFullscreenMagnifierEnabled(bool enabled) {
     active_user_pref_service_->SetBoolean(
         prefs::kAccessibilityScreenMagnifierEnabled, enabled);
   }
-}
-
-void DockedMagnifierController::FlushClientPtrForTesting() {
-  client_.FlushForTesting();
 }
 
 const views::Widget* DockedMagnifierController::GetViewportWidgetForTesting()
@@ -496,12 +504,22 @@ void DockedMagnifierController::InitFromUserPrefs() {
           base::Unretained(this)));
 
   OnEnabledPrefChanged();
-  NotifyClientWithStatusChanged();
 }
 
 void DockedMagnifierController::OnEnabledPrefChanged() {
   Shell* shell = Shell::Get();
-  if (GetEnabled()) {
+  // When switching from the signin screen to a newly created profile while the
+  // Docked Magnifier is enabled, the prefs will copied from the signin profile
+  // to the user profile, and the Docked Magnifier will remain enabled. We don't
+  // want to redo the below operations if the status doesn't change, for example
+  // readding the same observer to the WindowTreeHostManager will cause a crash
+  // on DCHECK on debug builds.
+  const bool current_enabled = !!current_source_root_window_;
+  const bool new_enabled = GetEnabled();
+  if (current_enabled == new_enabled)
+    return;
+
+  if (new_enabled) {
     // Enabling the Docked Magnifier disables the Fullscreen Magnifier.
     SetFullscreenMagnifierEnabled(false);
     // Calling refresh will result in the creation of the magnifier viewport and
@@ -509,7 +527,7 @@ void DockedMagnifierController::OnEnabledPrefChanged() {
     Refresh();
     // Make sure we are in front of the fullscreen magnifier which also handles
     // scroll events.
-    shell->PrependPreTargetHandler(this);
+    shell->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
     shell->window_tree_host_manager()->AddObserver(this);
   } else {
     shell->window_tree_host_manager()->RemoveObserver(this);
@@ -523,14 +541,11 @@ void DockedMagnifierController::OnEnabledPrefChanged() {
 
   // Update the green checkmark status in the accessibility menu in the system
   // tray.
-  shell->accessibility_controller()->NotifyAccessibilityStatusChanged(
-      A11Y_NOTIFICATION_NONE);
+  shell->accessibility_controller()->NotifyAccessibilityStatusChanged();
 
   // We use software composited mouse cursor so that it can be mirrored into the
   // magnifier viewport.
   shell->UpdateCursorCompositingEnabled();
-
-  NotifyClientWithStatusChanged();
 }
 
 void DockedMagnifierController::OnScalePrefChanged() {
@@ -558,11 +573,6 @@ void DockedMagnifierController::OnHighContrastEnabledPrefChanged() {
 void DockedMagnifierController::Refresh() {
   DCHECK(GetEnabled());
   CenterOnPoint(GetCursorScreenPoint());
-}
-
-void DockedMagnifierController::NotifyClientWithStatusChanged() {
-  if (client_)
-    client_->OnEnabledStatusChanged(GetEnabled());
 }
 
 void DockedMagnifierController::CreateMagnifierViewport() {

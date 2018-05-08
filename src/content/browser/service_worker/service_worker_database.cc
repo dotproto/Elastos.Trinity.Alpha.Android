@@ -19,8 +19,8 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/content_switches.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
@@ -1257,7 +1257,7 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::LazyOpen(
   leveldb_env::Options options;
   options.create_if_missing = create_if_missing;
   if (IsDatabaseInMemory()) {
-    env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    env_ = leveldb_chrome::NewMemEnv("service-worker");
     options.env = env_.get();
   } else {
     options.env = g_service_worker_env.Pointer();

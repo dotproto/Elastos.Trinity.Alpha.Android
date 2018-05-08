@@ -19,6 +19,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/printing/print_job_worker.h"
@@ -71,10 +72,10 @@ class ArcPrintServiceImpl : public ArcPrintService,
 
  protected:
   // chromeos::CupsPrintJobManager::Observer:
-  void OnPrintJobCreated(chromeos::CupsPrintJob* job) override;
-  void OnPrintJobCancelled(chromeos::CupsPrintJob* job) override;
-  void OnPrintJobError(chromeos::CupsPrintJob* job) override;
-  void OnPrintJobDone(chromeos::CupsPrintJob* job) override;
+  void OnPrintJobCreated(base::WeakPtr<chromeos::CupsPrintJob> job) override;
+  void OnPrintJobCancelled(base::WeakPtr<chromeos::CupsPrintJob> job) override;
+  void OnPrintJobError(base::WeakPtr<chromeos::CupsPrintJob> job) override;
+  void OnPrintJobDone(base::WeakPtr<chromeos::CupsPrintJob> job) override;
 
  private:
   Profile* const profile_;                      // Owned by ProfileManager.
@@ -194,7 +195,8 @@ class PrinterDiscoverySessionHostImpl
       : binding_(this, std::move(request)),
         instance_(std::move(instance)),
         service_(service),
-        printers_manager_(chromeos::CupsPrintersManager::Create(profile)),
+        printers_manager_(chromeos::CupsPrintersManagerFactory::GetInstance()
+                              ->GetForBrowserContext(profile)),
         configurer_(chromeos::PrinterConfigurer::Create(profile)),
         weak_ptr_factory_(this) {
     printers_manager_->AddObserver(this);
@@ -311,7 +313,7 @@ class PrinterDiscoverySessionHostImpl
 
   mojom::PrinterDiscoverySessionInstancePtr instance_;
   ArcPrintServiceImpl* const service_;
-  std::unique_ptr<chromeos::CupsPrintersManager> printers_manager_;
+  chromeos::CupsPrintersManager* printers_manager_;
   std::unique_ptr<chromeos::PrinterConfigurer> configurer_;
   base::WeakPtrFactory<PrinterDiscoverySessionHostImpl> weak_ptr_factory_;
 
@@ -504,25 +506,37 @@ void ArcPrintServiceImpl::Shutdown() {
       ->RemoveObserver(this);
 }
 
-void ArcPrintServiceImpl::OnPrintJobCreated(chromeos::CupsPrintJob* job) {
+void ArcPrintServiceImpl::OnPrintJobCreated(
+    base::WeakPtr<chromeos::CupsPrintJob> job) {
+  if (!job)
+    return;
   auto it = jobs_by_id_.find(job->GetUniqueId());
   if (it != jobs_by_id_.end())
-    it->second->CupsJobCreated(job);
+    it->second->CupsJobCreated(job.get());
 }
 
-void ArcPrintServiceImpl::OnPrintJobCancelled(chromeos::CupsPrintJob* job) {
+void ArcPrintServiceImpl::OnPrintJobCancelled(
+    base::WeakPtr<chromeos::CupsPrintJob> job) {
+  if (!job)
+    return;
   auto it = jobs_by_id_.find(job->GetUniqueId());
   if (it != jobs_by_id_.end())
     it->second->JobCanceled();
 }
 
-void ArcPrintServiceImpl::OnPrintJobError(chromeos::CupsPrintJob* job) {
+void ArcPrintServiceImpl::OnPrintJobError(
+    base::WeakPtr<chromeos::CupsPrintJob> job) {
+  if (!job)
+    return;
   auto it = jobs_by_id_.find(job->GetUniqueId());
   if (it != jobs_by_id_.end())
     it->second->JobError();
 }
 
-void ArcPrintServiceImpl::OnPrintJobDone(chromeos::CupsPrintJob* job) {
+void ArcPrintServiceImpl::OnPrintJobDone(
+    base::WeakPtr<chromeos::CupsPrintJob> job) {
+  if (!job)
+    return;
   auto it = jobs_by_id_.find(job->GetUniqueId());
   if (it != jobs_by_id_.end())
     it->second->JobDone();

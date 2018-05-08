@@ -33,104 +33,11 @@ ukm::SourceId GenerateUkmSourceId() {
   return ukm_recorder ? ukm_recorder->GetNewSourceID() : ukm::kInvalidSourceId;
 }
 
-// LatencyComponents generated in the renderer must have component IDs
-// provided to them by the browser process. This function adds the correct
-// component ID where necessary.
-void AddLatencyInfoComponentIds(LatencyInfo* latency,
-                                int64_t latency_component_id) {
-  std::vector<std::pair<ui::LatencyComponentType, int64_t>> new_components_key;
-  std::vector<LatencyInfo::LatencyComponent> new_components_value;
-  for (const auto& lc : latency->latency_components()) {
-    ui::LatencyComponentType component_type = lc.first.first;
-    if (component_type == ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT) {
-      // Generate a new component entry with the correct component ID
-      new_components_key.push_back(std::make_pair(component_type,
-                                                  latency_component_id));
-      new_components_value.push_back(lc.second);
-    }
-  }
-
-  // Remove the entries with invalid component IDs.
-  latency->RemoveLatency(ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT);
-
-  // Add newly generated components into the latency info
-  for (size_t i = 0; i < new_components_key.size(); i++) {
-    latency->AddLatencyNumberWithTimestamp(
-        new_components_key[i].first,
-        new_components_key[i].second,
-        new_components_value[i].sequence_number,
-        new_components_value[i].event_time,
-        new_components_value[i].event_count);
-  }
-}
-
-void RecordEQTAccuracy(base::TimeDelta queueing_time,
-                       base::TimeDelta expected_queueing_time) {
-  float queueing_time_ms = queueing_time.InMillisecondsF();
-
-  if (queueing_time_ms < 10) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.10ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 150) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.150ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 300) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.300ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 450) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.450ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 10) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.10ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 150) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.150ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 300) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.300ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 450) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.450ms",
-        expected_queueing_time);
-  }
-}
-
 }  // namespace
 
 RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker(
-    bool metric_sampling,
     RenderWidgetHostDelegate* delegate)
-    : LatencyTracker(metric_sampling, GenerateUkmSourceId()),
+    : ukm_source_id_(GenerateUkmSourceId()),
       last_event_id_(0),
       latency_component_id_(0),
       has_seen_first_gesture_scroll_update_(false),
@@ -199,10 +106,6 @@ void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
       UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
           "Event.Latency.QueueingTime." + event_name + default_action_status,
           rwh_component, main_component);
-
-      RecordEQTAccuracy(
-          main_component.last_event_time - rwh_component.first_event_time,
-          latency.expected_queueing_time_on_dispatch());
     }
   }
 
@@ -227,9 +130,9 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
 
   OnEventStart(latency);
   if (!set_url_for_ukm_ && render_widget_host_delegate_ &&
-      ukm_source_id() != ukm::kInvalidSourceId) {
+      ukm_source_id_ != ukm::kInvalidSourceId) {
     render_widget_host_delegate_->UpdateUrlForUkmSource(ukm::UkmRecorder::Get(),
-                                                        ukm_source_id());
+                                                        ukm_source_id_);
     set_url_for_ukm_ = true;
   }
 
@@ -252,13 +155,11 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
                            latency_component_id_, nullptr);
   DCHECK(!found_component);
 
-  if (event.TimeStampSeconds() &&
+  if (!event.TimeStamp().is_null() &&
       !latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0,
                             nullptr)) {
     base::TimeTicks timestamp_now = base::TimeTicks::Now();
-    base::TimeTicks timestamp_original =
-        base::TimeTicks() +
-        base::TimeDelta::FromSecondsD(event.TimeStampSeconds());
+    base::TimeTicks timestamp_original = event.TimeStamp();
 
     // Timestamp from platform input can wrap, e.g. 32 bits timestamp
     // for Xserver and Window MSG time will wrap about 49.6 days. Do a
@@ -336,12 +237,10 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
                                 *latency, ack_result);
 }
 
-void RenderWidgetHostLatencyTracker::OnSwapCompositorFrame(
-    std::vector<LatencyInfo>* latencies) {
-  DCHECK(latencies);
-  for (LatencyInfo& latency : *latencies) {
-    AddLatencyInfoComponentIds(&latency, latency_component_id_);
-  }
+void RenderWidgetHostLatencyTracker::OnEventStart(ui::LatencyInfo* latency) {
+  static uint64_t global_trace_id = 0;
+  latency->set_trace_id(++global_trace_id);
+  latency->set_ukm_source_id(ukm_source_id_);
 }
 
 }  // namespace content

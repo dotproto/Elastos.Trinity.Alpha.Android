@@ -120,9 +120,8 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
           ->StartAuthPolicyService();
 
       device_active_directory_policy_manager_ =
-          ActiveDirectoryPolicyManager::CreateForDevicePolicy(
-              std::move(device_cloud_policy_store))
-              .release();
+          new DeviceActiveDirectoryPolicyManager(
+              std::move(device_cloud_policy_store));
       providers_for_init_.push_back(
           base::WrapUnique<ConfigurationPolicyProvider>(
               device_active_directory_policy_manager_));
@@ -202,7 +201,8 @@ void BrowserPolicyConnectorChromeOS::Init(
           chromeos::NetworkHandler::Get()
               ->managed_network_configuration_handler(),
           chromeos::NetworkHandler::Get()->network_device_handler(),
-          chromeos::CrosSettings::Get());
+          chromeos::CrosSettings::Get(),
+          DeviceNetworkConfigurationUpdater::DeviceAssetIDFetcher());
 
   bluetooth_policy_handler_ =
       std::make_unique<BluetoothPolicyHandler>(chromeos::CrosSettings::Get());

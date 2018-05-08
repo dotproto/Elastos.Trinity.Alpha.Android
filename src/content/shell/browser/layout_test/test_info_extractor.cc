@@ -8,7 +8,6 @@
 
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -97,7 +96,7 @@ std::unique_ptr<TestInfo> GetTestInfoFromLayoutTestName(
 #endif
     if (!base::PathExists(local_file)) {
       base::FilePath base_path;
-      PathService::Get(base::DIR_SOURCE_ROOT, &base_path);
+      base::PathService::Get(base::DIR_SOURCE_ROOT, &base_path);
       local_file = base_path.Append(FILE_PATH_LITERAL("third_party"))
                        .Append(FILE_PATH_LITERAL("WebKit"))
                        .Append(FILE_PATH_LITERAL("LayoutTests"))

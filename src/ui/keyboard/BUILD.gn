@@ -16,6 +16,10 @@ jumbo_component("keyboard") {
     "container_floating_behavior.h",
     "container_full_width_behavior.cc",
     "container_full_width_behavior.h",
+    "container_fullscreen_behavior.cc",
+    "container_fullscreen_behavior.h",
+    "display_util.cc",
+    "display_util.h",
     "drag_descriptor.cc",
     "drag_descriptor.h",
     "keyboard_controller.cc",
@@ -39,6 +43,8 @@ jumbo_component("keyboard") {
     "notification_manager.h",
     "queued_container_type.cc",
     "queued_container_type.h",
+    "queued_display_change.cc",
+    "queued_display_change.h",
   ]
 
   defines = [ "KEYBOARD_IMPLEMENTATION" ]

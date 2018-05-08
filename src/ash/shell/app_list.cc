@@ -184,11 +184,6 @@ class ExampleSearchResult : public app_list::SearchResult {
 
   WindowTypeShelfItem::Type type() const { return type_; }
 
-  // app_list::SearchResult:
-  std::unique_ptr<SearchResult> Duplicate() const override {
-    return std::unique_ptr<SearchResult>();
-  }
-
  private:
   WindowTypeShelfItem::Type type_;
 
@@ -295,6 +290,12 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
     NOTIMPLEMENTED();
   }
 
+  void GetSearchResultContextMenuModel(
+      const std::string& result_id,
+      GetContextMenuModelCallback callback) override {
+    NOTIMPLEMENTED();
+  }
+
   void ContextMenuItemSelected(const std::string& id,
                                int command_id,
                                int event_flags) override {
@@ -307,6 +308,11 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
 
   void RemoveObserver(
       app_list::AppListViewDelegateObserver* observer) override {
+    NOTIMPLEMENTED();
+  }
+
+  void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
+                                ui::MenuSourceType source_type) override {
     NOTIMPLEMENTED();
   }
 

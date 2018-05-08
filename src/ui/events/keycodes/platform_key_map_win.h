@@ -9,12 +9,12 @@
 
 #include <unordered_map>
 
-#include "base/event_types.h"
 #include "base/hash.h"
 #include "ui/events/event.h"
 #include "ui/events/events_export.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes_win.h"
+#include "ui/events/platform_event.h"
 
 namespace ui {
 
@@ -37,11 +37,7 @@ class EVENTS_EXPORT PlatformKeyMap {
   // If the supplied event has both Control and Alt modifiers set, then they
   // are replaced by AltGraph. This should only ever be applied to the flags
   // for printable-character events.
-  // TODO(crbug.com/25503): Has no effect if FixAltGraph is not enabled.
   static int ReplaceControlAndAltWithAltGraph(int flags);
-
-  // TODO(crbug.com/25503): Returns true if we disambiguate AltGraph.
-  static bool IsFixAltGraphEnabled();
 
  private:
   friend class PlatformKeyMapTest;

@@ -31,6 +31,9 @@ enum LayoutConstant {
   BOOKMARK_BAR_NTP_PADDING,
 #endif
 
+  // The size of the app menu button in a hosted app browser window.
+  HOSTED_APP_MENU_BUTTON_SIZE,
+
   // The vertical padding (additional to TOOLBAR_ELEMENT_PADDING) above and
   // below location bar bubbles.
   LOCATION_BAR_BUBBLE_VERTICAL_PADDING,
@@ -48,12 +51,9 @@ enum LayoutConstant {
   // images inside.
   LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET,
 
-  // The horizontal padding between location bar decorations.
+  // The horizontal padding between location bar decorations as well as the
+  // vertical and horizontal padding inside the border.
   LOCATION_BAR_ELEMENT_PADDING,
-
-  // The padding inside the location bar border (i.e. between the border and the
-  // location bar's children).
-  LOCATION_BAR_PADDING,
 
   // The height to be occupied by the LocationBar.
   LOCATION_BAR_HEIGHT,
@@ -67,9 +67,6 @@ enum LayoutConstant {
   // horizontally by LOCATION_BAR_ELEMENT_PADDING, but this region is not part
   // of the icon view (e.g. does not highlight on hover).
   LOCATION_BAR_ICON_INTERIOR_PADDING,
-
-  // The amount of spacing between the last tab and the new tab button.
-  TABSTRIP_NEW_TAB_BUTTON_SPACING,
 
   // Padding after the tab title.
   TAB_AFTER_TITLE_PADDING,
@@ -106,7 +103,6 @@ enum LayoutConstant {
 
   // The horizontal space between most items in the toolbar.
   TOOLBAR_STANDARD_SPACING,
-
 };
 
 enum LayoutInset {
@@ -115,6 +111,9 @@ enum LayoutInset {
 
   // The padding inside the border of a toolbar button (around the image).
   TOOLBAR_BUTTON,
+
+  // The padding inside the border of a toolbar action view button.
+  TOOLBAR_ACTION_VIEW,
 };
 
 enum LayoutSize {

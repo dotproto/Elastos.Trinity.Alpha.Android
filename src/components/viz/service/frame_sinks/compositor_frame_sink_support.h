@@ -70,6 +70,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
     return last_activated_surface_id_.local_surface_id();
   }
 
+  bool is_root() const { return is_root_; }
+
   FrameSinkManagerImpl* frame_sink_manager() { return frame_sink_manager_; }
 
   // Viz hit-test setup is only called when |is_root_| is true (except on
@@ -89,15 +91,17 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   // SurfaceClient implementation.
   void OnSurfaceActivated(Surface* surface) override;
+  void OnSurfaceDiscarded(Surface* surface) override;
   void RefResources(
       const std::vector<TransferableResource>& resources) override;
   void UnrefResources(const std::vector<ReturnedResource>& resources) override;
   void ReturnResources(const std::vector<ReturnedResource>& resources) override;
   void ReceiveFromChild(
       const std::vector<TransferableResource>& resources) override;
-  bool HasCopyOutputRequests() override;
-  std::vector<std::unique_ptr<CopyOutputRequest>> TakeCopyOutputRequests()
-      override;
+  // Takes the CopyOutputRequests that were requested for a surface with at
+  // most |local_surface_id|.
+  std::vector<std::unique_ptr<CopyOutputRequest>> TakeCopyOutputRequests(
+      const LocalSurfaceId& local_surface_id) override;
 
   // mojom::CompositorFrameSink helpers.
   void SetNeedsBeginFrame(bool needs_begin_frame);
@@ -132,7 +136,9 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   void AttachCaptureClient(CapturableFrameSink::Client* client) override;
   void DetachCaptureClient(CapturableFrameSink::Client* client) override;
   gfx::Size GetActiveFrameSize() override;
-  void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request) override;
+  void RequestCopyOfOutput(const LocalSurfaceId& local_surface_id,
+                           std::unique_ptr<CopyOutputRequest> request) override;
+  const CompositorFrameMetadata* GetLastActivatedFrameMetadata() override;
 
   HitTestAggregator* GetHitTestAggregator();
 
@@ -178,7 +184,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   Surface* CreateSurface(const SurfaceInfo& surface_info);
 
   void OnAggregatedDamage(const LocalSurfaceId& local_surface_id,
-                          const gfx::Size& frame_size_in_pixels,
+                          const CompositorFrame& frame,
                           const gfx::Rect& damage_rect,
                           base::TimeTicks expected_display_time) const;
 
@@ -249,8 +255,14 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   // These are the CopyOutputRequests made on the frame sink (as opposed to
   // being included as a part of a CompositorFrame). They stay here until a
-  // Surface takes them.
-  std::vector<std::unique_ptr<CopyOutputRequest>> copy_output_requests_;
+  // Surface with a LocalSurfaceId which is at least the stored LocalSurfaceId
+  // takes them. For example, if we store a pair of LocalSurfaceId stored_id and
+  // a CopyOutputRequest, then a surface with LocalSurfaceId >= stored_id will
+  // take it, but a surface with LocalSurfaceId < stored_id will not. Note that
+  // if stored_id is default initialized, then the next surface will take it
+  // regardless of its LocalSurfaceId.
+  std::vector<std::pair<LocalSurfaceId, std::unique_ptr<CopyOutputRequest>>>
+      copy_output_requests_;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_;
 

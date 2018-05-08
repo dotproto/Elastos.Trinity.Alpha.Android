@@ -90,6 +90,10 @@ class ASH_EXPORT ShelfView : public views::View,
   // Returns true if we're showing a menu.
   bool IsShowingMenu() const;
 
+  // Returns true if we're showing a menu for |view|. |view| could be a
+  // ShelfButton or the ShelfView.
+  bool IsShowingMenuForView(views::View* view) const;
+
   // Returns true if overflow bubble is shown.
   bool IsShowingOverflowBubble() const;
 
@@ -370,11 +374,10 @@ class ASH_EXPORT ShelfView : public views::View,
                 views::View* source,
                 const gfx::Point& click_point,
                 bool context_menu,
-                ui::MenuSourceType source_type,
-                views::InkDrop* ink_drop);
+                ui::MenuSourceType source_type);
 
   // Callback for MenuRunner.
-  void OnMenuClosed(views::InkDrop* ink_drop);
+  void OnMenuClosed(views::View* source);
 
   // Overridden from views::BoundsAnimatorObserver:
   void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override;
@@ -385,6 +388,9 @@ class ASH_EXPORT ShelfView : public views::View,
   // item, we should ignore the call.
   bool IsRepostEvent(const ui::Event& event);
 
+  // Returns true if the given |item| is supposed to be shown to the user.
+  bool ShouldShowShelfItem(const ShelfItem& item);
+
   // Convenience accessor to model_->items().
   const ShelfItem* ShelfItemForView(const views::View* view) const;
 
@@ -393,6 +399,9 @@ class ASH_EXPORT ShelfView : public views::View,
   int CalculateShelfDistance(const gfx::Point& coordinate) const;
 
   bool CanPrepareForDrag(Pointer pointer, const ui::LocatedEvent& event);
+
+  // Updates the back button opacity and focus behavior based on tablet mode.
+  void UpdateBackButton();
 
   // The model; owned by Launcher.
   ShelfModel* model_;
@@ -432,6 +441,10 @@ class ASH_EXPORT ShelfView : public views::View,
   // The view being dragged. This is set immediately when the mouse is pressed.
   // |dragging_| is set only if the mouse is dragged far enough.
   ShelfButton* drag_view_ = nullptr;
+
+  // The view showing a context menu. This can be either a ShelfView or
+  // ShelfButton.
+  views::View* menu_owner_ = nullptr;
 
   // Position of the mouse down event in |drag_view_|'s coordinates.
   gfx::Point drag_origin_;

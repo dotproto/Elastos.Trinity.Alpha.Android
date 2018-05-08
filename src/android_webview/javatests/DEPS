@@ -9,9 +9,7 @@ include_rules = [
 
   "-content/public/android/java",
   "+content/public/android/java/src/org/chromium/content_public",
-  "!content/public/android/java/src/org/chromium/content/browser/AppWebMessagePort.java",
   "!content/public/android/java/src/org/chromium/content/browser/ContentVideoView.java",
-  "!content/public/android/java/src/org/chromium/content/browser/ContentViewStatics.java",
   "!content/public/android/java/src/org/chromium/content/common/ContentSwitches.java",
 
   "-content/public/android/javatests",
@@ -19,4 +17,6 @@ include_rules = [
 
   "+device/geolocation/android/java",
   "+device/geolocation/android/javatests",
+
+  "+media/base/android",
 ]

@@ -93,17 +93,17 @@ class DirectOutputSurface : public viz::OutputSurface {
     DCHECK(context_provider_.get());
     if (frame.sub_buffer_rect) {
       context_provider_->ContextSupport()->PartialSwapBuffers(
-          *frame.sub_buffer_rect);
+          *frame.sub_buffer_rect, 0 /* flags */);
     } else {
-      context_provider_->ContextSupport()->Swap();
+      context_provider_->ContextSupport()->Swap(0 /* flags */);
     }
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
     gpu::SyncToken sync_token;
     gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
 
     context_provider_->ContextSupport()->SignalSyncToken(
-        sync_token, base::Bind(&DirectOutputSurface::OnSwapBuffersComplete,
-                               weak_ptr_factory_.GetWeakPtr(), ++swap_id_));
+        sync_token, base::BindOnce(&DirectOutputSurface::OnSwapBuffersComplete,
+                                   weak_ptr_factory_.GetWeakPtr(), ++swap_id_));
   }
   uint32_t GetFramebufferCopyTextureFormat() override {
     auto* gl = static_cast<InProcessContextProvider*>(context_provider());
@@ -118,7 +118,6 @@ class DirectOutputSurface : public viz::OutputSurface {
   gfx::BufferFormat GetOverlayBufferFormat() const override {
     return gfx::BufferFormat::RGBX_8888;
   }
-  bool SurfaceIsSuspendForRecycle() const override { return false; }
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -197,7 +196,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   if (!shared_worker_context_provider_ || shared_worker_context_provider_lost) {
     constexpr bool support_locking = true;
     shared_worker_context_provider_ = InProcessContextProvider::CreateOffscreen(
-        &gpu_memory_buffer_manager_, &image_factory_, nullptr, support_locking);
+        &gpu_memory_buffer_manager_, &image_factory_, support_locking);
     auto result = shared_worker_context_provider_->BindToCurrentThread();
     if (result != gpu::ContextResult::kSuccess)
       shared_worker_context_provider_ = nullptr;
@@ -220,10 +219,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
 
   constexpr bool support_locking = false;
   scoped_refptr<InProcessContextProvider> context_provider =
-      InProcessContextProvider::Create(
-          attribs, shared_worker_context_provider_.get(),
-          &gpu_memory_buffer_manager_, &image_factory_, data->surface_handle,
-          "UICompositor", support_locking);
+      InProcessContextProvider::Create(attribs, &gpu_memory_buffer_manager_,
+                                       &image_factory_, data->surface_handle,
+                                       "UICompositor", support_locking);
 
   std::unique_ptr<viz::OutputSurface> display_output_surface;
   if (use_test_surface_) {
@@ -270,7 +268,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
       GetFrameSinkManager(), display, nullptr /* display_client */,
       context_provider, shared_worker_context_provider_,
       compositor->task_runner(), &gpu_memory_buffer_manager_,
-      &shared_bitmap_manager_, false /* use_viz_hit_test */);
+      false /* use_viz_hit_test */);
   compositor->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 
   data->display->Resize(compositor->size());
@@ -294,7 +292,7 @@ InProcessContextFactory::SharedMainThreadContextProvider() {
 
   constexpr bool support_locking = false;
   shared_main_thread_contexts_ = InProcessContextProvider::CreateOffscreen(
-      &gpu_memory_buffer_manager_, &image_factory_, nullptr, support_locking);
+      &gpu_memory_buffer_manager_, &image_factory_, support_locking);
   auto result = shared_main_thread_contexts_->BindToCurrentThread();
   if (result != gpu::ContextResult::kSuccess)
     shared_main_thread_contexts_ = NULL;

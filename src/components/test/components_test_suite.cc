@@ -50,6 +50,9 @@ class ComponentsTestSuite : public base::TestSuite {
 
     mojo::edk::Init();
 
+    // Before registering any schemes, clear GURL's internal state.
+    url::Shutdown();
+
 #if !defined(OS_IOS)
     gl::GLSurfaceTestSupport::InitializeOneOff();
 
@@ -64,13 +67,13 @@ class ComponentsTestSuite : public base::TestSuite {
 
     base::FilePath pak_path;
 #if defined(OS_ANDROID)
-    PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
+    base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
 #else
-    PathService::Get(base::DIR_MODULE, &pak_path);
+    base::PathService::Get(base::DIR_MODULE, &pak_path);
 #endif
 
     base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+    ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
     ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
@@ -79,10 +82,10 @@ class ComponentsTestSuite : public base::TestSuite {
 
     // These schemes need to be added globally to pass tests of
     // autocomplete_input_unittest.cc and content_settings_pattern*
-    url::AddStandardScheme("chrome", url::SCHEME_WITHOUT_PORT);
-    url::AddStandardScheme("chrome-extension", url::SCHEME_WITHOUT_PORT);
-    url::AddStandardScheme("chrome-devtools", url::SCHEME_WITHOUT_PORT);
-    url::AddStandardScheme("chrome-search", url::SCHEME_WITHOUT_PORT);
+    url::AddStandardScheme("chrome", url::SCHEME_WITH_HOST);
+    url::AddStandardScheme("chrome-extension", url::SCHEME_WITH_HOST);
+    url::AddStandardScheme("chrome-devtools", url::SCHEME_WITH_HOST);
+    url::AddStandardScheme("chrome-search", url::SCHEME_WITH_HOST);
 
     ContentSettingsPattern::SetNonWildcardDomainNonPortSchemes(
         kNonWildcardDomainNonPortSchemes,
@@ -91,7 +94,6 @@ class ComponentsTestSuite : public base::TestSuite {
 
   void Shutdown() override {
     ui::ResourceBundle::CleanupSharedInstance();
-
     base::TestSuite::Shutdown();
   }
 

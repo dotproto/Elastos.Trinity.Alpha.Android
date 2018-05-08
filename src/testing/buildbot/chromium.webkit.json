@@ -4,14 +4,18 @@
   "WebKit Linux Trusty": {
     "isolated_scripts": [
       {
+        "args": [
+          "--zero-tests-executed-ok"
+        ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -20,7 +24,7 @@
               "os": "Ubuntu-14.04"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -29,16 +33,18 @@
     "isolated_scripts": [
       {
         "args": [
-          "--debug"
+          "--debug",
+          "--zero-tests-executed-ok"
         ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -60,16 +66,18 @@
           "../../third_party/WebKit/LayoutTests/ASANExpectations",
           "--time-out-ms",
           "48000",
-          "--enable-sanitizer"
+          "--enable-sanitizer",
+          "--zero-tests-executed-ok"
         ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -91,16 +99,18 @@
           "../../third_party/WebKit/LayoutTests/LeakExpectations",
           "--time-out-ms",
           "48000",
-          "--enable-leak-detection"
+          "--enable-leak-detection",
+          "--zero-tests-executed-ok"
         ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -122,16 +132,18 @@
           "../../third_party/WebKit/LayoutTests/MSANExpectations",
           "--time-out-ms",
           "66000",
-          "--enable-sanitizer"
+          "--enable-sanitizer",
+          "--zero-tests-executed-ok"
         ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -156,9 +168,10 @@
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -168,7 +181,7 @@
               "os": "Mac-10.10.5"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -181,9 +194,10 @@
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -193,7 +207,7 @@
               "os": "Mac-10.11.6"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -209,9 +223,10 @@
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -221,37 +236,12 @@
               "os": "Mac-10.11.6"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
   },
-  "WebKit Mac10.12": {
-    "isolated_scripts": [
-      {
-        "isolate_name": "webkit_layout_tests_exparchive",
-        "merge": {
-          "args": [
-            "--verbose"
-          ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
-        },
-        "name": "webkit_layout_tests",
-        "results_handler": "layout tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0a2e",
-              "hidpi": "0",
-              "os": "Mac-10.12.6"
-            }
-          ],
-          "shards": 6
-        }
-      }
-    ]
-  },
+  "WebKit Mac10.12": {},
   "WebKit Mac10.12 (retina)": {
     "isolated_scripts": [
       {
@@ -260,9 +250,10 @@
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -274,7 +265,7 @@
               "pool": "Chrome-GPU"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -292,23 +283,27 @@
   "WebKit Win10": {
     "isolated_scripts": [
       {
+        "args": [
+          "--zero-tests-executed-ok"
+        ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "os": "Windows-10-14393"
+              "os": "Windows-10-15063"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -316,14 +311,18 @@
   "WebKit Win7": {
     "isolated_scripts": [
       {
+        "args": [
+          "--zero-tests-executed-ok"
+        ],
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
             "--verbose"
           ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "webkit_layout_tests",
+        "only_retry_failed_tests": true,
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -332,7 +331,7 @@
               "os": "Windows-7-SP1"
             }
           ],
-          "shards": 6
+          "shards": 12
         }
       }
     ]

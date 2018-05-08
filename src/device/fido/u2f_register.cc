@@ -9,7 +9,8 @@
 #include "base/stl_util.h"
 #include "components/apdu/apdu_command.h"
 #include "components/apdu/apdu_response.h"
-#include "device/fido/register_response_data.h"
+#include "device/fido/authenticator_make_credential_response.h"
+#include "device/fido/u2f_command_constructor.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace device {
@@ -17,7 +18,7 @@ namespace device {
 // static
 std::unique_ptr<U2fRequest> U2fRegister::TryRegistration(
     service_manager::Connector* connector,
-    const base::flat_set<U2fTransportProtocol>& transports,
+    const base::flat_set<FidoTransportProtocol>& transports,
     std::vector<std::vector<uint8_t>> registered_keys,
     std::vector<uint8_t> challenge_digest,
     std::vector<uint8_t> application_parameter,
@@ -31,13 +32,14 @@ std::unique_ptr<U2fRequest> U2fRegister::TryRegistration(
   return request;
 }
 
-U2fRegister::U2fRegister(service_manager::Connector* connector,
-                         const base::flat_set<U2fTransportProtocol>& transports,
-                         std::vector<std::vector<uint8_t>> registered_keys,
-                         std::vector<uint8_t> challenge_digest,
-                         std::vector<uint8_t> application_parameter,
-                         bool individual_attestation_ok,
-                         RegisterResponseCallback completion_callback)
+U2fRegister::U2fRegister(
+    service_manager::Connector* connector,
+    const base::flat_set<FidoTransportProtocol>& transports,
+    std::vector<std::vector<uint8_t>> registered_keys,
+    std::vector<uint8_t> challenge_digest,
+    std::vector<uint8_t> application_parameter,
+    bool individual_attestation_ok,
+    RegisterResponseCallback completion_callback)
     : U2fRequest(connector,
                  transports,
                  std::move(application_parameter),
@@ -81,7 +83,7 @@ void U2fRegister::OnTryCheckRegistration(
       // Duplicate registration found. Call bogus registration to check for
       // user presence (touch) and terminate the registration process.
       InitiateDeviceTransaction(
-          U2fRequest::GetBogusRegisterCommand(),
+          ConstructBogusU2fRegistrationCommand(),
           base::BindOnce(&U2fRegister::OnTryDevice, weak_factory_.GetWeakPtr(),
                          true /* is_duplicate_registration */));
       break;
@@ -109,9 +111,7 @@ void U2fRegister::OnTryCheckRegistration(
       break;
     default:
       // Some sort of failure occurred. Abandon this device and move on.
-      state_ = State::IDLE;
-      current_device_ = nullptr;
-      Transition();
+      AbandonCurrentDeviceAndTransition();
       break;
   }
 }
@@ -142,19 +142,21 @@ void U2fRegister::OnTryDevice(bool is_duplicate_registration,
       state_ = State::COMPLETE;
       if (is_duplicate_registration) {
         std::move(completion_callback_)
-            .Run(U2fReturnCode::CONDITIONS_NOT_SATISFIED, base::nullopt);
+            .Run(FidoReturnCode::kUserConsentButCredentialExcluded,
+                 base::nullopt);
         break;
       }
-      auto response = RegisterResponseData::CreateFromU2fRegisterResponse(
-          application_parameter_, apdu_response->data());
+      auto response =
+          AuthenticatorMakeCredentialResponse::CreateFromU2fRegisterResponse(
+              application_parameter_, apdu_response->data());
       if (!response) {
         // The response data was corrupted / didn't parse properly.
         std::move(completion_callback_)
-            .Run(U2fReturnCode::FAILURE, base::nullopt);
+            .Run(FidoReturnCode::kAuthenticatorResponseInvalid, base::nullopt);
         break;
       }
       std::move(completion_callback_)
-          .Run(U2fReturnCode::SUCCESS, std::move(response));
+          .Run(FidoReturnCode::kSuccess, std::move(response));
       break;
     }
     case apdu::ApduResponse::Status::SW_CONDITIONS_NOT_SATISFIED:
@@ -163,10 +165,8 @@ void U2fRegister::OnTryDevice(bool is_duplicate_registration,
       Transition();
       break;
     default:
-      state_ = State::IDLE;
       // An error has occurred, quit trying this device.
-      current_device_ = nullptr;
-      Transition();
+      AbandonCurrentDeviceAndTransition();
       break;
   }
 }

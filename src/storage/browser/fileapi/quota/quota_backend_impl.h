@@ -13,7 +13,7 @@
 #include "storage/browser/fileapi/quota/quota_reservation_manager.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend_delegate.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -36,8 +36,7 @@ class ObfuscatedFileUtil;
 class STORAGE_EXPORT QuotaBackendImpl
     : public QuotaReservationManager::QuotaBackend {
  public:
-  typedef QuotaReservationManager::ReserveQuotaCallback
-      ReserveQuotaCallback;
+  using ReserveQuotaCallback = QuotaReservationManager::ReserveQuotaCallback;
 
   QuotaBackendImpl(base::SequencedTaskRunner* file_task_runner,
                    ObfuscatedFileUtil* obfuscated_file_util,

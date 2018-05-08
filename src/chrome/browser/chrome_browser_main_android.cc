@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
@@ -33,9 +34,9 @@
 #include "ui/base/ui_base_paths.h"
 
 ChromeBrowserMainPartsAndroid::ChromeBrowserMainPartsAndroid(
-    const content::MainFunctionParams& parameters)
-    : ChromeBrowserMainParts(parameters) {
-}
+    const content::MainFunctionParams& parameters,
+    std::unique_ptr<ui::DataPack> data_pack)
+    : ChromeBrowserMainParts(parameters, std::move(data_pack)) {}
 
 ChromeBrowserMainPartsAndroid::~ChromeBrowserMainPartsAndroid() {
 }
@@ -114,7 +115,7 @@ int ChromeBrowserMainPartsAndroid::PreEarlyInitialization() {
   {
     TRACE_EVENT0("startup",
       "ChromeBrowserMainPartsAndroid::PreEarlyInitialization:StartUiMsgLoop");
-    base::MessageLoopForUI::current()->Start();
+    base::MessageLoopCurrentForUI::Get()->Start();
   }
 
   // In order for SetLoadSecondaryLocalePaks() to work ResourceBundle must

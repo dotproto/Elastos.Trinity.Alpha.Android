@@ -417,6 +417,8 @@ const char* ToString(ax::mojom::Role role) {
       return "svgRoot";
     case ax::mojom::Role::kScrollBar:
       return "scrollBar";
+    case ax::mojom::Role::kScrollView:
+      return "scrollView";
     case ax::mojom::Role::kSearch:
       return "search";
     case ax::mojom::Role::kSearchBox:
@@ -788,10 +790,6 @@ const char* ToString(ax::mojom::State state) {
       return "required";
     case ax::mojom::State::kRichlyEditable:
       return "richlyEditable";
-    case ax::mojom::State::kSelectable:
-      return "selectable";
-    case ax::mojom::State::kSelected:
-      return "selected";
     case ax::mojom::State::kVertical:
       return "vertical";
     case ax::mojom::State::kVisited:
@@ -836,10 +834,6 @@ ax::mojom::State ParseState(const char* state) {
     return ax::mojom::State::kRequired;
   if (0 == strcmp(state, "richlyEditable"))
     return ax::mojom::State::kRichlyEditable;
-  if (0 == strcmp(state, "selectable"))
-    return ax::mojom::State::kSelectable;
-  if (0 == strcmp(state, "selected"))
-    return ax::mojom::State::kSelected;
   if (0 == strcmp(state, "vertical"))
     return ax::mojom::State::kVertical;
   if (0 == strcmp(state, "visited"))
@@ -1439,6 +1433,8 @@ const char* ToString(ax::mojom::BoolAttribute bool_attribute) {
       return "clickable";
     case ax::mojom::BoolAttribute::kClipsChildren:
       return "clipsChildren";
+    case ax::mojom::BoolAttribute::kSelected:
+      return "selected";
   }
 
   return "";
@@ -1469,6 +1465,8 @@ ax::mojom::BoolAttribute ParseBoolAttribute(const char* bool_attribute) {
     return ax::mojom::BoolAttribute::kClickable;
   if (0 == strcmp(bool_attribute, "clipsChildren"))
     return ax::mojom::BoolAttribute::kClipsChildren;
+  if (0 == strcmp(bool_attribute, "selected"))
+    return ax::mojom::BoolAttribute::kSelected;
   return ax::mojom::BoolAttribute::kNone;
 }
 
@@ -1496,10 +1494,6 @@ const char* ToString(ax::mojom::IntListAttribute int_list_attribute) {
       return "markerStarts";
     case ax::mojom::IntListAttribute::kMarkerEnds:
       return "markerEnds";
-    case ax::mojom::IntListAttribute::kCellIds:
-      return "cellIds";
-    case ax::mojom::IntListAttribute::kUniqueCellIds:
-      return "uniqueCellIds";
     case ax::mojom::IntListAttribute::kCharacterOffsets:
       return "characterOffsets";
     case ax::mojom::IntListAttribute::kCachedLineStarts:
@@ -1539,10 +1533,6 @@ ax::mojom::IntListAttribute ParseIntListAttribute(
     return ax::mojom::IntListAttribute::kMarkerStarts;
   if (0 == strcmp(int_list_attribute, "markerEnds"))
     return ax::mojom::IntListAttribute::kMarkerEnds;
-  if (0 == strcmp(int_list_attribute, "cellIds"))
-    return ax::mojom::IntListAttribute::kCellIds;
-  if (0 == strcmp(int_list_attribute, "uniqueCellIds"))
-    return ax::mojom::IntListAttribute::kUniqueCellIds;
   if (0 == strcmp(int_list_attribute, "characterOffsets"))
     return ax::mojom::IntListAttribute::kCharacterOffsets;
   if (0 == strcmp(int_list_attribute, "cachedLineStarts"))
@@ -2133,6 +2123,10 @@ const char* ToString(ax::mojom::Gesture gesture) {
       return "swipeDown4";
     case ax::mojom::Gesture::kTap2:
       return "tap2";
+    case ax::mojom::Gesture::kTap3:
+      return "tap3";
+    case ax::mojom::Gesture::kTap4:
+      return "tap4";
   }
 
   return "";
@@ -2177,6 +2171,10 @@ ax::mojom::Gesture ParseGesture(const char* gesture) {
     return ax::mojom::Gesture::kSwipeDown4;
   if (0 == strcmp(gesture, "tap2"))
     return ax::mojom::Gesture::kTap2;
+  if (0 == strcmp(gesture, "tap3"))
+    return ax::mojom::Gesture::kTap3;
+  if (0 == strcmp(gesture, "tap4"))
+    return ax::mojom::Gesture::kTap4;
   return ax::mojom::Gesture::kNone;
 }
 

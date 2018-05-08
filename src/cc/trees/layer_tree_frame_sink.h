@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "cc/cc_export.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
@@ -29,19 +30,19 @@ class GpuMemoryBufferManager;
 namespace viz {
 class CompositorFrame;
 class LocalSurfaceId;
-class SharedBitmapManager;
 struct BeginFrameAck;
 }  // namespace viz
 
 namespace cc {
 class LayerTreeFrameSinkClient;
+class LayerTreeHostImpl;
 
 // An interface for submitting CompositorFrames to a display compositor
 // which will compose frames from multiple clients to show on screen to the
 // user.
 // If a context_provider() is present, frames should be submitted with
 // OpenGL resources (created with the context_provider()). If not, then
-// SharedBitmap resources should be used.
+// SharedMemory resources should be used.
 class CC_EXPORT LayerTreeFrameSink : public viz::ContextLostObserver {
  public:
   struct Capabilities {
@@ -73,8 +74,7 @@ class CC_EXPORT LayerTreeFrameSink : public viz::ContextLostObserver {
       scoped_refptr<viz::ContextProvider> context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      viz::SharedBitmapManager* shared_bitmap_manager);
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
   ~LayerTreeFrameSink() override;
 
@@ -100,7 +100,7 @@ class CC_EXPORT LayerTreeFrameSink : public viz::ContextLostObserver {
   const Capabilities& capabilities() const { return capabilities_; }
 
   // The viz::ContextProviders may be null if frames should be submitted with
-  // software SharedBitmap resources.
+  // software SharedMemory resources.
   viz::ContextProvider* context_provider() const {
     return context_provider_.get();
   }
@@ -110,9 +110,10 @@ class CC_EXPORT LayerTreeFrameSink : public viz::ContextLostObserver {
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() const {
     return gpu_memory_buffer_manager_;
   }
-  viz::SharedBitmapManager* shared_bitmap_manager() const {
-    return shared_bitmap_manager_;
-  }
+
+  // Generate hit test region list based on LayerTreeHostImpl, the data will be
+  // submitted with compositor frame.
+  virtual void UpdateHitTestData(const LayerTreeHostImpl* host_impl) {}
 
   // If supported, this sets the viz::LocalSurfaceId the LayerTreeFrameSink will
   // use to submit a CompositorFrame.
@@ -153,7 +154,6 @@ class CC_EXPORT LayerTreeFrameSink : public viz::ContextLostObserver {
   scoped_refptr<viz::RasterContextProvider> worker_context_provider_;
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-  viz::SharedBitmapManager* shared_bitmap_manager_;
 
   std::unique_ptr<ContextLostForwarder> worker_context_lost_forwarder_;
 

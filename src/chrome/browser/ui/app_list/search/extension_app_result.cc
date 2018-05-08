@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/extension_app_result.h"
 
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
 #include "chrome/browser/extensions/chrome_app_icon_service.h"
@@ -21,8 +23,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
-#include "ui/app_list/app_list_switches.h"
-#include "ui/app_list/app_list_util.h"
 #include "ui/events/event_constants.h"
 
 namespace app_list {
@@ -41,7 +41,7 @@ ExtensionAppResult::ExtensionAppResult(Profile* profile,
 
   is_platform_app_ = extension->is_platform_app();
   icon_ = extensions::ChromeAppIconService::Get(profile)->CreateIcon(
-      this, app_id, GetPreferredIconDimension(this));
+      this, app_id, GetPreferredIconDimension(display_type()));
 
   StartObservingExtensionRegistry();
 }
@@ -65,7 +65,7 @@ void ExtensionAppResult::Open(int event_flags) {
   if (RunExtensionEnableFlow())
     return;
 
-  // Record the search metrics if the SearchResult is not a suggested app.
+  // Record the search metrics if the ChromeSearchResult is not a suggested app.
   if (display_type() != ash::SearchResultDisplayType::kRecommendation) {
     RecordHistogram(APP_SEARCH_RESULT);
     extensions::RecordAppListSearchLaunch(extension);
@@ -78,25 +78,25 @@ void ExtensionAppResult::Open(int event_flags) {
       event_flags);
 }
 
-std::unique_ptr<SearchResult> ExtensionAppResult::Duplicate() const {
-  std::unique_ptr<SearchResult> copy = std::make_unique<ExtensionAppResult>(
-      profile(), app_id(), controller(),
-      display_type() == ash::SearchResultDisplayType::kRecommendation);
+std::unique_ptr<ChromeSearchResult> ExtensionAppResult::Duplicate() const {
+  std::unique_ptr<ChromeSearchResult> copy =
+      std::make_unique<ExtensionAppResult>(
+          profile(), app_id(), controller(),
+          display_type() == ash::SearchResultDisplayType::kRecommendation);
   copy->set_title(title());
   copy->set_title_tags(title_tags());
   copy->set_relevance(relevance());
-
   return copy;
 }
 
-ui::MenuModel* ExtensionAppResult::GetContextMenuModel() {
+void ExtensionAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
   if (!context_menu_) {
-    context_menu_.reset(new ExtensionAppContextMenu(
-        this, profile(), app_id(), controller()));
+    context_menu_ = std::make_unique<ExtensionAppContextMenu>(
+        this, profile(), app_id(), controller());
     context_menu_->set_is_platform_app(is_platform_app_);
   }
 
-  return context_menu_->GetMenuModel();
+  context_menu_->GetMenuModel(std::move(callback));
 }
 
 void ExtensionAppResult::StartObservingExtensionRegistry() {

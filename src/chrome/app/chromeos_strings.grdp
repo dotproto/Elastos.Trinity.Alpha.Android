@@ -74,6 +74,15 @@
   <message name="IDS_WALLPAPER_MANAGER_LAYOUT_STRETCH" desc="Label for option to stretch a customized wallpaper.">
     Stretch
   </message>
+  <message name="IDS_WALLPAPER_MANAGER_CURRENTLY_SET_LABEL" desc="The string displayed before the title of the currently set wallpaper.">
+    Currently set
+  </message>
+  <message name="IDS_WALLPAPER_MANAGER_CONFIRM_PREVIEW_WALLPAPER_LABEL" desc="Label for the button that confirms setting the preview wallpaper.">
+    Set Wallpaper
+  </message>
+  <message name="IDS_WALLPAPER_MANAGER_SET_SUCCESSFULLY_MESSAGE" desc="Message shown to user after setting wallpaper is done.">
+    Wallpaper set successfully
+  </message>
   <message name="IDS_CURRENT_WALLPAPER_SET_BY_MESSAGE" desc="The string displayed to user if the current wallpaper is set by a third party wallpaper app/extension.">
     The current wallpaper is set by '<ph name="APP_NAME">$1</ph>'. You may need to uninstall '<ph name="APP_NAME">$1</ph>' before selecting a different wallpaper.
   </message>
@@ -119,6 +128,34 @@
     Cancel
   </message>
 
+  <!-- MultiDevice setup dialog. -->
+  <message name="IDS_MULTIDEVICE_SETUP_DIALOG_TITLE" desc="Title for the MultiDevice setup dialog, which allows users to enable features which involve communication between multiple devices (e.g., a Chromebook and a phone)." translateable="false">
+    MultiDevice Setup
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_ACCEPT_LABEL" desc="Label for button to accept conditions and begin MultiDevice setup workflow." translateable="false">
+    Accept
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_TRY_AGAIN_LABEL" desc="Label for button to retry setup upon failure." translateable="false">
+    Try again
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_SETUP_FAILED_PAGE_HEADER" desc="Header for failed setup page." translateable="false">
+    Could not connect to phone (PlAcEhOlDeR tExT!!)
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_SETUP_FAILED_PAGE_MESSAGE" desc="Message for failed setup page." translateable="false">
+    PlAcEhOlDeR tExT!! This is a paragraph about an error. Blah blah blah. Something went wrong. Whomp whomp whomp.
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_SETUP_SUCCEEDED_PAGE_HEADER" desc="Header for successful setup page." translateable="false">
+    You're all set! (PlAcEhOlDeR tExT!!)
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_SETUP_SUCCEEDED_PAGE_MESSAGE" desc="Message for successful setup page." translateable="false">
+    PlAcEhOlDeR tExT!! This String includes a link with the text &lt;a id="settings-link"&gt;Settings&lt;/a&gt; that opens the settings page. Blah blah blah.
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_HEADER" desc="Header for welcome page." translateable="false">
+    Better together (PlAcEhOlDeR tExT!!)
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MESSAGE" desc="Message for welcome page." translateable="false">
+    PlAcEhOlDeR tExT!! This String includes a link with the text &lt;a id="terms-and-conditions-link" href="chrome://foo-bar"&gt;Terms and Conditions&lt;/a&gt; that opens a browser window to that info. Blah blah blah.
+  </message>
 
   <!-- File Manager -->
   <message name="IDS_FILE_SYSTEM_PROVIDER_UNRESPONSIVE_WARNING" desc="A warning shown in a notification that an operation is taking longer than expected.">
@@ -556,7 +593,7 @@
     Open with...
   </message>
   <message name="IDS_FILE_BROWSER_MORE_ACTIONS_BUTTON_LABEL" desc="Menu item label, showing dialog to choose extension to open/share/pack/etc... selected files or directories.">
-    More actions...
+    More actions
   </message>
   <message name="IDS_FILE_BROWSER_OPEN_WITH_VERB_BUTTON_LABEL" desc="Verb that describe the action of opening one or more files or directories with the given extension.">
     Open with <ph name="EXTENSION_NAME">$1<ex>Gallery</ex></ph>
@@ -1286,6 +1323,9 @@
   <message name="IDS_FILE_BROWSER_FAILED_SPACE_INFO" desc="Menu item, saying that FileBrowser is failed to retrieve space information.">
     Failed to retrieve space info
   </message>
+  <message name="IDS_FILE_BROWSER_SEE_MENU_FOR_ACTIONS" desc="Text to be used by screen reader to indicate users that there are more options on the action bar.">
+    More options available on the action bar. Press Alt + A to focus the action bar.
+  </message>
 
 <!-- Common for Audio player and Media player -->
   <message name="IDS_MEDIA_PLAYER_PLAY_BUTTON_LABEL" desc="Label for the Play button of media players (audio player / video player).">
@@ -1731,6 +1771,18 @@
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_ACCEPT_AND_CONTINUE" desc="The label on the button that closes dialog while accepting the selected settings.">
     Accept and continue
   </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_TITLE" desc="The title of the dialog that recommend apps which user has installed in other devices">
+    Install apps from your other devices
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_DESCRIPTION" desc="The description of the 'Recommend Apps' section">
+    You have apps that are optimized for Chromebooks
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SKIP" desc="The label on the button that skips installing any recommended apps">
+    Skip
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_INSTALL" desc="The label on the button that installs the user selected apps">
+    Install
+  </message>
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP" desc="Tooltip over disabled Add user button">
     The owner of this device has disabled new users from being added
   </message>
@@ -2104,7 +2156,7 @@
     Help
   </message>
   <message name="IDS_LOGIN_NEEDS_DIRCRYPTO_MIGRATION_BANNER" desc="Banner text for users that need to migrate their data to use dircrypto.">
-    You've got a new OS update. Sign in to get started.
+    A critical update is ready to install. Sign in to get started.
   </message>
   <message name="IDS_LOGIN_NEW_LOCK_SCREEN_NOTE_BUTTON_TITLE" desc="Title for the button on the Chrome OS lock screen that launches an app for taking notes (the action of creating a new note is delegated to the app). The string is primarily intended to be spoken out by accessibility tools - the button is represented by an icon in the lock screen UI.">
     Create new note
@@ -2608,7 +2660,7 @@
     <ph name="BR">&lt;br&gt;</ph>
     <ph name="BR">&lt;br&gt;</ph>
     For more information about the debugging features see:<ph name="BR">&lt;br&gt;</ph>
-    http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-features
+    https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-features
     <ph name="BR">&lt;br&gt;</ph>
     <ph name="BR">&lt;br&gt;</ph>
     <ph name="BEGIN_BOLD">&lt;b&gt;</ph>Note:<ph name="END_BOLD">&lt;/b&gt;</ph>  The system will reboot during the process.
@@ -3379,6 +3431,12 @@
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK" desc="The text in the keyboard overlay to explain the shortcut (enable or disable spoken feedback).">
     ChromeVox (spoken feedback)
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_DOCKED_MAGNIFIER" desc="The text in the keyboard overlay to explain the shortcut (toggle the Docked Magnifier on/off).">
+    Toggle Docked Magnifier
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_FULLSCREEN_MAGNIFIER" desc="The text in the keyboard overlay to explain the shortcut (toggle the Fullscreen Magnifier on/off).">
+    Toggle Fullscreen Magnifier
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE" desc="The text in the keyboard overlay to explain the shortcut (Toggle high contrast mode).">
     Toggle High Contrast Mode
   </message>
@@ -3579,10 +3637,10 @@
 
   <!-- Encryption migration dialog -->
   <message name="IDS_ENCRYPTION_MIGRATION_READY_TITLE" desc="Title shown in encryption migration screen, which asks the user to install an OS update.">
-    Install OS update
+    Install critical update
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_READY_DESCRIPTION" desc="Description shown in encryption migration screen, which asks the user to install an OS update.">
-    To download and use Android apps, first you need to install an update. While your device is updating, you can’t use it. Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart after installation completes.
+    To download and use Android apps, first you need to install this required update. While your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is updating, you can’t use it. After installation completes, your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart.
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_MIGRATING_TITLE" desc="Title shown in encryption migration screen when the migration is ongoing.">
     Installing OS update
@@ -4483,13 +4541,13 @@
     No thanks
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE" desc="Agree button of the opt-in dialog for Android apps.">
-    Agree
+    I Agree
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_CANCEL" desc="Cancel button of the opt-in dialog for Android apps.">
     Cancel
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_NEXT" desc="Next button of the opt-in dialog for Android apps.">
-    Next
+    More
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_RETRY" desc="Retry button of the opt-in dialog for Android apps.">
     Try again
@@ -4510,42 +4568,59 @@
     Terms of Service
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_MANAGED_ENABLED" desc="Message in the opt-in dialog for Android apps in case metrics are managed on the device and on.">
-    This device currently sends diagnostic and usage data to Google. This <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>setting<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> is enforced by the owner. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Send system data. This device currently automatically sends diagnostic and device and app usage data to Google. This <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>setting<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> is enforced by the owner. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the opt-in dialog for Android apps in case metrics are enabled on the device and off.">
-    The owner may choose to send diagnostic and usage data for this device to Google. You may view this <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>setting<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> here. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the opt-in dialog for Android apps in case metrics are managed on the device and off.">
+    Send system data. Automatically send diagnostic and device and app usage data to Google. This setting is enforced by the owner. The owner may choose to send diagnostic and usage data for this device to Google. You may view this in <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_ENABLED" desc="Message in the opt-in dialog for Android apps in case metrics are already enabled on the device. User has no way to deactivate them using opt-in dialog.">
-    This device currently sends diagnostic and usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Send system data. This device currently automatically sends diagnostic and device and app usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_DISABLED" desc="Message in the opt-in dialog for Android apps in case metrics are disabled on the device. User has an option to active them using opt-in dialog">
-    Automatically send diagnostic and usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Send system data. Automatically send diagnostic and device and app usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE" desc="Message in the opt-in dialog for users to enable Backup and Restore for Android apps.">
-    Automatically back up and restore Play app data to Google Drive. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-backup-restore"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Back up to Google Drive. Easily restore your data or switch device at any time. Your backup includes app data. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-backup-restore"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_ENABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are managed on the device and on.">
-    This device currently sends diagnostic and usage data to Google. This setting is enforced by the owner. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Send system data. This device currently automatically sends diagnostic and device and app usage data to Google. This setting is enforced by the owner. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
-  <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are enabled on the device and off.">
-    The owner may choose to send diagnostic and usage data for this device to Google. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;a&gt;<ex>&lt;/a&gt;</ex></ph>
+  <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are managed on the device and off.">
+    Send system data. Automatically send diagnostic and device and app usage data to Google. This setting is enforced by the owner. The owner may choose to send diagnostic and usage data for this device to Google. You may view this in settings. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
-  <message name="IDS_ARC_OPT_IN_LOCATION_SETTING" desc="Message in the opt-in dialog for Android apps for the user to turn on Google location services">
-    Let Google’s location service help apps find your location quickly and accurately, which can reduce battery consumption. Anonymous location data will be sent to Google, even when no apps are running. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-location-service"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_ENABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are already enabled on the device.">
+    Send system data. This device currently automatically sends diagnostic and device and app usage data to Google. You can change this at any time in your device settings. If you turned on additional Web &#38; App Activity, this information will be stored with your account so you can manage it in My Activity. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_LOCATION_SETTING" desc="Message in the opt-in dialog for Android apps for the user to turn on Google location services.">
+    Help apps find location. Use Google’s location service to help improve location for apps. Google may collect location data periodically and use this data in an anonymous way to improve location accuracy and location-based services. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-location-service"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_PAI" desc="Message in the opt-in dialog for Play auto install.">
+    Install updates &#38; apps. By continuing, you agree that this device may also automatically download and install updates and apps from Google, your carrier, and your device's manufacturer, possibly using cellular data. Some of these apps may offer in-app purchases. You can remove these apps at any time. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-pai"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_GOOGLE_SERVICE_CONFIRMATION" desc="Message in the opt-in dialog for Accepting Google services.">
+    By clicking the "I Agree" button, you agree to the processing described above for these Google services.
   </message>
   <message name="IDS_ARC_OPT_IN_LEARN_MORE_CLOSE" desc="Text for close button in learn more dialog">
     Close
   </message>
   <message name="IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS" desc="Message shown in pop up overlay dialog when user clicks learn more UMA">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>This is general information about your device and how you use it, such as battery level, how often you use your apps, the quality and duration of your network connections (like Wi-Fi and Bluetooth), and crash reports when things aren’t working the way they should. It will be used to improve Google’s products and services for everyone. Some aggregated information will help partners, such as Android developers, make their apps and products better, too.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can turn this on or off a any time in the Android apps Settings. This doesn’t affect your device’s ability to send the information it needs to receive essential services such as system updates and security.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>This is general information about your device and how you use it (such as battery level, app usage, and network connectivity). The data will be used to improve Google's products and services for everyone. Some aggregated information will help partners, such as Android developers, make their apps and products better, too.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>Turning off this feature doesn't affect your device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>You can control this feature from Settings &gt; Google. Select Usage &#38; diagnostics from the menu.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
   </message>
   <message name="IDS_ARC_OPT_IN_LEARN_MORE_BACKUP_AND_RESTORE" desc="Message shown in pop up overlay dialog when user clicks learn more backup and restore">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>When you turn on automatic backup, device and app data is periodically saved to a private folder in Google Drive. App data can be any data that an app has saved (based on developer settings), including potentially sensitive data such as contacts, messages, and photos.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>Backup data will not count towards your Drive storage quota. Large files, or files developers have chosen to exclude from the service will not be backed up.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Back up to Google Drive. Easily restore your data or switch device at any time. Your backup includes app data.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>App data can be any data that an app has saved (based on developer settings), including potentially sensitive data such as contacts, messages, and photos.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Backup data will not count toward your Drive storage quota.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>You can turn this service off in Settings.<ph name="END_PARAGRAPH4">&lt;/p&gt;</ph>
   </message>
   <message name="IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES" desc="Message shown in pop up overlay dialog when user clicks learn more location services">
-    <ph name="BEGIN_PARAGRAPH">&lt;p&gt;</ph>Google’s location service uses sources like Wi-Fi to help estimate your device’s location faster and more accurately. When you turn on Google’s location services, your device enters a mode that uses Wi-Fi to provide location information. You can turn this off in location settings anytime.<ph name="END_PARAGRAPH">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Help apps find location. Use Google’s location service to help improve location for apps. Google may collect location data periodically and use this data in an anonymous way to improve location accuracy and location-based services.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>Google's location service uses sources like Wi-Fi, mobile networks, and sensors to help estimate your device’s location. This service is active when your device’s Location setting is on.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>You can turn off Location by turning off the main Location setting on your device. You can also turn off the use of Wi-Fi, mobile networks, and sensors for location in location settings.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_LEARN_MORE_PAI_SERVICE" desc="Message shown in pop up overlay dialog when user clicks learn more play auto install services.">
+    To remove apps, go to Settings &gt; Apps or Application manager. Then tap the app you want to uninstall (you may need to swipe right or left to find the app). Then tap Uninstall or Disable.
   </message>
   <message name="IDS_ARC_OPT_IN_PRIVACY_POLICY_LINK" desc="Text of the Link to Goolge Privacy Policy in opt-in dialog">
     Google privacy policy
@@ -4599,7 +4674,7 @@
     Installing the Google Play Store on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. This could take a few minutes.
   </message>
   <message name="IDS_ARC_OOBE_TERMS_HEADING" desc="Heading of the Arc Terms OOBE dialog.">
-    Google Play Terms of Service
+    Google Play apps and services
   </message>
   <message name="IDS_ARC_OOBE_TERMS_DESCRIPTION" desc="Description of the Arc Terms OOBE dialog.">
     Use Google Play to install Android apps
@@ -4611,7 +4686,7 @@
     Google Play Terms of Service cannot be loaded. Please retry.
   </message>
   <message name="IDS_ARC_OOBE_TERMS_BUTTON_ACCEPT" desc="Accept button of the Arc Terms OOBE dialog.">
-    Agree
+    I Agree
   </message>
   <message name="IDS_ARC_OOBE_TERMS_BUTTON_SKIP" desc="Skip button of the Arc Terms OOBE dialog.">
     Skip
@@ -4641,10 +4716,10 @@
     Done
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_TITLE" desc="Title of the notification to navigate the user to first update the device encryption before running Android apps.">
-    Install OS update
+    Install critical update
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_MESSAGE" desc="Main message of the notification to navigate the user to first update the device encryption before running Android apps.">
-    To use Android apps, sign in again and update.
+    To use Android apps and keep your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> working properly, sign in again and update.
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_LOW_BATTERY_MESSAGE" desc="Main message of the notification to navigate the user to first update the device encryption before running Android apps.">
     To use Android apps, charge &amp; update your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
@@ -4787,6 +4862,12 @@
   <message name="IDS_PIN_UNLOCK_FEATURE_NOTIFIER_NAME" desc="The name of PIN unlock feature notifier that is a system component">
     PIN Unlock Feature
   </message>
+  <message name="IDS_PIN_UNLOCK_MIGRATION_PROMPT" desc="String shown in a notification asking the user to re-enter their PIN so it can be used in sign-in.">
+    Re-enter your PIN to use it to sign in to your device.
+  </message>
+  <message name="IDS_PIN_UNLOCK_MIGRATION_PROMPT_CONTINUE" desc="Continue button in notification prompt.">
+    Continue
+  </message>
 
   <message name="IDS_WIFI_SCANNING_MESSAGE" desc="Scanning for wifi networks">
     Searching for Wi-Fi networks...
@@ -4837,18 +4918,85 @@
     Lock screen notes are automatically saved to <ph name="LOCK_SCREEN_APP_NAME">$1<ex>Lock Screen Enabled App</ex></ph>. Your most recent note will remain on the lock screen.
   </message>
 
+  <!-- Launcher Searchable Chrome OS internal apps -->
+  <message name="IDS_INTERNAL_APP_KEYBOARD_SHORTCUT_VIEWER" desc="The name of keyboard shortcut viewer app.">
+    Shortcuts
+  </message>
+  <message name="IDS_LAUNCHER_SEARCHABLE_KEYBOARD_SHORTCUT_VIEWER" desc="The string can be used to search keyboard shortcut viewer app.">
+    Keyboard Shortcut Helper
+  </message>
+  <message name="IDS_INTERNAL_APP_SETTINGS" desc="The name of Settings.">
+    Settings
+  </message>
+
+  <!-- Launcher Settings shortcuts -->
+  <message name="IDS_LAUNCHER_SHORTCUTS_BLUETOOTH" desc="The name of bluetooth shortcut.">
+    Bluetooth
+  </message>
+
   <message name="IDS_CROSTINI_INSTALLER_TITLE" desc="Title of the Crostini installer, a dialog for installing the 'Terminal'.">
     <ph name="APP_NAME">$1<ex>Terminal</ex></ph> for <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph>
   </message>
   <message name="IDS_CROSTINI_INSTALLER_BODY" desc="Description for the Crostini installer, a dialog for installing the 'Terminal'.">
     Develop on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. You can run your favorite native apps and command-line tools seamlessly and securely.
 
-Installing the <ph name="APP_NAME">$2<ex>Terminal</ex></ph> will download <ph name="DOWNLOAD_SIZE">$3<ex>200MB</ex></ph> of data.
+Installing the <ph name="APP_NAME">$2<ex>Terminal</ex></ph> will download <ph name="DOWNLOAD_SIZE">$3<ex>300MB</ex></ph> of data.
   </message>
   <message name="IDS_CROSTINI_INSTALLER_INSTALL_BUTTON" desc="Label for the button in the Crostini installer dialog to begin installing the 'Terminal'.">
     Install
   </message>
   <message name="IDS_CROSTINI_INSTALLER_INSTALLING" desc="Text shown in the Crostini installer dialog while the 'Terminal' is installing.">
     Installing <ph name="APP_NAME">$1<ex>Terminal</ex></ph>...
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_ERROR_TITLE" desc="Title of the Crostini installer when an error occurs.">
+    Error installing <ph name="APP_NAME">$1<ex>Terminal</ex></ph>...
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_COMPLETE" desc="Text shown in the Crostini installer dialog when installation is complete.">
+    Finished installing <ph name="APP_NAME">$1<ex>Terminal</ex></ph>.
+  </message>
+    <message name="IDS_CROSTINI_INSTALLER_LOAD_TERMINA_MESSAGE" desc="Text shown in the Crostini installer dialog when the 'Termina' component is loading">
+    Loading Termina component.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_CONCIERGE_MESSAGE" desc="Text shown in the Crostini installer dialog when the 'Concierge' service is starting">
+    Starting Concierge service.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_MESSAGE" desc="Text shown in the Crostini installer dialog when the disk image is being created">
+    Creating disk image.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_TERMINA_VM_MESSAGE" desc="Text shown in the Crostini installer dialog when the 'Termina VM' is starting">
+    Starting Termina VM.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_CONTAINER_MESSAGE" desc="Text shown in the Crostini installer dialog when the container inside the 'Termina VM' is starting">
+    Starting container inside Termina VM.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_LOAD_TERMINA_ERROR" desc="Text shown in the Crostini installer dialog when the 'Termina' component fails to load">
+    ERROR: Failed to load Termina component.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_CONCIERGE_ERROR" desc="Text shown in the Crostini installer dialog when the 'Concierge' client fails to start">
+    ERROR: Failed to start Concierge client.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_ERROR" desc="Text shown in the Crostini installer dialog when the failing to create the disk image">
+    ERROR: Failed to create disk image.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_TERMINA_VM_ERROR" desc="Text shown in the Crostini installer dialog when the 'Termina VM' fails to start">
+    ERROR: Failed to start Termina VM.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_START_CONTAINER_ERROR" desc="Text shown in the Crostini installer dialog when the container fails to start inside the 'Termina VM'">
+    ERROR: Failed to start container inside Termina VM.
+  </message>
+  <message name="IDS_CROSTINI_UNINSTALLER_TITLE" desc="Title of the Crostini uninstaller, a dialog for uninstalling the 'Terminal', the associated VM and Linux container.">
+    <ph name="APP_NAME">$1<ex>Uninstall Terminal</ex></ph> for <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph>
+  </message>
+  <message name="IDS_CROSTINI_UNINSTALLER_BODY" desc="Description for the Crostini uninstaller, a dialog for uninstalling the 'Terminal', the associated VM and Linux container.">
+    This will uninstall the <ph name="APP_NAME">$1<ex>Terminal</ex></ph>, and remove all Linux data and applications from your <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph>. Are you sure?
+  </message>
+  <message name="IDS_CROSTINI_UNINSTALLER_UNINSTALL_BUTTON" desc="Label for the button in the Crostini uninstaller dialog to uninstall the 'Terminal'.">
+  Uninstall
+  </message>
+  <message name="IDS_CROSTINI_UNINSTALLER_UNINSTALLING_MESSAGE" desc="Text shown in the Crostini installer dialog when the 'Terminal' uninstall is in progress.">
+  Uninstalling...
+  </message>
+    <message name="IDS_CROSTINI_UNINSTALLER_ERROR" desc="Text shown in the Crostini uninstaller dialog when the 'Terminal' uninstall process fails.">
+    ERROR: Failed to uninstall <ph name="APP_NAME">$1<ex>Terminal</ex></ph>.
   </message>
 </grit-part>

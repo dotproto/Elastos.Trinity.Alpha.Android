@@ -13,6 +13,9 @@
 
 namespace ash {
 
+// Id of OEM folder in app list.
+ASH_PUBLIC_EXPORT extern const char kOemFolderId[];
+
 // All possible states of the app list.
 // Note: Do not change the order of these as they are used for metrics.
 enum class AppListState {
@@ -34,10 +37,15 @@ enum class AppListModelStatus {
 
 // Type of the search result, which is set in Chrome.
 enum class SearchResultType {
-  kUnknown,       // Unknown type. Don't use over IPC
-  kInstalledApp,  // Installed apps.
-  kPlayStoreApp,  // Uninstalled apps from playstore.
-  kInstantApp,    // Instant apps.
+  kUnknown,         // Unknown type. Don't use over IPC
+  kInstalledApp,    // Installed apps.
+  kPlayStoreApp,    // Installable apps from PlayStore.
+  kInstantApp,      // Instant apps.
+  kInternalApp,     // Chrome OS apps.
+  kWebStoreApp,     // Installable apps from WebStore.
+  kWebStoreSearch,  // A search query in WebStore.
+  kOmnibox,         // Results from Omnibox.
+  kLauncher,        // Results from launcher search (currently only from Files).
   // Add new values here.
 };
 

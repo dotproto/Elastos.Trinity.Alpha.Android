@@ -183,6 +183,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_ADD_USER_BUTTON" desc="Text shown on an add user button on login/locker screen">
         Add Person
       </message>
+      <message name="IDS_ASH_SHOW_WEBUI_LOGIN_BUTTON" desc="Button on login/lock screen which reverts to the previous implementation." translateable="false">
+        (TEMP) Show webui login; if used file bug (crbug.com) or feedback (alt+shift+i)
+      </message>
 
       <message name="IDS_ASH_KEYBOARD_OVERLAY_TITLE" desc="The title of the keyboard overlay.">
         Keyboard overlay
@@ -491,7 +494,10 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STYLUS_WARM_WELCOME_BUBBLE_TITLE" desc="The title of the bubble that pops up the first time a user uses a stylus.">
         These are your stylus tools
       </message>
-      <message name="IDS_ASH_STYLUS_WARM_WELCOME_BUBBLE_DESCRIPTION" desc="The description of the bubble that pops up the first time a user uses a stylus. Describes what tools exist in the palette tray.">
+      <message name="IDS_ASH_STYLUS_WARM_WELCOME_BUBBLE_DESCRIPTION" desc="The description of the bubble that pops up the first time a user uses a stylus on a non assistant enabled device. Describes what tools exist in the palette tray.">
+        Tap the stylus button on the shelf to take a note, screenshot, use the laser pointer, or magnifying glass.
+      </message>
+      <message name="IDS_ASH_STYLUS_WARM_WELCOME_BUBBLE_WITH_ASSISTANT_DESCRIPTION" desc="The description of the bubble that pops up the first time a user uses a stylus on a assistant enabled device. Describes what tools exist in the palette tray.">
         Tap the stylus button on the shelf to take a note, screenshot, use the Google Assistant, laser pointer, or magnifying glass.
       </message>
       <message name="IDS_ASH_PALETTE_SETTINGS" desc="The label on the setting button used to open palette setting page.">
@@ -528,6 +534,11 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_MOD3_KEY" desc="Name of ISOLevel5 (mod3) key name. Shouldn't be translated in many languages actually. This name should be lower case.">
         mod3
+      </message>
+
+      <!-- Dictation -->
+      <message name="IDS_ASH_DICTATION_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the Dictation button in the system tray.">
+        Toggle dictation
       </message>
 
       <!-- Overview Mode -->
@@ -1218,27 +1229,37 @@ This file contains the strings for ash.
         Multiple sign-in
       </message>
       <message name="IDS_ASH_MULTIPROFILES_INTRO_MESSAGE" desc="Content of the multi-profiles intro dialog shown when the user adds another user in multi-profiles mode.">
-        This feature allows you to quickly access any signed-in user without requiring a password.
-
-Only use this feature with accounts you trust.
+        This feature allows you to quickly access any signed-in user without requiring a password. Only use this feature with accounts you trust.
       </message>
       <message name="IDS_ASH_MULTIPROFILES_INTRO_EXPLANATION" desc="Content of the multi-profiles intro dialog shown when the user adds another user in multi-profiles mode.">
       </message>
-      <message name="IDS_ASH_MULTIPROFILES_INTRO_NOSHOW_AGAIN" desc="In multi-profiles intro dialog, text for no-show-again option.">
-        Got it, don't show me this again.
+
+      <!-- Strings shown within MultiDevice setup notifications -->
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_NEW_USER_POTENTIAL_HOST_EXISTS_TITLE" desc="Title of the notification shown to a user that has not completed the MultiDevice setup flow when a potential host device is found." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (Better together in sickness and in health)
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_NEW_USER_POTENTIAL_HOST_EXISTS_MESSAGE" desc="Message shown as part of the notification shown to a user that has not completed the MultiDevice setup flow when a potential host device is found. Clicking it opens the setup WebUI." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (Your Chromebook works better with your phone)
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_HOST_SWITCHED_TITLE" desc="Title of the notification shown to a user that has already completed the MultiDevice setup flow that a new host device is replacing the current one (i.e., when the user purchases a new Android phone)." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (Better together phone changed)
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_HOST_SWITCHED_MESSAGE" desc="Message shown as part of the notification shown to a user that has already completed the MultiDevice setup flow that a new host device is replacing the current one (i.e., when the user purchases a new Android phone)." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (A new phone was connected to your Chromebook)
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_NEW_CHROMEBOOK_ADDED_TITLE" desc="Title of the notification shown to a user that has already completed the MultiDevice setup flow logging into a new Chromebook that all their Chromebooks are MultiDevice enabled." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (New Chromebook added to Better together)
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_NEW_CHROMEBOOK_ADDED_MESSAGE" desc="Message shown as part of the notification shown to a user that has already completed the MultiDevice setup flow logging into a new Chromebook that all their Chromebooks are MultiDevice enabled." translateable="false">
+        PLACEHOLDER TEXT blah blah blah (All Chromebooks work better with your phone)
       </message>
 
       <!-- Window teleportation warning dialog -->
       <message name="IDS_ASH_TELEPORT_WARNING_TITLE" desc="The title of the dialog which warns user about oddities which can be seen when a window gets moved to another user desktop.">
-        Careful, this feature may bite
+        Warning: Experimental feature
       </message>
       <message name="IDS_ASH_TELEPORT_WARNING_MESSAGE" desc="The message on the dialog which warns user about oddities which can be seen when a window gets moved to another user desktop.">
-        Moving windows to another desktop may result in unexpected behaviour.
-
-Subsequent notifications, windows and dialogs may be split between desktops.
-      </message>
-      <message name="IDS_ASH_TELEPORT_WARNING_SHOW_DISMISS" desc="Label for checkbox dismissing show of teleportation warning dialog.">
-        Got it, don't show me again.
+        Moving windows to another desktop may result in unexpected behaviour. Subsequent notifications, windows and dialogs may be split between desktops.
       </message>
 
       <!-- Session aborted dialog -->
@@ -1299,6 +1320,9 @@ Subsequent notifications, windows and dialogs may be split between desktops.
       <message name="IDS_ASH_WINDOW_CONTROL_ACCNAME_BACK" desc="The accessible name for the back button on the window frame.">
         Back button
       </message>
+      <message name="IDS_ASH_DIALOG_DONT_SHOW_AGAIN" desc="Label for checkbox dismissing show of a dialog.">
+        Don't show again
+      </message>
 
       <!-- Power off menu  -->
       <message name="IDS_ASH_POWER_OFF_MENU_POWER_OFF_BUTTON" desc="Text shown on power off button in power off menu.">
@@ -1313,7 +1337,7 @@ Subsequent notifications, windows and dialogs may be split between desktops.
         It may be attempting to steal your keystrokes
       </message>
       <message name="IDS_ASH_DETACHABLE_BASE_NOTIFICATION_UPDATE_NEEDED_TITLE" desc="Title for the notification shown to the user when the detachable base (keyboard) connected to the device has to be updated.">
-        Your detachable keybaord needs a critical update
+        Your detachable keyboard needs a critical update
       </message>
       <message name="IDS_ASH_DETACHABLE_BASE_NOTIFICATION_UPDATE_NEEDED_MESSAGE" desc="Body for the notification shown to the user when the detachable base (keyboard) connected to the device has to be updated. This notification is shown if the keyboard is usable without the update.">
         To get the update, restart your Chromebook with the keyboard attached.

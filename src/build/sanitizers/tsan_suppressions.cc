@@ -55,10 +55,6 @@ char kTSanDefaultSuppressions[] =
     "race:third_party/libvpx/source/libvpx/vp8/encoder/*\n"
     "race:third_party/libvpx/source/libvpx/vp9/encoder/*\n"
 
-    // http://crbug.com/189177
-    "race:thread_manager\n"
-    "race:v8::Locker::Initialize\n"
-
     // http://crbug.com/239359
     "race:media::TestInputCallback::OnData\n"
 
@@ -256,7 +252,8 @@ char kTSanDefaultSuppressions[] =
     "race:base::i18n::SetICUDefaultLocale\n"
 
     // https://crbug.com/794920
-    "race:crash_reporter::InitializeCrashKeys\n"
+    "race:base::debug::SetCrashKeyString\n"
+    "race:crash_reporter::internal::CrashKeyStringImpl::Set\n"
 
     // http://crbug.com/795110
     "race:third_party/fontconfig/*\n"

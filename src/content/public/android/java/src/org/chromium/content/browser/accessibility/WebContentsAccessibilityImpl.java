@@ -30,14 +30,14 @@ import android.view.accessibility.AccessibilityNodeProvider;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.content.browser.RenderCoordinates;
+import org.chromium.content.browser.RenderCoordinatesImpl;
 import org.chromium.content.browser.WindowEventObserver;
+import org.chromium.content.browser.accessibility.captioning.CaptioningController;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
-import org.chromium.content.browser.webcontents.WebContentsUserData;
-import org.chromium.content.browser.webcontents.WebContentsUserData.UserDataFactory;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 
 import java.util.ArrayList;
@@ -97,6 +97,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     protected int mSelectionNodeId;
     private Runnable mSendWindowContentChangedRunnable;
     private View mAutofillPopupView;
+    private CaptioningController mCaptioningController;
 
     // Whether native accessibility is allowed.
     private boolean mNativeAccessibilityAllowed;
@@ -140,7 +141,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
     public static WebContentsAccessibilityImpl create(Context context, ViewGroup containerView,
             WebContents webContents, String productVersion) {
-        WebContentsAccessibilityImpl wcax = WebContentsUserData.fromWebContents(webContents,
+        WebContentsAccessibilityImpl wcax = webContents.getOrSetUserData(
                 WebContentsAccessibilityImpl.class, UserDataFactoryLazyHolder.INSTANCE);
         assert wcax != null && !wcax.initialized();
         wcax.init(context, containerView, productVersion);
@@ -148,8 +149,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     }
 
     public static WebContentsAccessibilityImpl fromWebContents(WebContents webContents) {
-        return WebContentsUserData.fromWebContents(
-                webContents, WebContentsAccessibilityImpl.class, null);
+        return webContents.getOrSetUserData(WebContentsAccessibilityImpl.class, null);
     }
 
     protected WebContentsAccessibilityImpl(WebContents webContents) {
@@ -162,6 +162,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         mProductVersion = productVersion;
         mAccessibilityManager =
                 (AccessibilityManager) mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        mCaptioningController = new CaptioningController(mWebContents, mContext);
+
         mInitialized = true;
         // Native is initialized lazily, when node provider is actually requested.
     }
@@ -205,12 +207,14 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     @Override
     public void onDetachedFromWindow() {
         mAccessibilityManager.removeAccessibilityStateChangeListener(this);
+        mCaptioningController.stopListening();
     }
 
     @Override
     public void onAttachedToWindow() {
         mAccessibilityManager.addAccessibilityStateChangeListener(this);
         refreshState();
+        mCaptioningController.startListening();
     }
 
     /**
@@ -370,7 +374,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         } else {
             viewNode.setText(node.text);
         }
-        RenderCoordinates renderCoordinates = mWebContents.getRenderCoordinates();
+        RenderCoordinatesImpl renderCoordinates = mWebContents.getRenderCoordinates();
         int left = (int) renderCoordinates.fromLocalCssToPix(node.x);
         int top = (int) renderCoordinates.fromLocalCssToPix(node.y);
         int width = (int) renderCoordinates.fromLocalCssToPix(node.width);
@@ -916,7 +920,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             // We already got frame info since WebContents finished its lifecycle.
             return true;
         }
-        RenderCoordinates rc = mWebContents.getRenderCoordinates();
+        RenderCoordinatesImpl rc = mWebContents.getRenderCoordinates();
         return rc.getContentWidthCss() != 0.0 || rc.getContentHeightCss() != 0.0;
     }
 
@@ -1162,7 +1166,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
     protected void convertWebRectToAndroidCoordinates(Rect rect) {
         // Offset by the scroll position.
-        RenderCoordinates rc = mWebContents.getRenderCoordinates();
+        RenderCoordinatesImpl rc = mWebContents.getRenderCoordinates();
         rect.offset(-(int) rc.getScrollX(), -(int) rc.getScrollY());
 
         // Convert CSS (web) pixels to Android View pixels
@@ -1195,7 +1199,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                 parentRelativeLeft + width, parentRelativeTop + height);
         if (isRootNode) {
             // Offset of the web content relative to the View.
-            RenderCoordinates rc = mWebContents.getRenderCoordinates();
+            RenderCoordinatesImpl rc = mWebContents.getRenderCoordinates();
             boundsInParent.offset(0, (int) rc.getContentOffsetYPix());
         }
         node.setBoundsInParent(boundsInParent);

@@ -21,7 +21,6 @@
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 #include "content/browser/renderer_host/input/passthrough_touch_event_queue.h"
 #include "content/browser/renderer_host/input/touch_action_filter.h"
-#include "content/browser/renderer_host/input/touchpad_tap_suppression_controller.h"
 #include "content/common/input/input_event_stream_validator.h"
 #include "content/common/input/input_handler.mojom.h"
 #include "content/common/widget.mojom.h"
@@ -37,6 +36,8 @@ struct DidOverscrollParams;
 namespace content {
 
 class InputDispositionHandler;
+
+class MockRenderWidgetHost;
 
 class CONTENT_EXPORT InputRouterImplClient : public InputRouterClient {
  public:
@@ -54,7 +55,6 @@ class CONTENT_EXPORT InputRouterImpl
       public FlingControllerClient,
       public MouseWheelEventQueueClient,
       public PassthroughTouchEventQueueClient,
-      public TouchpadTapSuppressionControllerClient,
       public mojom::WidgetInputHandlerHost {
  public:
   InputRouterImpl(InputRouterImplClient* client,
@@ -81,6 +81,8 @@ class CONTENT_EXPORT InputRouterImpl
                 bool frame_handler) override;
   void ProgressFling(base::TimeTicks current_time) override;
   void StopFling() override;
+  bool FlingCancellationIsDeferred() override;
+  void DidStopFlingingOnBrowser() override;
 
   // InputHandlerHost impl
   void CancelTouchTimeout() override;
@@ -90,6 +92,7 @@ class CONTENT_EXPORT InputRouterImpl
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
   void ImeCancelComposition() override;
+  void DidStartScrollingViewport() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& bounds) override;
@@ -99,13 +102,12 @@ class CONTENT_EXPORT InputRouterImpl
 
  private:
   friend class InputRouterImplTest;
+  friend class MockRenderWidgetHost;
 
   // Keeps track of last position of touch points and sets MovementXY for them.
   void SetMovementXYForTouchPoints(blink::WebTouchEvent* event);
 
-  // TouchpadTapSuppressionControllerClient
-  void SendMouseEventImmediately(
-      const MouseEventWithLatencyInfo& mouse_event) override;
+  void SendMouseEventImmediately(const MouseEventWithLatencyInfo& mouse_event);
 
   // PassthroughTouchEventQueueClient
   void SendTouchEventImmediately(
@@ -114,6 +116,7 @@ class CONTENT_EXPORT InputRouterImpl
                        InputEventAckSource ack_source,
                        InputEventAckState ack_result) override;
   void OnFilteringTouchEvent(const blink::WebTouchEvent& touch_event) override;
+  bool TouchscreenFlingInProgress() override;
 
   // GestureEventFilterClient
   void SendGestureEventImmediately(
@@ -125,6 +128,8 @@ class CONTENT_EXPORT InputRouterImpl
   // FlingControllerClient
   void SendGeneratedWheelEvent(
       const MouseWheelEventWithLatencyInfo& wheel_event) override;
+  void SendGeneratedGestureScrollEvents(
+      const GestureEventWithLatencyInfo& gesture_event) override;
   void SetNeedsBeginFrameForFlingProgress() override;
 
   // MouseWheelEventQueueClient
@@ -211,6 +216,8 @@ class CONTENT_EXPORT InputRouterImpl
   InputEventStreamValidator output_stream_validator_;
 
   float device_scale_factor_;
+
+  gfx::Vector2dF current_fling_velocity_;
 
   // Last touch position relative to screen. Used to compute movementX/Y.
   base::flat_map<int, gfx::Point> global_touch_position_;

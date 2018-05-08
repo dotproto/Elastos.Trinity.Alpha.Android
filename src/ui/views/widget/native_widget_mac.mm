@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
@@ -16,6 +17,9 @@
 #include "components/crash/core/common/crash_key.h"
 #import "ui/base/cocoa/constrained_window/constrained_window_animation.h"
 #import "ui/base/cocoa/window_size_constants.h"
+#include "ui/base/ui_base_switches.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/font_list.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
@@ -45,6 +49,11 @@
 
 namespace views {
 namespace {
+
+bool AreModalAnimationsEnabled() {
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableModalAnimations);
+}
 
 NSInteger StyleMaskForParams(const Widget::InitParams& params) {
   // If the Widget is modal, it will be displayed as a sheet. This works best if
@@ -166,7 +175,10 @@ bool NativeWidgetMac::ShouldWindowContentsBeTransparent() const {
 }
 
 void NativeWidgetMac::FrameTypeChanged() {
-  NOTIMPLEMENTED();
+  // This is called when the Theme has changed; forward the event to the root
+  // widget.
+  GetWidget()->ThemeChanged();
+  GetWidget()->GetRootView()->SchedulePaint();
 }
 
 Widget* NativeWidgetMac::GetWidget() {
@@ -188,7 +200,7 @@ gfx::NativeWindow NativeWidgetMac::GetNativeWindow() const {
 
 Widget* NativeWidgetMac::GetTopLevelWidget() {
   NativeWidgetPrivate* native_widget = GetTopLevelNativeWidget(GetNativeView());
-  return native_widget ? native_widget->GetWidget() : NULL;
+  return native_widget ? native_widget->GetWidget() : nullptr;
 }
 
 const ui::Compositor* NativeWidgetMac::GetCompositor() const {
@@ -245,7 +257,7 @@ bool NativeWidgetMac::HasCapture() const {
 }
 
 ui::InputMethod* NativeWidgetMac::GetInputMethod() {
-  return bridge_ ? bridge_->GetInputMethod() : NULL;
+  return bridge_ ? bridge_->GetInputMethod() : nullptr;
 }
 
 void NativeWidgetMac::CenterWindow(const gfx::Size& size) {
@@ -325,6 +337,24 @@ void NativeWidgetMac::SetBounds(const gfx::Rect& bounds) {
     bridge_->SetBounds(bounds);
 }
 
+void NativeWidgetMac::SetBoundsConstrained(const gfx::Rect& bounds) {
+  if (!bridge_)
+    return;
+
+  gfx::Rect new_bounds(bounds);
+  NativeWidgetPrivate* ancestor =
+      bridge_ && bridge_->parent()
+          ? GetNativeWidgetForNativeWindow(bridge_->parent()->GetNSWindow())
+          : nullptr;
+  if (!ancestor) {
+    new_bounds = ConstrainBoundsToDisplayWorkArea(new_bounds);
+  } else {
+    new_bounds.AdjustToFit(
+        gfx::Rect(ancestor->GetWindowBoundsInScreen().size()));
+  }
+  SetBounds(new_bounds);
+}
+
 void NativeWidgetMac::SetSize(const gfx::Size& size) {
   // Ensure the top-left corner stays in-place (rather than the bottom-left,
   // which -[NSWindow setContentSize:] would do).
@@ -332,11 +362,8 @@ void NativeWidgetMac::SetSize(const gfx::Size& size) {
 }
 
 void NativeWidgetMac::StackAbove(gfx::NativeView native_view) {
-  // NativeWidgetMac currently only has machinery for stacking windows, and only
-  // stacks child windows above parents. That's currently all this is used for.
-  // DCHECK if a new use case comes along.
-  DCHECK(bridge_ && bridge_->parent());
-  DCHECK_EQ([native_view window], bridge_->parent()->GetNSWindow());
+  NSInteger view_parent = native_view.window.windowNumber;
+  [GetNativeWindow() orderWindow:NSWindowAbove relativeTo:view_parent];
 }
 
 void NativeWidgetMac::StackAtTop() {
@@ -365,13 +392,14 @@ void NativeWidgetMac::Close() {
   }
 
   // For other modal types, animate the close.
-  if (bridge_->animate() && delegate_->IsModal()) {
+  if (bridge_->animate() && AreModalAnimationsEnabled() &&
+      delegate_->IsModal()) {
     [ViewsNSWindowCloseAnimator closeWindowWithAnimation:window];
     return;
   }
 
   // Clear the view early to suppress repaints.
-  bridge_->SetRootView(NULL);
+  bridge_->SetRootView(nullptr);
 
   // Widget::Close() ensures [Non]ClientView::CanClose() returns true, so there
   // is no need to call the NSWindow or its delegate's -windowShouldClose:
@@ -697,7 +725,7 @@ NativeWidgetPrivate* NativeWidgetPrivate::GetNativeWidgetForNativeWindow(
         base::mac::ObjCCastStrict<ViewsNSWindowDelegate>(window_delegate);
     return [delegate nativeWidgetMac];
   }
-  return NULL;  // Not created by NativeWidgetMac.
+  return nullptr;  // Not created by NativeWidgetMac.
 }
 
 // static

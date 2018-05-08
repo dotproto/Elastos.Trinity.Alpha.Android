@@ -14,6 +14,7 @@
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/triggers/suspicious_site_trigger.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/cpp/features.h"
@@ -57,15 +58,19 @@ void StartDisplayingBlockingPage(
 
 UrlCheckerDelegateImpl::UrlCheckerDelegateImpl(
     scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
-    scoped_refptr<SafeBrowsingUIManager> ui_manager,
-    const ProfileIOData* profile_io_data)
+    scoped_refptr<SafeBrowsingUIManager> ui_manager)
     : database_manager_(std::move(database_manager)),
       ui_manager_(std::move(ui_manager)),
-      threat_types_(
-          CreateSBThreatTypeSet({safe_browsing::SB_THREAT_TYPE_URL_MALWARE,
-                                 safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
-                                 safe_browsing::SB_THREAT_TYPE_URL_UNWANTED})),
-      profile_io_data_(profile_io_data) {}
+      threat_types_(CreateSBThreatTypeSet({
+// TODO(crbug.com/835961): Enable on Android when list is available.
+#if defined(SAFE_BROWSING_DB_LOCAL)
+        safe_browsing::SB_THREAT_TYPE_SUSPICIOUS_SITE,
+#endif
+            safe_browsing::SB_THREAT_TYPE_URL_MALWARE,
+            safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
+            safe_browsing::SB_THREAT_TYPE_URL_UNWANTED
+      })) {
+}
 
 UrlCheckerDelegateImpl::~UrlCheckerDelegateImpl() = default;
 
@@ -89,10 +94,7 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
 }
 
 bool UrlCheckerDelegateImpl::IsUrlWhitelisted(const GURL& url) {
-  return profile_io_data_
-             ? safe_browsing::IsURLWhitelistedByPolicy(
-                   url, profile_io_data_->safe_browsing_whitelist_domains())
-             : false;
+  return false;
 }
 
 bool UrlCheckerDelegateImpl::ShouldSkipRequestCheck(
@@ -108,6 +110,15 @@ bool UrlCheckerDelegateImpl::ShouldSkipRequestCheck(
   return !base::FeatureList::IsEnabled(network::features::kNetworkService) &&
          IsDataReductionProxyResourceThrottleEnabledForUrl(resource_context,
                                                            original_url);
+}
+
+void UrlCheckerDelegateImpl::NotifySuspiciousSiteDetected(
+    const base::RepeatingCallback<content::WebContents*()>&
+        web_contents_getter) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&NotifySuspiciousSiteTriggerDetected,
+                     web_contents_getter));
 }
 
 const SBThreatTypeSet& UrlCheckerDelegateImpl::GetThreatTypes() {

@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/history_ui.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"
-#include "chrome/browser/ui/webui/bookmarks_ui.h"
 #include "chrome/browser/ui/webui/components_ui.h"
 #include "chrome/browser/ui/webui/constrained_web_dialog_ui.h"
 #include "chrome/browser/ui/webui/crashes_ui.h"
@@ -48,7 +47,6 @@
 #include "chrome/browser/ui/webui/ntp_tiles_internals_ui.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
 #include "chrome/browser/ui/webui/password_manager_internals/password_manager_internals_ui.h"
-#include "chrome/browser/ui/webui/physical_web/physical_web_ui.h"
 #include "chrome/browser/ui/webui/policy_tool_ui.h"
 #include "chrome/browser/ui/webui/policy_ui.h"
 #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
@@ -80,6 +78,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/web_ui/constants.h"
 #include "components/safe_browsing/web_ui/safe_browsing_ui.h"
+#include "components/security_interstitials/content/connection_help_ui.h"
+#include "components/security_interstitials/content/urls.h"
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_buildflags.h"
 #include "content/public/browser/web_contents.h"
@@ -87,9 +87,9 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/buildflags/buildflags.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 #include "url/gurl.h"
@@ -117,7 +117,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/offline/offline_internals_ui.h"
-#include "chrome/browser/ui/webui/snippets_internals_ui.h"
+#include "chrome/browser/ui/webui/snippets_internals/snippets_internals_ui.h"
 #include "chrome/browser/ui/webui/webapks_ui.h"
 #else
 #include "chrome/browser/ui/webui/devtools_ui.h"
@@ -126,6 +126,7 @@
 #include "chrome/browser/ui/webui/md_downloads/md_downloads_ui.h"
 #include "chrome/browser/ui/webui/md_history_ui.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
+#include "chrome/browser/ui/webui/page_not_available_for_guest/page_not_available_for_guest_ui.h"
 #include "chrome/browser/ui/webui/sync_file_system_internals/sync_file_system_internals_ui.h"
 #include "chrome/browser/ui/webui/system_info_ui.h"
 #endif
@@ -145,14 +146,15 @@
 #include "chrome/browser/ui/webui/chromeos/keyboard_overlay_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/mobile_setup_ui.h"
+#include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/network_ui.h"
 #include "chrome/browser/ui/webui/chromeos/power_ui.h"
 #include "chrome/browser/ui/webui/chromeos/set_time_ui.h"
 #include "chrome/browser/ui/webui/chromeos/slow_trace_ui.h"
 #include "chrome/browser/ui/webui/chromeos/slow_ui.h"
 #include "chrome/browser/ui/webui/chromeos/sys_internals/sys_internals_ui.h"
-#include "components/proximity_auth/webui/proximity_auth_ui.h"
-#include "components/proximity_auth/webui/url_constants.h"
+#include "chromeos/components/proximity_auth/webui/proximity_auth_ui.h"
+#include "chromeos/components/proximity_auth/webui/url_constants.h"
 #endif
 
 #if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
@@ -208,6 +210,12 @@
 #include "extensions/common/manifest.h"
 #endif
 
+#if defined(SAFE_BROWSING_DB_LOCAL)
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
+#include "chrome/browser/ui/webui/reset_password/reset_password_ui.h"
+#include "components/safe_browsing/features.h"
+#endif
+
 using content::WebUI;
 using content::WebUIController;
 using ui::WebDialogUI;
@@ -224,6 +232,14 @@ template<class T>
 WebUIController* NewWebUI(WebUI* web_ui, const GURL& url) {
   return new T(web_ui);
 }
+
+#if !defined(OS_ANDROID)
+template <>
+WebUIController* NewWebUI<PageNotAvailableForGuestUI>(WebUI* web_ui,
+                                                      const GURL& url) {
+  return new PageNotAvailableForGuestUI(web_ui, url.host());
+}
+#endif
 
 // Special case for older about: handlers.
 template<>
@@ -280,10 +296,6 @@ WebUIController* NewWebUI<WelcomeWin10UI>(WebUI* web_ui, const GURL& url) {
 #endif  // defined(OS_WIN)
 
 bool IsAboutUI(const GURL& url) {
-  if (base::FeatureList::IsEnabled(features::kBundledConnectionHelpFeature) &&
-      url.host_piece() == chrome::kChromeUIConnectionHelpHost) {
-    return true;
-  }
   return (url.host_piece() == chrome::kChromeUIChromeURLsHost ||
           url.host_piece() == chrome::kChromeUICreditsHost ||
           url.host_piece() == chrome::kChromeUIDNSHost
@@ -400,11 +412,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   }
 #endif  // defined(OS_CHROMEOS)
 
-  // Bookmarks are part of NTP on Android.
-  if (url.host_piece() == chrome::kChromeUIBookmarksHost) {
-    return MdBookmarksUI::IsEnabled() ? &NewWebUI<MdBookmarksUI>
-                                      : &NewWebUI<BookmarksUI>;
+  if (profile->IsGuestSession() &&
+      (url.host_piece() == chrome::kChromeUIBookmarksHost ||
+       url.host_piece() == chrome::kChromeUIHistoryHost)) {
+    return &NewWebUI<PageNotAvailableForGuestUI>;
   }
+  // Bookmarks are part of NTP on Android.
+  if (url.host_piece() == chrome::kChromeUIBookmarksHost)
+    return &NewWebUI<MdBookmarksUI>;
   // Downloads list on Android uses the built-in download manager.
   if (url.host_piece() == chrome::kChromeUIDownloadsHost)
     return &NewWebUI<MdDownloadsUI>;
@@ -446,6 +461,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<KeyboardOverlayUI>;
   if (url.host_piece() == chrome::kChromeUIMobileSetupHost)
     return &NewWebUI<MobileSetupUI>;
+  if (url.host_piece() == chrome::kChromeUIMultiDeviceSetupHost)
+    return &NewWebUI<chromeos::multidevice_setup::MultiDeviceSetupDialogUI>;
   if (url.host_piece() == chrome::kChromeUINetworkHost)
     return &NewWebUI<chromeos::NetworkUI>;
   if (url.host_piece() == chrome::kChromeUIOobeHost)
@@ -479,8 +496,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 #if defined(OS_ANDROID)
   if (url.host_piece() == chrome::kChromeUIOfflineInternalsHost)
     return &NewWebUI<OfflineInternalsUI>;
-  if (url.host_piece() == chrome::kChromeUIPhysicalWebHost)
-    return &NewWebUI<PhysicalWebUI>;
   if (url.host_piece() == chrome::kChromeUISnippetsInternalsHost &&
       !profile->IsOffTheRecord())
     return &NewWebUI<SnippetsInternalsUI>;
@@ -601,6 +616,11 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (IsAboutUI(url))
     return &NewWebUI<AboutUI>;
 
+  if (base::FeatureList::IsEnabled(features::kBundledConnectionHelpFeature) &&
+      url.host_piece() == security_interstitials::kChromeUIConnectionHelpHost) {
+    return &NewWebUI<security_interstitials::ConnectionHelpUI>;
+  }
+
   if (dom_distiller::IsEnableDomDistillerSet() &&
       url.host_piece() == dom_distiller::kChromeUIDomDistillerHost) {
     return &NewWebUI<dom_distiller::DomDistillerUi>;
@@ -615,6 +635,18 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       url.host_piece() == chrome::kChromeUIMediaEngagementHost) {
     return &NewWebUI<MediaEngagementUI>;
   }
+
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  bool enable_reset_password =
+      base::FeatureList::IsEnabled(
+          safe_browsing::kForceEnableResetPasswordWebUI) ||
+      safe_browsing::ChromePasswordProtectionService::
+          IsPasswordReuseProtectionConfigured(profile);
+  if (url.host_piece() == chrome::kChromeUIResetPasswordHost &&
+      enable_reset_password) {
+    return &NewWebUI<ResetPasswordUI>;
+  }
+#endif
 
   return NULL;
 }
@@ -673,10 +705,8 @@ void ChromeWebUIControllerFactory::GetFaviconForURL(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   ExtensionWebUI::HandleChromeURLOverride(&url, profile);
 
-  // All extensions but the bookmark manager get their favicon from the icons
-  // part of the manifest.
-  if (url.SchemeIs(extensions::kExtensionScheme) &&
-      url.host_piece() != extension_misc::kBookmarkManagerId) {
+  // All extensions get their favicon from the icons part of the manifest.
+  if (url.SchemeIs(extensions::kExtensionScheme)) {
     ExtensionWebUI::GetFaviconForURL(profile, url, callback);
     return;
   }
@@ -737,14 +767,7 @@ ChromeWebUIControllerFactory::~ChromeWebUIControllerFactory() {
 
 base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
     const GURL& page_url, ui::ScaleFactor scale_factor) const {
-#if !defined(OS_ANDROID)  // Bookmarks are part of NTP on Android.
-  // The bookmark manager is a chrome extension, so we have to check for it
-  // before we check for extension scheme.
-  if (page_url.host_piece() == extension_misc::kBookmarkManagerId ||
-      page_url.host_piece() == chrome::kChromeUIBookmarksHost) {
-    return BookmarksUI::GetFaviconResourceBytes(scale_factor);
-  }
-
+#if !defined(OS_ANDROID)
   // The extension scheme is handled in GetFaviconForURL.
   if (page_url.SchemeIs(extensions::kExtensionScheme)) {
     NOTREACHED();
@@ -779,6 +802,10 @@ base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
   if (page_url.host_piece() == chrome::kChromeUIAppLauncherPageHost)
     return AppLauncherPageUI::GetFaviconResourceBytes(scale_factor);
 #endif  // !defined(OS_CHROMEOS)
+
+  // Bookmarks are part of NTP on Android.
+  if (page_url.host_piece() == chrome::kChromeUIBookmarksHost)
+    return MdBookmarksUI::GetFaviconResourceBytes(scale_factor);
 
   // Flash is not available on android.
   if (page_url.host_piece() == chrome::kChromeUIFlashHost)

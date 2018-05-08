@@ -13,6 +13,7 @@
 #include "components/device_event_log/device_event_log.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
+using chromeos::ChallengeResponseKey;
 using google::protobuf::RepeatedPtrField;
 
 namespace cryptohome {
@@ -25,6 +26,34 @@ bool IsEmpty(const base::Optional<BaseReply>& reply) {
     return true;
   }
   return false;
+}
+
+ChallengeSignatureAlgorithm ChallengeSignatureAlgorithmToProtoEnum(
+    ChallengeResponseKey::SignatureAlgorithm algorithm) {
+  using Algorithm = ChallengeResponseKey::SignatureAlgorithm;
+  switch (algorithm) {
+    case Algorithm::kRsassaPkcs1V15Sha1:
+      return CHALLENGE_RSASSA_PKCS1_V1_5_SHA1;
+    case Algorithm::kRsassaPkcs1V15Sha256:
+      return CHALLENGE_RSASSA_PKCS1_V1_5_SHA256;
+    case Algorithm::kRsassaPkcs1V15Sha384:
+      return CHALLENGE_RSASSA_PKCS1_V1_5_SHA384;
+    case Algorithm::kRsassaPkcs1V15Sha512:
+      return CHALLENGE_RSASSA_PKCS1_V1_5_SHA512;
+  }
+  NOTREACHED();
+}
+
+void ChallengeResponseKeyToPublicKeyInfo(
+    const ChallengeResponseKey& challenge_response_key,
+    ChallengePublicKeyInfo* public_key_info) {
+  public_key_info->set_public_key_spki_der(
+      challenge_response_key.public_key_spki_der());
+  for (ChallengeResponseKey::SignatureAlgorithm algorithm :
+       challenge_response_key.signature_algorithms()) {
+    public_key_info->add_signature_algorithm(
+        ChallengeSignatureAlgorithmToProtoEnum(algorithm));
+  }
 }
 
 void KeyDefPrivilegesToKeyPrivileges(int key_def_privileges,
@@ -115,10 +144,17 @@ std::vector<KeyDefinition> GetKeyDataReplyToKeyDefinitions(
   for (RepeatedPtrField<KeyData>::const_iterator it = key_data.begin();
        it != key_data.end(); ++it) {
     // Extract |type|, |label| and |revision|.
-    DCHECK_EQ(KeyData::KEY_TYPE_PASSWORD, it->type());
-    key_definitions.push_back(KeyDefinition(std::string() /* secret */,
-                                            it->label(), 0 /* privileges */));
-    KeyDefinition& key_definition = key_definitions.back();
+    KeyDefinition key_definition;
+    CHECK(it->has_type());
+    switch (it->type()) {
+      case KeyData::KEY_TYPE_PASSWORD:
+        key_definition.type = KeyDefinition::TYPE_PASSWORD;
+        break;
+      case KeyData::KEY_TYPE_CHALLENGE_RESPONSE:
+        key_definition.type = KeyDefinition::TYPE_CHALLENGE_RESPONSE;
+        break;
+    }
+    key_definition.label = it->label();
     key_definition.revision = it->revision();
 
     // Extract |privileges|.
@@ -171,6 +207,8 @@ std::vector<KeyDefinition> GetKeyDataReplyToKeyDefinitions(
 
       DCHECK_EQ(1, data_items);
     }
+
+    key_definitions.push_back(std::move(key_definition));
   }
   return key_definitions;
 }
@@ -210,11 +248,24 @@ AuthorizationRequest CreateAuthorizationRequest(const std::string& label,
 
 // TODO(crbug.com/797848): Finish testing this method.
 void KeyDefinitionToKey(const KeyDefinition& key_def, Key* key) {
-  key->set_secret(key_def.secret);
   KeyData* data = key->mutable_data();
-  DCHECK_EQ(KeyDefinition::TYPE_PASSWORD, key_def.type);
-  data->set_type(KeyData::KEY_TYPE_PASSWORD);
   data->set_label(key_def.label);
+
+  switch (key_def.type) {
+    case KeyDefinition::TYPE_PASSWORD:
+      data->set_type(KeyData::KEY_TYPE_PASSWORD);
+      key->set_secret(key_def.secret);
+      break;
+
+    case KeyDefinition::TYPE_CHALLENGE_RESPONSE:
+      data->set_type(KeyData::KEY_TYPE_CHALLENGE_RESPONSE);
+      for (const auto& challenge_response_key :
+           key_def.challenge_response_keys) {
+        ChallengeResponseKeyToPublicKeyInfo(challenge_response_key,
+                                            data->add_challenge_response_key());
+      }
+      break;
+  }
 
   if (key_def.revision > 0)
     data->set_revision(key_def.revision);

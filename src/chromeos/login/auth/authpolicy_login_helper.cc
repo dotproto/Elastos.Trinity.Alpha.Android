@@ -124,6 +124,8 @@ void AuthPolicyLoginHelper::JoinAdDomain(const std::string& machine_name,
       static_cast<authpolicy::KerberosEncryptionTypes>(encryption_types));
   if (!username.empty())
     request.set_user_principal_name(username);
+  DCHECK(!dm_token_.empty());
+  request.set_dm_token(dm_token_);
 
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->JoinAdDomain(
       request, GetDataReadPipe(password).get(),
@@ -142,11 +144,12 @@ void AuthPolicyLoginHelper::AuthenticateUser(const std::string& username,
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->AuthenticateUser(
       request, GetDataReadPipe(password).get(),
       base::BindOnce(&AuthPolicyLoginHelper::OnAuthCallback,
-                     weak_factory_.GetWeakPtr(), base::Passed(&callback)));
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void AuthPolicyLoginHelper::CancelRequestsAndRestart() {
   weak_factory_.InvalidateWeakPtrs();
+  dm_token_.clear();
   AuthPolicyLoginHelper::Restart();
 }
 
@@ -162,7 +165,7 @@ void AuthPolicyLoginHelper::OnJoinCallback(JoinCallback callback,
       ->GetAuthPolicyClient()
       ->RefreshDevicePolicy(base::BindOnce(
           &AuthPolicyLoginHelper::OnFirstPolicyRefreshCallback,
-          weak_factory_.GetWeakPtr(), base::Passed(&callback), machine_domain));
+          weak_factory_.GetWeakPtr(), std::move(callback), machine_domain));
 }
 
 void AuthPolicyLoginHelper::OnFirstPolicyRefreshCallback(

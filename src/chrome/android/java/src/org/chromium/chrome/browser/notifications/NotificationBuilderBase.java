@@ -20,6 +20,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 
+import org.chromium.base.PackageUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 
@@ -209,6 +210,28 @@ public abstract class NotificationBuilderBase {
             applyWhiteOverlayToBitmap(copyOfBitmap);
         }
         mSmallIconBitmap = copyOfBitmap;
+        return this;
+    }
+
+    /**
+     * Sets the small icon id for a notification that will be displayed by a different Android app
+     * (eg a Web APK or Trusted Web Activity). Wherever the platform supports using a small icon
+     * bitmap, and a non-null {@code Bitmap} is provided, it will take precedence over one specified
+     * as a resource id.
+     * @param iconId An iconId for a resource in the package that will display the notification.
+     * @param packageName The package name of the package that will display the notification.
+     * @return This NotificationBuilderBase.
+     */
+    public NotificationBuilderBase setSmallIconForRemoteApp(int iconId, String packageName) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // On Android M+, the small icon has to be from the resources of the app whose context
+            // is passed to the Notification.Builder constructor.
+            setSmallIcon(PackageUtils.decodeImageResource(packageName, iconId));
+        } else {
+            // Pre Android M, the small icon has to be from the resources of the app whose
+            // NotificationManager is used in NotificationManager#notify.
+            setSmallIcon(iconId);
+        }
         return this;
     }
 
@@ -425,11 +448,30 @@ public abstract class NotificationBuilderBase {
     @TargetApi(Build.VERSION_CODES.M) // For the Icon class.
     protected static void setSmallIconOnBuilder(
             ChromeNotificationBuilder builder, int iconId, @Nullable Bitmap iconBitmap) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && iconBitmap != null) {
+        if (iconBitmap != null && deviceSupportsBitmapStatusBarIcons()) {
             builder.setSmallIcon(Icon.createWithBitmap(iconBitmap));
         } else {
             builder.setSmallIcon(iconId);
         }
+    }
+
+    /**
+     * Returns true if it is safe to call Notification.Builder.setSmallIcon(Icon) on this device.
+     */
+    @VisibleForTesting
+    static boolean deviceSupportsBitmapStatusBarIcons() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            // The Icon class was only added in Android M.
+            return false;
+        }
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M
+                && (Build.MANUFACTURER.equalsIgnoreCase("samsung")
+                           || Build.MANUFACTURER.equalsIgnoreCase("yulong"))) {
+            // Updating a notification with a bitmap status bar icon leads to a crash on Samsung
+            // and Coolpad (Yulong) devices on Marshmallow, see https://crbug.com/829367.
+            return false;
+        }
+        return true;
     }
 
     /**

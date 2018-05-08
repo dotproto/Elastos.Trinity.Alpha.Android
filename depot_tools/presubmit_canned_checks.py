@@ -793,15 +793,6 @@ def RunPylint(input_api, *args, **kwargs):
   return input_api.RunTests(GetPylint(input_api, *args, **kwargs), False)
 
 
-def CheckRietveldTryJobExecution(dummy_input_api, output_api,
-                                 dummy_host_url, dummy_platforms,
-                                 dummy_owner):
-  return [
-    output_api.PresubmitNotifyResult(
-        'CheckRietveldTryJobExecution is deprecated, please remove it.')
-  ]
-
-
 def CheckBuildbotPendingBuilds(input_api, output_api, url, max_pendings,
     ignored):
   try:
@@ -833,6 +824,22 @@ def CheckBuildbotPendingBuilds(input_api, output_api, url, max_pendings,
             'builds are pending.' % max_pendings,
         long_text='\n'.join(out))]
   return []
+
+
+def CheckOwnersFormat(input_api, output_api):
+  affected_files = set([
+      f.LocalPath()
+      for f in input_api.change.AffectedFiles()
+      if 'OWNERS' in f.LocalPath() and f.Action() != 'D'
+  ])
+  if not affected_files:
+    return []
+  try:
+    input_api.owners_db.load_data_needed_for(affected_files)
+    return []
+  except Exception as e:
+    return [output_api.PresubmitError(
+        'Error parsing OWNERS files:\n%s' % e)]
 
 
 def CheckOwners(input_api, output_api, source_file_filter=None):
@@ -895,65 +902,8 @@ def CheckOwners(input_api, output_api, source_file_filter=None):
     return [output_fn('Missing LGTM from someone other than %s' % owner_email)]
   return []
 
+
 def GetCodereviewOwnerAndReviewers(input_api, email_regexp, approval_needed):
-  """Return the owner and reviewers of a change, if any.
-
-  If approval_needed is True, only reviewers who have approved the change
-  will be returned.
-  """
-  # Rietveld is default.
-  func = _RietveldOwnerAndReviewers
-  if input_api.gerrit:
-    func = _GerritOwnerAndReviewers
-  return func(input_api, email_regexp, approval_needed)
-
-
-def _GetRietveldIssueProps(input_api, messages):
-  """Gets the issue properties from rietveld."""
-  issue = input_api.change.issue
-  if issue and input_api.rietveld:
-    return input_api.rietveld.get_issue_properties(
-        issue=int(issue), messages=messages)
-
-
-def _ReviewersFromChange(change):
-  """Return the reviewers specified in the |change|, if any."""
-  reviewers = set()
-  reviewers.update(change.ReviewersFromDescription())
-  reviewers.update(change.TBRsFromDescription())
-
-  # Drop reviewers that aren't specified in email address format.
-  return set(reviewer for reviewer in reviewers if '@' in reviewer)
-
-
-def _match_reviewer_email(r, owner_email, email_regexp):
-  return email_regexp.match(r) and r != owner_email
-
-def _RietveldOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
-  """Return the owner and reviewers of a change, if any.
-
-  If approval_needed is True, only reviewers who have approved the change
-  will be returned.
-  """
-  issue_props = _GetRietveldIssueProps(input_api, True)
-  if not issue_props:
-    return None, (set() if approval_needed else
-                  _ReviewersFromChange(input_api.change))
-
-  if not approval_needed:
-    return issue_props['owner_email'], set(issue_props['reviewers'])
-
-  owner_email = issue_props['owner_email']
-
-  messages = issue_props.get('messages', [])
-  approvers = set(
-      m['sender'] for m in messages
-      if m.get('approval') and _match_reviewer_email(m['sender'], owner_email,
-                                                     email_regexp))
-  return owner_email, approvers
-
-
-def _GerritOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
   """Return the owner and reviewers of a change, if any.
 
   If approval_needed is True, only reviewers who have approved the change
@@ -971,6 +921,20 @@ def _GerritOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
   input_api.logging.debug('owner: %s; approvals given by: %s',
                           owner_email, ', '.join(sorted(reviewers)))
   return owner_email, reviewers
+
+
+def _ReviewersFromChange(change):
+  """Return the reviewers specified in the |change|, if any."""
+  reviewers = set()
+  reviewers.update(change.ReviewersFromDescription())
+  reviewers.update(change.TBRsFromDescription())
+
+  # Drop reviewers that aren't specified in email address format.
+  return set(reviewer for reviewer in reviewers if '@' in reviewer)
+
+
+def _match_reviewer_email(r, owner_email, email_regexp):
+  return email_regexp.match(r) and r != owner_email
 
 
 def CheckSingletonInHeaders(input_api, output_api, source_file_filter=None):
@@ -1048,6 +1012,10 @@ def PanProjectChecks(input_api, output_api,
       if delta_ms > 500:
         print "  %s took a long time: %dms" % (snapshot_memory[1], delta_ms)
     snapshot_memory[:] = (dt2, msg)
+
+  snapshot("checking owners files format")
+  results.extend(input_api.canned_checks.CheckOwnersFormat(
+      input_api, output_api))
 
   if owners_check:
     snapshot("checking owners")
@@ -1209,7 +1177,7 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
     A list of input_api.Command objects containing verification commands.
   """
   file_filter = file_filter or (lambda f: f.LocalPath().endswith('.vpython'))
-  affected_files = input_api.AffectedFiles(file_filter=file_filter)
+  affected_files = input_api.AffectedTestableFiles(file_filter=file_filter)
   affected_files = map(lambda f: f.AbsoluteLocalPath(), affected_files)
 
   commands = []

@@ -61,7 +61,7 @@ RichNotificationData::RichNotificationData(const RichNotificationData& other) =
 
 RichNotificationData::~RichNotificationData() = default;
 
-Notification::Notification() = default;
+Notification::Notification() : serial_number_(g_next_serial_number++) {}
 
 Notification::Notification(NotificationType type,
                            const std::string& id,
@@ -83,8 +83,6 @@ Notification::Notification(NotificationType type,
       notifier_id_(notifier_id),
       optional_fields_(optional_fields),
       serial_number_(g_next_serial_number++),
-      shown_as_popup_(false),
-      is_read_(false),
       delegate_(std::move(delegate)) {}
 
 Notification::Notification(const std::string& id, const Notification& other)
@@ -119,18 +117,6 @@ std::unique_ptr<Notification> Notification::DeepCopy(
                : gfx::Image());
   }
   return notification_copy;
-}
-
-bool Notification::IsRead() const {
-  return is_read_ || optional_fields_.priority == MIN_PRIORITY;
-}
-
-void Notification::CopyState(Notification* base) {
-  shown_as_popup_ = base->shown_as_popup();
-  is_read_ = base->is_read_;
-  if (!delegate_.get())
-    delegate_ = base->delegate();
-  optional_fields_.never_timeout = base->never_timeout();
 }
 
 void Notification::SetButtonIcon(size_t index, const gfx::Image& icon) {

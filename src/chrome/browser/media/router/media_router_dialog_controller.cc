@@ -13,11 +13,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/presentation_info.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/media/android/router/media_router_dialog_controller_android.h"
 #else
-#include "chrome/browser/ui/webui/media_router/media_router_dialog_controller_impl.h"
+#include "chrome/browser/ui/media_router/media_router_dialog_controller_impl_base.h"
 #endif
 
 namespace media_router {
@@ -30,7 +31,8 @@ MediaRouterDialogController::GetOrCreateForWebContents(
   return MediaRouterDialogControllerAndroid::GetOrCreateForWebContents(
       contents);
 #else
-  return MediaRouterDialogControllerImpl::GetOrCreateForWebContents(contents);
+  return MediaRouterDialogControllerImplBase::GetOrCreateForWebContents(
+      contents);
 #endif
 }
 
@@ -78,8 +80,8 @@ StartPresentationContext::StartPresentationContext(
 
 StartPresentationContext::~StartPresentationContext() {
   if (!cb_invoked_) {
-    std::move(error_cb_).Run(content::PresentationError(
-        content::PRESENTATION_ERROR_UNKNOWN, "Unknown error."));
+    std::move(error_cb_).Run(blink::mojom::PresentationError(
+        blink::mojom::PresentationErrorType::UNKNOWN, "Unknown error."));
   }
 }
 
@@ -96,7 +98,7 @@ void StartPresentationContext::InvokeSuccessCallback(
 }
 
 void StartPresentationContext::InvokeErrorCallback(
-    const content::PresentationError& error) {
+    const blink::mojom::PresentationError& error) {
   if (!cb_invoked_) {
     std::move(error_cb_).Run(error);
     cb_invoked_ = true;
@@ -108,8 +110,8 @@ void StartPresentationContext::HandleRouteResponse(
     std::unique_ptr<StartPresentationContext> context,
     const RouteRequestResult& result) {
   if (!result.route()) {
-    context->InvokeErrorCallback(content::PresentationError(
-        content::PRESENTATION_ERROR_UNKNOWN, result.error()));
+    context->InvokeErrorCallback(blink::mojom::PresentationError(
+        blink::mojom::PresentationErrorType::UNKNOWN, result.error()));
   } else {
     context->InvokeSuccessCallback(result.presentation_id(),
                                    result.presentation_url(), *result.route());
@@ -134,8 +136,8 @@ bool MediaRouterDialogController::ShowMediaRouterDialogForPresentation(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (IsShowingMediaRouterDialog()) {
-    std::move(error_cb).Run(content::PresentationError(
-        content::PRESENTATION_ERROR_UNKNOWN,
+    std::move(error_cb).Run(blink::mojom::PresentationError(
+        blink::mojom::PresentationErrorType::UNKNOWN,
         "Unable to create dialog: dialog already shown"));
     return false;
   }

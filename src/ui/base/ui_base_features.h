@@ -13,9 +13,14 @@
 namespace features {
 
 // Keep sorted!
+UI_BASE_EXPORT extern const base::Feature kEnableEmojiContextMenu;
 UI_BASE_EXPORT extern const base::Feature kEnableFloatingVirtualKeyboard;
+UI_BASE_EXPORT extern const base::Feature
+    kEnableFullscreenHandwritingVirtualKeyboard;
+UI_BASE_EXPORT extern const base::Feature kEnableStylusVirtualKeyboard;
 UI_BASE_EXPORT extern const base::Feature kSecondaryUiMd;
 UI_BASE_EXPORT extern const base::Feature kTouchableAppContextMenu;
+UI_BASE_EXPORT extern const base::Feature kUiCompositorScrollWithLayers;
 
 UI_BASE_EXPORT bool IsTouchableAppContextMenuEnabled();
 
@@ -23,6 +28,7 @@ UI_BASE_EXPORT bool IsTouchableAppContextMenuEnabled();
 UI_BASE_EXPORT extern const base::Feature kDirectManipulationStylus;
 UI_BASE_EXPORT extern const base::Feature kPointerEventsForTouch;
 UI_BASE_EXPORT extern const base::Feature kPrecisionTouchpad;
+UI_BASE_EXPORT extern const base::Feature kPrecisionTouchpadScrollPhase;
 UI_BASE_EXPORT extern const base::Feature kTSFImeSupport;
 
 // Returns true if the system should use WM_POINTER events for touch events.

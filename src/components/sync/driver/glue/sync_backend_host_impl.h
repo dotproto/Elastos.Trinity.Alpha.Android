@@ -60,6 +60,7 @@ class SyncBackendHostImpl : public SyncEngine, public InvalidationHandler {
   void Initialize(InitParams params) override;
   void TriggerRefresh(const ModelTypeSet& types) override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
+  void InvalidateCredentials() override;
   void StartConfiguration() override;
   void StartSyncingWithServer() override;
   void SetEncryptionPassphrase(const std::string& passphrase,
@@ -80,7 +81,8 @@ class SyncBackendHostImpl : public SyncEngine, public InvalidationHandler {
   void EnableEncryptEverything() override;
   UserShare* GetUserShare() const override;
   Status GetDetailedStatus() override;
-  bool HasUnsyncedItems() const override;
+  void HasUnsyncedItemsForTest(
+      base::OnceCallback<void(bool)> cb) const override;
   bool IsCryptographerReady(const BaseTransaction* trans) const override;
   void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const override;
   void FlushDirectory() const override;

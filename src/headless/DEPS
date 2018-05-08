@@ -13,7 +13,7 @@ include_rules = [
   "+content/public/test",
   "+mojo/public",
   "+net",
-  "+printing/features",
+  "+printing/buildflags",
   "+services/network/public/cpp",
   "+ui/base",
   "+ui/base/resource",
@@ -26,4 +26,5 @@ include_rules = [
   "+ui/ozone/public",
   "+sandbox/win/src",
   "+services/service_manager/public",
+  "+services/service_manager/sandbox",
 ]

@@ -29,6 +29,7 @@
 #include "content/renderer/mojo/blink_interface_registry_impl.h"
 #include "content/renderer/navigation_state_impl.h"
 #include "content/renderer/render_frame_impl.h"
+#include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/test/fake_compositor_dependencies.h"
 #include "content/test/frame_host_test_interface.mojom.h"
@@ -37,14 +38,14 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebHistoryItem.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_effective_connection_type.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/native_theme/native_theme_features.h"
 
 using blink::WebString;
@@ -58,6 +59,10 @@ constexpr int32_t kSubframeRouteId = 20;
 constexpr int32_t kSubframeWidgetRouteId = 21;
 constexpr int32_t kFrameProxyRouteId = 22;
 constexpr int32_t kEmbeddedSubframeRouteId = 23;
+
+const char kParentFrameHTML[] = "Parent frame <iframe name='frame'></iframe>";
+
+const char kAutoplayTestOrigin[] = "https://www.google.com";
 
 }  // namespace
 
@@ -74,13 +79,16 @@ class RenderFrameImplTest : public RenderViewTest {
     RenderViewTest::SetUp();
     EXPECT_TRUE(GetMainRenderFrame()->is_main_frame_);
 
+    IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+
+    LoadHTML(kParentFrameHTML);
+    LoadChildFrame();
+  }
+
+  void LoadChildFrame() {
     mojom::CreateFrameWidgetParams widget_params;
     widget_params.routing_id = kSubframeWidgetRouteId;
     widget_params.hidden = false;
-
-    IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
-
-    LoadHTML("Parent frame <iframe name='frame'></iframe>");
 
     FrameReplicationState frame_replication_state;
     frame_replication_state.name = "frame";
@@ -132,6 +140,14 @@ class RenderFrameImplTest : public RenderViewTest {
     return frame_->render_widget_.get();
   }
 
+  static url::Origin GetOriginForFrame(TestRenderFrame* frame) {
+    return url::Origin(frame->GetWebFrame()->GetSecurityOrigin());
+  }
+
+  static int32_t AutoplayFlagsForFrame(TestRenderFrame* frame) {
+    return frame->render_view()->webview()->AutoplayFlagsForTest();
+  }
+
 #if defined(OS_ANDROID)
   void ReceiveOverlayRoutingToken(const base::UnguessableToken& token) {
     overlay_routing_token_ = token;
@@ -173,18 +189,18 @@ TEST_F(RenderFrameImplTest, SubframeWidget) {
 // Verify a subframe RenderWidget properly processes its viewport being
 // resized.
 TEST_F(RenderFrameImplTest, FrameResize) {
-  ResizeParams resize_params;
+  VisualProperties visual_properties;
   gfx::Size size(200, 200);
-  resize_params.screen_info = ScreenInfo();
-  resize_params.new_size = size;
-  resize_params.compositor_viewport_pixel_size = size;
-  resize_params.visible_viewport_size = size;
-  resize_params.top_controls_height = 0.f;
-  resize_params.browser_controls_shrink_blink_size = false;
-  resize_params.is_fullscreen_granted = false;
-  resize_params.content_source_id = frame_widget()->GetContentSourceId();
+  visual_properties.screen_info = ScreenInfo();
+  visual_properties.new_size = size;
+  visual_properties.compositor_viewport_pixel_size = size;
+  visual_properties.visible_viewport_size = size;
+  visual_properties.top_controls_height = 0.f;
+  visual_properties.browser_controls_shrink_blink_size = false;
+  visual_properties.is_fullscreen_granted = false;
+  visual_properties.content_source_id = frame_widget()->GetContentSourceId();
 
-  ViewMsg_Resize resize_message(0, resize_params);
+  ViewMsg_SynchronizeVisualProperties resize_message(0, visual_properties);
   frame_widget()->OnMessageReceived(resize_message);
 
   EXPECT_EQ(frame_widget()->GetWebWidget()->Size(), blink::WebSize(size));
@@ -557,6 +573,51 @@ TEST_F(RenderFrameImplTest, GetPreviewsStateForFrame) {
 
   SetPreviewsState(frame(), CLIENT_LOFI_ON | PREVIEWS_OFF);
   EXPECT_DCHECK_DEATH(frame()->GetPreviewsStateForFrame());
+}
+
+TEST_F(RenderFrameImplTest, AutoplayFlags) {
+  // Add autoplay flags to the page.
+  GetMainRenderFrame()->AddAutoplayFlags(
+      url::Origin::Create(GURL(kAutoplayTestOrigin)),
+      blink::mojom::kAutoplayFlagHighMediaEngagement);
+
+  // Navigate the top frame.
+  LoadHTMLWithUrlOverride(kParentFrameHTML, kAutoplayTestOrigin);
+
+  // Check the flags have been set correctly.
+  EXPECT_EQ(blink::mojom::kAutoplayFlagHighMediaEngagement,
+            AutoplayFlagsForFrame(GetMainRenderFrame()));
+
+  // Navigate the child frame.
+  LoadChildFrame();
+
+  // Check the flags are set on both frames.
+  EXPECT_EQ(blink::mojom::kAutoplayFlagHighMediaEngagement,
+            AutoplayFlagsForFrame(GetMainRenderFrame()));
+  EXPECT_EQ(blink::mojom::kAutoplayFlagHighMediaEngagement,
+            AutoplayFlagsForFrame(frame()));
+
+  // Navigate the top frame.
+  LoadHTMLWithUrlOverride(kParentFrameHTML, "https://www.example.com");
+  LoadChildFrame();
+
+  // Check the flags have been cleared.
+  EXPECT_EQ(blink::mojom::kAutoplayFlagNone,
+            AutoplayFlagsForFrame(GetMainRenderFrame()));
+  EXPECT_EQ(blink::mojom::kAutoplayFlagNone, AutoplayFlagsForFrame(frame()));
+}
+
+TEST_F(RenderFrameImplTest, AutoplayFlags_WrongOrigin) {
+  // Add autoplay flags to the page.
+  GetMainRenderFrame()->AddAutoplayFlags(
+      url::Origin(), blink::mojom::kAutoplayFlagHighMediaEngagement);
+
+  // Navigate the top frame.
+  LoadHTMLWithUrlOverride(kParentFrameHTML, kAutoplayTestOrigin);
+
+  // Check the flags have been not been set.
+  EXPECT_EQ(blink::mojom::kAutoplayFlagNone,
+            AutoplayFlagsForFrame(GetMainRenderFrame()));
 }
 
 // RenderFrameRemoteInterfacesTest ------------------------------------

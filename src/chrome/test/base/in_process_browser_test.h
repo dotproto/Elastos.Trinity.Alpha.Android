@@ -22,6 +22,7 @@
 
 #if defined(OS_MACOSX)
 #include "ui/base/test/scoped_fake_full_keyboard_access.h"
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
 namespace base {
@@ -40,6 +41,10 @@ class ScopedCOMInitializer;
 }
 #endif  // defined(OS_WIN)
 }  // namespace base
+
+#if defined(TOOLKIT_VIEWS)
+class AccessibilityChecker;
+#endif
 
 class Browser;
 class Profile;
@@ -255,6 +260,10 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // We use hardcoded quota settings to have a consistent testing environment.
   storage::QuotaSettings quota_settings_;
 
+  // Use a default download directory to make sure downloads don't end up in the
+  // system default location.
+  base::ScopedTempDir default_download_dir_;
+
   base::test::ScopedFeatureList scoped_feature_list_;
 
 #if defined(OS_MACOSX)
@@ -266,10 +275,20 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // more consistent with other platforms, where most views are focusable by
   // default.
   ui::test::ScopedFakeFullKeyboardAccess faked_full_keyboard_access_;
+
+  // Don't allow browser tests to enter real fullscreen - it might trigger races
+  // in WindowServer in test configurations. This is a temporary debugging hack.
+  // TODO(ellyjones): Remove this or make it permanent -
+  // https://crbug.com/828031.
+  ui::test::ScopedFakeNSWindowFullscreen faked_fullscreen_;
 #endif  // OS_MACOSX
 
 #if defined(OS_WIN)
   std::unique_ptr<base::win::ScopedCOMInitializer> com_initializer_;
+#endif
+
+#if defined(TOOLKIT_VIEWS)
+  std::unique_ptr<AccessibilityChecker> accessibility_checker_;
 #endif
 };
 

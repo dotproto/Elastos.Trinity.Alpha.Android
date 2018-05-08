@@ -9,7 +9,10 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_footer_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_item.h"
+#import "ios/chrome/browser/ui/popup_menu/popup_menu_table_view_controller_commands.h"
+#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -17,21 +20,36 @@
 
 using base::UserMetricsAction;
 
-@interface PopupMenuTableViewController ()
-@end
+namespace {
+const CGFloat kFooterHeight = 21;
+const CGFloat kPopupMenuVerticalInsets = 7;
+const CGFloat kScrollIndicatorVerticalInsets = 11;
+}  // namespace
 
 @implementation PopupMenuTableViewController
 
 @dynamic tableViewModel;
+@synthesize baseViewController = _baseViewController;
+@synthesize commandHandler = _commandHandler;
 @synthesize dispatcher = _dispatcher;
 
 #pragma mark - UIViewController
 
 - (void)viewDidLoad {
+  self.styler.tableViewBackgroundColor = nil;
   [super viewDidLoad];
+  self.tableView.contentInset = UIEdgeInsetsMake(kPopupMenuVerticalInsets, 0,
+                                                 kPopupMenuVerticalInsets, 0);
+  self.tableView.scrollIndicatorInsets = UIEdgeInsetsMake(
+      kScrollIndicatorVerticalInsets, 0, kScrollIndicatorVerticalInsets, 0);
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.sectionHeaderHeight = 0;
-  self.tableView.sectionFooterHeight = 0;
+  self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+  // Adding a tableHeaderView is needed to prevent a wide inset on top of the
+  // collection.
+  self.tableView.tableHeaderView = [[UIView alloc]
+      initWithFrame:CGRectMake(0.0f, 0.0f, self.tableView.bounds.size.width,
+                               0.01f)];
 }
 
 - (void)setPopupMenuItems:
@@ -44,27 +62,61 @@ using base::UserMetricsAction;
       [self.tableViewModel addItem:item
            toSectionWithIdentifier:sectionIdentifier];
     }
+
+    if (section != items.count - 1) {
+      // Add a footer for all sections except the last one.
+      TableViewHeaderFooterItem* footer =
+          [[PopupMenuFooterItem alloc] initWithType:kItemTypeEnumZero];
+      [self.tableViewModel setFooter:footer
+            forSectionWithIdentifier:sectionIdentifier];
+    }
   }
   [self.tableView reloadData];
+}
+
+- (CGSize)preferredContentSize {
+  CGFloat width = 0;
+  CGFloat height = 0;
+  for (NSInteger section = 0; section < [self.tableViewModel numberOfSections];
+       section++) {
+    NSInteger sectionIdentifier =
+        [self.tableViewModel sectionIdentifierForSection:section];
+    for (TableViewItem<PopupMenuItem>* item in
+         [self.tableViewModel itemsInSectionWithIdentifier:sectionIdentifier]) {
+      CGSize sizeForCell = [item cellSizeForWidth:self.view.bounds.size.width];
+      width = MAX(width, ceil(sizeForCell.width));
+      height += ceil(sizeForCell.height);
+    }
+  }
+  height +=
+      self.tableView.contentInset.top + self.tableView.contentInset.bottom;
+  return CGSizeMake(width, height);
 }
 
 #pragma mark - UITableViewDelegate
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  TableViewItem<PopupMenuItem>* item =
-      [self.tableViewModel itemAtIndexPath:indexPath];
   UIView* cell = [self.tableView cellForRowAtIndexPath:indexPath];
   CGPoint center = [cell convertPoint:cell.center toView:nil];
-  [self executeActionForIdentifier:item.actionIdentifier origin:center];
+  [self executeActionForItem:[self.tableViewModel itemAtIndexPath:indexPath]
+                      origin:center];
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForFooterInSection:(NSInteger)section {
+  if (section == self.tableViewModel.numberOfSections - 1)
+    return 0;
+  return kFooterHeight;
 }
 
 #pragma mark - Private
 
 // Executes the action associated with |identifier|, using |origin| as the point
 // of origin of the action if one is needed.
-- (void)executeActionForIdentifier:(PopupMenuAction)identifier
-                            origin:(CGPoint)origin {
+- (void)executeActionForItem:(TableViewItem<PopupMenuItem>*)item
+                      origin:(CGPoint)origin {
+  NSInteger identifier = item.actionIdentifier;
   switch (identifier) {
     case PopupMenuActionReload:
       base::RecordAction(UserMetricsAction("MobileMenuReload"));
@@ -87,7 +139,16 @@ using base::UserMetricsAction;
                                                       originPoint:origin]];
       break;
     case PopupMenuActionReadLater:
-      // TODO(crbug.com/822703): Add metric and action.
+      base::RecordAction(UserMetricsAction("MobileMenuReadLater"));
+      [self.commandHandler readPageLater];
+      break;
+    case PopupMenuActionPageBookmark:
+      base::RecordAction(UserMetricsAction("MobileMenuAddToBookmarks"));
+      [self.dispatcher bookmarkPage];
+      break;
+    case PopupMenuActionFindInPage:
+      base::RecordAction(UserMetricsAction("MobileMenuFindInPage"));
+      [self.dispatcher showFindInPage];
       break;
     case PopupMenuActionRequestDesktop:
       base::RecordAction(UserMetricsAction("MobileMenuRequestDesktopSite"));
@@ -98,11 +159,17 @@ using base::UserMetricsAction;
       [self.dispatcher requestMobileSite];
       break;
     case PopupMenuActionSiteInformation:
-      // TODO(crbug.com/822703): Add metric and action.
+      base::RecordAction(UserMetricsAction("MobileMenuSiteInformation"));
+      [self.dispatcher
+          showPageInfoForOriginPoint:self.baseViewController.view.center];
       break;
     case PopupMenuActionReportIssue:
       base::RecordAction(UserMetricsAction("MobileMenuReportAnIssue"));
-      // TODO(crbug.com/822703): Add action.
+      [self.dispatcher
+          showReportAnIssueFromViewController:self.baseViewController];
+      // Dismisses the popup menu without animation to allow the snapshot to be
+      // taken without the menu presented.
+      [self.dispatcher dismissPopupMenuAnimated:NO];
       break;
     case PopupMenuActionHelp:
       base::RecordAction(UserMetricsAction("MobileMenuHelp"));
@@ -126,12 +193,24 @@ using base::UserMetricsAction;
       break;
     case PopupMenuActionSettings:
       base::RecordAction(UserMetricsAction("MobileMenuSettings"));
-      // TODO(crbug.com/822703): Add action.
+      [self.dispatcher showSettingsFromViewController:self.baseViewController];
+      break;
+    case PopupMenuActionCloseTab:
+      base::RecordAction(UserMetricsAction("MobileMenuCloseTab"));
+      [self.dispatcher closeCurrentTab];
+      break;
+    case PopupMenuActionCloseAllIncognitoTabs:
+      base::RecordAction(UserMetricsAction("MobileMenuCloseAllIncognitoTabs"));
+      [self.dispatcher closeAllIncognitoTabs];
+      break;
+    case PopupMenuActionNavigate:
+      // No metrics for this item.
+      [self.commandHandler navigateToPageForItem:item];
       break;
   }
 
   // Close the tools menu.
-  [self.dispatcher dismissPopupMenu];
+  [self.dispatcher dismissPopupMenuAnimated:YES];
 }
 
 @end

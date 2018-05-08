@@ -56,8 +56,7 @@ TouchExplorationManager::~TouchExplorationManager() {
   Shell::Get()->RemoveShellObserver(this);
 }
 
-void TouchExplorationManager::OnAccessibilityStatusChanged(
-    AccessibilityNotificationVisibility notify) {
+void TouchExplorationManager::OnAccessibilityStatusChanged() {
   UpdateTouchExplorationState();
 }
 
@@ -144,7 +143,7 @@ void TouchExplorationManager::ToggleSpokenFeedback() {
           return;
         GetA11yController()->SetSpokenFeedbackEnabled(
             !GetA11yController()->IsSpokenFeedbackEnabled(),
-            ash::A11Y_NOTIFICATION_SHOW);
+            A11Y_NOTIFICATION_SHOW);
       }));
 }
 

@@ -5,16 +5,17 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_WORKER_FETCH_CONTEXT_IMPL_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_WORKER_FETCH_CONTEXT_IMPL_H_
 
+#include "base/synchronization/waitable_event.h"
 #include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "third_party/WebKit/public/mojom/blob/blob_registry.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/platform/WebApplicationCacheHost.h"
-#include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
+#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/platform/web_application_cache_host.h"
+#include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "url/gurl.h"
 
 namespace IPC {
@@ -26,13 +27,15 @@ namespace content {
 class ResourceDispatcher;
 class ThreadSafeSender;
 class URLLoaderThrottleProvider;
+class WebSocketHandshakeThrottleProvider;
 
 // This class is used while fetching resource requests on workers (dedicated
 // worker and shared worker). This class is created on the main thread and
 // passed to the worker thread. This class is not used for service workers. For
 // service workers, ServiceWorkerFetchContextImpl class is used instead.
-class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
-                               public mojom::ServiceWorkerWorkerClient {
+class CONTENT_EXPORT WorkerFetchContextImpl
+    : public blink::WebWorkerFetchContext,
+      public mojom::ServiceWorkerWorkerClient {
  public:
   // |url_loader_factory_info| is a generic URLLoaderFactory that may
   // contain multiple URLLoader factories for different schemes internally,
@@ -49,10 +52,15 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
           url_loader_factory_info,
       std::unique_ptr<network::SharedURLLoaderFactoryInfo>
           direct_network_factory_info,
-      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider);
+      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider,
+      std::unique_ptr<WebSocketHandshakeThrottleProvider>
+          websocket_handshake_throttle_provider,
+      ThreadSafeSender* thread_safe_sender);
   ~WorkerFetchContextImpl() override;
 
   // blink::WebWorkerFetchContext implementation:
+  std::unique_ptr<blink::WebWorkerFetchContext> CloneForNestedWorker() override;
+  void SetTerminateSyncLoadEvent(base::WaitableEvent*) override;
   void InitializeOnWorkerThread() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   std::unique_ptr<blink::WebURLLoaderFactory> WrapURLLoaderFactory(
@@ -72,6 +80,8 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
       std::unique_ptr<blink::WebDocumentSubresourceFilter::Builder>) override;
   std::unique_ptr<blink::WebDocumentSubresourceFilter> TakeSubresourceFilter()
       override;
+  std::unique_ptr<blink::WebSocketHandshakeThrottle>
+  CreateWebSocketHandshakeThrottle() override;
 
   // mojom::ServiceWorkerWorkerClient implementation:
   void SetControllerServiceWorker(int64_t controller_version_id) override;
@@ -86,6 +96,9 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   // https://w3c.github.io/webappsec-secure-contexts/
   void set_is_secure_context(bool flag);
   void set_origin_url(const GURL& origin_url);
+
+  using RewriteURLFunction = blink::WebURL (*)(const std::string&, bool);
+  static void InstallRewriteURLFunction(RewriteURLFunction rewrite_url);
 
  private:
   class URLLoaderFactoryImpl;
@@ -151,11 +164,16 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   GURL origin_url_;
   int appcache_host_id_ = blink::WebApplicationCacheHost::kAppCacheNoHostId;
 
+  // This is owned by ThreadedMessagingProxyBase on the main thread.
+  base::WaitableEvent* terminate_sync_load_event_ = nullptr;
+
   // A weak ptr to blink::WebURLLoaderFactory which was created and passed to
   // Blink by CreateURLLoaderFactory().
   base::WeakPtr<URLLoaderFactoryImpl> url_loader_factory_;
 
   std::unique_ptr<URLLoaderThrottleProvider> throttle_provider_;
+  std::unique_ptr<WebSocketHandshakeThrottleProvider>
+      websocket_handshake_throttle_provider_;
 };
 
 }  // namespace content

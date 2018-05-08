@@ -10,8 +10,6 @@ import android.graphics.Bitmap;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.AttributeSet;
@@ -20,21 +18,23 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.ListMenuButton;
 import org.chromium.chrome.browser.widget.ListMenuButton.Item;
 import org.chromium.chrome.browser.widget.MaterialProgressBar;
 import org.chromium.chrome.browser.widget.ThumbnailProvider;
 import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.selection.SelectableItemView;
-import org.chromium.components.offline_items_collection.ContentId;
+import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
-import org.chromium.components.offline_items_collection.OfflineItemVisuals;
-import org.chromium.components.offline_items_collection.VisualsCallback;
 import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.ui.UiUtils;
 
@@ -82,7 +82,6 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
     private DownloadHistoryItemWrapper mItem;
     private int mIconResId;
     private int mIconSize;
-    private int mIconCornerRadius;
     private Bitmap mThumbnailBitmap;
 
     // Controls common to completed and in-progress downloads.
@@ -115,8 +114,6 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
         mIconBackgroundColorSelected =
                 ApiCompatibilityUtils.getColor(context.getResources(), R.color.google_grey_600);
         mIconSize = getResources().getDimensionPixelSize(R.dimen.list_item_start_icon_width);
-        mIconCornerRadius =
-                getResources().getDimensionPixelSize(R.dimen.list_item_start_icon_corner_radius);
         mCheckedIconForegroundColorList = DownloadUtils.getIconForegroundColorList(context);
 
         mIconBackgroundResId = R.drawable.list_item_icon_modern_bg;
@@ -204,6 +201,21 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
     }
 
     @Override
+    public boolean getThumbnail(Callback<Bitmap> callback) {
+        if (!mItem.isOfflinePage()) return false;
+        OfflineContentAggregatorFactory.forProfile(Profile.getLastUsedProfile())
+                .getVisualsForItem(((OfflineItem) mItem.getItem()).id, (id, visuals) -> {
+                    if (visuals == null) {
+                        callback.onResult(null);
+                    } else {
+                        callback.onResult(Bitmap.createScaledBitmap(
+                                visuals.icon, mIconSize, mIconSize, false));
+                    }
+                });
+        return true;
+    }
+
+    @Override
     public int getIconSize() {
         return mIconSize;
     }
@@ -235,9 +247,8 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
         // immediately if the thumbnail is cached or asynchronously if it has to be fetched from a
         // remote source.
         mThumbnailBitmap = null;
-        if (item.isOfflinePage()) {
-            requestVisualsFromProvider(item);
-        } else if (fileType == DownloadFilter.FILTER_IMAGE && item.isComplete()) {
+        if (item.isOfflinePage()
+                || (fileType == DownloadFilter.FILTER_IMAGE && item.isComplete())) {
             thumbnailProvider.getThumbnail(this);
         } else {
             // TODO(dfalcantara): Get thumbnails for audio and video files when possible.
@@ -314,18 +325,6 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
         updateIconView();
     }
 
-    private void requestVisualsFromProvider(DownloadHistoryItemWrapper item) {
-        item.requestVisualsFromProvider(new VisualsCallback() {
-            @Override
-            public void onVisualsAvailable(ContentId id, OfflineItemVisuals visuals) {
-                if (visuals == null) return;
-
-                mThumbnailBitmap = visuals.icon;
-                updateIconView();
-            }
-        });
-    }
-
     @Override
     public void onSelectionStateChange(List<DownloadHistoryItemWrapper> selectedItems) {
         super.onSelectionStateChange(selectedItems);
@@ -366,11 +365,10 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
             assert !mThumbnailBitmap.isRecycled();
             mIconView.setBackground(null);
             if (FeatureUtilities.isChromeModernDesignEnabled()) {
-                RoundedBitmapDrawable roundedIcon = RoundedBitmapDrawableFactory.create(
-                        getResources(),
-                        Bitmap.createScaledBitmap(mThumbnailBitmap, mIconSize, mIconSize, false));
-                roundedIcon.setCornerRadius(mIconCornerRadius);
-                mIconView.setImageDrawable(roundedIcon);
+                mIconView.setImageDrawable(ViewUtils.createRoundedBitmapDrawable(
+                        Bitmap.createScaledBitmap(mThumbnailBitmap, mIconSize, mIconSize, false),
+                        getResources().getDimensionPixelSize(
+                                R.dimen.list_item_start_icon_corner_radius)));
             } else {
                 mIconView.setImageBitmap(mThumbnailBitmap);
             }

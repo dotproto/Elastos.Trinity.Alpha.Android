@@ -26,10 +26,28 @@ class DEVICE_GEOLOCATION_EXPORT WifiPollingPolicy {
   static WifiPollingPolicy* Get();
   static bool IsInitialized();
 
-  // Calculates the new polling interval for wiFi scans, given the previous
+  // Calculates the new polling interval for wifi scans, given the previous
   // interval and whether the last scan produced new results.
   virtual void UpdatePollingInterval(bool scan_results_differ) = 0;
+
+  // Use InitialInterval to schedule the initial scan when the wifi data
+  // provider is first started. Returns the number of milliseconds before the
+  // initial scan should be performed. May return zero if the policy allows a
+  // scan to be performed immediately.
+  virtual int InitialInterval() = 0;
+
+  // Use PollingInterval to schedule a new scan after the previous scan results
+  // are available. Only use PollingInterval if WLAN hardware is available and
+  // can perform scans for nearby access points. If the current interval is
+  // complete, PollingInterval returns the duration for a new interval starting
+  // at the current time.
   virtual int PollingInterval() = 0;
+
+  // Use NoWifiInterval to schedule a new scan after the previous scan results
+  // are available. NoWifiInterval is typically shorter than PollingInterval
+  // and should not be used if wifi scanning is available in order to conserve
+  // power. If the current interval is complete, NoWifiInterval returns the
+  // duration for a new interval starting at the current time.
   virtual int NoWifiInterval() = 0;
 
  protected:
@@ -47,7 +65,7 @@ template <int DEFAULT_INTERVAL,
           int NO_WIFI_INTERVAL>
 class GenericWifiPollingPolicy : public WifiPollingPolicy {
  public:
-  GenericWifiPollingPolicy() : polling_interval_(DEFAULT_INTERVAL) {}
+  GenericWifiPollingPolicy() = default;
 
   // WifiPollingPolicy
   void UpdatePollingInterval(bool scan_results_differ) override {
@@ -61,37 +79,57 @@ class GenericWifiPollingPolicy : public WifiPollingPolicy {
       polling_interval_ = TWO_NO_CHANGE_INTERVAL;
     }
   }
-  int PollingInterval() override { return ComputeInterval(polling_interval_); }
-  int NoWifiInterval() override { return ComputeInterval(NO_WIFI_INTERVAL); }
+  int InitialInterval() override { return ComputeInterval(polling_interval_); }
+  int PollingInterval() override {
+    int interval = ComputeInterval(polling_interval_);
+    return interval <= 0 ? polling_interval_ : interval;
+  }
+  int NoWifiInterval() override {
+    int interval = ComputeInterval(NO_WIFI_INTERVAL);
+    return interval <= 0 ? NO_WIFI_INTERVAL : interval;
+  }
 
  private:
   int ComputeInterval(int polling_interval) {
     base::Time now = base::Time::Now();
 
     int64_t remaining_millis = 0;
-    if (!next_scan_.is_null()) {
+    if (!interval_start_.is_null()) {
+      // If the new interval duration differs from the initial duration, use the
+      // shorter duration.
+      if (polling_interval < interval_duration_)
+        interval_duration_ = polling_interval;
+
       // Compute the remaining duration of the current interval. If the interval
       // is not yet complete, we will schedule a scan to occur once it is.
-      base::TimeDelta remaining = next_scan_ - now;
+      base::TimeDelta remaining =
+          interval_start_ +
+          base::TimeDelta::FromMilliseconds(interval_duration_) - now;
       remaining_millis = remaining.InMilliseconds();
     }
 
-    // If the current interval is complete (or if this is our first scan), scan
-    // now and schedule the next scan to occur at |polling_interval|
-    // milliseconds into the future.
+    // If the current interval is complete (or if this is our first scan),
+    // start a new interval beginning now.
     if (remaining_millis <= 0) {
-      next_scan_ = now + base::TimeDelta::FromMilliseconds(polling_interval);
+      interval_start_ = now;
+      interval_duration_ = polling_interval;
       remaining_millis = 0;
     }
 
     return remaining_millis;
   }
 
-  int polling_interval_;
+  // The current duration of the polling interval. When wifi data is
+  // substantially the same from one scan to the next, this may be increased to
+  // reduce the frequency of wifi scanning.
+  int polling_interval_ = DEFAULT_INTERVAL;
 
-  // The scheduled time of the next scan, or a null value if no scan has
-  // occurred yet.
-  base::Time next_scan_;
+  // The start time for the most recent interval. Initialized to the "null" time
+  // value.
+  base::Time interval_start_;
+
+  // Duration for the interval starting at |interval_start_|.
+  int interval_duration_ = DEFAULT_INTERVAL;
 };
 
 }  // namespace device

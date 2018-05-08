@@ -71,6 +71,10 @@ public class ContextualSearchSelectionController {
     private float mX;
     private float mY;
 
+    // Additional tap info from Mojo.
+    int mFontSizeDips;
+    int mTextRunLength;
+
     // The time of the most last scroll activity, or 0 if none.
     private long mLastScrollTimeNs;
 
@@ -232,7 +236,8 @@ public class ContextualSearchSelectionController {
             return;
         }
 
-        if (selection == null || selection.isEmpty()) {
+        if (TextUtils.isEmpty(selection) && !TextUtils.isEmpty(mSelectedText)) {
+            mSelectedText = selection;
             mHandler.handleSelectionCleared();
             // When the user taps on the page it will place the caret in that position, which
             // will trigger a onSelectionChanged event with an empty string.
@@ -312,6 +317,8 @@ public class ContextualSearchSelectionController {
         mTapTimeNanoseconds = 0;
         mTapDurationMs = INVALID_DURATION;
         mDidExpandSelection = false;
+        mFontSizeDips = 0;
+        mTextRunLength = 0;
     }
 
     /**
@@ -336,8 +343,10 @@ public class ContextualSearchSelectionController {
      * Handles an unhandled tap gesture.
      * @param x The x coordinate in px.
      * @param y The y coordinate in px.
+     * @param fontSizeDips The font size in DPs.
+     * @param textRunLength The run-length of the text of the tapped element.
      */
-    void handleShowUnhandledTapUIIfNeeded(int x, int y) {
+    void handleShowUnhandledTapUIIfNeeded(int x, int y, int fontSizeDips, int textRunLength) {
         mWasTapGestureDetected = false;
         // TODO(donnd): refactor to avoid needing a new handler API method as suggested by Pedro.
         if (mSelectionType != SelectionType.LONG_PRESS) {
@@ -349,6 +358,8 @@ public class ContextualSearchSelectionController {
             mSelectionType = SelectionType.TAP;
             mX = x;
             mY = y;
+            mFontSizeDips = fontSizeDips;
+            mTextRunLength = textRunLength;
             mHandler.handleValidTap();
         } else {
             // Long press; reset last tap state.
@@ -373,8 +384,9 @@ public class ContextualSearchSelectionController {
 
         // TODO(donnd): Remove tap counters.
         if (mTapDurationMs == INVALID_DURATION) mTapDurationMs = DEFAULT_DURATION;
-        TapSuppressionHeuristics tapHeuristics = new TapSuppressionHeuristics(this, mLastTapState,
-                x, y, contextualSearchContext, mTapDurationMs, mWasSelectionEmptyBeforeTap);
+        TapSuppressionHeuristics tapHeuristics =
+                new TapSuppressionHeuristics(this, mLastTapState, x, y, contextualSearchContext,
+                        mTapDurationMs, mWasSelectionEmptyBeforeTap, mFontSizeDips, mTextRunLength);
         // TODO(donnd): Move to be called when the panel closes to work with states that change.
         tapHeuristics.logConditionState();
 

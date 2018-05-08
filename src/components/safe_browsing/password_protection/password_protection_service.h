@@ -21,7 +21,8 @@
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "components/sessions/core/session_id.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
 namespace content {
@@ -78,6 +79,11 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
     MATCHED_ENTERPRISE_WHITELIST = 15,
     MATCHED_ENTERPRISE_CHANGE_PASSWORD_URL = 16,
     MATCHED_ENTERPRISE_LOGIN_URL = 17,
+    // No request is ever sent if the admin configures password protection to
+    // warn on ALL password reuses (rather than just phishing sites).
+    PASSWORD_ALERT_MODE = 18,
+    // No request is event sent if the admin turns off password protection.
+    TURNED_OFF_BY_ADMIN = 19,
     MAX_OUTCOME
   };
 
@@ -114,7 +120,7 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 
   PasswordProtectionService(
       const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
-      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       history::HistoryService* history_service,
       HostContentSettingsMap* host_content_settings_map);
 
@@ -202,9 +208,6 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
                             WarningUIType ui_type,
                             WarningAction action) = 0;
 
-  // If we want to show softer warnings based on Finch parameters.
-  static bool ShouldShowSofterWarning();
-
   virtual void UpdateSecurityState(safe_browsing::SBThreatType threat_type,
                                    content::WebContents* web_contents) = 0;
 
@@ -241,16 +244,27 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
       const GURL& url,
       RequestOutcome* reason) const = 0;
 
+  // Called when password reuse warning or phishing reuse warning is shown.
+  // Must be called on UI thread.
+  virtual void OnPolicySpecifiedPasswordReuseDetected(const GURL& url,
+                                                      bool is_phishing_url) = 0;
+
+  // Called when a protected password change is detected. Must be called on
+  // UI thread.
+  virtual void OnPolicySpecifiedPasswordChanged() = 0;
+
  protected:
   friend class PasswordProtectionRequest;
 
   // Chrome can send password protection ping if it is allowed by Finch config
   // and if Safe Browsing can compute reputation of |main_frame_url| (e.g.
   // Safe Browsing is not able to compute reputation of a private IP or
-  // a local host). |matches_sync_password| is used for UMA metric recording.
+  // a local host). Update |reason| if sending ping is not allowed.
+  // |matches_sync_password| is used for UMA metric recording.
   bool CanSendPing(LoginReputationClientRequest::TriggerType trigger_type,
                    const GURL& main_frame_url,
-                   bool matches_sync_password);
+                   bool matches_sync_password,
+                   RequestOutcome* reason);
 
   // Called by a PasswordProtectionRequest instance when it finishes to remove
   // itself from |requests_|.
@@ -268,8 +282,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual int GetStoredVerdictCount(
       LoginReputationClientRequest::TriggerType trigger_type);
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter() {
-    return request_context_getter_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory() {
+    return url_loader_factory_;
   }
 
   // Returns the URL where PasswordProtectionRequest instances send requests.
@@ -282,7 +296,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // info into |frame|.
   virtual void FillReferrerChain(
       const GURL& event_url,
-      int event_tab_id,  // -1 if tab id is not available.
+      SessionID
+          event_tab_id,  // SessionID::InvalidValue() if tab not available.
       LoginReputationClientRequest::Frame* frame) = 0;
 
   void FillUserPopulation(
@@ -402,7 +417,7 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // The context we use to issue network requests. This request_context_getter
   // is obtained from SafeBrowsingService so that we can use the Safe Browsing
   // cookie store.
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Set of pending PasswordProtectionRequests that are still waiting for
   // verdict.

@@ -12,14 +12,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/common/media/media_devices.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/media/stream/user_media_processor.h"
-#include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
-#include "third_party/WebKit/public/web/WebApplyConstraintsRequest.h"
-#include "third_party/WebKit/public/web/WebUserMediaClient.h"
-#include "third_party/WebKit/public/web/WebUserMediaRequest.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/web/web_apply_constraints_request.h"
+#include "third_party/blink/public/web/web_user_media_client.h"
+#include "third_party/blink/public/web/web_user_media_request.h"
 
 namespace content {
 
@@ -38,11 +39,13 @@ class CONTENT_EXPORT UserMediaClientImpl : public RenderFrameObserver,
   // the free store. http://crbug.com/764293
   // |render_frame| and |dependency_factory| must outlive this instance.
   UserMediaClientImpl(
-      RenderFrame* render_frame,
+      RenderFrameImpl* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
-      std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer);
-  UserMediaClientImpl(RenderFrame* render_frame,
-                      std::unique_ptr<UserMediaProcessor> user_media_processor);
+      std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+  UserMediaClientImpl(RenderFrameImpl* render_frame,
+                      std::unique_ptr<UserMediaProcessor> user_media_processor,
+                      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~UserMediaClientImpl() override;
 
   MediaStreamDeviceObserver* media_stream_device_observer() const {

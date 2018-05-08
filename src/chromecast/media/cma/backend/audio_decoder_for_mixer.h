@@ -28,7 +28,6 @@ class AudioRendererAlgorithm;
 
 namespace chromecast {
 namespace media {
-class AvSync;
 class DecoderBufferBase;
 class MediaPipelineBackendForMixer;
 
@@ -41,14 +40,13 @@ class AudioDecoderForMixer : public MediaPipelineBackend::AudioDecoder,
   explicit AudioDecoderForMixer(MediaPipelineBackendForMixer* backend);
   ~AudioDecoderForMixer() override;
 
-  void Initialize();
-  bool Start(int64_t start_pts);
-  void Stop();
-  bool Pause();
-  bool Resume();
-  bool SetPlaybackRate(float rate);
-
-  int64_t GetCurrentPts() const;
+  virtual void Initialize();
+  virtual bool Start(int64_t timestamp);
+  virtual void Stop();
+  virtual bool Pause();
+  virtual bool Resume();
+  virtual float SetPlaybackRate(float rate);
+  virtual int64_t GetCurrentPts() const;
 
   // MediaPipelineBackend::AudioDecoder implementation:
   void SetDelegate(MediaPipelineBackend::Decoder::Delegate* delegate) override;
@@ -59,6 +57,9 @@ class AudioDecoderForMixer : public MediaPipelineBackend::AudioDecoder,
   RenderingDelay GetRenderingDelay() override;
 
  private:
+  friend class MockAudioDecoderForMixer;
+  friend class AvSyncTest;
+
   struct RateShifterInfo {
     explicit RateShifterInfo(float playback_rate);
 
@@ -86,7 +87,6 @@ class AudioDecoderForMixer : public MediaPipelineBackend::AudioDecoder,
   bool BypassDecoder() const;
   bool ShouldStartClock() const;
   void UpdateStatistics(Statistics delta);
-  void WritePcmWrapper(const scoped_refptr<DecoderBufferBase>& buffer);
 
   MediaPipelineBackendForMixer* const backend_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -120,7 +120,7 @@ class AudioDecoderForMixer : public MediaPipelineBackend::AudioDecoder,
 
   scoped_refptr<::media::AudioBufferMemoryPool> pool_;
 
-  std::unique_ptr<AvSync> av_sync_;
+  int64_t playback_start_timestamp_ = 0;
 
   base::WeakPtrFactory<AudioDecoderForMixer> weak_factory_;
 

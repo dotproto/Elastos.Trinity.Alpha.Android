@@ -130,11 +130,24 @@ const char kVSyncInterval[] = "vsync-interval";
 // resolution is high enough).  Otherwise, cast_shell defaults to 720p.
 const char kDesktopWindow1080p[] = "desktop-window-1080p";
 
+// When present overrides the screen resolution used by CanDisplayType API,
+// instead of using the values obtained from avsettings.
+const char kForceMediaResolutionHeight[] = "force-media-resolution-height";
+const char kForceMediaResolutionWidth[] = "force-media-resolution-width";
+
 // Enables input event handling by the window manager.
 const char kEnableInput[] = "enable-input";
 
 // Background color used when Chromium hasn't rendered anything yet.
 const char kCastAppBackgroundColor[] = "cast-app-background-color";
+
+// The number of pixels from the very left or right of the screen to consider as
+// a valid origin for the left or right swipe gesture.
+const char kSystemGestureStartWidth[] = "system-gesture-start-width";
+
+// The number of pixels from the very top or bottom of the screen to consider as
+// a valid origin for the top or bottom swipe gesture.
+const char kSystemGestureStartHeight[] = "system-gesture-start-height";
 
 }  // namespace switches
 
@@ -188,6 +201,23 @@ int GetSwitchValueNonNegativeInt(const std::string& switch_name,
     return default_value;
   }
   return value;
+}
+
+double GetSwitchValueDouble(const std::string& switch_name,
+                            const double default_value) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switch_name)) {
+    return default_value;
+  }
+
+  double arg_value;
+  if (!base::StringToDouble(command_line->GetSwitchValueASCII(switch_name),
+                            &arg_value)) {
+    LOG(DFATAL) << "--" << switch_name << " only accepts numbers as arguments";
+    return default_value;
+  }
+  return arg_value;
 }
 
 uint32_t GetSwitchValueColor(const std::string& switch_name,

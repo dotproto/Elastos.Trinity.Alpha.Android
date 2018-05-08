@@ -6,17 +6,22 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/discardable_memory.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -49,8 +54,8 @@
 #include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/web_main_thread_scheduler.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/buffer_format_util.h"
 
@@ -127,9 +132,13 @@ class RenderThreadImplForTest : public RenderThreadImpl {
  public:
   RenderThreadImplForTest(
       const InProcessChildThreadParams& params,
-      std::unique_ptr<blink::scheduler::RendererScheduler> scheduler,
-      scoped_refptr<base::SingleThreadTaskRunner>& test_task_counter)
-      : RenderThreadImpl(params, std::move(scheduler), test_task_counter) {}
+      std::unique_ptr<blink::scheduler::WebMainThreadScheduler> scheduler,
+      scoped_refptr<base::SingleThreadTaskRunner>& test_task_counter,
+      base::MessageLoop* unowned_message_loop)
+      : RenderThreadImpl(params,
+                         std::move(scheduler),
+                         test_task_counter,
+                         unowned_message_loop) {}
 
   ~RenderThreadImplForTest() override {}
 };
@@ -166,12 +175,34 @@ class QuitOnTestMsgFilter : public IPC::MessageFilter {
 
 class RenderThreadImplBrowserTest : public testing::Test {
  public:
+  // Managing our own main MessageLoop also forces us to manage our own
+  // TaskScheduler. This ensures a basic TaskScheduler is in scope during this
+  // test.
+  class TestTaskScheduler {
+   public:
+    TestTaskScheduler() {
+      base::TaskScheduler::CreateAndStartWithDefaultParams(
+          "RenderThreadImplBrowserTest");
+    }
+
+    ~TestTaskScheduler() {
+      base::TaskScheduler::GetInstance()->Shutdown();
+      base::TaskScheduler::GetInstance()->JoinForTesting();
+      base::TaskScheduler::SetInstance(nullptr);
+    }
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(TestTaskScheduler);
+  };
+
   RenderThreadImplBrowserTest() : field_trial_list_(nullptr) {}
 
   void SetUp() override {
     content_renderer_client_.reset(new ContentRendererClient());
     SetRendererClientForTesting(content_renderer_client_.get());
 
+    main_message_loop_.reset(new base::MessageLoop(base::MessageLoop::TYPE_IO));
+    test_task_scheduler_.reset(new TestTaskScheduler);
     browser_threads_.reset(
         new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP));
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
@@ -217,8 +248,9 @@ class RenderThreadImplBrowserTest : public testing::Test {
     // in RenderThreadImpl::Init().
     cmd->AppendSwitch(switches::kIgnoreGpuBlacklist);
 
-    std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler =
-        blink::scheduler::RendererScheduler::Create();
+    std::unique_ptr<blink::scheduler::WebMainThreadScheduler>
+        main_thread_scheduler =
+            blink::scheduler::WebMainThreadScheduler::Create();
     scoped_refptr<base::SingleThreadTaskRunner> test_task_counter(
         test_task_counter_.get());
 
@@ -227,7 +259,8 @@ class RenderThreadImplBrowserTest : public testing::Test {
     thread_ = new RenderThreadImplForTest(
         InProcessChildThreadParams(io_task_runner, &invitation,
                                    child_connection_->service_token()),
-        std::move(renderer_scheduler), test_task_counter);
+        std::move(main_thread_scheduler), test_task_counter,
+        main_message_loop_.get());
     cmd->InitFromArgv(old_argv);
 
     run_loop_ = std::make_unique<base::RunLoop>();
@@ -247,12 +280,15 @@ class RenderThreadImplBrowserTest : public testing::Test {
     }
   }
 
+ protected:
   IPC::Sender* sender() { return channel_.get(); }
 
   scoped_refptr<TestTaskCounter> test_task_counter_;
   TestContentClientInitializer content_client_initializer_;
   std::unique_ptr<ContentRendererClient> content_renderer_client_;
 
+  std::unique_ptr<base::MessageLoop> main_message_loop_;
+  std::unique_ptr<TestTaskScheduler> test_task_scheduler_;
   std::unique_ptr<TestBrowserThreadBundle> browser_threads_;
   std::unique_ptr<TestServiceManagerContext> shell_context_;
   std::unique_ptr<ChildConnection> child_connection_;
@@ -266,22 +302,10 @@ class RenderThreadImplBrowserTest : public testing::Test {
   base::FieldTrialList field_trial_list_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
-};
-
-class RenderThreadImplMojoInputMessagesDisabledBrowserTest
-    : public RenderThreadImplBrowserTest {
- public:
-  RenderThreadImplMojoInputMessagesDisabledBrowserTest() {
-    feature_list_.InitAndDisableFeature(features::kMojoInputMessages);
-  }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
+  DISALLOW_COPY_AND_ASSIGN(RenderThreadImplBrowserTest);
 };
-
-void CheckRenderThreadInputHandlerManager(RenderThreadImpl* thread) {
-  ASSERT_TRUE(thread->input_handler_manager());
-}
 
 // Check that InputHandlerManager outlives compositor thread because it uses
 // raw pointers to post tasks.
@@ -294,14 +318,6 @@ void CheckRenderThreadInputHandlerManager(RenderThreadImpl* thread) {
 #define MAYBE_InputHandlerManagerDestroyedAfterCompositorThread \
   InputHandlerManagerDestroyedAfterCompositorThread
 #endif
-TEST_F(RenderThreadImplMojoInputMessagesDisabledBrowserTest,
-       WILL_LEAK(MAYBE_InputHandlerManagerDestroyedAfterCompositorThread)) {
-  ASSERT_TRUE(thread_->input_handler_manager());
-
-  thread_->compositor_task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CheckRenderThreadInputHandlerManager, thread_));
-}
 
 // Disabled under LeakSanitizer due to memory leaks.
 TEST_F(RenderThreadImplBrowserTest,

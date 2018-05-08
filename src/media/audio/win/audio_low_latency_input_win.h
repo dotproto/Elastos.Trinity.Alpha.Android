@@ -144,6 +144,17 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   // AudioConverter::InputCallback implementation.
   double ProvideInput(AudioBus* audio_bus, uint32_t frames_delayed) override;
 
+  // Reports delay stats based on |capture_time|. Detects and counts glitches
+  // based on |frames_in_buffer|, |discontinuity_flagged|, and
+  // |device_position|.
+  void ReportDelayStatsAndUpdateGlitchCount(UINT32 frames_in_buffer,
+                                            bool discontinuity_flagged,
+                                            UINT64 device_position,
+                                            base::TimeTicks capture_time);
+
+  // Reports glitch stats and resets associated variables.
+  void ReportAndResetGlitchStats();
+
   // Used to track down where we fail during initialization which at the
   // moment seems to be happening frequently and we're not sure why.
   // The reason might be expected (e.g. trying to open "default" on a machine
@@ -234,6 +245,11 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   // from a capture endpoint buffer.
   Microsoft::WRL::ComPtr<IAudioCaptureClient> audio_capture_client_;
 
+  // The IAudioClock interface is used to get the current timestamp, as the
+  // timestamp from IAudioCaptureClient::GetBuffer can be unreliable with some
+  // devices.
+  Microsoft::WRL::ComPtr<IAudioClock> audio_clock_;
+
   // The ISimpleAudioVolume interface enables a client to control the
   // master volume level of an audio session.
   // The volume-level is a value in the range 0.0 to 1.0.
@@ -268,6 +284,15 @@ class MEDIA_EXPORT WASAPIAudioInputStream
 
   // Callback to send log messages.
   AudioManager::LogCallback log_callback_;
+
+  // For detecting and reporting glitches.
+  UINT64 expected_next_device_position_ = 0;
+  int total_glitches_ = 0;
+  int total_device_position_less_than_expected_ = 0;
+  int total_discontinuities_ = 0;
+  int total_concurrent_glitch_and_discontinuities_ = 0;
+  UINT64 total_lost_frames_ = 0;
+  UINT64 largest_glitch_frames_ = 0;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

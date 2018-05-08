@@ -26,7 +26,7 @@
 #include "content/public/browser/touch_selection_controller_client_manager.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
-#include "third_party/WebKit/public/platform/WebIntrinsicSizingInfo.h"
+#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -96,12 +96,14 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
+  void EnsureSurfaceSynchronizedForLayoutTest() override;
+  uint32_t GetCaptureSequenceNumber() const override;
   void Show() override;
   void Hide() override;
   bool IsShowing() override;
   gfx::Rect GetViewBounds() const override;
   gfx::Size GetVisibleViewportSize() const override;
-  gfx::Vector2dF GetLastScrollOffset() const override;
+  void SetInsets(const gfx::Insets& insets) override;
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void SetBackgroundColor(SkColor color) override;
@@ -110,6 +112,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   bool IsMouseLocked() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
   void SetWantsAnimateOnlyBeginFrames() override;
+  void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -160,6 +163,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const gfx::PointF& point) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
+  void OnRenderFrameMetadataChanged() override;
 
   bool IsRenderWidgetHostViewChildFrame() override;
 
@@ -180,9 +184,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
   void GetScreenInfo(ScreenInfo* screen_info) const override;
+  void EnableAutoResize(const gfx::Size& min_size,
+                        const gfx::Size& max_size) override;
+  void DisableAutoResize(const gfx::Size& new_size) override;
   viz::ScopedSurfaceIdAllocator ResizeDueToAutoResize(
       const gfx::Size& new_size,
-      uint64_t sequence_number) override;
+      const viz::LocalSurfaceId& local_surface_id) override;
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
@@ -251,10 +258,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   void ProcessFrameSwappedCallbacks();
 
-  // The last scroll offset of the view.
-  gfx::Vector2dF last_scroll_offset_;
-
-
   // The ID for FrameSink associated with this view.
   viz::FrameSinkId frame_sink_id_;
 
@@ -294,8 +297,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // using CSS.
   bool CanBecomeVisible();
 
-  void OnResizeDueToAutoResizeComplete(const gfx::Size& new_size,
-                                       uint64_t sequence_number);
+  void OnResizeDueToAutoResizeComplete(viz::LocalSurfaceId local_surface_id);
 
   std::vector<base::OnceClosure> frame_swapped_callbacks_;
 
@@ -309,6 +311,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // The background color of the widget.
   SkColor background_color_;
+
+  gfx::Insets insets_;
 
   std::unique_ptr<TouchSelectionControllerClientChildFrame>
       selection_controller_client_;

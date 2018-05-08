@@ -20,14 +20,14 @@
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
-#include "chrome/browser/chromeos/login/user_selection_screen_proxy.h"
+#include "chrome/browser/chromeos/login/user_board_view_mojo.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
@@ -46,10 +46,10 @@ ViewsScreenLocker::ViewsScreenLocker(ScreenLocker* screen_locker)
       version_info_updater_(this),
       weak_factory_(this) {
   LoginScreenClient::Get()->SetDelegate(this);
-  user_selection_screen_proxy_ = std::make_unique<UserSelectionScreenProxy>();
+  user_board_view_mojo_ = std::make_unique<UserBoardViewMojo>();
   user_selection_screen_ =
       std::make_unique<ChromeUserSelectionScreen>(kLockDisplay);
-  user_selection_screen_->SetView(user_selection_screen_proxy_.get());
+  user_selection_screen_->SetView(user_board_view_mojo_.get());
 
   allowed_input_methods_subscription_ =
       CrosSettings::Get()->AddSettingsObserver(
@@ -242,6 +242,13 @@ bool ViewsScreenLocker::HandleFocusLockScreenApps(bool reverse) {
 }
 
 void ViewsScreenLocker::HandleLoginAsGuest() {
+  NOTREACHED();
+}
+
+void ViewsScreenLocker::HandleLaunchPublicSession(
+    const AccountId& account_id,
+    const std::string& locale,
+    const std::string& input_method) {
   NOTREACHED();
 }
 

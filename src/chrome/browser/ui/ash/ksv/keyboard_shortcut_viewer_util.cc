@@ -5,13 +5,14 @@
 #include "chrome/browser/ui/ash/ksv/keyboard_shortcut_viewer_util.h"
 
 #include "ash/components/shortcut_viewer/views/keyboard_shortcut_view.h"
-#include "ash/wm/window_util.h"
+#include "ash/shell.h"
 
 namespace keyboard_shortcut_viewer_util {
 
 void ShowKeyboardShortcutViewer() {
+  // TODO(https://crbug.com/833673): Remove the dependency on aura::Window.
   keyboard_shortcut_viewer::KeyboardShortcutView::Show(
-      ash::wm::GetActiveWindow());
+      ash::Shell::GetRootWindowForNewWindows());
 }
 
 }  // namespace keyboard_shortcut_viewer_util

@@ -4,7 +4,6 @@
 
 #include "extensions/browser/extensions_test.h"
 
-#include "base/memory/ptr_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service_factory.h"
@@ -31,12 +30,12 @@ std::unique_ptr<content::TestBrowserContext> CreateTestIncognitoContext() {
 namespace extensions {
 
 ExtensionsTest::ExtensionsTest()
-    : rvh_test_enabler_(
-          std::make_unique<content::RenderViewHostTestEnabler>()) {}
+    : ExtensionsTest(content::TestBrowserThreadBundle::Options::DEFAULT) {}
 
 ExtensionsTest::ExtensionsTest(
-    std::unique_ptr<content::TestBrowserThreadBundle> thread_bundle)
-    : thread_bundle_(std::move(thread_bundle)),
+    content::TestBrowserThreadBundle::Options thread_options)
+    : thread_bundle_(
+          std::make_unique<content::TestBrowserThreadBundle>(thread_options)),
       rvh_test_enabler_(
           std::make_unique<content::RenderViewHostTestEnabler>()) {}
 

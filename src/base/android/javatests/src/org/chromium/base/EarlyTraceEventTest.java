@@ -4,6 +4,9 @@
 
 package org.chromium.base;
 
+import static org.chromium.base.EarlyTraceEvent.AsyncEvent;
+import static org.chromium.base.EarlyTraceEvent.Event;
+
 import android.os.Process;
 import android.support.test.filters.SmallTest;
 
@@ -11,8 +14,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import static org.chromium.base.EarlyTraceEvent.Event;
 
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
@@ -28,6 +29,8 @@ import org.chromium.base.test.util.Feature;
 public class EarlyTraceEventTest {
     private static final String EVENT_NAME = "MyEvent";
     private static final String EVENT_NAME2 = "MyOtherEvent";
+    private static final long EVENT_ID = 1;
+    private static final long EVENT_ID2 = 2;
 
     @Before
     public void setUp() throws Exception {
@@ -55,6 +58,44 @@ public class EarlyTraceEventTest {
                 beforeNanos <= event.mBeginTimeNanos && event.mBeginTimeNanos <= afterNanos);
         Assert.assertTrue(event.mBeginTimeNanos <= event.mEndTimeNanos);
         Assert.assertTrue(beforeNanos <= event.mEndTimeNanos && event.mEndTimeNanos <= afterNanos);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCanRecordAsyncEvent() {
+        EarlyTraceEvent.enable();
+        long beforeNanos = Event.elapsedRealtimeNanos();
+        EarlyTraceEvent.startAsync(EVENT_NAME, EVENT_ID);
+        EarlyTraceEvent.finishAsync(EVENT_NAME, EVENT_ID);
+        long afterNanos = Event.elapsedRealtimeNanos();
+
+        Assert.assertEquals(2, EarlyTraceEvent.sAsyncEvents.size());
+        Assert.assertTrue(EarlyTraceEvent.sPendingEvents.isEmpty());
+        AsyncEvent eventStart = EarlyTraceEvent.sAsyncEvents.get(0);
+        AsyncEvent eventEnd = EarlyTraceEvent.sAsyncEvents.get(1);
+        Assert.assertEquals(EVENT_NAME, eventStart.mName);
+        Assert.assertEquals(EVENT_ID, eventStart.mId);
+        Assert.assertEquals(EVENT_NAME, eventEnd.mName);
+        Assert.assertEquals(EVENT_ID, eventEnd.mId);
+        Assert.assertTrue(beforeNanos <= eventStart.mTimestampNanos
+                && eventEnd.mTimestampNanos <= afterNanos);
+        Assert.assertTrue(eventStart.mTimestampNanos <= eventEnd.mTimestampNanos);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testRecordAsyncFinishEventWhenFinishing() {
+        EarlyTraceEvent.enable();
+        EarlyTraceEvent.startAsync(EVENT_NAME, EVENT_ID);
+        EarlyTraceEvent.disable();
+
+        Assert.assertEquals(EarlyTraceEvent.STATE_FINISHING, EarlyTraceEvent.sState);
+        Assert.assertTrue(EarlyTraceEvent.sAsyncEvents.isEmpty());
+        Assert.assertEquals(1, EarlyTraceEvent.sPendingAsyncEvents.size());
+        EarlyTraceEvent.finishAsync(EVENT_NAME, EVENT_ID);
+        Assert.assertEquals(EarlyTraceEvent.STATE_FINISHED, EarlyTraceEvent.sState);
     }
 
     @Test
@@ -123,6 +164,15 @@ public class EarlyTraceEventTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
+    public void testIgnoreAsyncEventsWhenDisabled() {
+        EarlyTraceEvent.startAsync(EVENT_NAME, EVENT_ID);
+        EarlyTraceEvent.finishAsync(EVENT_NAME, EVENT_ID);
+        Assert.assertNull(EarlyTraceEvent.sAsyncEvents);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
     public void testIgnoreNewEventsWhenFinishing() {
         EarlyTraceEvent.enable();
         EarlyTraceEvent.begin(EVENT_NAME);
@@ -134,6 +184,21 @@ public class EarlyTraceEventTest {
 
         Assert.assertEquals(1, EarlyTraceEvent.sPendingEvents.size());
         Assert.assertTrue(EarlyTraceEvent.sCompletedEvents.isEmpty());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testIgnoreNewAsyncEventsWhenFinishing() {
+        EarlyTraceEvent.enable();
+        EarlyTraceEvent.startAsync(EVENT_NAME, EVENT_ID);
+        EarlyTraceEvent.disable();
+
+        Assert.assertEquals(EarlyTraceEvent.STATE_FINISHING, EarlyTraceEvent.sState);
+        EarlyTraceEvent.startAsync(EVENT_NAME2, EVENT_ID2);
+
+        Assert.assertEquals(1, EarlyTraceEvent.sPendingAsyncEvents.size());
+        Assert.assertTrue(EarlyTraceEvent.sAsyncEvents.isEmpty());
     }
 
     @Test

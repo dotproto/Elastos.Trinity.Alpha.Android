@@ -4,25 +4,17 @@
 
 #include "ipc/ipc_mojo_bootstrap.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
+#include <utility>
 
-#include "base/base_paths.h"
-#include "base/files/file.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "build/build_config.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_test_base.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/test/mojo_test_base.h"
 #include "mojo/edk/test/multiprocess_test_helper.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-
-#if defined(OS_POSIX)
-#include "base/file_descriptor_posix.h"
-#endif
 
 namespace {
 
@@ -64,7 +56,10 @@ class PeerPidReceiver : public IPC::mojom::Channel {
       MessageExpectation message_expectation = MessageExpectation::kNotExpected)
       : binding_(this, std::move(request)),
         on_peer_pid_set_(on_peer_pid_set),
-        message_expectation_(message_expectation) {}
+        message_expectation_(message_expectation) {
+    binding_.set_connection_error_handler(disconnect_run_loop_.QuitClosure());
+  }
+
   ~PeerPidReceiver() override {
     bool expected_message =
         message_expectation_ != MessageExpectation::kNotExpected;
@@ -96,13 +91,15 @@ class PeerPidReceiver : public IPC::mojom::Channel {
 
   int32_t peer_pid() const { return peer_pid_; }
 
+  void RunUntilDisconnect() { disconnect_run_loop_.Run(); }
+
  private:
   mojo::AssociatedBinding<IPC::mojom::Channel> binding_;
   const base::Closure on_peer_pid_set_;
   MessageExpectation message_expectation_;
   int32_t peer_pid_ = -1;
-
   bool received_message_ = false;
+  base::RunLoop disconnect_run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(PeerPidReceiver);
 };
@@ -130,27 +127,7 @@ TEST_F(IPCMojoBootstrapTest, Connect) {
 
   EXPECT_EQ(kTestClientPid, impl.peer_pid());
 
-  EXPECT_TRUE(helper_.WaitForChildTestShutdown());
-}
-
-// TODO(https://crbug.com/821254): Fix this test and re-enable it.
-TEST_F(IPCMojoBootstrapTest, DISABLED_ReceiveEmptyMessage) {
-  base::MessageLoop message_loop;
-  Connection connection(
-      IPC::MojoBootstrap::Create(
-          helper_.StartChild("IPCMojoBootstrapTestEmptyMessage"),
-          IPC::Channel::MODE_SERVER, base::ThreadTaskRunnerHandle::Get(),
-          base::ThreadTaskRunnerHandle::Get()),
-      kTestServerPid);
-
-  IPC::mojom::ChannelAssociatedRequest receiver;
-  connection.TakeReceiver(&receiver);
-
-  base::RunLoop run_loop;
-  PeerPidReceiver impl(std::move(receiver), run_loop.QuitClosure(),
-                       PeerPidReceiver::MessageExpectation::kExpectedInvalid);
-  run_loop.Run();
-
+  impl.RunUntilDisconnect();
   EXPECT_TRUE(helper_.WaitForChildTestShutdown());
 }
 
@@ -176,6 +153,30 @@ MULTIPROCESS_TEST_MAIN_WITH_SETUP(
   EXPECT_EQ(kTestServerPid, impl.peer_pid());
 
   return 0;
+}
+
+TEST_F(IPCMojoBootstrapTest, ReceiveEmptyMessage) {
+  base::MessageLoop message_loop;
+  Connection connection(
+      IPC::MojoBootstrap::Create(
+          helper_.StartChild("IPCMojoBootstrapTestEmptyMessage"),
+          IPC::Channel::MODE_SERVER, base::ThreadTaskRunnerHandle::Get(),
+          base::ThreadTaskRunnerHandle::Get()),
+      kTestServerPid);
+
+  IPC::mojom::ChannelAssociatedRequest receiver;
+  connection.TakeReceiver(&receiver);
+
+  base::RunLoop run_loop;
+  PeerPidReceiver impl(std::move(receiver), run_loop.QuitClosure(),
+                       PeerPidReceiver::MessageExpectation::kExpectedInvalid);
+  run_loop.Run();
+
+  // Wait for the Channel to be disconnected so we can reasonably assert that
+  // the child's empty message must have been received before we pass the test.
+  impl.RunUntilDisconnect();
+
+  EXPECT_TRUE(helper_.WaitForChildTestShutdown());
 }
 
 // A long running process that connects to us.

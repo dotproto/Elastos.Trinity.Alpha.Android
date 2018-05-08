@@ -11,6 +11,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -133,7 +134,8 @@ class MockFetcher : public URLFetcher {
       total_received_bytes = total_received_bytes_value->GetInt();
     result_listener->OnFetchComplete(
         GURL(final_url_value->GetString()), std::move(response_headers),
-        response_data_.c_str(), response_data_.size(), load_timing_info,
+        response_data_.c_str(), response_data_.size(),
+        scoped_refptr<net::IOBufferWithSize>(), load_timing_info,
         total_received_bytes);
   }
 
@@ -645,7 +647,7 @@ class ByteAtATimeUploadElementReader : public net::UploadElementReader {
     if (!BytesRemaining())
       return net::OK;
 
-    base::MessageLoop::current()->task_runner()->PostTask(
+    base::MessageLoopCurrent::Get()->task_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(&ByteAtATimeUploadElementReader::ReadImpl,
                        base::Unretained(this), base::WrapRefCounted(buf),

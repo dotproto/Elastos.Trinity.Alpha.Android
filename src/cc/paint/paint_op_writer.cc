@@ -11,17 +11,29 @@
 #include "cc/paint/paint_op_buffer_serializer.h"
 #include "cc/paint/paint_shader.h"
 #include "cc/paint/paint_typeface_transfer_cache_entry.h"
+#include "cc/paint/path_transfer_cache_entry.h"
 #include "cc/paint/transfer_cache_serialize_helper.h"
+#include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
 namespace {
-void TypefaceCataloger(SkTypeface* typeface, void* ctx) {
+const size_t kSkiaAlignment = 4u;
+
+sk_sp<SkData> TypefaceCataloger(SkTypeface* typeface, void* ctx) {
   static_cast<TransferCacheSerializeHelper*>(ctx)->AssertLocked(
       TransferCacheEntryType::kPaintTypeface, typeface->uniqueID());
+
+  uint32_t id = typeface->uniqueID();
+  return SkData::MakeWithCopy(&id, sizeof(uint32_t));
 }
+
+size_t RoundDownToAlignment(size_t bytes, size_t alignment) {
+  return bytes - (bytes & (alignment - 1));
+}
+
 }  // namespace
 
 // static
@@ -97,16 +109,28 @@ void PaintOpWriter::WriteSimple(const T& val) {
 void PaintOpWriter::WriteFlattenable(const SkFlattenable* val) {
   DCHECK(SkIsAlign4(reinterpret_cast<uintptr_t>(memory_)))
       << "Flattenable must start writing at 4 byte alignment.";
-
   if (!val) {
     WriteSize(static_cast<size_t>(0u));
     return;
   }
 
-  sk_sp<SkData> data = val->serialize();
-  WriteSize(data->size());
-  if (!data->isEmpty())
-    WriteData(data->size(), data->data());
+  size_t size_offset = sizeof(size_t);
+  EnsureBytes(size_offset);
+  if (!valid_)
+    return;
+  char* size_memory = memory_;
+  memory_ += size_offset;
+  remaining_bytes_ -= size_offset;
+
+  size_t bytes_written = val->serialize(
+      memory_, RoundDownToAlignment(remaining_bytes_, kSkiaAlignment));
+  if (bytes_written == 0u) {
+    valid_ = false;
+    return;
+  }
+  reinterpret_cast<size_t*>(size_memory)[0] = bytes_written;
+  memory_ += bytes_written;
+  remaining_bytes_ -= bytes_written;
 }
 
 void PaintOpWriter::WriteSize(size_t size) {
@@ -146,16 +170,13 @@ void PaintOpWriter::Write(const SkRRect& rect) {
 }
 
 void PaintOpWriter::Write(const SkPath& path) {
-  AlignMemory(4);
-  size_t bytes = path.writeToMemory(nullptr);
-  EnsureBytes(bytes);
-  if (!valid_)
-    return;
-
-  size_t bytes_written = path.writeToMemory(memory_);
-  DCHECK_LE(bytes_written, bytes);
-  memory_ += bytes;
-  remaining_bytes_ -= bytes;
+  auto id = path.getGenerationID();
+  auto locked = transfer_cache_->LockEntry(TransferCacheEntryType::kPath, id);
+  if (!locked) {
+    transfer_cache_->CreateEntry(ClientPathTransferCacheEntry(path));
+    transfer_cache_->AssertLocked(TransferCacheEntryType::kPath, id);
+  }
+  Write(id);
 }
 
 void PaintOpWriter::Write(const PaintFlags& flags) {
@@ -250,13 +271,28 @@ void PaintOpWriter::Write(const SkColorSpace* color_space) {
 }
 
 void PaintOpWriter::Write(const sk_sp<SkTextBlob>& blob) {
-  // TODO(khushalsagar): Change skia API to serialize directly into shared mem.
-  auto data = blob->serialize(&TypefaceCataloger, transfer_cache_);
-  DCHECK(data);
-  DCHECK_GT(data->size(), 0u);
+  DCHECK(blob);
 
-  WriteSize(data->size());
-  WriteData(data->size(), data->data());
+  size_t size_offset = sizeof(size_t);
+  EnsureBytes(size_offset);
+  if (!valid_)
+    return;
+
+  char* size_memory = memory_;
+  memory_ += size_offset;
+  remaining_bytes_ -= size_offset;
+  SkSerialProcs procs;
+  procs.fTypefaceProc = &TypefaceCataloger;
+  procs.fTypefaceCtx = transfer_cache_;
+  size_t bytes_written = blob->serialize(
+      procs, memory_, RoundDownToAlignment(remaining_bytes_, kSkiaAlignment));
+  if (bytes_written == 0u) {
+    valid_ = false;
+    return;
+  }
+  reinterpret_cast<size_t*>(size_memory)[0] = bytes_written;
+  memory_ += bytes_written;
+  remaining_bytes_ -= bytes_written;
 }
 
 void PaintOpWriter::Write(const scoped_refptr<PaintTextBlob>& blob) {

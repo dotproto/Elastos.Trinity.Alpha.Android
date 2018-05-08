@@ -85,6 +85,7 @@ class OmniboxViewViews : public OmniboxView,
   void ResetTabState(content::WebContents* web_contents);
 
   // OmniboxView:
+  void EmphasizeURLComponents() override;
   void Update() override;
   base::string16 GetText() const override;
   using OmniboxView::SetUserText;
@@ -102,7 +103,6 @@ class OmniboxViewViews : public OmniboxView,
   // views::Textfield:
   gfx::Size GetMinimumSize() const override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void ExecuteCommand(int command_id, int event_flags) override;
   ui::TextInputType GetTextInputType() const override;
   void AddedToWidget() override;
@@ -121,6 +121,22 @@ class OmniboxViewViews : public OmniboxView,
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, OnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, DoNotNavigateOnDrop);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           FirstMouseClickFocusesOnly);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           NegligibleDragKeepsElisions);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           CaretPlacementByMouse);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           MouseDoubleClick);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           MouseTripleClick);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           MouseClickDrag);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsSteadyStateElisionsTest,
+                           MouseDoubleClickDrag);
+  friend class OmniboxViewViewsTest;
+  friend class OmniboxViewViewsSteadyStateElisionsTest;
 
   // Update the field with |text| and set the selection.
   void SetTextAndSelectedRange(const base::string16& text,
@@ -173,8 +189,8 @@ class OmniboxViewViews : public OmniboxView,
   int GetWidth() const override;
   bool IsImeShowingPopup() const override;
   void ShowImeIfNeeded() override;
+  void HideImeIfNeeded() override;
   int GetOmniboxTextLength() const override;
-  void EmphasizeURLComponents() override;
   void SetEmphasis(bool emphasize, const gfx::Range& range) override;
   void UpdateSchemeStyle(const gfx::Range& range) override;
 

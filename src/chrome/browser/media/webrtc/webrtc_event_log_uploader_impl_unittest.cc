@@ -37,7 +37,7 @@ class MockWebRtcEventLogUploaderObserver
   // Combines the mock functionality via a helper (CompletionCallback), as well
   // as calls the completion closure.
   void OnWebRtcEventLogUploadComplete(const base::FilePath& log_file,
-                                      bool upload_successful) {
+                                      bool upload_successful) override {
     CompletionCallback(log_file, upload_successful);
     std::move(completion_closure_).Run();
   }
@@ -133,7 +133,7 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
             [](WebRtcEventLogUploaderImplTest* test,
                size_t max_log_size_bytes) {
               test->uploader_ =
-                  test->uploader_factory_.CreateWithCurstomMaxSizeForTesting(
+                  test->uploader_factory_.CreateWithCustomMaxSizeForTesting(
                       test->log_file_, &test->observer_, max_log_size_bytes);
             },
             base::Unretained(this), max_log_size_bytes));

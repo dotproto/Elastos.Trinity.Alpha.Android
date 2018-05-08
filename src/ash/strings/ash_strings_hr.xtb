@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Pokretač</translation>
 <translation id="1525508553941733066">ODBACI</translation>
+<translation id="1537254971476575106">Povećalo za cijeli zaslon</translation>
 <translation id="15373452373711364">Veliki pokazivač miša</translation>
 <translation id="1550523713251050646">Kliknite za više opcija</translation>
 <translation id="1567387640189251553">Nakon vašeg posljednjeg unosa zaporke povezana je neka druga tipkovnica. Možda pokušava ukrasti podatke o pritisnutim tipkama.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Vaša zaporka i dalje nije mogla biti potvrđena. Napomena: ako ste nedavno promijenili zaporku, vaša nova zaporka primjenjivat će se nakon što se odjavite. Ovdje upotrijebite staru zaporku.</translation>
 <translation id="1677472565718498478">Još <ph name="TIME" /></translation>
 <translation id="1698760176351776263">IPv6 adresa: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Administrator uređaja možda će moći nadzirati vašu aktivnost.</translation>
 <translation id="1734367976349034509">Ovim uređajem upravlja tvrtka</translation>
 <translation id="1746730358044914197">Načine unosa konfigurira administrator.</translation>
 <translation id="1747827819627189109">Tipkovnica na zaslonu omogućena je</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Gumb dodatnog izbornika</translation>
 <translation id="1951012854035635156">Asistent</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Postavite jezik</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Isključi</translation>
 <translation id="2012624427112548395">Ctrl + Search + H</translation>
 <translation id="2049639323467105390">Ovim uređajem upravlja <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Portret</translation>
 <translation id="2067602449040652523">Svjetlina tipkovnice</translation>
+<translation id="2081529251031312395">Korisnik $1 može se prijaviti i kasnije.</translation>
 <translation id="2122028596993374965">Zaustavi emitiranje kartice <ph name="TAB_NAME" /> na prijamniku <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Punjač male snage</translation>
+<translation id="2135456203358955318">Usidreno povećalo</translation>
 <translation id="2144487987174258011">Ponovno pokrenite da biste ažurirali Adobe Flash Player</translation>
-<translation id="2191905770366256395">Potrebno je kritično ažuriranje za vašu odvojivu tipkovnicu</translation>
 <translation id="2208323208084708176">Način jedinstvene radne površine</translation>
 <translation id="2220572644011485463">PIN ili zaporka</translation>
 <translation id="225680501294068881">Pretraživanje uređaja...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Skala prikaza</translation>
 <translation id="2303600792989757991">Prebaci na prozor pregleda</translation>
 <translation id="2338501278241028356">Uključite Bluetooth da biste otkrili uređaje u blizini</translation>
+<translation id="2339073806695260576">Dodirnite gumb pisaljke na polici da biste napisali bilješku, izradili snimku zaslona, upotrijebili laserski pokazivač ili povećalo.</translation>
 <translation id="2351266942280602854">Jezik i unos</translation>
 <translation id="2352467521400612932">Postavke pisaljke</translation>
 <translation id="2354174487190027830">Aktiviranje mreže <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Pošalji</translation>
 <translation id="2675319268637823299">Administrator je onemogućio višestruku prijavu za <ph name="USER_EMAIL" />.
     Svi se korisnici moraju odjaviti za nastavak.</translation>
+<translation id="2696763960464195425">Vaši će podaci biti uklonjeni kada se odjavite. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Postavite tipkovnicu</translation>
 <translation id="2718395828230677721">Noćno svjetlo</translation>
 <translation id="2727977024730340865">Uređaj je priključen na punjač male snage. Punjenje baterije možda nije pouzdano.</translation>
 <translation id="2761704814324807722">Traka statusa, vrijeme <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Unos rukopisom</translation>
 <translation id="6528179044667508675">Ne ometaj</translation>
 <translation id="6537270692134705506">Snimi zaslon</translation>
-<translation id="6580955892089546165">Ta vam značajka omogućuje brzi pristup bilo kojem prijavljenom korisniku bez zahtijevanja zaporke.
-
-Tu značajku upotrebljavajte samo s pouzdanim računima.</translation>
 <translation id="6585808820553845416">Sesija će završiti za <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Pretraži + Shift + K</translation>
 <translation id="6650933572246256093">Bluetooth uređaj "<ph name="DEVICE_NAME" />" traži dopuštenje za uparivanje. Unesite ovaj pristupni ključ na tom uređaju: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Zaporka</translation>
 <translation id="6691659475504239918">Search + Shift + H</translation>
+<translation id="6696025732084565524">Potrebno je preuzeti važno ažuriranje za vašu odvojivu tipkovnicu</translation>
 <translation id="6700713906295497288">Gumb izbornika IME-a</translation>
 <translation id="6713285437468012787">Bluetooth uređaj "<ph name="DEVICE_NAME" />" sada je uparen i dostupan svim korisnicima. To uparivanje možete ukloniti u Postavkama.</translation>
 <translation id="6715542151869432661">Nije pronađen nijedan mobilni uređaj.</translation>
@@ -260,7 +265,6 @@ Tu značajku upotrebljavajte samo s pouzdanim računima.</translation>
 <translation id="7029814467594812963">Izlazak iz sesije</translation>
 <translation id="7034339000180558234">Emitiranje kartice <ph name="TAB_NAME" /> na <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Postavljanje pozadinske slike...</translation>
-<translation id="7054808953701320293">U redu, više mi ne prikazuj to upozorenje.</translation>
 <translation id="7066646422045619941">Tu mrežu onemogućio je vaš administrator.</translation>
 <translation id="7067196344162293536">Automatski izmjenjuj</translation>
 <translation id="7098389117866926363">USB-C uređaj (lijevi priključak sa stražnje strane)</translation>
@@ -299,8 +303,6 @@ Tu značajku upotrebljavajte samo s pouzdanim računima.</translation>
 <translation id="7994370417837006925">Višestruka prijava</translation>
 <translation id="8000066093800657092">Nema mreže</translation>
 <translation id="8054466585765276473">Izračun vremena baterije.</translation>
-<translation id="8056430285089645882">U redu, više mi ne prikazuj tu poruku.</translation>
-<translation id="8088137642766812908">Oprezno, ta značajka može biti probematična</translation>
 <translation id="8098591350844501178">Zaustavi emitiranje zaslona na prijamniku <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Povezano s <ph name="NAME" /></translation>
 <translation id="813913629614996137">Pokretanje...</translation>
@@ -326,10 +328,8 @@ Tu značajku upotrebljavajte samo s pouzdanim računima.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Priključen je punjač male snage</translation>
 <translation id="8734991477317290293">Možda pokušava ukrasti podatke o pritisnutim tipkama</translation>
+<translation id="8809737090443522491">Unesite naziv aplikacije ili dokumenta</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">Premještanje prozora na drugu radnu površinu može dovesti do neočekivanog ponašanja.
-
-Naknadne obavijesti, prozori i dijaloški okviri mogu biti podijeljeni između radnih površina.</translation>
 <translation id="8825534185036233643">Zrcaljenje s više od dva zaslona nije podržano.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Gumb Natrag</translation>

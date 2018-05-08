@@ -6,10 +6,10 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 
 using base::StringAppendF;
 using base::SStringPrintf;
@@ -107,7 +107,8 @@ struct WebInputEventToString {
   bool Execute(const WebInputEvent& event, std::string* result) const {
     SStringPrintf(result, "%s (Time: %lf, Modifiers: %d)\n",
                   WebInputEvent::GetName(event.GetType()),
-                  event.TimeStampSeconds(), event.GetModifiers());
+                  event.TimeStamp().since_origin().InSecondsF(),
+                  event.GetModifiers());
     const EventType& typed_event = static_cast<const EventType&>(event);
     ApppendEventDetails(typed_event, result);
     return true;

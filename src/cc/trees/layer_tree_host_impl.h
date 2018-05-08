@@ -596,6 +596,10 @@ class CC_EXPORT LayerTreeHostImpl
 
   virtual bool IsUIResourceOpaque(UIResourceId uid) const;
 
+  bool GetSnapFlingInfo(const gfx::Vector2dF& natural_displacement_in_viewport,
+                        gfx::Vector2dF* initial_offset,
+                        gfx::Vector2dF* target_offset) const override;
+
   // Returns the amount of delta that can be applied to scroll_node, taking
   // page scale into account.
   gfx::Vector2dF ComputeScrollDelta(const ScrollNode& scroll_node,
@@ -663,7 +667,13 @@ class CC_EXPORT LayerTreeHostImpl
 
   void SetLayerTreeMutator(std::unique_ptr<LayerTreeMutator> mutator);
 
+  // The viewport has two scroll nodes, corresponding to the visual and layout
+  // viewports. However, when we compute the scroll chain we include only one
+  // of these -- we call that the "main" scroll node. When scrolling it, we
+  // scroll using the Viewport class which knows how to distribute scroll
+  // between the two.
   LayerImpl* ViewportMainScrollLayer();
+  ScrollNode* ViewportMainScrollNode();
 
   void QueueImageDecode(int request_id, const PaintImage& image);
   std::vector<std::pair<int, bool>> TakeCompletedImageDecodeRequests();
@@ -868,6 +878,7 @@ class CC_EXPORT LayerTreeHostImpl
   bool content_has_non_aa_paint_;
   bool has_gpu_rasterization_trigger_;
   bool use_gpu_rasterization_;
+  bool use_oop_rasterization_;
   bool use_msaa_;
   GpuRasterizationStatus gpu_rasterization_status_;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;

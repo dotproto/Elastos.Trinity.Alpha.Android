@@ -28,19 +28,13 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/weak_wrapper_shared_url_loader_factory.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
-#include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_completion_callback.h"
-#include "net/disk_cache/disk_cache.h"
-#include "net/http/http_cache.h"
-#include "net/http/http_response_headers.h"
-#include "net/http/http_response_info.h"
 #include "net/http/http_util.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 
 using content::BrowserThread;
@@ -84,77 +78,6 @@ static const char* kLandingData =
 using content::BrowserThread;
 using content::WebContents;
 
-void WriteHeaders(disk_cache::Entry* entry, const std::string& headers) {
-  net::HttpResponseInfo responseinfo;
-  std::string raw_headers =
-      net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.size());
-  responseinfo.socket_address = net::HostPortPair("1.2.3.4", 80);
-  responseinfo.headers = new net::HttpResponseHeaders(raw_headers);
-
-  base::Pickle pickle;
-  responseinfo.Persist(&pickle, false, false);
-
-  scoped_refptr<net::WrappedIOBuffer> buf(
-      new net::WrappedIOBuffer(reinterpret_cast<const char*>(pickle.data())));
-  int len = static_cast<int>(pickle.size());
-
-  net::TestCompletionCallback cb;
-  int rv = entry->WriteData(0, 0, buf.get(), len, cb.callback(), true);
-  ASSERT_EQ(len, cb.GetResult(rv));
-}
-
-void WriteData(disk_cache::Entry* entry, const std::string& data) {
-  if (data.empty())
-    return;
-
-  int len = data.length();
-  scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(len));
-  memcpy(buf->data(), data.data(), data.length());
-
-  net::TestCompletionCallback cb;
-  int rv = entry->WriteData(1, 0, buf.get(), len, cb.callback(), true);
-  ASSERT_EQ(len, cb.GetResult(rv));
-}
-
-void WriteToEntry(disk_cache::Backend* cache,
-                  const std::string& key,
-                  const std::string& headers,
-                  const std::string& data) {
-  net::TestCompletionCallback cb;
-  disk_cache::Entry* entry;
-  int rv = cache->CreateEntry(key, &entry, cb.callback());
-  rv = cb.GetResult(rv);
-  if (rv != net::OK) {
-    rv = cache->OpenEntry(key, &entry, cb.callback());
-    ASSERT_EQ(net::OK, cb.GetResult(rv));
-  }
-
-  WriteHeaders(entry, headers);
-  WriteData(entry, data);
-  entry->Close();
-}
-
-void FillCacheBase(net::URLRequestContextGetter* context_getter,
-                   bool use_https_threat_url) {
-  net::TestCompletionCallback cb;
-  disk_cache::Backend* cache;
-  int rv = context_getter->GetURLRequestContext()
-               ->http_transaction_factory()
-               ->GetCache()
-               ->GetBackend(&cache, cb.callback());
-  ASSERT_EQ(net::OK, cb.GetResult(rv));
-
-  WriteToEntry(cache, use_https_threat_url ? kThreatURLHttps : kThreatURL,
-               kThreatHeaders, kThreatData);
-  WriteToEntry(cache, kLandingURL, kLandingHeaders, kLandingData);
-}
-void FillCache(net::URLRequestContextGetter* context_getter) {
-  FillCacheBase(context_getter, /*use_https_threat_url=*/false);
-}
-void FillCacheHttps(net::URLRequestContextGetter* context_getter) {
-  FillCacheBase(context_getter, /*use_https_threat_url=*/true);
-}
-
 // Lets us control synchronization of the done callback for ThreatDetails.
 // Also exposes the constructor.
 class ThreatDetailsWrap : public ThreatDetails {
@@ -163,12 +86,12 @@ class ThreatDetailsWrap : public ThreatDetails {
       SafeBrowsingUIManager* ui_manager,
       WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       history::HistoryService* history_service)
       : ThreatDetails(ui_manager,
                       web_contents,
                       unsafe_resource,
-                      request_context_getter,
+                      url_loader_factory,
                       history_service,
                       /*trim_to_ad_tags=*/false,
                       base::Bind(&ThreatDetailsWrap::ThreatDetailsDone,
@@ -180,13 +103,13 @@ class ThreatDetailsWrap : public ThreatDetails {
       SafeBrowsingUIManager* ui_manager,
       WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       history::HistoryService* history_service,
       bool trim_to_ad_tags)
       : ThreatDetails(ui_manager,
                       web_contents,
                       unsafe_resource,
-                      request_context_getter,
+                      url_loader_factory,
                       history_service,
                       trim_to_ad_tags,
                       base::Bind(&ThreatDetailsWrap::ThreatDetailsDone,
@@ -220,19 +143,23 @@ class ThreatDetailsWrap : public ThreatDetails {
 class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
  public:
   // The safe browsing UI manager does not need a service for this test.
-  MockSafeBrowsingUIManager() : SafeBrowsingUIManager(NULL) {}
+  MockSafeBrowsingUIManager()
+      : SafeBrowsingUIManager(NULL), report_sent_(false) {}
 
   // When the serialized report is sent, this is called.
   void SendSerializedThreatDetails(const std::string& serialized) override {
+    report_sent_ = true;
     serialized_ = serialized;
   }
 
   const std::string& GetSerialized() { return serialized_; }
+  bool ReportWasSent() { return report_sent_; }
 
  private:
   ~MockSafeBrowsingUIManager() override {}
 
   std::string serialized_;
+  bool report_sent_;
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingUIManager);
 };
 
@@ -248,14 +175,15 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
     ChromeRenderViewHostTestHarness::SetUp();
     ASSERT_TRUE(profile()->CreateHistoryService(true /* delete_file */,
                                                 false /* no_db */));
+    test_shared_loader_factory_ =
+        base::MakeRefCounted<content::WeakWrapperSharedURLLoaderFactory>(
+            &test_url_loader_factory_);
   }
 
   std::string WaitForThreatDetailsDone(ThreatDetailsWrap* report,
                                        bool did_proceed,
                                        int num_visit) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::BindOnce(&ThreatDetails::FinishCollection,
-                                           report, did_proceed, num_visit));
+    report->FinishCollection(did_proceed, num_visit);
     // Wait for the callback (ThreatDetailsDone).
     base::RunLoop run_loop;
     report->SetRunLoopToQuit(&run_loop);
@@ -269,6 +197,8 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
     return HistoryServiceFactory::GetForProfile(
         profile(), ServiceAccessType::EXPLICIT_ACCESS);
   }
+
+  bool ReportWasSent() { return ui_manager_->ReportWasSent(); }
 
  protected:
   void InitResource(SBThreatType threat_type,
@@ -408,7 +338,28 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
                                history::SOURCE_BROWSED, false);
   }
 
+  void WriteCacheEntry(const std::string& url,
+                       const std::string& headers,
+                       const std::string& content) {
+    network::ResourceResponseHead head;
+    head.headers = new net::HttpResponseHeaders(
+        net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.size()));
+    head.socket_address = net::HostPortPair("1.2.3.4", 80);
+    head.mime_type = "text/html";
+    network::URLLoaderCompletionStatus status;
+    status.decoded_body_length = content.size();
+
+    test_url_loader_factory_.AddResponse(GURL(url), head, content, status);
+  }
+
+  void SimulateFillCache(const std::string& url) {
+    WriteCacheEntry(url, kThreatHeaders, kThreatData);
+    WriteCacheEntry(kLandingURL, kLandingHeaders, kLandingData);
+  }
+
   scoped_refptr<MockSafeBrowsingUIManager> ui_manager_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
 };
 
 // Tests creating a simple threat report of a malware URL.
@@ -1185,6 +1136,76 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_TrimToAdTags) {
   VerifyResults(actual, expected);
 }
 
+// Tests that an empty report does not get sent. Empty reports can result from
+// trying to trim a report to ad tags when no ad tags are present.
+// This test uses the following structure.
+// kDOMParentURL
+//   \- <frame src=kDataURL>
+//        \- <script src=kDOMChildURL2>
+TEST_F(ThreatDetailsTest, ThreatDOMDetails_EmptyReportNotSent) {
+  // Create a child renderer inside the main frame to house the inner iframe.
+  // Perform the navigation first in order to manipulate the frame tree.
+  content::WebContentsTester::For(web_contents())
+      ->NavigateAndCommit(GURL(kLandingURL));
+  content::RenderFrameHost* child_rfh =
+      content::RenderFrameHostTester::For(main_rfh())->AppendChild("subframe");
+  // Define two sets of DOM nodes - one for an outer page containing a frame,
+  // and then another for the inner page containing the contents of that frame.
+  std::vector<mojom::ThreatDOMDetailsNodePtr> outer_params;
+  mojom::ThreatDOMDetailsNodePtr outer_child_node =
+      mojom::ThreatDOMDetailsNode::New();
+  outer_child_node->url = GURL(kDataURL);
+  outer_child_node->tag_name = "frame";
+  outer_child_node->parent = GURL(kDOMParentURL);
+  outer_child_node->attributes.push_back(
+      mojom::AttributeNameValue::New("src", kDataURL));
+  outer_params.push_back(std::move(outer_child_node));
+  mojom::ThreatDOMDetailsNodePtr outer_summary_node =
+      mojom::ThreatDOMDetailsNode::New();
+  outer_summary_node->url = GURL(kDOMParentURL);
+  outer_summary_node->children.push_back(GURL(kDataURL));
+  // Set |child_frame_routing_id| for this node to something non-sensical so
+  // that the child frame lookup fails.
+  outer_summary_node->child_frame_routing_id = -100;
+  outer_params.push_back(std::move(outer_summary_node));
+
+  // Now define some more nodes for the body of the frame. The URL of this
+  // inner frame is "about:blank".
+  std::vector<mojom::ThreatDOMDetailsNodePtr> inner_params;
+  mojom::ThreatDOMDetailsNodePtr inner_child_node =
+      mojom::ThreatDOMDetailsNode::New();
+  inner_child_node->url = GURL(kDOMChildUrl2);
+  inner_child_node->tag_name = "script";
+  inner_child_node->parent = GURL(kBlankURL);
+  inner_child_node->attributes.push_back(
+      mojom::AttributeNameValue::New("src", kDOMChildUrl2));
+  inner_params.push_back(std::move(inner_child_node));
+  mojom::ThreatDOMDetailsNodePtr inner_summary_node =
+      mojom::ThreatDOMDetailsNode::New();
+  inner_summary_node->url = GURL(kBlankURL);
+  inner_summary_node->children.push_back(GURL(kDOMChildUrl2));
+  inner_params.push_back(std::move(inner_summary_node));
+
+  UnsafeResource resource;
+  InitResource(SB_THREAT_TYPE_URL_UNWANTED, ThreatSource::LOCAL_PVER4,
+               true /* is_subresource */, GURL(kThreatURL), &resource);
+
+  // Send both sets of nodes, from different render frames.
+  scoped_refptr<ThreatDetailsWrap> trimmed_report = new ThreatDetailsWrap(
+      ui_manager_.get(), web_contents(), resource, NULL, history_service(),
+      /*trim_to_ad_tags=*/true);
+
+  // Send both sets of nodes from different render frames.
+  trimmed_report->OnReceivedThreatDOMDetails(nullptr, child_rfh,
+                                             std::move(inner_params));
+  trimmed_report->OnReceivedThreatDOMDetails(nullptr, main_rfh(),
+                                             std::move(outer_params));
+
+  std::string serialized = WaitForThreatDetailsDone(
+      trimmed_report.get(), false /* did_proceed*/, 0 /* num_visit */);
+  EXPECT_FALSE(ReportWasSent());
+}
+
 // Tests creating a threat report of a malware page where there are redirect
 // urls to an unsafe resource url.
 TEST_F(ThreatDetailsTest, ThreatWithRedirectUrl) {
@@ -1412,12 +1433,9 @@ TEST_F(ThreatDetailsTest, HTTPCache) {
 
   scoped_refptr<ThreatDetailsWrap> report =
       new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource,
-                            profile()->GetRequestContext(), history_service());
+                            test_shared_loader_factory_, history_service());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&FillCache,
-                     base::RetainedRef(profile()->GetRequestContext())));
+  SimulateFillCache(kThreatURL);
 
   // The cache collection starts after the IPC from the DOM is fired.
   std::vector<mojom::ThreatDOMDetailsNodePtr> params;
@@ -1453,9 +1471,6 @@ TEST_F(ThreatDetailsTest, HTTPCache) {
   pb_header = pb_response->add_headers();
   pb_header->set_name("Content-Length");
   pb_header->set_value("1024");
-  pb_header = pb_response->add_headers();
-  pb_header->set_name("Set-Cookie");
-  pb_header->set_value("");  // The cookie is dropped.
   pb_response->set_body(kLandingData);
   std::string landing_data(kLandingData);
   pb_response->set_bodylength(landing_data.size());
@@ -1496,12 +1511,9 @@ TEST_F(ThreatDetailsTest, HttpsResourceSanitization) {
 
   scoped_refptr<ThreatDetailsWrap> report =
       new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource,
-                            profile()->GetRequestContext(), history_service());
+                            test_shared_loader_factory_, history_service());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&FillCacheHttps,
-                     base::RetainedRef(profile()->GetRequestContext())));
+  SimulateFillCache(kThreatURLHttps);
 
   // The cache collection starts after the IPC from the DOM is fired.
   std::vector<mojom::ThreatDOMDetailsNodePtr> params;
@@ -1537,9 +1549,6 @@ TEST_F(ThreatDetailsTest, HttpsResourceSanitization) {
   pb_header = pb_response->add_headers();
   pb_header->set_name("Content-Length");
   pb_header->set_value("1024");
-  pb_header = pb_response->add_headers();
-  pb_header->set_name("Set-Cookie");
-  pb_header->set_value("");  // The cookie is dropped.
   pb_response->set_body(kLandingData);
   std::string landing_data(kLandingData);
   pb_response->set_bodylength(landing_data.size());
@@ -1577,9 +1586,15 @@ TEST_F(ThreatDetailsTest, HTTPCacheNoEntries) {
 
   scoped_refptr<ThreatDetailsWrap> report =
       new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource,
-                            profile()->GetRequestContext(), history_service());
+                            test_shared_loader_factory_, history_service());
 
-  // No call to FillCache
+  // Simulate no cache entry found.
+  test_url_loader_factory_.AddResponse(
+      GURL(kThreatURL), network::ResourceResponseHead(), std::string(),
+      network::URLLoaderCompletionStatus(net::ERR_CACHE_MISS));
+  test_url_loader_factory_.AddResponse(
+      GURL(kLandingURL), network::ResourceResponseHead(), std::string(),
+      network::URLLoaderCompletionStatus(net::ERR_CACHE_MISS));
 
   // The cache collection starts after the IPC from the DOM is fired.
   std::vector<mojom::ThreatDOMDetailsNodePtr> params;

@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Käivitaja</translation>
 <translation id="1525508553941733066">LOOBU</translation>
+<translation id="1537254971476575106">Täisekraani luup</translation>
 <translation id="15373452373711364">Suur hiirekursor</translation>
 <translation id="1550523713251050646">Klõpsake lisavalikute nägemiseks</translation>
 <translation id="1567387640189251553">Pärast parooli viimast sisestamist on ühendatud teine klaviatuur. See võib üritada varastada teie klahvivajutusi.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">Kahjuks ei saanud teie parooli kinnitada. Märkus: kui muutsite parooli hiljuti, rakendub uus parool pärast väljalogimist. Kasutage siin vana parooli.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> tühjenemiseni</translation>
 <translation id="1698760176351776263">IPv6-aadress: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">Seadme administraator saab võib-olla teie tegevust jälgida.</translation>
 <translation id="1734367976349034509">Seda seadet haldab ettevõte</translation>
 <translation id="1746730358044914197">Sisestusmeetodid seadistab teie administraator.</translation>
 <translation id="1747827819627189109">Ekraanil kuvatav klaviatuur on lubatud</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">Ülevoolunupp</translation>
 <translation id="1951012854035635156">Assistent</translation>
 <translation id="1957803754585243749">0°</translation>
+<translation id="1957958912175573503">Valige keel</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1995660704900986789">Lülita välja</translation>
 <translation id="2012624427112548395">Ctrl + otsinguklahv + H</translation>
 <translation id="2049639323467105390">Seadet haldab <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Vertikaalpaigutus</translation>
 <translation id="2067602449040652523">Klaviatuuri eredus</translation>
+<translation id="2081529251031312395">$1 saab siiski hiljem sisse logida.</translation>
 <translation id="2122028596993374965">Peata vahekaardi <ph name="TAB_NAME" /> ülekandmine vastuvõtjasse <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Väikese energiakuluga laadija</translation>
+<translation id="2135456203358955318">Dokitud luup</translation>
 <translation id="2144487987174258011">Taaskäivitage Adobe Flash Playeri värskendamiseks</translation>
-<translation id="2191905770366256395">Eemaldatav klaviatuur vajab kriitilist värskendust</translation>
 <translation id="2208323208084708176">Ühendatud töölaua režiim</translation>
 <translation id="2220572644011485463">PIN-kood või parool</translation>
 <translation id="225680501294068881">Seadmete skannimine ...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">Ekraani skaala</translation>
 <translation id="2303600792989757991">Akna ülevaate sisse- ja väljalülitamine</translation>
 <translation id="2338501278241028356">Lülitage Bluetooth sisse, et läheduses olevaid seadmeid avastada</translation>
+<translation id="2339073806695260576">Puudutage riiulil elektronpliiatsi nuppu, et teha märkmeid, jäädvustada ekraanipilt, kasutada laserkursorit või suurendusklaasi.</translation>
 <translation id="2351266942280602854">Keel ja sisend</translation>
 <translation id="2352467521400612932">Elektronpliiatsi seaded</translation>
 <translation id="2354174487190027830">Võrgu <ph name="NAME" /> aktiveerimine</translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">Esita</translation>
 <translation id="2675319268637823299">Administraator on keelanud e-posti aadressi <ph name="USER_EMAIL" /> puhul mitmele kontole sisselogimise.
     Jätkamiseks peavad kõik kasutajad välja logima.</translation>
+<translation id="2696763960464195425">Teie teave eemaldatakse väljalogimisel. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">Valige klaviatuur</translation>
 <translation id="2718395828230677721">Öövalgus</translation>
 <translation id="2727977024730340865">Ühendatud väikese energiakuluga laadijaga. Aku laadimine võib olla ebastabiilne.</translation>
 <translation id="2761704814324807722">Olekusalv, kellaaeg <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">Käsitsikirjasisend</translation>
 <translation id="6528179044667508675">Mitte segada</translation>
 <translation id="6537270692134705506">Jäädvusta ekraanikuva</translation>
-<translation id="6580955892089546165">See funktsioon võimaldab teil parooli sisestamata pääseda kiirelt juurde kõigile sisselogitud kasutajatele.
-
-Kasutage seda funktsiooni vaid kontode puhul, mida usaldate.</translation>
 <translation id="6585808820553845416">Seansi lõpuni on jäänud <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Otsing + Tõstuklahv + K</translation>
 <translation id="6650933572246256093">Bluetoothi seade „<ph name="DEVICE_NAME" />” küsib luba sidumiseks. Sisestage seadmesse see parool: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">Parool</translation>
 <translation id="6691659475504239918">Otsinguklahv + tõstuklahv + H</translation>
+<translation id="6696025732084565524">Eemaldatav klaviatuur vajab kriitilist värskendust</translation>
 <translation id="6700713906295497288">IME menüünupp</translation>
 <translation id="6713285437468012787">Bluetoothi seade „<ph name="DEVICE_NAME" />” on nüüd seotud ja saadaval kõikidele kasutajatele. Võite sidumise tühistada jaotises Seaded.</translation>
 <translation id="6715542151869432661">Mobiilseadmeid ei leitud.</translation>
@@ -260,7 +265,6 @@ Kasutage seda funktsiooni vaid kontode puhul, mida usaldate.</translation>
 <translation id="7029814467594812963">Välju seansist</translation>
 <translation id="7034339000180558234">Vahelehe <ph name="TAB_NAME" /> ülekandmine seadmesse <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">Määra taustapilt ...</translation>
-<translation id="7054808953701320293">Selge. Ära seda uuesti kuva.</translation>
 <translation id="7066646422045619941">Teie administraator on selle võrgu keelanud.</translation>
 <translation id="7067196344162293536">Automaatne pööramine</translation>
 <translation id="7098389117866926363">C-tüüpi USB-seade (vasakpoolne port taga)</translation>
@@ -299,8 +303,6 @@ Kasutage seda funktsiooni vaid kontode puhul, mida usaldate.</translation>
 <translation id="7994370417837006925">Mitmele kontole sisselogimine</translation>
 <translation id="8000066093800657092">Võrku pole</translation>
 <translation id="8054466585765276473">Aku tööaja arvutamine.</translation>
-<translation id="8056430285089645882">Selge. Ära seda enam kuva.</translation>
-<translation id="8088137642766812908">Ettevaatust, see funktsioon võib hammustada</translation>
 <translation id="8098591350844501178">Peata ekraani ülekandmine vastuvõtjasse <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">Ühendus <ph name="NAME" />iga</translation>
 <translation id="813913629614996137">Lähtestamine …</translation>
@@ -326,10 +328,8 @@ Kasutage seda funktsiooni vaid kontode puhul, mida usaldate.</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Väikese energiakuluga laadija on ühendatud</translation>
 <translation id="8734991477317290293">See võib üritada varastada teie klahvivajutusi</translation>
+<translation id="8809737090443522491">Sisestage rakenduse või dokumendi nimi</translation>
 <translation id="8814190375133053267">WiFi</translation>
-<translation id="8814715559352963456">Kui teisaldate aknad teisele töölauale, võib tagajärjeks olla ootamatu toimimine.
-
-Järgmised märguanded, aknad ja dialoogid võivad jaguneda eri töölaudade vahel.</translation>
 <translation id="8825534185036233643">Rohkem kui kahe ekraaniga peegeldamist ei toetata.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Nupp Tagasi</translation>

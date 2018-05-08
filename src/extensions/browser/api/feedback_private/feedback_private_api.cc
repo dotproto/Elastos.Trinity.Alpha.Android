@@ -11,7 +11,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
@@ -348,7 +347,7 @@ void FeedbackPrivateSendFeedbackFunction::OnCompleted(
   }
 }
 
-AsyncExtensionFunction::ResponseAction
+ExtensionFunction::ResponseAction
 FeedbackPrivateLogSrtPromptResultFunction::Run() {
   std::unique_ptr<feedback_private::LogSrtPromptResult::Params> params(
       feedback_private::LogSrtPromptResult::Params::Create(*args_));

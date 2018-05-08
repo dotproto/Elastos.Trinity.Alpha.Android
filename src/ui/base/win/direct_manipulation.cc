@@ -11,6 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/win/windows_version.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/display/win/screen_win.h"
 
 namespace ui {
 namespace win {
@@ -99,6 +100,8 @@ bool DirectManipulationHelper::Initialize() {
       DIRECTMANIPULATION_CONFIGURATION_TRANSLATION_X |
       DIRECTMANIPULATION_CONFIGURATION_TRANSLATION_Y |
       DIRECTMANIPULATION_CONFIGURATION_TRANSLATION_INERTIA |
+      DIRECTMANIPULATION_CONFIGURATION_RAILS_X |
+      DIRECTMANIPULATION_CONFIGURATION_RAILS_Y |
       DIRECTMANIPULATION_CONFIGURATION_SCALING;
 
   hr = viewport_->ActivateConfiguration(configuration);
@@ -148,6 +151,10 @@ void DirectManipulationHelper::Deactivate() {
 bool DirectManipulationHelper::OnPointerHitTest(
     WPARAM w_param,
     WindowEventTarget* event_target) {
+  // Update the device scale factor.
+  event_handler_->SetDeviceScaleFactor(
+      display::win::ScreenWin::GetScaleFactorForHWND(window_));
+
   // Only DM_POINTERHITTEST can be the first message of input sequence of
   // touchpad input.
   // TODO(chaopeng) Check if Windows API changes:
@@ -191,6 +198,10 @@ bool DirectManipulationHelper::PollForNextEvent() {
   return need_poll_events_;
 }
 
+void DirectManipulationHelper::SetDeviceScaleFactorForTesting(float factor) {
+  event_handler_->SetDeviceScaleFactor(factor);
+}
+
 // DirectManipulationHandler
 DirectManipulationHandler::DirectManipulationHandler() {
   NOTREACHED();
@@ -209,25 +220,62 @@ void DirectManipulationHandler::TransitionToState(Gesture new_gesture_state) {
   Gesture previous_gesture_state = gesture_state_;
   gesture_state_ = new_gesture_state;
 
-  if (new_gesture_state == Gesture::kPinch) {
-    // kScroll, kNone -> kPinch, PinchBegin.
-    // Pinch gesture may begin with some scroll events.
-    event_target_->ApplyPinchZoomBegin();
-    return;
+  // End the previous sequence.
+  switch (previous_gesture_state) {
+    case Gesture::kScroll: {
+      // kScroll -> kNone, kPinch, ScrollEnd.
+      // kScroll -> kFling, we don't want to end the current scroll sequence.
+      if (new_gesture_state != Gesture::kFling)
+        event_target_->ApplyPanGestureScrollEnd();
+      break;
+    }
+    case Gesture::kFling: {
+      // kFling -> *, FlingEnd.
+      event_target_->ApplyPanGestureFlingEnd();
+      break;
+    }
+    case Gesture::kPinch: {
+      DCHECK_EQ(new_gesture_state, Gesture::kNone);
+      // kPinch -> kNone, PinchEnd. kPinch should only transition to kNone.
+      event_target_->ApplyPinchZoomEnd();
+      break;
+    }
+    case Gesture::kNone: {
+      // kNone -> *, no cleanup is needed.
+      break;
+    }
+    default:
+      NOTREACHED();
   }
 
-  if (new_gesture_state == Gesture::kNone) {
-    // kScroll -> kNone do nothing.
-    if (previous_gesture_state == Gesture::kScroll)
-      return;
-    // kPinch -> kNone, PinchEnd.
-    event_target_->ApplyPinchZoomEnd();
-    return;
+  // Start the new sequence.
+  switch (new_gesture_state) {
+    case Gesture::kScroll: {
+      // kFling, kNone -> kScroll, ScrollBegin.
+      // ScrollBegin is different phase event with others. It must send within
+      // the first scroll event.
+      should_send_scroll_begin_ = true;
+      break;
+    }
+    case Gesture::kFling: {
+      // Only kScroll can transition to kFling.
+      DCHECK_EQ(previous_gesture_state, Gesture::kScroll);
+      event_target_->ApplyPanGestureFlingBegin();
+      break;
+    }
+    case Gesture::kPinch: {
+      // * -> kPinch, PinchBegin.
+      // Pinch gesture may begin with some scroll events.
+      event_target_->ApplyPinchZoomBegin();
+      break;
+    }
+    case Gesture::kNone: {
+      // * -> kNone, only cleanup is needed.
+      break;
+    }
+    default:
+      NOTREACHED();
   }
-
-  // kNone -> kScroll do nothing. Not allow kPinch -> kScroll.
-  DCHECK_EQ(previous_gesture_state, Gesture::kNone);
-  DCHECK_EQ(new_gesture_state, Gesture::kScroll);
 }
 
 HRESULT DirectManipulationHandler::OnViewportStatusChanged(
@@ -240,6 +288,29 @@ HRESULT DirectManipulationHandler::OnViewportStatusChanged(
   // - RUNNING: gesture updating
   // - INERTIA: finger leave touchpad content still updating by inertia
   HRESULT hr = S_OK;
+
+  if (current == previous)
+    return hr;
+
+  if (current == DIRECTMANIPULATION_INERTIA) {
+    // Fling must lead by Scroll. We can actually hit here when user pinch then
+    // quickly pan gesture and leave touchpad. In this case, we don't want to
+    // start a new sequence until the gesture end. The rest events in sequence
+    // will be ignore since sequence still in pinch and only scale factor
+    // changes will be applied.
+    if (previous != DIRECTMANIPULATION_RUNNING ||
+        gesture_state_ != Gesture::kScroll) {
+      return hr;
+    }
+
+    TransitionToState(Gesture::kFling);
+  }
+
+  if (current == DIRECTMANIPULATION_RUNNING) {
+    // INERTIA -> RUNNING, should start a new sequence.
+    if (previous == DIRECTMANIPULATION_INERTIA)
+      TransitionToState(Gesture::kNone);
+  }
 
   // Reset the viewport when we're idle, so the content transforms always start
   // at identity.
@@ -292,8 +363,8 @@ HRESULT DirectManipulationHandler::OnContentUpdated(
     return hr;
 
   float scale = xform[0];
-  int x_offset = xform[4];
-  int y_offset = xform[5];
+  int x_offset = xform[4] / device_scale_factor_;
+  int y_offset = xform[5] / device_scale_factor_;
 
   // Ignore if Windows pass scale=0 to us.
   if (scale == 0.0f) {
@@ -331,8 +402,17 @@ HRESULT DirectManipulationHandler::OnContentUpdated(
   }
 
   if (gesture_state_ == Gesture::kScroll) {
-    event_target_->ApplyPanGestureScroll(x_offset - last_x_offset_,
-                                         y_offset - last_y_offset_);
+    if (should_send_scroll_begin_) {
+      event_target_->ApplyPanGestureScrollBegin(x_offset - last_x_offset_,
+                                                y_offset - last_y_offset_);
+      should_send_scroll_begin_ = false;
+    } else {
+      event_target_->ApplyPanGestureScroll(x_offset - last_x_offset_,
+                                           y_offset - last_y_offset_);
+    }
+  } else if (gesture_state_ == Gesture::kFling) {
+    event_target_->ApplyPanGestureFling(x_offset - last_x_offset_,
+                                        y_offset - last_y_offset_);
   } else {
     event_target_->ApplyPinchZoomScale(scale / last_scale_);
   }
@@ -348,6 +428,11 @@ void DirectManipulationHandler::SetWindowEventTarget(
     WindowEventTarget* event_target) {
   DCHECK(event_target);
   event_target_ = event_target;
+}
+
+void DirectManipulationHandler::SetDeviceScaleFactor(
+    float device_scale_factor) {
+  device_scale_factor_ = device_scale_factor;
 }
 
 }  // namespace win

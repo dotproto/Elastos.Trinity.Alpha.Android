@@ -124,7 +124,7 @@ namespace {
 
 // Maximum framerate of encoded profile. This value is an arbitary limit
 // and not taken from HW documentation.
-const int kMaxEncoderFramerate = 30;
+constexpr int kMaxEncoderFramerate = 30;
 
 // A map between VideoCodecProfile and VAProfile.
 static const struct {
@@ -142,6 +142,42 @@ static const struct {
     {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
     {VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
 };
+
+static const struct {
+  std::string va_driver;
+  std::string cpu_family;
+  VaapiWrapper::CodecMode mode;
+  std::vector<VAProfile> va_profiles;
+} kBlackListMap[]{
+    // TODO(hiroh): Remove once Chrome supports unpacked header.
+    // https://crbug.com/828482.
+    {"Mesa Gallium driver",
+     "AMD STONEY",
+     VaapiWrapper::CodecMode::kEncode,
+     {VAProfileH264Baseline, VAProfileH264Main, VAProfileH264High,
+      VAProfileH264ConstrainedBaseline}},
+    // TODO(hiroh): Remove once Chrome supports converting format.
+    // https://crbug.com/828119.
+    {"Mesa Gallium driver",
+     "AMD STONEY",
+     VaapiWrapper::CodecMode::kDecode,
+     {VAProfileJPEGBaseline}},
+};
+
+bool IsBlackListedDriver(const std::string& va_vendor_string,
+                         VaapiWrapper::CodecMode mode,
+                         VAProfile va_profile) {
+  for (const auto& info : kBlackListMap) {
+    if (info.mode == mode &&
+        base::StartsWith(va_vendor_string, info.va_driver,
+                         base::CompareCase::SENSITIVE) &&
+        va_vendor_string.find(info.cpu_family) != std::string::npos &&
+        base::ContainsValue(info.va_profiles, va_profile)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // This class is a wrapper around its |va_display_| (and its associated
 // |va_lock_|) to guarantee mutual exclusion and singleton behaviour.
@@ -161,6 +197,7 @@ class VADisplayState {
 
   base::Lock* va_lock() { return &va_lock_; }
   VADisplay va_display() const { return va_display_; }
+  const std::string& va_vendor_string() const { return va_vendor_string_; }
 
   void SetDrmFd(base::PlatformFile fd) { drm_fd_.reset(HANDLE_EINTR(dup(fd))); }
 
@@ -184,6 +221,9 @@ class VADisplayState {
 
   // True if vaInitialize() has been called successfully.
   bool va_initialized_;
+
+  // String acquired by vaQueryVendorString().
+  std::string va_vendor_string_;
 };
 
 // static
@@ -275,7 +315,12 @@ bool VADisplayState::InitializeOnce() {
   }
 
   va_initialized_ = true;
-  DVLOG(1) << "VAAPI version: " << major_version << "." << minor_version;
+
+  va_vendor_string_ = vaQueryVendorString(va_display_);
+  DLOG_IF(WARNING, va_vendor_string_.empty())
+      << "Vendor string empty or error reading.";
+  DVLOG(1) << "VAAPI version: " << major_version << "." << minor_version << " "
+           << va_vendor_string_;
 
   if (major_version != VA_MAJOR_VERSION || minor_version != VA_MINOR_VERSION) {
     LOG(ERROR) << "This build of Chromium requires VA-API version "
@@ -391,7 +436,6 @@ class VASupportedProfiles {
                                VAEntrypoint entrypoint,
                                std::vector<VAConfigAttrib>& required_attribs,
                                gfx::Size* resolution);
-
   std::vector<ProfileInfo> supported_profiles_[VaapiWrapper::kCodecModeMax];
 
   // Pointer to VADisplayState's members |va_lock_| and its |va_display_|.
@@ -436,7 +480,6 @@ VASupportedProfiles::VASupportedProfiles()
 
   va_display_ = VADisplayState::Get()->va_display();
   DCHECK(va_display_) << "VADisplayState hasn't been properly Initialize()d";
-
   for (size_t i = 0; i < VaapiWrapper::kCodecModeMax; ++i) {
     supported_profiles_[i] = GetSupportedProfileInfosForCodecModeInternal(
         static_cast<VaapiWrapper::CodecMode>(i));
@@ -460,6 +503,8 @@ VASupportedProfiles::GetSupportedProfileInfosForCodecModeInternal(
     return supported_profile_infos;
 
   base::AutoLock auto_lock(*va_lock_);
+  const std::string& va_vendor_string =
+      VADisplayState::Get()->va_vendor_string();
   for (const auto& va_profile : va_profiles) {
     VAEntrypoint entrypoint = GetVaEntryPoint(mode, va_profile);
     std::vector<VAConfigAttrib> required_attribs =
@@ -468,6 +513,9 @@ VASupportedProfiles::GetSupportedProfileInfosForCodecModeInternal(
       continue;
     if (!AreAttribsSupported_Locked(va_profile, entrypoint, required_attribs))
       continue;
+    if (IsBlackListedDriver(va_vendor_string, mode, va_profile))
+      continue;
+
     ProfileInfo profile_info;
     if (!GetMaxResolution_Locked(va_profile, entrypoint, required_attribs,
                                  &profile_info.max_resolution)) {
@@ -746,19 +794,25 @@ bool VaapiWrapper::CreateSurfaces(unsigned int va_format,
   }
 
   // And create a context associated with them.
-  va_res = vaCreateContext(va_display_, va_config_id_, size.width(),
-                           size.height(), VA_PROGRESSIVE, &va_surface_ids_[0],
-                           va_surface_ids_.size(), &va_context_id_);
+  const bool success = CreateContext(va_format, size, va_surface_ids_);
+  if (success)
+    *va_surfaces = va_surface_ids_;
+  else
+    DestroySurfaces_Locked();
+  return success;
+}
+
+bool VaapiWrapper::CreateContext(unsigned int va_format,
+                                 const gfx::Size& size,
+                                 const std::vector<VASurfaceID>& va_surfaces) {
+  VAStatus va_res = vaCreateContext(
+      va_display_, va_config_id_, size.width(), size.height(), VA_PROGRESSIVE,
+      &va_surface_ids_[0], va_surface_ids_.size(), &va_context_id_);
 
   VA_LOG_ON_ERROR(va_res, "vaCreateContext failed");
-  if (va_res != VA_STATUS_SUCCESS) {
-    DestroySurfaces_Locked();
-    return false;
-  }
-
-  *va_surfaces = va_surface_ids_;
-  va_surface_format_ = va_format;
-  return true;
+  if (va_res == VA_STATUS_SUCCESS)
+    va_surface_format_ = va_format;
+  return va_res == VA_STATUS_SUCCESS;
 }
 
 void VaapiWrapper::DestroySurfaces() {

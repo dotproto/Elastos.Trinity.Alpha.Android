@@ -122,6 +122,13 @@ public class SelectableListToolbar<E>
     private int mModernToolbarSearchIconOffsetPx;
 
     private boolean mIsDestroyed;
+    private boolean mShowInfoItem;
+    private boolean mInfoShowing;
+
+    private boolean mShowInfoIcon;
+    private int mShowInfoStringId;
+    private int mHideInfoStringId;
+    private int mExtraMenuItemId;
 
     /**
      * Constructor for inflating from XML.
@@ -200,6 +207,22 @@ public class SelectableListToolbar<E>
         if (!FeatureUtilities.isChromeModernDesignEnabled()) {
             setTitleTextAppearance(getContext(), R.style.BlackHeadline2);
         }
+
+        VrShellDelegate.registerVrModeObserver(this);
+        if (VrShellDelegate.isInVr()) onEnterVr();
+
+        mShowInfoIcon = true;
+        mShowInfoStringId = R.string.show_info;
+        mHideInfoStringId = R.string.hide_info;
+
+        // Used only for the case of DownloadManagerToolbar.
+        // Will not be needed after a tint is applied to all toolbar buttons.
+        MenuItem extraMenuItem = getMenu().findItem(mExtraMenuItemId);
+        if (extraMenuItem != null) {
+            Drawable iconDrawable = TintedDrawable.constructTintedDrawable(
+                    getResources(), R.drawable.ic_more_vert_black_24dp, R.color.light_normal_color);
+            extraMenuItem.setIcon(iconDrawable);
+        }
     }
 
     @Override
@@ -208,12 +231,14 @@ public class SelectableListToolbar<E>
         // searching.
         mIsVrEnabled = true;
         if (mHasSearchView) updateSearchMenuItem();
+        updateInfoMenuItem(mShowInfoItem, mInfoShowing);
     }
 
     @Override
     public void onExitVr() {
         mIsVrEnabled = false;
         if (mHasSearchView) updateSearchMenuItem();
+        updateInfoMenuItem(mShowInfoItem, mInfoShowing);
     }
 
     /**
@@ -268,9 +293,6 @@ public class SelectableListToolbar<E>
                     getResources().getDimensionPixelSize(R.dimen.clear_text_button_end_padding),
                     mClearTextButton.getPaddingBottom());
         }
-
-        VrShellDelegate.registerVrModeObserver(this);
-        if (VrShellDelegate.isInVr()) onEnterVr();
     }
 
     @Override
@@ -632,19 +654,70 @@ public class SelectableListToolbar<E>
     }
 
     /**
+     * Set ID of menu item that is displayed to hold any extra actions.
+     * Needs to be called before {@link #initialize}.
+     *
+     * @param extraMenuItemId The menu item.
+     */
+    public void setExtraMenuItem(int extraMenuItemId) {
+        mExtraMenuItemId = extraMenuItemId;
+    }
+
+    /**
+     * Sets the parameter that determines whether to show the info icon.
+     * This is useful when the info menu option is being shown in a sub-menu, where only the text is
+     * necessary, versus being shown as an icon in the toolbar.
+     * Needs to be called before {@link #initialize}.
+     *
+     * @param shouldShow    Whether to show the icon for the info menu item. Defaults to true.
+     */
+    public void setShowInfoIcon(boolean shouldShow) {
+        mShowInfoIcon = shouldShow;
+    }
+
+    /**
+     * Set the IDs of the string resources to be shown for the info button text if different from
+     * the default "Show info"/"Hide info" text.
+     * Needs to be called before {@link #initialize}.
+     *
+     * @param showInfoStringId  Resource ID of string for the info button text that, when clicked,
+     *                          will show info.
+     * @param hideInfoStringId  Resource ID of the string that will hide the info.
+     */
+    public void setInfoButtonText(int showInfoStringId, int hideInfoStringId) {
+        mShowInfoStringId = showInfoStringId;
+        mHideInfoStringId = hideInfoStringId;
+    }
+
+    /**
      * Update icon, title, and visibility of info menu item.
-     * @param showItem Whether or not info menu item should show.
-     * @param infoShowing Whether or not info header is currently showing.
+     *  @param showItem          Whether or not info menu item should show.
+     * @param infoShowing       Whether or not info header is currently showing.
      */
     public void updateInfoMenuItem(boolean showItem, boolean infoShowing) {
+        mShowInfoItem = showItem;
+        mInfoShowing = infoShowing;
+
         MenuItem infoMenuItem = getMenu().findItem(mInfoMenuItemId);
         if (infoMenuItem != null) {
-            Drawable iconDrawable =
-                    TintedDrawable.constructTintedDrawable(getResources(), R.drawable.btn_info,
-                            infoShowing ? R.color.light_active_color : R.color.light_normal_color);
+            if (mShowInfoIcon) {
+                Drawable iconDrawable = TintedDrawable.constructTintedDrawable(getResources(),
+                        R.drawable.btn_info,
+                        infoShowing ? R.color.light_active_color : R.color.light_normal_color);
 
-            infoMenuItem.setIcon(iconDrawable);
-            infoMenuItem.setTitle(infoShowing ? R.string.hide_info : R.string.show_info);
+                infoMenuItem.setIcon(iconDrawable);
+            }
+
+            if (VrShellDelegate.isInVr()) {
+                // There seems to be a bug with the support library, only on Android N, where the
+                // toast showing the title shows up every time the info menu item is clicked or
+                // scrolled on, even if its long press handler is overridden. VR on N doesn't
+                // support toasts, which render monocularly over top of VR content, so we need to
+                // disable it.
+                infoMenuItem.setTitle("");
+            } else {
+                infoMenuItem.setTitle(infoShowing ? mHideInfoStringId : mShowInfoStringId);
+            }
             infoMenuItem.setVisible(showItem);
         }
     }

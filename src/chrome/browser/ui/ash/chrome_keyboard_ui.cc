@@ -43,13 +43,13 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/compositor_extra/shadow.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/keyboard/keyboard_resource_util.h"
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
-#include "ui/wm/core/shadow.h"
 #include "ui/wm/core/shadow_types.h"
 
 namespace virtual_keyboard_private = extensions::api::virtual_keyboard_private;
@@ -262,6 +262,10 @@ ChromeKeyboardUI::ChromeKeyboardUI(content::BrowserContext* context)
 
 ChromeKeyboardUI::~ChromeKeyboardUI() {
   ResetInsets();
+
+  if (keyboard_contents_)
+    keyboard_contents_->GetNativeView()->RemoveObserver(this);
+
   DCHECK(!keyboard_controller());
 }
 
@@ -308,11 +312,15 @@ void ChromeKeyboardUI::UpdateInsetsForWindow(aura::Window* window) {
 
 aura::Window* ChromeKeyboardUI::GetContentsWindow() {
   if (!keyboard_contents_) {
-    keyboard_contents_.reset(CreateWebContents());
+    keyboard_contents_ = CreateWebContents();
     keyboard_contents_->SetDelegate(new ChromeKeyboardContentsDelegate(this));
     SetupWebContents(keyboard_contents_.get());
     LoadContents(GetVirtualKeyboardUrl());
     keyboard_contents_->GetNativeView()->AddObserver(this);
+    content::RenderWidgetHostView* view =
+        keyboard_contents_->GetMainFrame()->GetView();
+    view->SetBackgroundColor(SK_ColorTRANSPARENT);
+    view->GetNativeView()->SetTransparent(true);
   }
 
   return keyboard_contents_->GetNativeView();
@@ -380,6 +388,11 @@ void ChromeKeyboardUI::InitInsets(const gfx::Rect& new_bounds) {
         gfx::Rect window_bounds = window->GetBoundsInScreen();
         gfx::Rect intersect = gfx::IntersectRects(window_bounds, new_bounds);
         int overlap = intersect.height();
+
+        // TODO(crbug.com/826617): get the actual obscured height from IME side.
+        if (keyboard::IsFullscreenHandwritingVirtualKeyboardEnabled())
+          overlap = 0;
+
         if (overlap > 0 && overlap < window_bounds.height())
           view->SetInsets(gfx::Insets(0, 0, overlap, 0));
         else
@@ -425,7 +438,7 @@ const aura::Window* ChromeKeyboardUI::GetKeyboardRootWindow() const {
   return keyboard_contents_->GetNativeView()->GetRootWindow();
 }
 
-content::WebContents* ChromeKeyboardUI::CreateWebContents() {
+std::unique_ptr<content::WebContents> ChromeKeyboardUI::CreateWebContents() {
   content::BrowserContext* context = browser_context();
   return content::WebContents::Create(content::WebContents::CreateParams(
       context,
@@ -462,7 +475,8 @@ bool ChromeKeyboardUI::ShouldEnableInsets(aura::Window* window) {
   return (contents_window->GetRootWindow() == window->GetRootWindow() &&
           keyboard::IsKeyboardOverscrollEnabled() &&
           contents_window->IsVisible() &&
-          keyboard_controller()->keyboard_visible());
+          keyboard_controller()->keyboard_visible() &&
+          !keyboard::IsFullscreenHandwritingVirtualKeyboardEnabled());
 }
 
 void ChromeKeyboardUI::AddBoundsChangedObserver(aura::Window* window) {
@@ -477,7 +491,7 @@ void ChromeKeyboardUI::SetShadowAroundKeyboard() {
     return;
 
   if (!shadow_) {
-    shadow_ = std::make_unique<::wm::Shadow>();
+    shadow_ = std::make_unique<ui::Shadow>();
     shadow_->Init(wm::kShadowElevationActiveWindow);
     shadow_->layer()->SetVisible(true);
     contents_window->parent()->layer()->Add(shadow_->layer());

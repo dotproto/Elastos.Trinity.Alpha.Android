@@ -30,7 +30,6 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
-#include "skia/ext/texture_handle.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "ui/gfx/geometry/rect.h"
@@ -90,27 +89,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
                                               DeleteStyle style) {
   TRACE_EVENT0("cc", "ResourceProvider::DeleteResourceInternal");
   viz::internal::Resource* resource = &it->second;
-  DCHECK(resource->exported_count == 0 || style != NORMAL);
-
-  // Exported resources are lost on shutdown.
-  bool exported_resource_lost =
-      style == FOR_SHUTDOWN && resource->exported_count > 0;
-  // GPU resources are lost when context is lost.
-  bool gpu_resource_lost =
-      resource->is_gpu_resource_type() && lost_context_provider_;
-  bool lost_resource =
-      resource->lost || exported_resource_lost || gpu_resource_lost;
-
-  // Wait on sync token before deleting resources we own.
-  if (!lost_resource && resource->origin == viz::internal::Resource::INTERNAL)
-    WaitSyncTokenInternal(resource);
-
-  if (resource->image_id) {
-    DCHECK_EQ(resource->origin, viz::internal::Resource::INTERNAL);
-    GLES2Interface* gl = ContextGL();
-    DCHECK(gl);
-    gl->DestroyImageCHROMIUM(resource->image_id);
-  }
 
   if (resource->gl_id) {
     GLES2Interface* gl = ContextGL();
@@ -124,11 +102,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
     resource->shared_bitmap = nullptr;
     resource->pixels = nullptr;
     resource->owned_shared_bitmap = nullptr;
-  }
-
-  if (resource->gpu_memory_buffer) {
-    DCHECK_EQ(viz::ResourceType::kGpuMemoryBuffer, resource->type);
-    resource->gpu_memory_buffer = nullptr;
   }
 
   resources_.erase(it);
@@ -149,11 +122,19 @@ viz::internal::Resource* ResourceProvider::InsertResource(
 
 viz::internal::Resource* ResourceProvider::GetResource(viz::ResourceId id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // TODO(ericrk): Changing the DCHECKs in this function to CHECKs to debug
-  // https://crbug.com/811858.
-  CHECK(id);
+  DCHECK(id);
   ResourceMap::iterator it = resources_.find(id);
-  CHECK(it != resources_.end());
+  DCHECK(it != resources_.end());
+  return &it->second;
+}
+
+viz::internal::Resource* ResourceProvider::TryGetResource(viz::ResourceId id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (!id)
+    return nullptr;
+  ResourceMap::iterator it = resources_.find(id);
+  if (it == resources_.end())
+    return nullptr;
   return &it->second;
 }
 
@@ -193,18 +174,11 @@ bool ResourceProvider::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  const uint64_t tracing_process_id =
-      base::trace_event::MemoryDumpManager::GetInstance()
-          ->GetTracingProcessId();
-
   for (const auto& resource_entry : resources_) {
     const auto& resource = resource_entry.second;
 
     bool backing_memory_allocated = false;
     switch (resource.type) {
-      case viz::ResourceType::kGpuMemoryBuffer:
-        backing_memory_allocated = !!resource.gpu_memory_buffer;
-        break;
       case viz::ResourceType::kTexture:
         backing_memory_allocated = !!resource.gl_id;
         break;
@@ -242,18 +216,6 @@ bool ResourceProvider::OnMemoryDump(
     base::trace_event::MemoryAllocatorDumpGuid guid;
     base::UnguessableToken shared_memory_guid;
     switch (resource.type) {
-      case viz::ResourceType::kGpuMemoryBuffer:
-        // GpuMemoryBuffers may be backed by shared memory, and in that case we
-        // use the guid from there to attribute for the global shared memory
-        // dumps. Otherwise, they may be backed by native structures, and we
-        // fall back to that with GetGUIDForTracing.
-        shared_memory_guid =
-            resource.gpu_memory_buffer->GetHandle().handle.GetGUID();
-        if (shared_memory_guid.is_empty()) {
-          guid =
-              resource.gpu_memory_buffer->GetGUIDForTracing(tracing_process_id);
-        }
-        break;
       case viz::ResourceType::kTexture:
         DCHECK(resource.gl_id);
         guid = gl::GetGLTextureClientGUIDForTracing(
@@ -273,11 +235,9 @@ bool ResourceProvider::OnMemoryDump(
 
     DCHECK(!shared_memory_guid.is_empty() || !guid.empty());
 
-    const int kImportanceForInteral = 2;
-    const int kImportanceForExternal = 1;
-    int importance = resource.origin == viz::internal::Resource::INTERNAL
-                         ? kImportanceForInteral
-                         : kImportanceForExternal;
+    // The client that owns the resource will use a higher importance (2), and
+    // the GPU service will use a lower one (0).
+    const int importance = 1;
     if (!shared_memory_guid.is_empty()) {
       pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,
                                            importance);

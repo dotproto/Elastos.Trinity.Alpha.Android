@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -274,7 +273,6 @@ void Window::SetTransform(const gfx::Transform& transform) {
   WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion_tracking;
   for (WindowObserver& observer : observers_)
     observer.OnWindowTargetTransformChanging(this, transform);
-  gfx::Transform old_transform = layer()->transform();
   layer()->SetTransform(transform);
 }
 
@@ -766,17 +764,6 @@ void Window::SetBoundsInternal(const gfx::Rect& new_bounds) {
   }
 }
 
-void Window::SetDeviceScaleFactor(float device_scale_factor) {
-  float old_device_scale_factor = layer()->device_scale_factor();
-  layer()->OnDeviceScaleFactorChanged(device_scale_factor);
-
-  // If we are currently not the layer's delegate, we will not get the device
-  // scale factor changed notification from the layer (this typically happens
-  // after animating hidden). We must notify ourselves.
-  if (layer()->delegate() != this)
-    OnDeviceScaleFactorChanged(old_device_scale_factor, device_scale_factor);
-}
-
 void Window::SetVisible(bool visible) {
   if (visible == layer()->GetTargetVisibility())
     return;  // No change.
@@ -1121,6 +1108,17 @@ viz::ScopedSurfaceIdAllocator Window::GetSurfaceIdAllocator(
 
 const viz::LocalSurfaceId& Window::GetLocalSurfaceId() const {
   return port_->GetLocalSurfaceId();
+}
+
+void Window::UpdateLocalSurfaceIdFromEmbeddedClient(
+    const base::Optional<viz::LocalSurfaceId>&
+        embedded_client_local_surface_id) {
+  if (embedded_client_local_surface_id) {
+    port_->UpdateLocalSurfaceIdFromEmbeddedClient(
+        *embedded_client_local_surface_id);
+  } else {
+    port_->AllocateLocalSurfaceId();
+  }
 }
 
 const viz::FrameSinkId& Window::GetFrameSinkId() const {

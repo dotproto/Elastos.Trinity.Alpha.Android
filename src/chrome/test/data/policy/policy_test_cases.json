@@ -352,6 +352,16 @@
     ]
   },
 
+  "UserNativePrintersAllowed": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "UserNativePrintersAllowed": true
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.user_native_printers_allowed" }
+    ]
+  },
+
   "SafeBrowsingEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
     "can_be_recommended": true,
@@ -1526,6 +1536,14 @@
     ]
   },
 
+  "DefaultWebUsbGuardSetting": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "DefaultWebUsbGuardSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.web_usb_guard" }
+    ]
+  },
+
   "AutoSelectCertificateForUrls": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "AutoSelectCertificateForUrls": ["{'pattern':'https://example.com','filter':{'ISSUER':{'CN': 'issuer-name'}}}"] },
@@ -1750,6 +1768,26 @@
     ],
 
     "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "WebUsbAskForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "WebUsbAskForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_web_usb_ask_for_urls" }
+    ],
+
+    "note": "TODO(reillyg): Add indicator tests. TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "WebUsbBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "WebUsbBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_web_usb_blocked_for_urls" }
+    ],
+
+    "note": "TODO(reillyg): Add indicator tests. TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
   },
 
   "Disable3DAPIs": {
@@ -2214,6 +2252,22 @@
     ]
   },
 
+  "CertificateTransparencyEnforcementDisabledForCas": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForCas": ["sha256/AAAAAAAAAAAAAAAAAAAAAA=="] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_spkis" }
+    ]
+  },
+
+  "CertificateTransparencyEnforcementDisabledForLegacyCas": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForLegacyCas": ["sha256/AAAAAAAAAAAAAAAAAAAAAA=="] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_legacy_spkis" }
+    ]
+  },
+
   "RC4Enabled": {
     "note": "This policy is retired, see https://crbug.com/375342."
   },
@@ -2285,6 +2339,16 @@
     "test_policy": { "ShowCastIconInToolbar": false },
     "pref_mappings": [
       { "pref": "media_router.show_cast_icon_in_toolbar" }
+    ]
+  },
+
+  "MediaRouterCastAllowAllIPs": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "MediaRouterCastAllowAllIPs": false },
+    "pref_mappings": [
+      { "pref": "media_router.cast_allow_all_ips",
+        "local_state": true
+      }
     ]
   },
 
@@ -3534,23 +3598,9 @@
   },
 
   "PasswordProtectionWarningTrigger": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "PasswordProtectionWarningTrigger": 2
-    },
-    "pref_mappings": [
-      { "pref": "safebrowsing.password_protection_warning_trigger"}
-    ]
   },
 
   "PasswordProtectionRiskTrigger": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "PasswordProtectionRiskTrigger": 2
-    },
-    "pref_mappings": [
-      { "pref": "safebrowsing.password_protection_risk_trigger"}
-    ]
   },
 
   "DeviceOffHours": {
@@ -3593,36 +3643,16 @@
     ]
   },
 
+  "DeviceSamlLoginAuthenticationType": {
+  },
+
   "SafeBrowsingWhitelistDomains": {
-    "os": ["win", "linux", "mac", "chromeos", "android"],
-    "test_policy": {
-      "SafeBrowsingWhitelistDomains": ["mydomain.com", "mydomain.net"]
-    },
-    "pref_mappings": [
-      { "pref": "safebrowsing.safe_browsing_whitelist_domains"}
-    ]
   },
 
   "PasswordProtectionLoginURLs": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "PasswordProtectionLoginURLs": [
-        "https://mydomain.com/login.html", "https://login.mydomain.com"
-      ]
-    },
-    "pref_mappings": [
-      { "pref": "safebrowsing.password_protection_login_urls"}
-    ]
   },
 
   "PasswordProtectionChangePasswordURL": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "PasswordProtectionChangePasswordURL": "https://mydomain.com/changepw.mydomain.html"
-    },
-    "pref_mappings": [
-      { "pref": "safebrowsing.password_protection_change_password_url"}
-    ]
   },
 
   "AutoplayAllowed": {
@@ -3630,6 +3660,28 @@
     "test_policy": { "AutoplayAllowed": false },
     "pref_mappings": [
       { "pref": "media.autoplay_allowed" }
+    ]
+  },
+
+  "AutoplayWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "AutoplayWhitelist": [
+        "https://mydomain.com", "https://test.mydomain.com"
+      ]
+    },
+    "pref_mappings": [
+      { "pref": "media.autoplay_whitelist" }
+    ]
+  },
+
+  "TabUnderAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "TabUnderAllowed": false
+    },
+    "pref_mappings": [
+      { "pref": "tab_under_allowed"}
     ]
   },
 

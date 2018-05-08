@@ -19,6 +19,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
@@ -31,6 +32,7 @@
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/events/event.h"
@@ -88,8 +90,6 @@ class MockInputMethod : public ui::InputMethodBase {
   ~MockInputMethod() override;
 
   // Overridden from InputMethod:
-  bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
-                                NativeEventResult* result) override;
   ui::EventDispatchDetails DispatchKeyEvent(ui::KeyEvent* key) override;
   void OnTextInputTypeChanged(const ui::TextInputClient* client) override;
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
@@ -147,13 +147,6 @@ MockInputMethod::MockInputMethod()
 }
 
 MockInputMethod::~MockInputMethod() {
-}
-
-bool MockInputMethod::OnUntranslatedIMEMessage(const base::NativeEvent& event,
-                                               NativeEventResult* result) {
-  if (result)
-    *result = NativeEventResult();
-  return false;
 }
 
 ui::EventDispatchDetails MockInputMethod::DispatchKeyEvent(ui::KeyEvent* key) {
@@ -711,6 +704,8 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
       EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* LOOK UP */));
       EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* Separator */));
     }
+    EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* EMOJI */));
+    EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* Separator */));
 #endif
 
     EXPECT_EQ(can_undo, menu->IsEnabledAt(menu_index++ /* UNDO */));
@@ -728,10 +723,10 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
               menu->IsEnabledAt(menu_index++ /* SELECT ALL */));
   }
 
-  void PressMouseButton(ui::EventFlags mouse_button_flags, int extra_flags) {
+  void PressMouseButton(ui::EventFlags mouse_button_flags) {
     ui::MouseEvent press(ui::ET_MOUSE_PRESSED, mouse_position_, mouse_position_,
                          ui::EventTimeForNow(), mouse_button_flags,
-                         mouse_button_flags | extra_flags);
+                         mouse_button_flags);
     textfield_->OnMousePressed(press);
   }
 
@@ -742,21 +737,21 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     textfield_->OnMouseReleased(release);
   }
 
-  void PressLeftMouseButton(int extra_flags = 0) {
-    PressMouseButton(ui::EF_LEFT_MOUSE_BUTTON, extra_flags);
+  void PressLeftMouseButton() {
+    PressMouseButton(ui::EF_LEFT_MOUSE_BUTTON);
   }
 
   void ReleaseLeftMouseButton() {
     ReleaseMouseButton(ui::EF_LEFT_MOUSE_BUTTON);
   }
 
-  void ClickLeftMouseButton(int extra_flags = 0) {
-    PressLeftMouseButton(extra_flags);
+  void ClickLeftMouseButton() {
+    PressLeftMouseButton();
     ReleaseLeftMouseButton();
   }
 
   void ClickRightMouseButton() {
-    PressMouseButton(ui::EF_RIGHT_MOUSE_BUTTON, 0);
+    PressMouseButton(ui::EF_RIGHT_MOUSE_BUTTON);
     ReleaseMouseButton(ui::EF_RIGHT_MOUSE_BUTTON);
   }
 
@@ -1545,6 +1540,9 @@ TEST_F(TextfieldTest, FocusTraversalTest) {
 
 TEST_F(TextfieldTest, ContextMenuDisplayTest) {
   InitTextfield();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnableEmojiContextMenu);
+
   EXPECT_TRUE(textfield_->context_menu_controller());
   textfield_->SetText(ASCIIToUTF16("hello world"));
   ui::Clipboard::GetForCurrentThread()->Clear(ui::CLIPBOARD_TYPE_COPY_PASTE);
@@ -1574,7 +1572,7 @@ TEST_F(TextfieldTest, DoubleAndTripleClickTest) {
   MoveMouseTo(gfx::Point(0, GetCursorYForTesting()));
   ClickLeftMouseButton();
   EXPECT_TRUE(textfield_->GetSelectedText().empty());
-  ClickLeftMouseButton(ui::EF_IS_DOUBLE_CLICK);
+  ClickLeftMouseButton();
   EXPECT_STR_EQ("hello", textfield_->GetSelectedText());
 
   // Test for triple click.
@@ -3491,6 +3489,24 @@ TEST_F(TextfieldTest, LookUpItemUpdate) {
   EXPECT_GT(context_menu->GetItemCount(), 0);
   EXPECT_EQ(context_menu->GetLabelAt(0),
             l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP, kTextTwo));
+}
+
+// Tests to see if the look up item is hidden for password fields.
+TEST_F(TextfieldTest, LookUpPassword) {
+  InitTextfield();
+  textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+
+  const base::string16 kText = ASCIIToUTF16("Willie Wagtail");
+
+  textfield_->SetText(kText);
+  textfield_->SelectAll(false);
+
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  EXPECT_NE(context_menu->GetCommandIdAt(0), IDS_CONTENT_CONTEXT_LOOK_UP);
+  EXPECT_NE(context_menu->GetLabelAt(0),
+            l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP, kText));
 }
 
 TEST_F(TextfieldTest, SecurePasswordInput) {

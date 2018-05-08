@@ -25,11 +25,7 @@
 <translation id="1204037785786432551">Pobierz link</translation>
 <translation id="1206892813135768548">Kopiuj tekst linku</translation>
 <translation id="1209206284964581585">Na razie ukryj</translation>
-<translation id="1211530540767271776">Nie ma tu żadnych urządzeń USB</translation>
 <translation id="123724288017357924">Ponowie załaduj stronę, bez pamięci podręcznej</translation>
-<translation id="1240668123557180468">Odkrywaj strony internetowe wysyłane przez obiekty w pobliżu. Chrome gromadzi strony internetowe powiązane z obiektami wokół Ciebie, wysyła je anonimowo do usługi Google, by wybrać te, które najbardziej mogą Ci się przydać, i wyświetla je.
-
-Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</translation>
 <translation id="124116460088058876">Więcej języków</translation>
 <translation id="124678866338384709">Zamknij bieżącą kartę</translation>
 <translation id="1258753120186372309">Doodle Google: <ph name="DOODLE_DESCRIPTION" /></translation>
@@ -47,7 +43,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="138361230106469022">Witaj, <ph name="FULL_NAME" /></translation>
 <translation id="1383876407941801731">Szukaj</translation>
 <translation id="1384959399684842514">Pobieranie wstrzymane</translation>
-<translation id="1389236224998445076">Zaoszczędzone dane:</translation>
 <translation id="1389974829397082527">Tu nie ma zakładek</translation>
 <translation id="1397811292916898096">Szukaj w <ph name="PRODUCT_NAME" /></translation>
 <translation id="1404122904123200417">Umieszczone na <ph name="WEBSITE_URL" /></translation>
@@ -83,10 +78,10 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="1670399744444387456">Podstawy</translation>
 <translation id="1671236975893690980">Oczekuję na pobranie…</translation>
 <translation id="1672586136351118594">Nie pokazuj ponownie</translation>
-<translation id="169033420419426091">Nie udało się pobrać pliku <ph name="FILE_NAME" /> z powodu braku karty SD.</translation>
 <translation id="1709438864123551175">Oszczędzanie danych</translation>
 <translation id="1718835860248848330">Ostatnia godzina</translation>
 <translation id="1729516292547892356">Aby oglądać treści rzeczywistości wirtualnej, zaktualizuj Usługi Google VR</translation>
+<translation id="1733116627827457509"><ph name="FILE_SIZE" /> – zaktualizowano <ph name="TIME_SINCE_UPDATE" /></translation>
 <translation id="1749561566933687563">Synchronizuj swoje zakładki</translation>
 <translation id="17513872634828108">Otwarte karty</translation>
 <translation id="1756600373018374892">Kliknij ten przycisk, by uzyskać szybki dostęp do swoich kart.</translation>
@@ -99,7 +94,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="1887786770086287077">Dostęp do lokalizacji jest wyłączony na tym urządzeniu. Włącz go w <ph name="BEGIN_LINK" />Ustawieniach Androida<ph name="END_LINK" />.</translation>
 <translation id="1891331835972267886"><ph name="APP_NAME" /> otworzy się w Chrome. Przechodząc dalej, akceptujesz <ph name="BEGIN_LINK1" />Warunki korzystania z usługi<ph name="END_LINK1" /> Chrome i <ph name="BEGIN_LINK2" />Informacje na temat ochrony prywatności<ph name="END_LINK2" />.</translation>
 <translation id="189172778771606813">Zamknij panel nawigacji</translation>
-<translation id="1897409700584096124">Strona internetowa jest nadawana</translation>
 <translation id="1919345977826869612">Reklamy</translation>
 <translation id="1933845786846280168">Wybrana karta</translation>
 <translation id="1938981467853765413">Prześlij opinię</translation>
@@ -109,7 +103,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="1946005195648379376">Określ, jak Google może korzystać z Twojej historii przeglądania, by dostosowywać wyniki wyszukiwania i działanie innych usług.</translation>
 <translation id="1952172573699511566">Gdy będzie to możliwe, tekst na stronach internetowych będzie się wyświetlać w Twoim preferowanym języku.</translation>
 <translation id="1966710179511230534">Zaktualizuj swoje dane logowania.</translation>
-<translation id="196723829409668860">Inne osoby oglądały też</translation>
 <translation id="1974060860693918893">Zaawansowane</translation>
 <translation id="1984937141057606926">Dozwolone, z wyjątkiem witryn innych firm</translation>
 <translation id="1989112275319619282">Przeglądaj</translation>
@@ -125,7 +118,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="2082238445998314030">Wynik <ph name="RESULT_NUMBER" /> z <ph name="TOTAL_RESULTS" /></translation>
 <translation id="2086652334978798447">Aby uzyskać dostęp do spersonalizowanej treści proponowanej przez Google, zaloguj się w Chrome.</translation>
 <translation id="2091887806945687916">Dźwięk</translation>
-<translation id="209354263896846928">Użyj paska adresu u dołu ekranu</translation>
 <translation id="2095887075102408547">Kiedy ta funkcja jest włączona, Chrome korzysta z serwerów Google, by kompresować strony przed ich pobraniem. Google nie optymalizuje ani nie widzi stron, z którymi łączysz się przez HTTPS lub które przeglądasz na kartach incognito.</translation>
 <translation id="2100273922101894616">Autologowanie</translation>
 <translation id="2111511281910874386">Przejdź do strony</translation>
@@ -143,7 +135,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="2206488550163399966"><ph name="APP_NAME" /> – aplikacja internetowa. <ph name="APP_URL" /></translation>
 <translation id="2227444325776770048">Kontynuuj jako <ph name="USER_FULL_NAME" /></translation>
 <translation id="2259659629660284697">Eksportuj hasła…</translation>
-<translation id="2266890032547182881">Szczegóły użycia danych</translation>
 <translation id="2268044343513325586">Zawęź</translation>
 <translation id="2286841657746966508">Adres rozliczeniowy</translation>
 <translation id="230115972905494466">Nie znaleziono zgodnych urządzeń</translation>
@@ -171,8 +162,7 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="2496180316473517155">Historia przeglądania</translation>
 <translation id="2498359688066513246">Pomoc i opinie</translation>
 <translation id="2501278716633472235">Wróć</translation>
-<translation id="2503472621226270518">Rozwija panel użytkownika</translation>
-<translation id="2512222046227390255">Autouzupełnianie formularzy</translation>
+<translation id="2512222046227390255">Autouzupełniaj formularze</translation>
 <translation id="2526148617758225454">Oszczędzanie danych jest włączone. Możesz nim zarządzać w ustawieniach.</translation>
 <translation id="2532336938189706096">Widok sieci</translation>
 <translation id="2536728043171574184">Oglądasz kopię offline tej strony</translation>
@@ -189,8 +179,10 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="2625189173221582860">Hasło zostało skopiowane</translation>
 <translation id="2631006050119455616">Zaoszczędzono</translation>
 <translation id="2647434099613338025">Dodaj język</translation>
+<translation id="2650751991977523696">Czy pobrać plik ponownie?</translation>
 <translation id="2653659639078652383">Prześlij</translation>
 <translation id="2677748264148917807">Wyjdź</translation>
+<translation id="2693813674743028984">Ukryj miejsce na pliki</translation>
 <translation id="2704606927547763573">Skopiowane</translation>
 <translation id="2707726405694321444">Odśwież stronę</translation>
 <translation id="2709516037105925701">Autouzupełnianie</translation>
@@ -216,6 +208,7 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="2956410042958133412">Tym kontem zarządzają <ph name="PARENT_NAME_1" /> i <ph name="PARENT_NAME_2" />.</translation>
 <translation id="2960796085439532066">Copyright <ph name="YEAR" /> Google Inc. Wszelkie prawa zastrzeżone.</translation>
 <translation id="2962095958535813455">Przełączono na karty incognito</translation>
+<translation id="2965945119655563012">Pokaż miejsce na pliki</translation>
 <translation id="2968755619301702150">Przeglądarka certyfikatów</translation>
 <translation id="2979025552038692506">Wybrana karta incognito</translation>
 <translation id="2989523299700148168">Ostatnio odwiedzone</translation>
@@ -224,14 +217,13 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="300526633675317032">Spowoduje to usunięcie <ph name="SIZE_IN_KB" /> danych witryn.</translation>
 <translation id="3029613699374795922">Pobrano <ph name="KBS" /> KB</translation>
 <translation id="3029704984691124060">Hasła nie pasują do siebie</translation>
-<translation id="3030708446010914655">Użyj paska adresu tutaj</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Poproś o pomoc<ph name="END_LINK" /></translation>
+<translation id="3045654778214005718">Zobacz więcej podobnych informacji od Google</translation>
 <translation id="305593374596241526">Lokalizacja jest wyłączona. Włącz ją w <ph name="BEGIN_LINK" />Ustawieniach Androida<ph name="END_LINK" />.</translation>
 <translation id="307908932405420782">Wkrótce pojawi się więcej artykułów. Życzymy miłego poranka.</translation>
 <translation id="3089395242580810162">Otwórz w karcie incognito</translation>
 <translation id="311456632243022227">Wiele linków otwartych w Chrome</translation>
 <translation id="3115898365077584848">Pokaż informacje</translation>
-<translation id="3135915540460564231">Gdzie są pobrane pliki, zakładki i historia?</translation>
 <translation id="3137521801621304719">Wyłącz tryb incognito</translation>
 <translation id="3148434565183091099">Aby korzystać ze swoich zakładek na wszystkich urządzeniach, zaloguj się w Chrome.</translation>
 <translation id="3157842584138209013">Sprawdź ilość zaoszczędzonych danych, używając przycisku Więcej opcji</translation>
@@ -252,7 +244,6 @@ Aby korzystać z internetu rzeczy, musisz włączyć Bluetooth i Lokalizację.</
 <translation id="32895400574683172">Powiadomienia są włączone</translation>
 <translation id="3295602654194328831">Ukryj informacje</translation>
 <translation id="3303414029551471755">Przejść do pobrania treści?</translation>
-<translation id="3321222012623826478">Usługa musi wysłać anonimowo adres tej strony na serwery Google w celu weryfikacji.</translation>
 <translation id="3328801116991980348">Informacje o witrynie</translation>
 <translation id="3341058695485821946">Sprawdź ilość zaoszczędzonych danych</translation>
 <translation id="3350687908700087792">Zamknij wszystkie karty incognito</translation>
@@ -292,10 +283,10 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="3661699943263275414">Witryny innych firm mogą zapisywać dane w plikach cookie i je odczytywać</translation>
 <translation id="3662546969139119822">Brak historii</translation>
 <translation id="3672452749423051839">Podpowiedzi przy błędach nawigacji</translation>
+<translation id="3692944402865947621">Nie udało się pobrać pliku <ph name="FILE_NAME" /> z powodu niedostępności pamięci.</translation>
 <translation id="3712575778697986964">Zresetować Oszczędzanie danych?</translation>
 <translation id="3714981814255182093">Otwórz pasek wyszukiwania</translation>
 <translation id="3716182511346448902">Ta strona używa zbyt dużo pamięci, dlatego została wstrzymana w Chrome.</translation>
-<translation id="3734660163659757482">Przeciągnij w górę, by zobaczyć zakładki i inne elementy</translation>
 <translation id="3738139272394829648">Dotknij, by wyszukać</translation>
 <translation id="3739899004075612870">Utworzono zakładkę w: <ph name="PRODUCT_NAME" /></translation>
 <translation id="3744111309925758534"><ph name="MEGABYTES" /> MB innych aplikacji</translation>
@@ -308,6 +299,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="3819178904835489326">Usunięte pobrane pliki: <ph name="NUMBER_OF_DOWNLOADS" /></translation>
 <translation id="3822502789641063741">Wyczyścić dane witryn?</translation>
 <translation id="3859306556332390985">Przewiń do przodu</translation>
+<translation id="3871936494901781193">Gdy przewijasz w górę, pokazuje szybkie linki do powiązanych stron.</translation>
 <translation id="3894427358181296146">Dodaj folder</translation>
 <translation id="3895926599014793903">Wymuś powiększenie</translation>
 <translation id="3927692899758076493">Bezszeryfowa</translation>
@@ -315,6 +307,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="393697183122708255">Brak włączonego wyszukiwania głosowego</translation>
 <translation id="3950820424414687140">Zaloguj się</translation>
 <translation id="395206256282351086">Podpowiadanie stron internetowych i wyszukiwanych słów jest wyłączone</translation>
+<translation id="3952533382939530115">Ta funkcja korzysta z <ph name="BEGIN_LINK" />synchronizacji<ph name="END_LINK" />. Adresy URL odwiedzanych przez Ciebie stron są przesyłane do Google.</translation>
 <translation id="3967822245660637423">Pobieranie zakończone</translation>
 <translation id="397583555483684758">Synchronizacja przestała działać</translation>
 <translation id="3976396876660209797">Usuń i utwórz ponownie ten skrót</translation>
@@ -329,6 +322,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="4056223980640387499">Sepia</translation>
 <translation id="4062305924942672200">Informacje prawne</translation>
 <translation id="4084682180776658562">Dodaj do zakładek</translation>
+<translation id="4084712963632273211">Opublikowane na <ph name="PUBLISHER_ORIGIN" /> – <ph name="BEGIN_DEEMPHASIZED" />wyświetlone przez Google<ph name="END_DEEMPHASIZED" /></translation>
 <translation id="4084836577264234537"><ph name="MEGABYTES" /> MB pobranych plików</translation>
 <translation id="4089831646916293264">Ta funkcja może zakłócać dostęp do udostępnianych przez operatora płatnych usług transmisji danych.</translation>
 <translation id="4095146165863963773">Usunąć dane aplikacji?</translation>
@@ -342,6 +336,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="4170011742729630528">Usługa jest niedostępna. Spróbuj ponownie później.</translation>
 <translation id="4181841719683918333">Języki</translation>
 <translation id="4195643157523330669">Otwórz w nowej karcie</translation>
+<translation id="4198423547019359126">Brak dostępnych miejsc zapisu pobieranych plików</translation>
 <translation id="4226663524361240545">Powiadomienia będą sygnalizowane wibracjami</translation>
 <translation id="4242533952199664413">Otwórz ustawienia</translation>
 <translation id="424864128008805179">Wylogować z Chrome?</translation>
@@ -372,13 +367,13 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="4521489764227272523">Wybrane dane zostały usunięte z Chrome i ze zsynchronizowanych urządzeń.
 
 Na stronie <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> na Twoim koncie Google mogą być zapisane inne rodzaje historii przeglądania, takie jak wyszukiwania lub aktywność z innych usług Google.</translation>
-<translation id="4522570452068850558">Szczegóły</translation>
 <translation id="4526249700380860531">Wyświetlaj zapisane hasła i zarządzaj nimi na <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4532845899244822526">Wybierz folder</translation>
 <translation id="4544481164434183075">Ta strona jest z <ph name="CREATION_TIME" /> i może różnić się od wersji online.</translation>
 <translation id="4550003330909367850">Aby wyświetlić lub skopiować hasło, ustaw blokadę ekranu na urządzeniu.</translation>
 <translation id="4558311620361989323">Skróty stron internetowych</translation>
 <translation id="4565377596337484307">Ukryj hasło</translation>
+<translation id="4570913071927164677">Szczegóły</translation>
 <translation id="4572422548854449519">Zaloguj się na konto zarządzane</translation>
 <translation id="4581964774250883625">Jesteś w trybie incognito.</translation>
 <translation id="4583164079174244168">{MINUTES,plural, =1{# minutę temu}few{# minuty temu}many{# minut temu}other{# minuty temu}}</translation>
@@ -417,6 +412,7 @@ Na stronie <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> n
 <translation id="4876188919622883022">Widok uproszczony</translation>
 <translation id="4878404682131129617">Nie udało się utworzyć tunelu przez serwer proxy</translation>
 <translation id="4881695831933465202">Otwórz</translation>
+<translation id="488187801263602086">Zmień nazwę pliku</translation>
 <translation id="4885273946141277891">Nieobsługiwana liczba wystąpień Chrome.</translation>
 <translation id="4910889077668685004">Aplikacje do płatności</translation>
 <translation id="4913161338056004800">Resetuj statystyki</translation>
@@ -510,6 +506,7 @@ Na stronie <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> n
 <translation id="5676636989614905379">Nie można odtworzyć filmu na ekranie <ph name="SCREEN_NAME" />.</translation>
 <translation id="5677928146339483299">Zablokowane</translation>
 <translation id="5684874026226664614">Nie można przetłumaczyć tej strony.</translation>
+<translation id="5686790454216892815">Nazwa pliku jest za długa</translation>
 <translation id="5689516760719285838">Lokalizacja</translation>
 <translation id="5719837394786370183">Po zamknięciu wszystkich kart incognito wyświetlane na nich strony nie pozostawią żadnych śladów w historii przeglądarki, magazynie plików cookie ani historii wyszukiwania. Pobrane pliki i utworzone zakładki zostaną zachowane.
 
@@ -555,6 +552,7 @@ To jednak nie oznacza, że Cię nie widać. Nawet gdy przejdziesz w tryb incogni
 <translation id="60923314841986378">Pozostało: <ph name="HOURS" /> godz.</translation>
 <translation id="60924377787140961">Wkrótce pojawi się więcej artykułów. Życzymy miłego popołudnia.</translation>
 <translation id="6108923351542677676">Trwa konfigurowanie…</translation>
+<translation id="6111020039983847643">użyte dane</translation>
 <translation id="6112702117600201073">Odświeżam stronę</translation>
 <translation id="6127379762771434464">Element został usunięty</translation>
 <translation id="6138140242378429169">Otwórz wersję na urządzenia mobilne</translation>
@@ -601,7 +599,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="6475951671322991020">Pobierz film</translation>
 <translation id="6482749332252372425">Nie udało się pobrać pliku <ph name="FILE_NAME" /> z powodu braku miejsca.</translation>
 <translation id="6496823230996795692">Aby pierwszy raz skorzystać z aplikacji <ph name="APP_NAME" />, połącz się z internetem.</translation>
-<translation id="6508332297647760142">Udostępnianie internetu rzeczy</translation>
 <translation id="6527303717912515753">Udostępnij</translation>
 <translation id="6534565668554028783">Google zbyt długo nie odpowiada</translation>
 <translation id="6538442820324228105">Pobrano <ph name="GBS" /> GB</translation>
@@ -644,7 +641,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="6864459304226931083">Pobierz obraz</translation>
 <translation id="6865313869410766144">Autouzupełnianie danych formularzy</translation>
 <translation id="6868088497967843822">Zaloguj się, by korzystać z zakładek, historii, haseł i innych ustawień na wszystkich swoich urządzeniach</translation>
-<translation id="6875705348083140572">Zobacz, co jest w pobliżu</translation>
 <translation id="688738109438487280">Dodaj istniejące dane do konta <ph name="TO_ACCOUNT" />.</translation>
 <translation id="6891726759199484455">Odblokuj, by skopiować hasło</translation>
 <translation id="6891858906296486776">{OPEN_TABS,plural, =1{%1$d otwarta karta}few{%1$d otwarte karty}many{%1$d otwartych kart}other{%1$d otwartej karty}}</translation>
@@ -694,7 +690,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="7352939065658542140">FILM</translation>
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{Udostępnij 1 wybrany element}few{Udostępnij # wybrane elementy}many{Udostępnij # wybranych elementów}other{Udostępnij # wybranego elementu}}</translation>
 <translation id="7366340029385295517">Przesyłam na ekran <ph name="SCREEN_NAME" /></translation>
-<translation id="7374228672268453233">Użyte dane:</translation>
 <translation id="7375125077091615385">Typ:</translation>
 <translation id="7400418766976504921">Adres URL</translation>
 <translation id="7403691278183511381">Pierwsze uruchomienie Chrome</translation>
@@ -703,12 +698,15 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="7437998757836447326">Wyloguj się z Chrome</translation>
 <translation id="7445411102860286510">Zezwalaj witrynom na automatyczne odtwarzanie wyciszonych filmów (zalecane)</translation>
 <translation id="7453467225369441013">Wylogowuje z większości stron internetowych. Nie wyloguje Cię z konta Google.</translation>
+<translation id="7454641608352164238">Za mało miejsca</translation>
 <translation id="7455923816558154057">Kliknij, by wyświetlić</translation>
 <translation id="7473891865547856676">Nie, dziękuję</translation>
 <translation id="7475192538862203634">Jeśli często widzisz ten komunikat, przeczytaj te <ph name="BEGIN_LINK" />wskazówki<ph name="END_LINK" />.</translation>
+<translation id="7475688122056506577">Nie znaleziono karty SD. Może brakować niektórych Twoich plików.</translation>
 <translation id="748127970106343339">Potwierdź usunięcie z urządzenia danych logowania</translation>
 <translation id="7481312909269577407">Dalej</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (zaktualizowana <ph name="TIME_SINCE_UPDATE" />)</translation>
+<translation id="7494974237137038751">zaoszczędzone dane</translation>
 <translation id="7498271377022651285">Czekaj…</translation>
 <translation id="7514365320538308">Pobierz</translation>
 <translation id="751961395872307827">Nie można połączyć się ze stroną</translation>
@@ -716,7 +714,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="7542481630195938534">Nie można uzyskać sugestii</translation>
 <translation id="7562080006725997899">Czyszczenie danych przeglądania</translation>
 <translation id="756809126120519699">Wyczyszczono dane Chrome</translation>
-<translation id="7588950540487816470">Internet rzeczy</translation>
 <translation id="7589445247086920869">Blokuj dostęp obecnej wyszukiwarce</translation>
 <translation id="7593557518625677601">Otwórz ustawienia Androida i ponownie włącz jego synchronizację, by uruchomić Synchronizację Chrome</translation>
 <translation id="7596558890252710462">System operacyjny</translation>
@@ -769,6 +766,7 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="8026334261755873520">Wyczyść dane przeglądania</translation>
 <translation id="8035133914807600019">Nowy folder…</translation>
 <translation id="8037750541064988519">Pozostało: <ph name="DAYS" /> dni</translation>
+<translation id="804335162455518893">Nie znaleziono karty SD</translation>
 <translation id="805047784848435650">Na podstawie Twojej historii przeglądania</translation>
 <translation id="8051695050440594747">Dostępne: <ph name="MEGABYTES" /> MB</translation>
 <translation id="8058746566562539958">Otwórz w nowej karcie Chrome</translation>
@@ -780,6 +778,7 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="8087000398470557479">Treść z <ph name="DOMAIN_NAME" /> dostarczana przez Google.</translation>
 <translation id="8100932616285851614">Zamknięto panel użytkownika</translation>
 <translation id="8103578431304235997">Karta incognito</translation>
+<translation id="8105951947646329362">Sugeruj powiązane strony</translation>
 <translation id="8116925261070264013">Wyciszone</translation>
 <translation id="813082847718468539">Wyświetl informacje o witrynie</translation>
 <translation id="8137558756159375272">Funkcja „Dotknij, by wyszukać” wysyła zaznaczone słowo i bieżącą stronę jako kontekst do wyszukiwarki Google. Możesz ją wyłączyć w <ph name="BEGIN_LINK" />ustawieniach<ph name="END_LINK" />.</translation>
@@ -789,6 +788,7 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="8200772114523450471">Wznów</translation>
 <translation id="8209050860603202033">Otwórz grafikę</translation>
 <translation id="8220488350232498290"><ph name="GIGABYTES" /> GB pobranych plików</translation>
+<translation id="8249310407154411074">Przenieś na początek</translation>
 <translation id="8250920743982581267">Dokumenty</translation>
 <translation id="8260126382462817229">Spróbuj zalogować się jeszcze raz</translation>
 <translation id="8261506727792406068">Usuń</translation>
@@ -832,6 +832,7 @@ Aby otrzymać nowe licencje, połącz się z internetem i odtwórz pobrane treś
 <translation id="8636825310635137004">Aby korzystać z kart ze swoich innych urządzeń, włącz synchronizację</translation>
 <translation id="8641930654639604085">Próbuj blokować strony dla dorosłych</translation>
 <translation id="8662811608048051533">Wylogowuje z większości stron internetowych.</translation>
+<translation id="8664979001105139458">Ta nazwa pliku już istnieje</translation>
 <translation id="8676374126336081632">Wyczyść wpisany tekst</translation>
 <translation id="8687353297350450808">{N_BARS,plural, =1{Poziom siły sygnału: # słupek}few{Poziom siły sygnału: # słupki}many{Poziom siły sygnału: # słupków}other{Poziom siły sygnału: # słupka}}</translation>
 <translation id="869891660844655955">Data wygaśnięcia</translation>
@@ -860,6 +861,7 @@ Aby otrzymać nowe licencje, połącz się z internetem i odtwórz pobrane treś
 <translation id="8942627711005830162">Otwórz w innym oknie</translation>
 <translation id="8951232171465285730">Chrome pozwolił Ci zaoszczędzić <ph name="MEGABYTES" /> MB</translation>
 <translation id="8959122750345127698">Adres nieosiągalny: <ph name="URL" /></translation>
+<translation id="8972098258593396643">Czy pobrać do folderu domyślnego?</translation>
 <translation id="8979405271719829084">Pobierz film, by obejrzeć go później</translation>
 <translation id="8981454092730389528">Zarządzanie aktywnością w Google</translation>
 <translation id="8986494364107987395">Automatycznie przesyłaj do Google statystyki użytkowania i raporty o awariach</translation>
@@ -888,6 +890,7 @@ Aby otrzymać nowe licencje, połącz się z internetem i odtwórz pobrane treś
 <translation id="932327136139879170">Strona główna</translation>
 <translation id="932599481871055447">Zapisuj dane i szybciej przeglądaj strony</translation>
 <translation id="938850635132480979">Błąd: <ph name="ERROR_CODE" /></translation>
+<translation id="945522503751344254">Wyślij zgłoszenie</translation>
 <translation id="945632385593298557">Dostęp do mikrofonu</translation>
 <translation id="951339005376969845">Usuń istniejące dane. Aby je pobrać, przełącz się z powrotem na konto <ph name="FROM_ACCOUNT" />.</translation>
 <translation id="95817756606698420">Chrome może używać <ph name="BEGIN_BOLD" />Sogou<ph name="END_BOLD" /> do wyszukiwania w Chinach. Możesz to zmienić w <ph name="BEGIN_LINK" />Ustawieniach<ph name="END_LINK" />.</translation>

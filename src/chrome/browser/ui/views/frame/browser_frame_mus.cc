@@ -20,11 +20,14 @@
 #include "ui/views/mus/window_manager_frame_values.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/public/interfaces/window_properties.mojom.h"
 #include "ash/public/interfaces/window_style.mojom.h"
+#include "chrome/browser/chromeos/ash_config.h"
+#include "chrome/browser/ui/views/frame/browser_frame_ash.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #endif
 
@@ -32,7 +35,12 @@ BrowserFrameMus::BrowserFrameMus(BrowserFrame* browser_frame,
                                  BrowserView* browser_view)
     : views::DesktopNativeWidgetAura(browser_frame),
       browser_frame_(browser_frame),
-      browser_view_(browser_view) {}
+      browser_view_(browser_view) {
+#if defined(OS_CHROMEOS)
+  // Not used with Mus on Chrome OS.
+  DCHECK_EQ(chromeos::GetAshConfig(), ash::Config::MASH);
+#endif
+}
 
 BrowserFrameMus::~BrowserFrameMus() {}
 
@@ -49,6 +57,7 @@ views::Widget::InitParams BrowserFrameMus::GetWidgetParams() {
   properties[ui::mojom::WindowManager::kDisableImmersive_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(true);
 #if defined(OS_CHROMEOS)
+  Browser* browser = browser_view_->browser();
   properties[ash::mojom::kAshWindowStyle_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ash::mojom::WindowStyle::BROWSER));
@@ -57,12 +66,25 @@ views::Widget::InitParams BrowserFrameMus::GetWidgetParams() {
   properties[ui::mojom::WindowManager::kShelfItemType_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int64_t>(ash::TYPE_BROWSER_SHORTCUT));
+
+  // TODO(estade): to match classic Ash, this property should be toggled to true
+  // for non-popups after the window is initially shown.
   properties[ash::mojom::kWindowPositionManaged_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(
-          static_cast<int64_t>(browser_view_->browser()->is_type_popup()));
+      mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int64_t>(
+          !browser->bounds_overridden() && !browser->is_session_restore() &&
+          !browser->is_type_popup()));
   properties[ash::mojom::kCanConsumeSystemKeys_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
-          static_cast<int64_t>(browser_view_->browser()->is_app()));
+          static_cast<int64_t>(browser->is_app()));
+  // Set the frame color for WebUI windows, e.g. settings.
+  if (!browser->is_type_tabbed() && browser->is_trusted_source()) {
+    properties[ui::mojom::WindowManager::kActiveFrameColor_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(
+            static_cast<int32_t>(BrowserFrameAsh::kMdWebUiFrameColor));
+    properties[ui::mojom::WindowManager::kInactiveFrameColor_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(
+            static_cast<int32_t>(BrowserFrameAsh::kMdWebUiFrameColor));
+  }
 #endif
   aura::WindowTreeHostMusInitParams window_tree_host_init_params =
       aura::CreateInitParamsForTopLevel(

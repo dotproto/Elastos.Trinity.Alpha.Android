@@ -187,15 +187,8 @@ void SoftwareOutputDeviceMac::EndPaint() {
         IOSurfaceCreateMachPort(current_paint_buffer_->io_surface));
     ui::CALayerFrameSink* ca_layer_frame_sink =
         ui::CALayerFrameSink::FromAcceleratedWidget(widget_);
-    if (ca_layer_frame_sink) {
-      ca_layer_frame_sink->SetSuspended(false);
+    if (ca_layer_frame_sink)
       ca_layer_frame_sink->UpdateCALayerTree(ca_layer_params);
-      base::TimeTicks vsync_timebase;
-      base::TimeDelta vsync_interval;
-      ca_layer_frame_sink->GetVSyncParameters(&vsync_timebase, &vsync_interval);
-      if (!update_vsync_callback_.is_null())
-        update_vsync_callback_.Run(vsync_timebase, vsync_interval);
-    }
   }
 
   current_paint_buffer_ = nullptr;
@@ -208,26 +201,7 @@ void SoftwareOutputDeviceMac::DiscardBackbuffer() {
 void SoftwareOutputDeviceMac::EnsureBackbuffer() {}
 
 gfx::VSyncProvider* SoftwareOutputDeviceMac::GetVSyncProvider() {
-  return this;
-}
-
-void SoftwareOutputDeviceMac::GetVSyncParameters(
-    const gfx::VSyncProvider::UpdateVSyncCallback& callback) {
-  update_vsync_callback_ = callback;
-}
-
-bool SoftwareOutputDeviceMac::GetVSyncParametersIfAvailable(
-    base::TimeTicks* timebase,
-    base::TimeDelta* interval) {
-  return false;
-}
-
-bool SoftwareOutputDeviceMac::SupportGetVSyncParametersIfAvailable() const {
-  return false;
-}
-
-bool SoftwareOutputDeviceMac::IsHWClock() const {
-  return false;
+  return nullptr;
 }
 
 }  // namespace viz

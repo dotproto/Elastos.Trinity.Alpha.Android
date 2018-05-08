@@ -20,10 +20,9 @@
 #include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/values.h"
-#include "net/base/network_throttle_manager_impl.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_response_body_drainer.h"
-#include "net/http/http_stream_factory_impl.h"
+#include "net/http/http_stream_factory.h"
 #include "net/http/url_security_manager.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/quic/chromium/quic_crypto_client_stream_factory.h"
@@ -37,6 +36,7 @@
 #include "net/socket/client_socket_pool_manager_impl.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/spdy/chromium/spdy_session_pool.h"
 
 namespace net {
@@ -48,7 +48,8 @@ base::AtomicSequenceNumber g_next_shard_id;
 std::unique_ptr<ClientSocketPoolManager> CreateSocketPoolManager(
     HttpNetworkSession::SocketPoolType pool_type,
     const HttpNetworkSession::Context& context,
-    const std::string& ssl_session_cache_shard) {
+    const std::string& ssl_session_cache_shard,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager) {
   // TODO(yutak): Differentiate WebSocket pool manager and allow more
   // simultaneous connections for WebSockets.
   return std::make_unique<ClientSocketPoolManagerImpl>(
@@ -60,7 +61,7 @@ std::unique_ptr<ClientSocketPoolManager> CreateSocketPoolManager(
       context.cert_verifier, context.channel_id_service,
       context.transport_security_state, context.cert_transparency_verifier,
       context.ct_policy_enforcer, ssl_session_cache_shard,
-      context.ssl_config_service, pool_type);
+      context.ssl_config_service, websocket_endpoint_lock_manager, pool_type);
 }
 
 }  // unnamed namespace
@@ -113,7 +114,7 @@ HttpNetworkSession::Params::Params()
       quic_max_server_configs_stored_in_properties(0u),
       quic_enable_socket_recv_optimization(false),
       mark_quic_broken_when_network_blackholes(false),
-      retry_without_alt_svc_on_quic_errors(false),
+      retry_without_alt_svc_on_quic_errors(true),
       support_ietf_format_quic_altsvc(false),
       quic_close_sessions_on_ip_change(false),
       quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
@@ -139,6 +140,7 @@ HttpNetworkSession::Params::Params()
       quic_estimate_initial_rtt(false),
       quic_headers_include_h2_stream_dependency(false),
       enable_token_binding(false),
+      enable_channel_id(false),
       http_09_on_non_default_ports_enabled(false),
       disable_idle_sockets_close_on_memory_pressure(false) {
   quic_supported_versions.push_back(QUIC_VERSION_39);
@@ -181,6 +183,8 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
       http_auth_handler_factory_(context.http_auth_handler_factory),
       proxy_resolution_service_(context.proxy_resolution_service),
       ssl_config_service_(context.ssl_config_service),
+      websocket_endpoint_lock_manager_(
+          std::make_unique<WebSocketEndpointLockManager>()),
       push_delegate_(nullptr),
       quic_stream_factory_(
           context.net_log,
@@ -223,6 +227,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_connection_options,
           params.quic_client_connection_options,
           params.enable_token_binding,
+          params.enable_channel_id,
           params.quic_enable_socket_recv_optimization),
       spdy_session_pool_(context.host_resolver,
                          context.ssl_config_service,
@@ -234,8 +239,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
                          params.spdy_session_max_recv_window_size,
                          AddDefaultHttp2Settings(params.http2_settings),
                          params.time_func),
-      http_stream_factory_(std::make_unique<HttpStreamFactoryImpl>(this)),
-      network_stream_throttler_(std::make_unique<NetworkThrottleManagerImpl>()),
+      http_stream_factory_(std::make_unique<HttpStreamFactory>(this)),
       params_(params),
       context_(context) {
   DCHECK(proxy_resolution_service_);
@@ -245,9 +249,11 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
   const std::string ssl_session_cache_shard =
       "http_network_session/" + base::IntToString(g_next_shard_id.GetNext());
   normal_socket_pool_manager_ = CreateSocketPoolManager(
-      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard);
+      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard,
+      websocket_endpoint_lock_manager_.get());
   websocket_socket_pool_manager_ = CreateSocketPoolManager(
-      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard);
+      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard,
+      websocket_endpoint_lock_manager_.get());
 
   if (params_.enable_http2) {
     next_protos_.push_back(kProtoHTTP2);
@@ -442,8 +448,11 @@ void HttpNetworkSession::GetSSLConfig(const HttpRequestInfo& request,
   *proxy_config = *server_config;
   if (request.privacy_mode == PRIVACY_MODE_ENABLED) {
     server_config->channel_id_enabled = false;
-  } else if (params_.enable_token_binding && context_.channel_id_service) {
-    server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
+  } else {
+    server_config->channel_id_enabled = params_.enable_channel_id;
+    if (params_.enable_token_binding && context_.channel_id_service) {
+      server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
+    }
   }
 }
 

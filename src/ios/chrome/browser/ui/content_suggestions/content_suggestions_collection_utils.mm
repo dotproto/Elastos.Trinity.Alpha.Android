@@ -86,6 +86,7 @@ namespace content_suggestions {
 
 const CGFloat kSearchFieldHeight = 50;
 const int kSearchFieldBackgroundColor = 0xF1F3F4;
+const CGFloat kHintTextScale = 0.85;
 
 const NSUInteger kMostVisitedItemsPerLine = 4;
 
@@ -143,7 +144,7 @@ CGFloat centeredTilesMarginForWidth(CGFloat width) {
 }
 
 CGFloat doodleHeight(BOOL logoIsShowing) {
-  if (!IsIPadIdiom() && !logoIsShowing)
+  if (!IsRegularXRegularSizeClass() && !logoIsShowing)
     return kNonGoogleSearchDoodleHeight;
 
   return kGoogleSearchDoodleHeight;
@@ -153,7 +154,7 @@ CGFloat doodleTopMargin(BOOL toolbarPresent) {
   if (IsUIRefreshPhase1Enabled()) {
     if (!IsCompactWidth() && !IsCompactHeight())
       return kDoodleTopMarginRegularXRegular;
-    return kDoodleTopMarginOther;
+    return StatusBarHeight() + kDoodleTopMarginOther;
   }
   if (IsIPadIdiom())
     return kDoodleTopMarginIPadLegacy;
@@ -189,7 +190,7 @@ CGFloat heightForLogoHeader(BOOL logoIsShowing,
   CGFloat headerHeight = doodleTopMargin(toolbarPresent) +
                          doodleHeight(logoIsShowing) + searchFieldTopMargin() +
                          kSearchFieldHeight + kNTPSearchFieldBottomPadding;
-  if (!IsIPadIdiom()) {
+  if (!IsRegularXRegularSizeClass()) {
     return headerHeight;
   }
   if (!logoIsShowing) {
@@ -203,25 +204,27 @@ CGFloat heightForLogoHeader(BOOL logoIsShowing,
 }
 
 void configureSearchHintLabel(UILabel* searchHintLabel,
+                              UIView* hintLabelContainer,
                               UIButton* searchTapTarget) {
-  [searchHintLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
+  // searchHintLabel is intentionally not using autolayout because it will need
+  // to use a CGAffineScale transform that will not work correctly with
+  // autolayout.  Instead, |hintLabelContainer| will use autolayout and will
+  // contain |searchHintLabel|.
+  searchHintLabel.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [hintLabelContainer setTranslatesAutoresizingMaskIntoConstraints:NO];
+  [searchTapTarget addSubview:hintLabelContainer];
+  [hintLabelContainer addSubview:searchHintLabel];
 
-  [searchTapTarget addSubview:searchHintLabel];
-
-  if (IsUIRefreshPhase1Enabled()) {
-    [NSLayoutConstraint activateConstraints:@[
-      [searchHintLabel.centerYAnchor
-          constraintEqualToAnchor:searchTapTarget.centerYAnchor]
-    ]];
-  } else {
-    [NSLayoutConstraint activateConstraints:@[
-      [searchHintLabel.heightAnchor
-          constraintEqualToConstant:kSearchFieldHeight - 2 * kSearchHintMargin],
-      [searchHintLabel.centerYAnchor
-          constraintEqualToAnchor:searchTapTarget.centerYAnchor
-                         constant:kSearchHintVerticalOffset]
-    ]];
-  }
+  CGFloat centerYOffsetConstant =
+      IsUIRefreshPhase1Enabled() ? 0 : kSearchHintVerticalOffset;
+  [NSLayoutConstraint activateConstraints:@[
+    [hintLabelContainer.centerYAnchor
+        constraintEqualToAnchor:searchTapTarget.centerYAnchor
+                       constant:centerYOffsetConstant],
+    [hintLabelContainer.heightAnchor
+        constraintEqualToConstant:kSearchFieldHeight - 2 * kSearchHintMargin],
+  ]];
 
   [searchHintLabel setText:l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)];
   if (base::i18n::IsRTL()) {
@@ -231,7 +234,6 @@ void configureSearchHintLabel(UILabel* searchHintLabel,
     [searchHintLabel setTextColor:[UIColor colorWithWhite:0 alpha:kHintAlpha]];
     searchHintLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleTitle3];
-    searchHintLabel.adjustsFontSizeToFitWidth = YES;
   } else {
     [searchHintLabel
         setTextColor:
@@ -271,6 +273,19 @@ UIView* nearestAncestor(UIView* view, Class aClass) {
     return view;
   }
   return nearestAncestor([view superview], aClass);
+}
+
+// Content suggestion dupliations of uikit_ui_util to allow wrapping behind
+// the refresh flag.  Post refresh remove these helpers and just check
+// IsRxRSC instead.
+BOOL IsRegularXRegularSizeClass(id<UITraitEnvironment> environment) {
+  return IsUIRefreshPhase1Enabled() ? ::IsRegularXRegularSizeClass(environment)
+                                    : IsIPadIdiom();
+}
+
+BOOL IsRegularXRegularSizeClass() {
+  return IsUIRefreshPhase1Enabled() ? ::IsRegularXRegularSizeClass()
+                                    : IsIPadIdiom();
 }
 
 }  // namespace content_suggestions

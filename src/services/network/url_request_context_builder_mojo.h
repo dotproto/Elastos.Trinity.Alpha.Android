@@ -55,12 +55,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLRequestContextBuilderMojo
   //
   // This method is intended to ease the transition to an out-of-process
   // NetworkService, and will be removed once that ships.
-  URLRequestContextOwner Create(mojom::NetworkContextParams* params,
-                                bool quic_disabled,
-                                net::NetLog* net_log);
+  URLRequestContextOwner Create(
+      mojom::NetworkContextParams* params,
+      bool quic_disabled,
+      net::NetLog* net_log,
+      net::NetworkQualityEstimator* network_quality_estimator);
 
  private:
-  std::unique_ptr<net::ProxyResolutionService> CreateProxyService(
+  std::unique_ptr<net::ProxyResolutionService> CreateProxyResolutionService(
       std::unique_ptr<net::ProxyConfigService> proxy_config_service,
       net::URLRequestContext* url_request_context,
       net::HostResolver* host_resolver,

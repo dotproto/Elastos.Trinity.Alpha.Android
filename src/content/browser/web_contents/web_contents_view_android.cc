@@ -11,10 +11,10 @@
 #include "cc/layers/layer.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_feature_list.h"
-#include "content/browser/android/content_view_core.h"
+#include "content/browser/android/content_ui_event_handler.h"
 #include "content/browser/android/gesture_listener_manager.h"
 #include "content/browser/android/select_popup.h"
-#include "content/browser/android/selection_popup_controller.h"
+#include "content/browser/android/selection/selection_popup_controller.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/renderer_host/display_util.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
@@ -30,6 +30,8 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/display/screen.h"
 #include "ui/events/android/drag_event_android.h"
+#include "ui/events/android/gesture_event_android.h"
+#include "ui/events/android/key_event_android.h"
 #include "ui/events/android/motion_event_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/image/image_skia.h"
@@ -44,8 +46,6 @@ namespace content {
 
 namespace {
 
-const int kAndroidLSDKVersion = 21;
-
 // True if we want to disable Android native event batching and use
 // compositor event queue.
 bool ShouldRequestUnbufferedDispatch() {
@@ -53,7 +53,7 @@ bool ShouldRequestUnbufferedDispatch() {
       base::FeatureList::IsEnabled(
           content::android::kRequestUnbufferedDispatch) &&
       base::android::BuildInfo::GetInstance()->sdk_int() >=
-          kAndroidLSDKVersion &&
+          base::android::SDK_VERSION_LOLLIPOP &&
       !content::GetContentClient()->UsingSynchronousCompositing();
   return should_request_unbuffered_dispatch;
 }
@@ -106,31 +106,21 @@ WebContentsViewAndroid::WebContentsViewAndroid(
     WebContentsViewDelegate* delegate)
     : web_contents_(web_contents),
       delegate_(delegate),
-      view_(this, ui::ViewAndroid::LayoutType::NORMAL),
-      synchronous_compositor_client_(nullptr) {}
+      view_(ui::ViewAndroid::LayoutType::NORMAL),
+      synchronous_compositor_client_(nullptr) {
+  view_.SetLayer(cc::Layer::Create());
+  view_.set_event_handler(this);
+}
 
 WebContentsViewAndroid::~WebContentsViewAndroid() {
   if (view_.GetLayer())
     view_.GetLayer()->RemoveFromParent();
+  view_.set_event_handler(nullptr);
 }
 
-void WebContentsViewAndroid::SetContentViewCore(ContentViewCore* cvc) {
-  if (content_view_core_.get() != cvc)
-    content_view_core_.reset(cvc);
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (rwhv)
-    rwhv->UpdateNativeViewTree(&view_);
-
-  if (web_contents_->ShowingInterstitialPage()) {
-    rwhv = static_cast<RenderWidgetHostViewAndroid*>(
-        web_contents_->GetInterstitialPage()
-            ->GetMainFrame()
-            ->GetRenderViewHost()
-            ->GetWidget()
-            ->GetView());
-    if (rwhv)
-      rwhv->UpdateNativeViewTree(&view_);
-  }
+void WebContentsViewAndroid::SetContentUiEventHandler(
+    std::unique_ptr<ContentUiEventHandler> handler) {
+  content_ui_event_handler_ = std::move(handler);
 }
 
 void WebContentsViewAndroid::SetSelectPopup(
@@ -182,7 +172,7 @@ WebContentsViewAndroid::GetRenderWidgetHostViewAndroid() {
 }
 
 gfx::NativeWindow WebContentsViewAndroid::GetTopLevelNativeWindow() const {
-  return content_view_core_ ? content_view_core_->GetWindowAndroid() : nullptr;
+  return view_.GetWindowAndroid();
 }
 
 void WebContentsViewAndroid::GetContainerBounds(gfx::Rect* out) const {
@@ -269,9 +259,7 @@ RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForWidget(
   // order to paint it. See ContentView::GetRenderWidgetHostViewAndroid for an
   // example of how this is achieved for InterstitialPages.
   RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(render_widget_host);
-  gfx::NativeView native_view = content_view_core_ ? &view_ : nullptr;
-  RenderWidgetHostViewAndroid* rwhv =
-      new RenderWidgetHostViewAndroid(rwhi, native_view);
+  auto* rwhv = new RenderWidgetHostViewAndroid(rwhi, &view_);
   rwhv->SetSynchronousCompositorClient(synchronous_compositor_client_);
   return rwhv;
 }
@@ -509,10 +497,9 @@ bool WebContentsViewAndroid::DoBrowserControlsShrinkBlinkSize() const {
 }
 
 bool WebContentsViewAndroid::OnTouchEvent(const ui::MotionEventAndroid& event) {
-  if (event.GetAction() == ui::MotionEventAndroid::Action::DOWN) {
-    if (ShouldRequestUnbufferedDispatch())
-      view_.RequestUnbufferedDispatch(event);
-    content_view_core_->OnTouchDown(event.GetJavaObject());
+  if (event.GetAction() == ui::MotionEventAndroid::Action::DOWN &&
+      ShouldRequestUnbufferedDispatch()) {
+    view_.RequestUnbufferedDispatch(event);
   }
   return false;  // let the children handle the actual event.
 }
@@ -530,11 +517,24 @@ bool WebContentsViewAndroid::OnMouseEvent(const ui::MotionEventAndroid& event) {
   return manager && manager->OnHoverEvent(event);
 }
 
+bool WebContentsViewAndroid::OnKeyUp(const ui::KeyEventAndroid& event) {
+  if (content_ui_event_handler_)
+    return content_ui_event_handler_->OnKeyUp(event);
+  return false;
+}
+
+bool WebContentsViewAndroid::DispatchKeyEvent(
+    const ui::KeyEventAndroid& event) {
+  if (content_ui_event_handler_)
+    return content_ui_event_handler_->DispatchKeyEvent(event);
+  return false;
+}
+
 void WebContentsViewAndroid::OnSizeChanged() {
   auto* rwhv = ::content::GetRenderWidgetHostViewAndroid(web_contents_);
   if (rwhv) {
     web_contents_->SendScreenRects();
-    rwhv->WasResized();
+    rwhv->SynchronizeVisualProperties();
   }
 }
 

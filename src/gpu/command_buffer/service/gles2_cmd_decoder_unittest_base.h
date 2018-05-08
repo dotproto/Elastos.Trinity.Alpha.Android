@@ -47,6 +47,7 @@ namespace gpu {
 namespace gles2 {
 
 class MemoryTracker;
+class MockCopyTextureResourceManager;
 
 class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
                              public DecoderClient {
@@ -60,6 +61,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   bool OnWaitSyncToken(const gpu::SyncToken&) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
+  void OnSwapBuffers(uint32_t flags) override;
 
   // Template to call glGenXXX functions.
   template <typename T>
@@ -365,6 +367,14 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
                     GLenum type,
                     uint32_t shared_memory_id,
                     uint32_t shared_memory_offset);
+  void DoCopyTexImage2D(GLenum target,
+                        GLint level,
+                        GLenum internal_format,
+                        GLint x,
+                        GLint y,
+                        GLsizei width,
+                        GLsizei height,
+                        GLint border);
   void DoRenderbufferStorage(
       GLenum target, GLenum internal_format, GLenum actual_format,
       GLsizei width, GLsizei height, GLenum error);
@@ -797,6 +807,8 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   scoped_refptr<ContextGroup> group_;
   MockGLStates gl_states_;
   base::MessageLoop message_loop_;
+
+  MockCopyTextureResourceManager* copy_texture_manager_;  // not owned
 };
 
 class GLES2DecoderWithShaderTestBase : public GLES2DecoderTestBase {
@@ -834,6 +846,7 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
   bool OnWaitSyncToken(const gpu::SyncToken&) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
+  void OnSwapBuffers(uint32_t flags) override;
 
   void SetUp() override;
   void TearDown() override;

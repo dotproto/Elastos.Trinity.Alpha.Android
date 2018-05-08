@@ -381,10 +381,6 @@ size_t SingleThreadProxy::MainThreadAnimationsCount() const {
   return 0;
 }
 
-size_t SingleThreadProxy::MainThreadCompositableAnimationsCount() const {
-  return 0;
-}
-
 bool SingleThreadProxy::CurrentFrameHadRAF() const {
   return false;
 }
@@ -839,7 +835,9 @@ void SingleThreadProxy::ScheduledActionPrepareTiles() {
 }
 
 void SingleThreadProxy::ScheduledActionInvalidateLayerTreeFrameSink() {
-  NOTREACHED();
+  // This is an Android WebView codepath, which only uses multi-thread
+  // compositor. So this should not occur in single-thread mode.
+  NOTREACHED() << "Android Webview use-case, so multi-thread only";
 }
 
 void SingleThreadProxy::ScheduledActionPerformImplSideInvalidation() {

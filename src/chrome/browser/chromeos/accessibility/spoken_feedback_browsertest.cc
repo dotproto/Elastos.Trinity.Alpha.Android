@@ -5,8 +5,9 @@
 #include <queue>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
-#include "ash/public/cpp/accessibility_types.h"
+#include "ash/public/cpp/accelerators.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
 #include "base/command_line.h"
@@ -44,8 +45,6 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/widget/widget.h"
@@ -128,8 +127,7 @@ class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
     // Enable ChromeVox, skip welcome message/notification, and disable earcons.
     ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
-    AccessibilityManager::Get()->EnableSpokenFeedback(
-        true, ash::A11Y_NOTIFICATION_NONE);
+    AccessibilityManager::Get()->EnableSpokenFeedback(true);
     EXPECT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
     DisableEarcons();
   }
@@ -740,8 +738,7 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, DISABLED_SpokenFeedbackInOobe) {
   // We expect to be in the language select dropdown for this test to work,
   // so make sure that's the case.
   js_checker().ExecuteAsync("$('language-select').focus()");
-  AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ash::A11Y_NOTIFICATION_NONE);
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
   ASSERT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
   // There's no guarantee that ChromeVox speaks anything when injected after
   // the page loads, which is by design.  Tab forward and then backward

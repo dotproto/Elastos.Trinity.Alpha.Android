@@ -90,6 +90,10 @@ class SyncBackendHostCore
   // SyncEngine::UpdateCredentials.
   void DoUpdateCredentials(const SyncCredentials& credentials);
 
+  // Called to invalidate the credentials on behalf of
+  // SyncEngine::InvalidateCredentials.
+  void DoInvalidateCredentials();
+
   // Switches sync engine into configuration mode. In this mode only initial
   // data for newly enabled types is downloaded from server. No local changes
   // are committed to server.
@@ -168,6 +172,8 @@ class SyncBackendHostCore
   void DoOnCookieJarChanged(bool account_mismatch,
                             bool empty_jar,
                             const base::Closure& callback);
+
+  bool HasUnsyncedItemsForTest() const;
 
  private:
   friend class base::RefCountedThreadSafe<SyncBackendHostCore>;

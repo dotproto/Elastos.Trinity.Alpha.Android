@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "cc/base/synced_property.h"
 #include "cc/input/event_listener_properties.h"
@@ -44,6 +43,7 @@ class HeadsUpDisplayLayerImpl;
 class ImageDecodeCache;
 class LayerTreeDebugState;
 class LayerTreeImpl;
+class LayerTreeFrameSink;
 class LayerTreeResourceProvider;
 class LayerTreeSettings;
 class MemoryHistory;
@@ -105,10 +105,10 @@ class CC_EXPORT LayerTreeImpl {
 
   // Methods called by the layer tree that pass-through or access LTHI.
   // ---------------------------------------------------------------------------
+  LayerTreeFrameSink* layer_tree_frame_sink();
   const LayerTreeSettings& settings() const;
   const LayerTreeDebugState& debug_state() const;
   viz::ContextProvider* context_provider() const;
-  viz::SharedBitmapManager* shared_bitmap_manager() const;
   LayerTreeResourceProvider* resource_provider() const;
   TileManager* tile_manager() const;
   ImageDecodeCache* image_decode_cache() const;
@@ -186,6 +186,8 @@ class CC_EXPORT LayerTreeImpl {
 
   LayerImplList::const_iterator begin() const;
   LayerImplList::const_iterator end() const;
+  LayerImplList::const_reverse_iterator rbegin() const;
+  LayerImplList::const_reverse_iterator rend() const;
   LayerImplList::reverse_iterator rbegin();
   LayerImplList::reverse_iterator rend();
 
@@ -296,9 +298,7 @@ class CC_EXPORT LayerTreeImpl {
   void set_content_source_id(uint32_t id) { content_source_id_ = id; }
   uint32_t content_source_id() { return content_source_id_; }
 
-  void set_local_surface_id(const viz::LocalSurfaceId& id) {
-    local_surface_id_ = id;
-  }
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& id);
   const viz::LocalSurfaceId& local_surface_id() const {
     return local_surface_id_;
   }

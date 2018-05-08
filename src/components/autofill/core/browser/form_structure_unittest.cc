@@ -1055,8 +1055,8 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(0U, form_structure.autofill_count());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->server_type());
     EXPECT_FALSE(form_structure.IsAutofillable());
   }
 
@@ -1068,8 +1068,8 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(0U, form_structure.autofill_count());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->server_type());
     EXPECT_FALSE(form_structure.IsAutofillable());
   }
 
@@ -1084,8 +1084,8 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(2U, form_structure.autofill_count());
     EXPECT_EQ(NAME_FIRST, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(NAME_LAST, form_structure.field(1)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->server_type());
     EXPECT_TRUE(form_structure.IsAutofillable());
   }
 }
@@ -1133,8 +1133,8 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(1U, form_structure.autofill_count());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->server_type());
     EXPECT_FALSE(form_structure.IsAutofillable());
   }
 
@@ -1149,8 +1149,8 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(2U, form_structure.autofill_count());
     EXPECT_EQ(NAME_FIRST, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(NAME_LAST, form_structure.field(1)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->server_type());
     EXPECT_EQ(NAME_FIRST, form_structure.field(0)->Type().GetStorableType());
     EXPECT_EQ(NAME_LAST, form_structure.field(1)->Type().GetStorableType());
     EXPECT_TRUE(form_structure.IsAutofillable());
@@ -1170,7 +1170,7 @@ TEST_F(FormStructureTest,
     ASSERT_EQ(1U, form_structure.field_count());
     ASSERT_EQ(1U, form_structure.autofill_count());
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
-    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
     EXPECT_EQ(NAME_FIRST, form_structure.field(0)->Type().GetStorableType());
     EXPECT_TRUE(form_structure.IsAutofillable());
   }
@@ -2566,13 +2566,6 @@ TEST_F(FormStructureTest,
       form_structure->field(i)->set_form_classifier_outcome(
           AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
     }
-    if (form_structure->field(i)->name == ASCIIToUTF16("firstname")) {
-      form_structure->field(i)->properties_mask =
-          FieldPropertiesFlags::HAD_FOCUS;
-    } else {
-      form_structure->field(i)->properties_mask =
-          FieldPropertiesFlags::HAD_FOCUS | FieldPropertiesFlags::USER_TYPED;
-    }
     if (form_structure->field(i)->name == ASCIIToUTF16("username")) {
       form_structure->field(i)->set_username_vote_type(
           AutofillUploadContents::Field::CREDENTIALS_REUSED);
@@ -2601,31 +2594,24 @@ TEST_F(FormStructureTest,
                         "given-name", 3U);
   upload_firstname_field->set_form_classifier_outcome(
       AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
-  upload_firstname_field->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS);
 
   AutofillUploadContents::Field* upload_lastname_field = upload.add_field();
   test::FillUploadField(upload_lastname_field, 2786066110U, "lastname", "",
                         "family-name", 5U);
   upload_lastname_field->set_form_classifier_outcome(
       AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
-  upload_lastname_field->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS |
-                                             FieldPropertiesFlags::USER_TYPED);
 
   AutofillUploadContents::Field* upload_email_field = upload.add_field();
   test::FillUploadField(upload_email_field, 1029417091U, "email", "email",
                         "email", 9U);
   upload_email_field->set_form_classifier_outcome(
       AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
-  upload_email_field->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS |
-                                          FieldPropertiesFlags::USER_TYPED);
 
   AutofillUploadContents::Field* upload_username_field = upload.add_field();
   test::FillUploadField(upload_username_field, 239111655U, "username", "text",
                         "email", 86U);
   upload_username_field->set_form_classifier_outcome(
       AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
-  upload_username_field->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS |
-                                             FieldPropertiesFlags::USER_TYPED);
   upload_username_field->set_username_vote_type(
       AutofillUploadContents::Field::CREDENTIALS_REUSED);
 
@@ -2637,8 +2623,6 @@ TEST_F(FormStructureTest,
   upload_password_field->set_generation_type(
       AutofillUploadContents::Field::
           MANUALLY_TRIGGERED_GENERATION_ON_SIGN_UP_FORM);
-  upload_password_field->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS |
-                                             FieldPropertiesFlags::USER_TYPED);
   upload_password_field->set_generated_password_changed(true);
 
   std::string expected_upload_string;
@@ -2711,6 +2695,94 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithAutocomplete) {
                         "family-name", 5U);
   test::FillUploadField(upload.add_field(), 1029417091U, "email", "email",
                         "email", 9U);
+
+  std::string expected_upload_string;
+  ASSERT_TRUE(upload.SerializeToString(&expected_upload_string));
+
+  AutofillUploadContents encoded_upload;
+  EXPECT_TRUE(form_structure->EncodeUploadRequest(
+      available_field_types, true, std::string(), true, &encoded_upload));
+
+  std::string encoded_upload_string;
+  encoded_upload.SerializeToString(&encoded_upload_string);
+  EXPECT_EQ(expected_upload_string, encoded_upload_string);
+}
+
+TEST_F(FormStructureTest, EncodeUploadRequestWithPropertiesMask) {
+  DisableAutofillMetadataFieldTrial();
+
+  std::unique_ptr<FormStructure> form_structure;
+  std::vector<ServerFieldTypeSet> possible_field_types;
+  FormData form;
+  form_structure.reset(new FormStructure(form));
+  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
+
+  FormFieldData field;
+  field.form_control_type = "text";
+
+  field.label = ASCIIToUTF16("First Name");
+  field.name = ASCIIToUTF16("firstname");
+  field.id = ASCIIToUTF16("first_name");
+  field.autocomplete_attribute = "given-name";
+  field.css_classes = ASCIIToUTF16("class1 class2");
+  field.properties_mask = FieldPropertiesFlags::HAD_FOCUS;
+  form.fields.push_back(field);
+  possible_field_types.push_back(ServerFieldTypeSet());
+  possible_field_types.back().insert(NAME_FIRST);
+
+  field.label = ASCIIToUTF16("Last Name");
+  field.name = ASCIIToUTF16("lastname");
+  field.id = ASCIIToUTF16("last_name");
+  field.autocomplete_attribute = "family-name";
+  field.css_classes = ASCIIToUTF16("class1 class2");
+  field.properties_mask =
+      FieldPropertiesFlags::HAD_FOCUS | FieldPropertiesFlags::USER_TYPED;
+  form.fields.push_back(field);
+  possible_field_types.push_back(ServerFieldTypeSet());
+  possible_field_types.back().insert(NAME_LAST);
+
+  field.label = ASCIIToUTF16("Email");
+  field.name = ASCIIToUTF16("email");
+  field.id = ASCIIToUTF16("e-mail");
+  field.form_control_type = "email";
+  field.autocomplete_attribute = "email";
+  field.css_classes = ASCIIToUTF16("class1 class2");
+  field.properties_mask =
+      FieldPropertiesFlags::HAD_FOCUS | FieldPropertiesFlags::USER_TYPED;
+  form.fields.push_back(field);
+  possible_field_types.push_back(ServerFieldTypeSet());
+  possible_field_types.back().insert(EMAIL_ADDRESS);
+
+  form_structure.reset(new FormStructure(form));
+
+  ASSERT_EQ(form_structure->field_count(), possible_field_types.size());
+  for (size_t i = 0; i < form_structure->field_count(); ++i)
+    form_structure->field(i)->set_possible_types(possible_field_types[i]);
+
+  ServerFieldTypeSet available_field_types;
+  available_field_types.insert(NAME_FIRST);
+  available_field_types.insert(NAME_LAST);
+  available_field_types.insert(EMAIL_ADDRESS);
+
+  // Prepare the expected proto string.
+  AutofillUploadContents upload;
+  upload.set_submission(true);
+  upload.set_client_version("6.1.1715.1442/en (GGLL)");
+  upload.set_form_signature(14746822798145140279U);
+  upload.set_autofill_used(true);
+  upload.set_data_present("1440");
+
+  test::FillUploadField(upload.add_field(), 3763331450U, nullptr, nullptr,
+                        nullptr, 3U);
+  upload.mutable_field(0)->set_properties_mask(FieldPropertiesFlags::HAD_FOCUS);
+  test::FillUploadField(upload.add_field(), 3494530716U, nullptr, nullptr,
+                        nullptr, 5U);
+  upload.mutable_field(1)->set_properties_mask(
+      FieldPropertiesFlags::HAD_FOCUS | FieldPropertiesFlags::USER_TYPED);
+  test::FillUploadField(upload.add_field(), 1029417091U, nullptr, nullptr,
+                        nullptr, 9U);
+  upload.mutable_field(2)->set_properties_mask(
+      FieldPropertiesFlags::HAD_FOCUS | FieldPropertiesFlags::USER_TYPED);
 
   std::string expected_upload_string;
   ASSERT_TRUE(upload.SerializeToString(&expected_upload_string));
@@ -3963,19 +4035,19 @@ TEST_F(FormStructureTest, ParseQueryResponse_UnknownType) {
 
   // Validate field 0.
   EXPECT_EQ(NAME_FIRST, form.field(0)->heuristic_type());
-  EXPECT_EQ(UNKNOWN_TYPE, form.field(0)->overall_server_type());
+  EXPECT_EQ(UNKNOWN_TYPE, form.field(0)->server_type());
   EXPECT_EQ(HTML_TYPE_UNSPECIFIED, form.field(0)->html_type());
   EXPECT_EQ(UNKNOWN_TYPE, form.field(0)->Type().GetStorableType());
 
   // Validate field 1.
   EXPECT_EQ(NAME_LAST, form.field(1)->heuristic_type());
-  EXPECT_EQ(NO_SERVER_DATA, form.field(1)->overall_server_type());
+  EXPECT_EQ(NO_SERVER_DATA, form.field(1)->server_type());
   EXPECT_EQ(HTML_TYPE_UNSPECIFIED, form.field(1)->html_type());
   EXPECT_EQ(NAME_LAST, form.field(1)->Type().GetStorableType());
 
   // Validate field 2. Note: HTML_TYPE_ADDRESS_LEVEL2 -> City
   EXPECT_EQ(EMAIL_ADDRESS, form.field(2)->heuristic_type());
-  EXPECT_EQ(ADDRESS_HOME_LINE1, form.field(2)->overall_server_type());
+  EXPECT_EQ(ADDRESS_HOME_LINE1, form.field(2)->server_type());
   EXPECT_EQ(HTML_TYPE_ADDRESS_LEVEL2, form.field(2)->html_type());
   EXPECT_EQ(ADDRESS_HOME_CITY, form.field(2)->Type().GetStorableType());
 }
@@ -4038,17 +4110,17 @@ TEST_F(FormStructureTest, ParseQueryResponse) {
 
   ASSERT_GE(forms[0]->field_count(), 2U);
   ASSERT_GE(forms[1]->field_count(), 2U);
-  EXPECT_EQ(7, forms[0]->field(0)->overall_server_type());
+  EXPECT_EQ(7, forms[0]->field(0)->server_type());
   ASSERT_EQ(2U, forms[0]->field(0)->server_predictions().size());
   EXPECT_EQ(7U, forms[0]->field(0)->server_predictions()[0].type());
   EXPECT_EQ(22U, forms[0]->field(0)->server_predictions()[1].type());
-  EXPECT_EQ(30, forms[0]->field(1)->overall_server_type());
+  EXPECT_EQ(30, forms[0]->field(1)->server_type());
   ASSERT_EQ(1U, forms[0]->field(1)->server_predictions().size());
   EXPECT_EQ(30U, forms[0]->field(1)->server_predictions()[0].type());
-  EXPECT_EQ(9, forms[1]->field(0)->overall_server_type());
+  EXPECT_EQ(9, forms[1]->field(0)->server_type());
   ASSERT_EQ(1U, forms[1]->field(0)->server_predictions().size());
   EXPECT_EQ(9U, forms[1]->field(0)->server_predictions()[0].type());
-  EXPECT_EQ(0, forms[1]->field(1)->overall_server_type());
+  EXPECT_EQ(0, forms[1]->field(1)->server_type());
   ASSERT_EQ(1U, forms[1]->field(1)->server_predictions().size());
   EXPECT_EQ(0U, forms[1]->field(1)->server_predictions()[0].type());
 }
@@ -4085,10 +4157,9 @@ TEST_F(FormStructureTest, ParseQueryResponse_AuthorDefinedTypes) {
 
   ASSERT_GE(forms[0]->field_count(), 2U);
   // Server type is parsed from the response and is the end result type.
-  EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->overall_server_type());
+  EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->server_type());
   EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->Type().GetStorableType());
-  EXPECT_EQ(ACCOUNT_CREATION_PASSWORD,
-            forms[0]->field(1)->overall_server_type());
+  EXPECT_EQ(ACCOUNT_CREATION_PASSWORD, forms[0]->field(1)->server_type());
   // TODO(crbug.com/613666): Should be a properly defined type, and not
   // UNKNOWN_TYPE.
   EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(1)->Type().GetStorableType());
@@ -4139,10 +4210,10 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeLoneField) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(2)->overall_server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->overall_server_type());
+    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(2)->Type().GetStorableType());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->Type().GetStorableType());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4154,10 +4225,11 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeLoneField) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->overall_server_type());
+    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+              forms[0]->field(2)->Type().GetStorableType());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->Type().GetStorableType());
   }
 }
 
@@ -4200,9 +4272,9 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeCCName) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(3U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FIRST, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(NAME_LAST, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(NAME_FIRST, forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(NAME_LAST, forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->Type().GetStorableType());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4215,9 +4287,10 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeCCName) {
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(3U, forms[0]->field_count());
     EXPECT_EQ(CREDIT_CARD_NAME_FIRST,
-              forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_NAME_LAST, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->overall_server_type());
+              forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_NAME_LAST,
+              forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->Type().GetStorableType());
   }
 }
 
@@ -4272,12 +4345,14 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_1) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(5U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL,
+              forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+              forms[0]->field(2)->Type().GetStorableType());
     EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR,
-              forms[0]->field(3)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(4)->overall_server_type());
+              forms[0]->field(3)->Type().GetStorableType());
+    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(4)->Type().GetStorableType());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4289,12 +4364,15 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_1) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(5U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL,
+              forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+              forms[0]->field(2)->Type().GetStorableType());
     EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR,
-              forms[0]->field(3)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(4)->overall_server_type());
+              forms[0]->field(3)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+              forms[0]->field(4)->Type().GetStorableType());
   }
 }
 
@@ -4343,11 +4421,12 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_2) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL,
+              forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
     EXPECT_EQ(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
-              forms[0]->field(2)->overall_server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(3)->overall_server_type());
+              forms[0]->field(2)->Type().GetStorableType());
+    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(3)->Type().GetStorableType());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4358,11 +4437,13 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_2) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL,
+              forms[0]->field(0)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
     EXPECT_EQ(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
-              forms[0]->field(2)->overall_server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(3)->overall_server_type());
+              forms[0]->field(2)->Type().GetStorableType());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+              forms[0]->field(3)->Type().GetStorableType());
   }
 }
 
@@ -4449,14 +4530,13 @@ TEST_F(FormStructureTest, RationalizePhoneNumber_RunsOncePerSection) {
   EXPECT_TRUE(form_structure.phone_rationalized_["fullName_1-default"]);
   ASSERT_EQ(1U, forms.size());
   ASSERT_EQ(4U, forms[0]->field_count());
-  EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
-  EXPECT_EQ(ADDRESS_HOME_STREET_ADDRESS,
-            forms[0]->field(1)->overall_server_type());
+  EXPECT_EQ(NAME_FULL, forms[0]->field(0)->server_type());
+  EXPECT_EQ(ADDRESS_HOME_STREET_ADDRESS, forms[0]->field(1)->server_type());
 
-  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(2)->overall_server_type());
+  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(2)->server_type());
   EXPECT_FALSE(forms[0]->field(2)->only_fill_when_focused());
 
-  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(3)->overall_server_type());
+  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(3)->server_type());
   EXPECT_TRUE(forms[0]->field(3)->only_fill_when_focused());
 }
 

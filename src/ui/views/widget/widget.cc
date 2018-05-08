@@ -7,7 +7,6 @@
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/window.h"
@@ -83,6 +82,9 @@ void NotifyCaretBoundsChanged(ui::InputMethod* input_method) {
 }
 
 }  // namespace
+
+// static
+bool Widget::g_disable_activation_change_handling_ = false;
 
 // A default implementation of WidgetDelegate, used by Widget when no
 // WidgetDelegate is supplied.
@@ -325,6 +327,9 @@ void Widget::Init(const InitParams& in_params) {
       params.delegate : new DefaultWidgetDelegate(this);
   widget_delegate_->set_can_activate(can_activate);
 
+  // Henceforth, ensure the delegate outlives the Widget.
+  widget_delegate_->can_delete_this_ = false;
+
   ownership_ = params.ownership;
   native_widget_ = CreateNativeWidget(params, this)->AsNativeWidgetPrivate();
   root_view_.reset(CreateRootView());
@@ -519,19 +524,7 @@ void Widget::CenterWindow(const gfx::Size& size) {
 }
 
 void Widget::SetBoundsConstrained(const gfx::Rect& bounds) {
-  gfx::Rect work_area = display::Screen::GetScreen()
-                            ->GetDisplayNearestPoint(bounds.origin())
-                            .work_area();
-  if (work_area.IsEmpty()) {
-    SetBounds(bounds);
-  } else {
-    // TODO(https://crbug.com/806936): The following code doesn't actually do
-    // what the comment describing this function says it should.
-    // Inset the work area slightly.
-    work_area.Inset(10, 10, 10, 10);
-    work_area.AdjustToFit(bounds);
-    SetBounds(work_area);
-  }
+  native_widget_->SetBoundsConstrained(bounds);
 }
 
 void Widget::SetVisibilityChangedAnimationsEnabled(bool value) {
@@ -1030,7 +1023,10 @@ bool Widget::IsAlwaysRenderAsActive() const {
   return always_render_as_active_;
 }
 
-void Widget::OnNativeWidgetActivationChanged(bool active) {
+bool Widget::OnNativeWidgetActivationChanged(bool active) {
+  if (g_disable_activation_change_handling_)
+    return false;
+
   // On windows we may end up here before we've completed initialization (from
   // an WM_NCACTIVATE). If that happens the WidgetDelegate likely doesn't know
   // the Widget and will crash attempting to access it.
@@ -1042,6 +1038,8 @@ void Widget::OnNativeWidgetActivationChanged(bool active) {
 
   if (non_client_view())
     non_client_view()->frame_view()->ActivationChanged(active);
+
+  return true;
 }
 
 void Widget::OnNativeFocus() {
@@ -1092,6 +1090,7 @@ void Widget::OnNativeWidgetDestroying() {
 void Widget::OnNativeWidgetDestroyed() {
   for (WidgetObserver& observer : observers_)
     observer.OnWidgetDestroyed(this);
+  widget_delegate_->can_delete_this_ = true;
   widget_delegate_->DeleteDelegate();
   widget_delegate_ = NULL;
   native_widget_destroyed_ = true;
@@ -1498,7 +1497,7 @@ void Widget::SetInitialBounds(const gfx::Rect& bounds) {
       if (bounds.origin().IsOrigin()) {
         // No initial bounds supplied, so size the window to its content and
         // center over its parent.
-        native_widget_->CenterWindow(non_client_view_->GetPreferredSize());
+        CenterWindow(non_client_view_->GetPreferredSize());
       } else {
         // Use the preferred size and the supplied origin.
         gfx::Rect preferred_bounds(bounds);

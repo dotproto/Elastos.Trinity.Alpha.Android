@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//chrome/process_version_rc_template.gni")
-import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 static_library("zucchini_lib") {
@@ -24,6 +23,8 @@ static_library("zucchini_lib") {
     "crc32.h",
     "disassembler.cc",
     "disassembler.h",
+    "disassembler_dex.cc",
+    "disassembler_dex.h",
     "disassembler_no_op.cc",
     "disassembler_no_op.h",
     "disassembler_win32.cc",
@@ -41,6 +42,8 @@ static_library("zucchini_lib") {
     "image_index.cc",
     "image_index.h",
     "image_utils.h",
+    "imposed_ensemble_matcher.cc",
+    "imposed_ensemble_matcher.h",
     "io_utils.cc",
     "io_utils.h",
     "patch_reader.cc",
@@ -48,6 +51,8 @@ static_library("zucchini_lib") {
     "patch_utils.h",
     "patch_writer.cc",
     "patch_writer.h",
+    "reference_bytes_mixer.cc",
+    "reference_bytes_mixer.h",
     "reference_set.cc",
     "reference_set.h",
     "rel32_finder.cc",
@@ -61,6 +66,7 @@ static_library("zucchini_lib") {
     "target_pool.h",
     "targets_affinity.cc",
     "targets_affinity.h",
+    "type_dex.h",
     "type_win_pe.h",
     "typed_value.h",
     "zucchini.h",
@@ -119,17 +125,6 @@ if (is_win) {
   }
 }
 
-fuzzer_test("zucchini_patch_fuzzer") {
-  sources = [
-    "patch_fuzzer.cc",
-  ]
-  deps = [
-    ":zucchini_lib",
-    "//base",
-  ]
-  seed_corpus = "testdata/patch_fuzzer"
-}
-
 test("zucchini_unittests") {
   sources = [
     "abs32_utils_unittest.cc",
@@ -140,11 +135,13 @@ test("zucchini_unittests") {
     "buffer_source_unittest.cc",
     "buffer_view_unittest.cc",
     "crc32_unittest.cc",
+    "disassembler_dex_unittest.cc",
     "element_detection_unittest.cc",
     "encoded_view_unittest.cc",
     "equivalence_map_unittest.cc",
     "image_index_unittest.cc",
     "image_utils_unittest.cc",
+    "imposed_ensemble_matcher_unittest.cc",
     "io_utils_unittest.cc",
     "mapped_file_unittest.cc",
     "patch_read_write_unittest.cc",
@@ -188,5 +185,14 @@ test("zucchini_integration_test") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+  ]
+}
+
+# Group to build and depend on all the Zucchini related fuzzers.
+group("zucchini_fuzzers") {
+  testonly = true
+  deps = [
+    "//components/zucchini/fuzzers:zucchini_disassembler_win32_fuzzer",
+    "//components/zucchini/fuzzers:zucchini_patch_fuzzer",
   ]
 }

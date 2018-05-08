@@ -18,12 +18,12 @@
 #include "media/base/test_data_util.h"
 #include "media/filters/file_data_source.h"
 #include "media/filters/memory_data_source.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/renderer_impl.h"
 #include "media/test/fake_encrypted_media.h"
 #include "media/test/mock_media_source.h"
-#include "third_party/libaom/av1_features.h"
+#include "third_party/libaom/av1_buildflags.h"
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 #include "media/filters/aom_video_decoder.h"
@@ -147,6 +147,13 @@ PipelineIntegrationTestBase::~PipelineIntegrationTestBase() {
   base::RunLoop().RunUntilIdle();
 }
 
+void PipelineIntegrationTestBase::ParseTestTypeFlags(uint8_t flags) {
+  hashing_enabled_ = flags & kHashed;
+  clockless_playback_ = !(flags & kNoClockless);
+  webaudio_attached_ = flags & kWebAudio;
+  mono_output_ = flags & kMonoOutput;
+}
+
 // TODO(xhwang): Method definitions in this file needs to be reordered.
 
 void PipelineIntegrationTestBase::OnSeeked(base::TimeDelta seek_time,
@@ -230,9 +237,7 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
     uint8_t test_type,
     CreateVideoDecodersCB prepend_video_decoders_cb,
     CreateAudioDecodersCB prepend_audio_decoders_cb) {
-  hashing_enabled_ = test_type & kHashed;
-  clockless_playback_ = !(test_type & kNoClockless);
-  webaudio_attached_ = test_type & kWebAudio;
+  ParseTestTypeFlags(test_type);
 
   EXPECT_CALL(*this, OnMetadata(_))
       .Times(AtMost(1))
@@ -274,12 +279,11 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
   // media files are provided in advance.
   EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
 
-  // SRC= demuxer does not support config changes.
-  for (auto* stream : demuxer_->GetAllStreams()) {
-    EXPECT_FALSE(stream->SupportsConfigChanges());
-  }
-  EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(0);
-  EXPECT_CALL(*this, OnVideoConfigChange(_)).Times(0);
+  // DemuxerStreams may signal config changes.
+  // In practice, this doesn't happen for FFmpegDemuxer, but it's allowed for
+  // SRC= demuxers in general.
+  EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(AnyNumber());
+  EXPECT_CALL(*this, OnVideoConfigChange(_)).Times(AnyNumber());
 
   base::RunLoop run_loop;
   pipeline_->Start(
@@ -465,18 +469,23 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
       false, &media_log_, nullptr));
 
   if (!clockless_playback_) {
+    DCHECK(!mono_output_) << " NullAudioSink doesn't specify output parameters";
+
     audio_sink_ =
         new NullAudioSink(scoped_task_environment_.GetMainThreadTaskRunner());
   } else {
-    clockless_audio_sink_ = new ClocklessAudioSink(OutputDeviceInfo(
-        "", OUTPUT_DEVICE_STATUS_OK,
-        // Don't allow the audio renderer to resample buffers if hashing is
-        // enabled:
-        hashing_enabled_
-            ? AudioParameters()
-            : AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                              CHANNEL_LAYOUT_STEREO, 44100, 16, 512)));
-    if (webaudio_attached_) {
+    ChannelLayout output_layout =
+        mono_output_ ? CHANNEL_LAYOUT_MONO : CHANNEL_LAYOUT_STEREO;
+
+    clockless_audio_sink_ = new ClocklessAudioSink(
+        OutputDeviceInfo("", OUTPUT_DEVICE_STATUS_OK,
+                         AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                         output_layout, 44100, 16, 512)));
+
+    // Say "not optimized for hardware parameters" to disallow renderer
+    // resampling. Hashed tests need this avoid platform dependent floating
+    // point precision differences.
+    if (webaudio_attached_ || hashing_enabled_) {
       clockless_audio_sink_->SetIsOptimizedForHardwareParametersForTesting(
           false);
     }
@@ -580,8 +589,7 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
     MockMediaSource* source,
     uint8_t test_type,
     FakeEncryptedMedia* encrypted_media) {
-  hashing_enabled_ = test_type & kHashed;
-  clockless_playback_ = !(test_type & kNoClockless);
+  ParseTestTypeFlags(test_type);
 
   if (!(test_type & kExpectDemuxerFailure))
     EXPECT_CALL(*source, InitSegmentReceivedMock(_)).Times(AtLeast(1));
@@ -606,10 +614,7 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
                  base::Unretained(this), run_loop.QuitWhenIdleClosure()));
   demuxer_ = source->GetDemuxer();
 
-  // MediaSource demuxer may signal config changes.
-  for (auto* stream : demuxer_->GetAllStreams()) {
-    EXPECT_TRUE(stream->SupportsConfigChanges());
-  }
+  // DemuxerStreams may signal config changes.
   // Config change tests should set more specific expectations about the number
   // of calls.
   EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(AnyNumber());
@@ -646,6 +651,10 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
 
   RunUntilIdleOrEndedOrError(&run_loop);
 
+  for (auto* stream : demuxer_->GetAllStreams()) {
+    EXPECT_TRUE(stream->SupportsConfigChanges());
+  }
+
   return pipeline_status_;
 }
 
@@ -680,7 +689,7 @@ void PipelineIntegrationTestBase::RunUntilIdleEndedOrErrorInternal(
   scoped_task_environment_.RunUntilIdle();
 }
 
-base::TimeTicks DummyTickClock::NowTicks() {
+base::TimeTicks DummyTickClock::NowTicks() const {
   now_ += base::TimeDelta::FromSeconds(60);
   return now_;
 }

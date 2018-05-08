@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
@@ -33,7 +32,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/url_constants.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -83,7 +82,7 @@ base::ProcessId GetRealProcessId(int process_host_id) {
   if (!rph)
     return base::kNullProcessId;
 
-  base::ProcessHandle handle = rph->GetHandle();
+  base::ProcessHandle handle = rph->GetProcess().Handle();
   if (handle == base::kNullProcessHandle)
     return base::kNullProcessId;
   // TODO(nhiroki): On Windows, |rph->GetHandle()| does not duplicate ownership
@@ -307,11 +306,11 @@ class ServiceWorkerInternalsUI::PartitionObserver
     web_ui_->CallJavascriptFunctionUnsafe(
         "serviceworker.onConsoleMessageReported", ConvertToRawPtrVector(args));
   }
-  void OnRegistrationStored(int64_t registration_id,
-                            const GURL& pattern) override {
+  void OnRegistrationCompleted(int64_t registration_id,
+                               const GURL& pattern) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    web_ui_->CallJavascriptFunctionUnsafe("serviceworker.onRegistrationStored",
-                                          Value(pattern.spec()));
+    web_ui_->CallJavascriptFunctionUnsafe(
+        "serviceworker.onRegistrationCompleted", Value(pattern.spec()));
   }
   void OnRegistrationDeleted(int64_t registration_id,
                              const GURL& pattern) override {
@@ -343,31 +342,27 @@ ServiceWorkerInternalsUI::ServiceWorkerInternalsUI(WebUI* web_ui)
   WebUIDataSource::Add(browser_context, source);
 
   web_ui->RegisterMessageCallback(
-      "GetOptions",
-      base::Bind(&ServiceWorkerInternalsUI::GetOptions,
-                 base::Unretained(this)));
+      "GetOptions", base::BindRepeating(&ServiceWorkerInternalsUI::GetOptions,
+                                        base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "SetOption",
-      base::Bind(&ServiceWorkerInternalsUI::SetOption, base::Unretained(this)));
+      "SetOption", base::BindRepeating(&ServiceWorkerInternalsUI::SetOption,
+                                       base::Unretained(this)));
   web_ui->RegisterMessageCallback(
       "getAllRegistrations",
-      base::Bind(&ServiceWorkerInternalsUI::GetAllRegistrations,
-                 base::Unretained(this)));
+      base::BindRepeating(&ServiceWorkerInternalsUI::GetAllRegistrations,
+                          base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "stop", base::Bind(&ServiceWorkerInternalsUI::StopWorker,
-                         base::Unretained(this)));
+      "stop", base::BindRepeating(&ServiceWorkerInternalsUI::StopWorker,
+                                  base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "inspect",
-      base::Bind(&ServiceWorkerInternalsUI::InspectWorker,
-                 base::Unretained(this)));
+      "inspect", base::BindRepeating(&ServiceWorkerInternalsUI::InspectWorker,
+                                     base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "unregister",
-      base::Bind(&ServiceWorkerInternalsUI::Unregister,
-                 base::Unretained(this)));
+      "unregister", base::BindRepeating(&ServiceWorkerInternalsUI::Unregister,
+                                        base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "start",
-      base::Bind(&ServiceWorkerInternalsUI::StartWorker,
-                 base::Unretained(this)));
+      "start", base::BindRepeating(&ServiceWorkerInternalsUI::StartWorker,
+                                   base::Unretained(this)));
 }
 
 ServiceWorkerInternalsUI::~ServiceWorkerInternalsUI() {

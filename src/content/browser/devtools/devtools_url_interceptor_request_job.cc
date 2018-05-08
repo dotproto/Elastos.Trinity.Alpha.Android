@@ -5,11 +5,11 @@
 #include "content/browser/devtools/devtools_url_interceptor_request_job.h"
 
 #include "base/base64.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/page.h"
+#include "content/browser/loader/navigation_loader_util.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "ipc/ipc_channel.h"
 #include "net/base/completion_once_callback.h"
@@ -120,6 +120,13 @@ DevToolsURLInterceptorRequestJob::SubRequest::SubRequest(
   request_->SetResponseHeadersCallback(
       devtools_interceptor_request_job->response_headers_callback_);
 
+  net::URLRequest* original_request =
+      devtools_interceptor_request_job_->request();
+  request_->set_attach_same_site_cookies(
+      original_request->attach_same_site_cookies());
+  request_->set_site_for_cookies(original_request->site_for_cookies());
+  request_->set_initiator(original_request->initiator());
+
   // Mimic the ResourceRequestInfoImpl of the original request.
   const ResourceRequestInfoImpl* resource_request_info =
       static_cast<const ResourceRequestInfoImpl*>(
@@ -135,7 +142,6 @@ DevToolsURLInterceptorRequestJob::SubRequest::SubRequest(
       resource_request_info->IsMainFrame(),
       resource_request_info->GetResourceType(),
       resource_request_info->GetPageTransition(),
-      resource_request_info->should_replace_current_entry(),
       resource_request_info->IsDownload(), resource_request_info->is_stream(),
       resource_request_info->allow_download(),
       resource_request_info->HasUserGesture(),
@@ -532,6 +538,25 @@ void SetDevToolsStatus(net::URLRequest* request,
   resource_request_info->set_devtools_status(devtools_status);
 }
 
+bool IsDownload(net::URLRequest* orig_request, net::URLRequest* subrequest) {
+  auto* req_info = ResourceRequestInfoImpl::ForRequest(orig_request);
+  // Only happens to downloads that are initiated by the download manager.
+  if (req_info->IsDownload())
+    return true;
+
+  // Note this will not correctly identify a download for the MIME types
+  // inferred with content sniffing. The new interception implementation
+  // should not have this problem, as it's on top of MIME sniffer.
+  std::string mime_type;
+  subrequest->GetMimeType(&mime_type);
+  bool is_cross_origin = navigation_loader_util::IsCrossOriginRequest(
+      orig_request->url(), orig_request->initiator());
+  return req_info->allow_download() &&
+         navigation_loader_util::IsDownload(
+             orig_request->url(), subrequest->response_headers(), mime_type,
+             req_info->suggested_filename().has_value(), is_cross_origin);
+}
+
 }  // namespace
 
 DevToolsURLInterceptorRequestJob::DevToolsURLInterceptorRequestJob(
@@ -670,10 +695,14 @@ DevToolsURLInterceptorRequestJob::GetHttpResponseHeaders() const {
 
 bool DevToolsURLInterceptorRequestJob::GetMimeType(
     std::string* mime_type) const {
+  if (sub_request_) {
+    sub_request_->request()->GetMimeType(mime_type);
+    return true;
+  }
   const net::HttpResponseHeaders* response_headers = GetHttpResponseHeaders();
-  if (!response_headers)
-    return false;
-  return response_headers->GetMimeType(mime_type);
+  if (response_headers)
+    return response_headers->GetMimeType(mime_type);
+  return false;
 }
 
 bool DevToolsURLInterceptorRequestJob::GetCharset(std::string* charset) {
@@ -811,8 +840,10 @@ void DevToolsURLInterceptorRequestJob::OnInterceptedRequestResponseStarted(
     const net::Error& net_error) {
   DCHECK_NE(waiting_for_user_response_,
             WaitingForUserResponse::WAITING_FOR_RESPONSE_ACK);
-  if (stage_to_intercept_ == InterceptionStage::DONT_INTERCEPT)
+  if (stage_to_intercept_ == InterceptionStage::DONT_INTERCEPT) {
+    static_cast<InterceptedRequest*>(sub_request_.get())->FetchResponseBody();
     return;
+  }
   waiting_for_user_response_ = WaitingForUserResponse::WAITING_FOR_RESPONSE_ACK;
 
   std::unique_ptr<InterceptedRequestInfo> request_info = BuildRequestInfo();
@@ -834,6 +865,7 @@ void DevToolsURLInterceptorRequestJob::OnInterceptedRequestResponseStarted(
         sub_request_->request()->GetResponseCode();
     request_info->response_headers =
         protocol::Object::fromValue(headers_dict.get(), nullptr);
+    request_info->is_download = IsDownload(request(), sub_request_->request());
   }
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::BindOnce(callback_, std::move(request_info)));
@@ -1130,7 +1162,13 @@ void DevToolsURLInterceptorRequestJob::ProcessInterceptionResponse(
     // The reason we start a sub request is because we are in full control of it
     // and can choose to ignore it if, for example, the fetch encounters a
     // redirect that the user chooses to replace with a mock response.
-    sub_request_.reset(new SubRequest(request_details_, this, interceptor_));
+    DCHECK(stage_to_intercept_ != InterceptionStage::RESPONSE);
+    if (stage_to_intercept_ == InterceptionStage::BOTH) {
+      sub_request_.reset(
+          new InterceptedRequest(request_details_, this, interceptor_));
+    } else {
+      sub_request_.reset(new SubRequest(request_details_, this, interceptor_));
+    }
   }
 }
 

@@ -94,10 +94,10 @@ public class PopupZoomerTest {
             @Override
             public void run() {
                 Context context = mActivityTestRule.getActivity();
-                WebContents webContents = mActivityTestRule.getContentViewCore().getWebContents();
+                WebContents webContents = mActivityTestRule.getWebContents();
                 mContentViewCore = new ContentViewCoreImpl(webContents);
                 mPopupZoomer = createPopupZoomerForTest(InstrumentationRegistry.getTargetContext(),
-                        mActivityTestRule.getContentViewCore().getContainerView());
+                        mActivityTestRule.getContainerView());
                 TapDisambiguator.fromWebContents(webContents).setPopupZoomerForTest(mPopupZoomer);
             }
         });
@@ -234,7 +234,7 @@ public class PopupZoomerTest {
                 Assert.assertTrue(mPopupZoomer.isShowing());
 
                 // Simulate losing the focus.
-                mContentViewCore.onFocusChanged(false, true);
+                mContentViewCore.onViewFocusChanged(false);
 
                 // Wait for the hide animation to finish.
                 mPopupZoomer.finishPendingDraws();

@@ -7,9 +7,20 @@ import("//mojo/public/tools/bindings/mojom.gni")
 # C++ headers and sources that can be used outside ash.
 component("cpp") {
   sources = [
+    "accelerators.cc",
+    "accelerators.h",
     "accessibility_types.h",
+    "app_list/answer_card_contents_registry.cc",
+    "app_list/answer_card_contents_registry.h",
+    "app_list/app_list_constants.cc",
+    "app_list/app_list_constants.h",
+    "app_list/app_list_features.cc",
+    "app_list/app_list_features.h",
+    "app_list/app_list_switches.cc",
+    "app_list/app_list_switches.h",
     "app_list/app_list_types.cc",
     "app_list/app_list_types.h",
+    "app_list/internal_app_id_constants.h",
     "app_list/term_break_iterator.cc",
     "app_list/term_break_iterator.h",
     "app_list/tokenized_string.cc",
@@ -45,6 +56,8 @@ component("cpp") {
     "menu_utils.h",
     "mus_property_mirror_ash.cc",
     "mus_property_mirror_ash.h",
+    "power_utils.cc",
+    "power_utils.h",
     "remote_shelf_item_delegate.cc",
     "remote_shelf_item_delegate.h",
     "scale_utility.cc",
@@ -65,6 +78,7 @@ component("cpp") {
     "shell_window_ids.h",
     "stylus_utils.cc",
     "stylus_utils.h",
+    "wallpaper_types.h",
     "window_pin_type.cc",
     "window_pin_type.h",
     "window_properties.cc",
@@ -78,10 +92,11 @@ component("cpp") {
   defines = [ "ASH_PUBLIC_IMPLEMENTATION" ]
 
   deps = [
+    "//chromeos:power_manager_proto",
     "//components/prefs",
-    "//mojo/common:common_custom_types",
     "//skia/public/interfaces",
     "//ui/aura",
+    "//ui/chromeos/strings",
     "//ui/display",
     "//ui/events/devices",
     "//ui/views",
@@ -118,6 +133,7 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "menu_utils_unittest.cc",
+    "power_utils_unittest.cc",
     "shelf_model_unittest.cc",
     "shelf_struct_mojom_traits_unittest.cc",
   ]

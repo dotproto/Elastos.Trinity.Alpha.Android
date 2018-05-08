@@ -28,6 +28,9 @@ class VIZ_SERVICE_EXPORT SurfaceClient {
   // Called when |surface| has a new CompositorFrame available for display.
   virtual void OnSurfaceActivated(Surface* surface) = 0;
 
+  // Called when |surface| is about to be destroyed.
+  virtual void OnSurfaceDiscarded(Surface* surface) = 0;
+
   // Increments the reference count on resources specified by |resources|.
   virtual void RefResources(
       const std::vector<TransferableResource>& resources) = 0;
@@ -46,12 +49,10 @@ class VIZ_SERVICE_EXPORT SurfaceClient {
   virtual void ReceiveFromChild(
       const std::vector<TransferableResource>& resources) = 0;
 
-  // Returns whether there are any CopyOutputRequests at the client level.
-  virtual bool HasCopyOutputRequests() = 0;
-
-  // Takes all the CopyOutputRequests made at the client level.
+  // Takes all the CopyOutputRequests made at the client level that happened for
+  // a LocalSurfaceId preceeding the given one.
   virtual std::vector<std::unique_ptr<CopyOutputRequest>>
-  TakeCopyOutputRequests() = 0;
+  TakeCopyOutputRequests(const LocalSurfaceId& latest_surface_id) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SurfaceClient);

@@ -31,7 +31,6 @@
 #include "content/browser/service_worker/service_worker_installed_scripts_sender.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_type_converters.h"
-#include "content/common/origin_trials/trial_policy_impl.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -44,11 +43,11 @@
 #include "content/public/common/result_codes.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
-#include "third_party/WebKit/public/common/origin_trials/trial_token_validator.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_error_type.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
+#include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/web/web_console_message.h"
 
 namespace content {
 namespace {
@@ -171,12 +170,13 @@ CompleteProviderHostPreparation(
     ServiceWorkerVersion* version,
     std::unique_ptr<ServiceWorkerProviderHost> provider_host,
     base::WeakPtr<ServiceWorkerContextCore> context,
-    int process_id) {
+    int process_id,
+    network::mojom::URLLoaderFactoryPtr non_network_loader_factory) {
   // Caller should ensure |context| is alive when completing StartWorker
   // preparation.
   DCHECK(context);
-  auto info =
-      provider_host->CompleteStartWorkerPreparation(process_id, version);
+  auto info = provider_host->CompleteStartWorkerPreparation(
+      process_id, version, std::move(non_network_loader_factory));
   context->AddProviderHost(std::move(provider_host));
   return info;
 }
@@ -329,7 +329,7 @@ ServiceWorkerVersion::ServiceWorkerVersion(
       tick_clock_(base::DefaultTickClock::GetInstance()),
       clock_(base::DefaultClock::GetInstance()),
       ping_controller_(new PingController(this)),
-      validator_(TrialPolicyImpl::CreateValidatorForPolicy()),
+      validator_(std::make_unique<blink::TrialTokenValidator>()),
       weak_factory_(this) {
   DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId, version_id);
   DCHECK(context_);
@@ -504,15 +504,7 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
         base::BindOnce(std::move(callback), SERVICE_WORKER_ERROR_REDUNDANT));
     return;
   }
-
-  // Check that the worker is allowed to start on the given scope. Since this
-  // worker might not be used for a specific tab, pass a null callback as
-  // WebContents getter.
-  // resource_context() can return null in unit tests.
-  if (context_->wrapper()->resource_context() &&
-      !GetContentClient()->browser()->AllowServiceWorker(
-          scope_, scope_, context_->wrapper()->resource_context(),
-          base::Callback<WebContents*(void)>())) {
+  if (!IsStartWorkerAllowed()) {
     RecordStartWorkerResult(purpose, status_, kInvalidTraceId,
                             is_browser_startup_complete,
                             SERVICE_WORKER_ERROR_DISALLOWED);
@@ -887,7 +879,8 @@ void ServiceWorkerVersion::SimulatePingTimeoutForTesting() {
   ping_controller_->SimulateTimeoutForTesting();
 }
 
-void ServiceWorkerVersion::SetTickClockForTesting(base::TickClock* tick_clock) {
+void ServiceWorkerVersion::SetTickClockForTesting(
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
 }
 
@@ -934,9 +927,6 @@ ServiceWorkerVersion::InflightRequest::~InflightRequest() {}
 
 void ServiceWorkerVersion::OnThreadStarted() {
   DCHECK_EQ(EmbeddedWorkerStatus::STARTING, running_status());
-  DCHECK(provider_host_);
-  provider_host_->SetReadyToSendMessagesToWorker(
-      embedded_worker()->thread_id());
   // Activate ping/pong now that JavaScript execution will start.
   ping_controller_->Activate();
 }
@@ -1991,6 +1981,30 @@ void ServiceWorkerVersion::OnNoWorkInBrowser() {
   for (auto& observer : listeners_)
     observer.OnNoWork(this);
   idle_timer_fired_in_renderer_ = false;
+}
+
+bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
+  // Check that the worker is allowed on this origin. It's possible a
+  // worker was previously allowed and installed, but later the embedder's
+  // policy or binary changed to disallow this origin.
+  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(
+          {script_url_})) {
+    return false;
+  }
+
+  // Check that the worker is allowed on the given scope. It's possible a worker
+  // was previously allowed and installed, but later content settings changed to
+  // disallow this scope. Since this worker might not be used for a specific
+  // tab, pass a null callback as WebContents getter.
+  // resource_context() can return null in unit tests.
+  if ((context_->wrapper()->resource_context() &&
+       !GetContentClient()->browser()->AllowServiceWorker(
+           scope_, scope_, context_->wrapper()->resource_context(),
+           base::Callback<WebContents*(void)>()))) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace content

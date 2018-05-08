@@ -10,7 +10,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -1148,6 +1147,13 @@ void MenuController::TurnOffMenuSelectionHoldForTest() {
   menu_selection_hold_time_ms = -1;
 }
 
+void MenuController::OnMenuItemDestroying(MenuItemView* menu_item) {
+#if defined(OS_MACOSX)
+  if (menu_closure_animation_ && menu_closure_animation_->item() == menu_item)
+    menu_closure_animation_.reset();
+#endif
+}
+
 void MenuController::SetSelection(MenuItemView* menu_item,
                                   int selection_types) {
   size_t paths_differ_at = 0;
@@ -1439,11 +1445,6 @@ void MenuController::UpdateInitialLocation(const gfx::Rect& bounds,
                                            bool context_menu) {
   pending_state_.context_menu = context_menu;
   pending_state_.initial_bounds = bounds;
-  if (bounds.height() > 1) {
-    // Inset the bounds slightly, otherwise drag coordinates don't line up
-    // nicely and menus close prematurely.
-    pending_state_.initial_bounds.Inset(0, 1);
-  }
 
   // Reverse anchor position for RTL languages.
   if (base::i18n::IsRTL() &&
@@ -1473,8 +1474,25 @@ void MenuController::UpdateInitialLocation(const gfx::Rect& bounds,
 }
 
 void MenuController::Accept(MenuItemView* item, int event_flags) {
+#if defined(OS_MACOSX)
+  menu_closure_animation_ = std::make_unique<MenuClosureAnimationMac>(
+      item,
+      base::BindOnce(&MenuController::ReallyAccept, base::Unretained(this),
+                     base::Unretained(item), event_flags));
+  menu_closure_animation_->Start();
+#else
+  ReallyAccept(item, event_flags);
+#endif
+}
+
+void MenuController::ReallyAccept(MenuItemView* item, int event_flags) {
   DCHECK(IsBlockingRun());
   result_ = item;
+#if defined(OS_MACOSX)
+  // Reset the closure animation since it's now finished - this also unblocks
+  // input events for the menu.
+  menu_closure_animation_.reset();
+#endif
   if (item && !menu_stack_.empty() &&
       !item->GetDelegate()->ShouldCloseAllMenusOnExecute(item->GetCommand())) {
     SetExitType(EXIT_OUTERMOST);
@@ -1539,9 +1557,8 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
 
   // It is currently not possible to show a submenu recursively in a bubble.
   DCHECK(!MenuItemView::IsBubble(anchor));
-  // Subtract 1 from the height to make the popup flush with the button border.
   UpdateInitialLocation(gfx::Rect(screen_menu_loc.x(), screen_menu_loc.y(),
-                                  button->width(), button->height() - 1),
+                                  button->width(), button->height()),
                         anchor, state_.context_menu);
   alt_menu->PrepareForRun(
       false, has_mnemonics,
@@ -2144,6 +2161,12 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
   pref.set_width(std::min(pref.width(),
                           item->GetDelegate()->GetMaxWidthForMenu(item)));
 
+  const MenuConfig& menu_config = MenuConfig::instance();
+  // Shadow insets are built into MenuScrollView's preferred size so it must be
+  // compensated for when determining the bounds of touchable menus.
+  gfx::Insets shadow_insets = BubbleBorder::GetBorderAndShadowInsets(
+      menu_config.touchable_menu_shadow_elevation);
+
   int x, y;
   if (state_.anchor == MENU_ANCHOR_BUBBLE_ABOVE ||
       state_.anchor == MENU_ANCHOR_BUBBLE_BELOW) {
@@ -2164,25 +2187,31 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(MenuItemView* item,
   } else if (state_.anchor == MENU_ANCHOR_BUBBLE_TOUCHABLE_ABOVE) {
     // Align the left edges of the menu and anchor, and the bottom of the menu
     // with the top of the anchor.
-    x = owner_bounds.origin().x();
-    y = owner_bounds.origin().y() - pref.height();
+    x = owner_bounds.origin().x() - shadow_insets.left();
+    y = owner_bounds.origin().y() - pref.height() + shadow_insets.bottom() -
+        menu_config.touchable_anchor_offset;
     // Align the right of the container with the right of the app icon.
     if (x + pref.width() > state_.monitor_bounds.width())
-      x = owner_bounds.right() - pref.width();
+      x = owner_bounds.right() - pref.width() + shadow_insets.right();
     // Align the top of the menu with the bottom of the anchor.
-    if (y < 0)
-      y = owner_bounds.bottom();
+    if (y < 0) {
+      y = owner_bounds.bottom() - shadow_insets.top() +
+          menu_config.touchable_anchor_offset;
+    }
   } else if (state_.anchor == MENU_ANCHOR_BUBBLE_TOUCHABLE_LEFT) {
     // Align the right of the menu with the left of the anchor, and the top of
     // the menu with the top of the anchor.
-    x = owner_bounds.origin().x() - pref.width();
-    y = owner_bounds.origin().y();
+    x = owner_bounds.origin().x() - pref.width() + shadow_insets.right() -
+        menu_config.touchable_anchor_offset;
+    y = owner_bounds.origin().y() - shadow_insets.top();
     // Align the left of the menu with the right of the anchor.
-    if (x < 0)
-      x = owner_bounds.right();
+    if (x < 0) {
+      x = owner_bounds.right() + shadow_insets.left() +
+          menu_config.touchable_anchor_offset;
+    }
     // Align the bottom of the menu to the bottom of the anchor.
     if (y + pref.height() > state_.monitor_bounds.height())
-      y = owner_bounds.bottom() - pref.height();
+      y = owner_bounds.bottom() - pref.height() + shadow_insets.bottom();
   } else {
     if (state_.anchor == MENU_ANCHOR_BUBBLE_RIGHT)
       x = owner_bounds.right() - kBubbleTipSizeLeftRight;
@@ -2733,6 +2762,14 @@ void MenuController::SetHotTrackedButton(Button* hot_button) {
     hot_button->SetHotTracked(true);
     hot_button->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
+}
+
+bool MenuController::CanProcessInputEvents() const {
+#if defined(OS_MACOSX)
+  return !menu_closure_animation_;
+#else
+  return true;
+#endif
 }
 
 }  // namespace views

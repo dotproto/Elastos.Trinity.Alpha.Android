@@ -172,7 +172,8 @@ CommandUtil.canExecuteAlways = function(event) {
  */
 CommandUtil.forceDefaultHandler = function(node, commandId) {
   var doc = node.ownerDocument;
-  var command = doc.querySelector('command[id="' + commandId + '"]');
+  var command = /** @type {!cr.ui.Command} */ (
+      doc.querySelector('command[id="' + commandId + '"]'));
   node.addEventListener('keydown', function(e) {
     if (command.matchesEvent(e)) {
       // Prevent cr.ui.CommandManager of handling it and leave it
@@ -193,28 +194,6 @@ CommandUtil.forceDefaultHandler = function(node, commandId) {
     event.command.setHidden(false);
   });
 };
-
-/**
- * Default command.
- * @type {Command}
- */
-CommandUtil.defaultCommand = /** @type {Command} */ ({
-  /**
-   * @param {!Event} event Command event.
-   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
-   */
-  execute: function(event, fileManager) {
-    fileManager.document.execCommand(event.command.id);
-  },
-  /**
-   * @param {!Event} event Command event.
-   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
-   */
-  canExecute: function(event, fileManager) {
-    event.canExecute = fileManager.document.queryCommandEnabled(
-        event.command.id);
-  }
-});
 
 /**
  * Creates the volume switch command with index.
@@ -372,6 +351,60 @@ CommandHandler.RENAME_DISK_FILE_SYSYTEM_SUPPORT_ = [
 ];
 
 /**
+ * Name of a command (for UMA).
+ * @enum {string}
+ * @const
+ */
+CommandHandler.MenuCommandsForUMA = {
+  HELP: 'volume-help',
+  DRIVE_HELP: 'volume-help-drive',
+  DRIVE_BUY_MORE_SPACE: 'drive-buy-more-space',
+  DRIVE_GO_TO_DRIVE: 'drive-go-to-drive',
+  HIDDEN_FILES_SHOW: 'toggle-hidden-files-on',
+  HIDDEN_FILES_HIDE: 'toggle-hidden-files-off',
+  MOBILE_DATA_ON: 'drive-sync-settings-enabled',
+  MOBILE_DATA_OFF: 'drive-sync-settings-disabled',
+  SHOW_GOOGLE_DOCS_FILES_OFF: 'drive-hosted-settings-disabled',
+  SHOW_GOOGLE_DOCS_FILES_ON: 'drive-hosted-settings-enabled',
+};
+
+/**
+ * Keep the order of this in sync with FileManagerMenuCommands in
+ * tools/metrics/histograms/enums.xml.
+ * The array indices will be recorded in UMA as enum values. The index for each
+ * root type should never be renumbered nor reused in this array.
+ *
+ * @type {!Array<CommandHandler.MenuCommandsForUMA>}
+ * @const
+ */
+CommandHandler.ValidMenuCommandsForUMA = [
+  CommandHandler.MenuCommandsForUMA.HELP,
+  CommandHandler.MenuCommandsForUMA.DRIVE_HELP,
+  CommandHandler.MenuCommandsForUMA.DRIVE_BUY_MORE_SPACE,
+  CommandHandler.MenuCommandsForUMA.DRIVE_GO_TO_DRIVE,
+  CommandHandler.MenuCommandsForUMA.HIDDEN_FILES_SHOW,
+  CommandHandler.MenuCommandsForUMA.HIDDEN_FILES_HIDE,
+  CommandHandler.MenuCommandsForUMA.MOBILE_DATA_ON,
+  CommandHandler.MenuCommandsForUMA.MOBILE_DATA_OFF,
+  CommandHandler.MenuCommandsForUMA.SHOW_GOOGLE_DOCS_FILES_ON,
+  CommandHandler.MenuCommandsForUMA.SHOW_GOOGLE_DOCS_FILES_OFF,
+];
+console.assert(
+    Object.keys(CommandHandler.MenuCommandsForUMA).length ===
+        CommandHandler.ValidMenuCommandsForUMA.length,
+    'Members in ValidMenuCommandsForUMA do not match those in ' +
+        'MenuCommandsForUMA.');
+
+/**
+ * Records the menu item as selected in UMA.
+ * @param {CommandHandler.MenuCommandsForUMA} menuItem The selected menu item.
+ */
+CommandHandler.recordMenuItemSelected_ = function(menuItem) {
+  metrics.recordEnum(
+      'MenuItemSelected', menuItem, CommandHandler.ValidMenuCommandsForUMA);
+};
+
+/**
  * Updates the availability of all commands.
  */
 CommandHandler.prototype.updateAvailability = function() {
@@ -515,7 +548,7 @@ CommandHandler.COMMANDS_['format'] = /** @type {Command} */ ({
     if (!root)
       root = directoryModel.getCurrentDirEntry();
 
-    var volumeInfo = fileManager.volumeManager.getVolumeInfo(root);
+    var volumeInfo = fileManager.volumeManager.getVolumeInfo(assert(root));
     if (volumeInfo) {
       fileManager.ui.confirmDialog.show(
           loadTimeData.getString('FORMATTING_WARNING'),
@@ -706,6 +739,13 @@ CommandHandler.COMMANDS_['toggle-hidden-files'] = /** @type {Command} */ ({
     var isFilterHiddenOn = !fileManager.fileFilter.isFilterHiddenOn();
     fileManager.fileFilter.setFilterHidden(isFilterHiddenOn);
     event.command.checked = /* is show hidden files */!isFilterHiddenOn;
+    if (isFilterHiddenOn) {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.HIDDEN_FILES_SHOW);
+    } else {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.HIDDEN_FILES_HIDE);
+    }
   },
   /**
    * @param {!Event} event Command event.
@@ -729,6 +769,13 @@ CommandHandler.COMMANDS_['drive-sync-settings'] = /** @type {Command} */ ({
         fileManager.ui.gearMenu.syncButton.hasAttribute('checked');
     var changeInfo = {cellularDisabled: !nowCellularDisabled};
     chrome.fileManagerPrivate.setPreferences(changeInfo);
+    if (nowCellularDisabled) {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.MOBILE_DATA_OFF);
+    } else {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.MOBILE_DATA_ON);
+    }
   },
   /**
    * @param {!Event} event Command event.
@@ -756,12 +803,20 @@ CommandHandler.COMMANDS_['drive-hosted-settings'] = /** @type {Command} */ ({
     var nowHostedFilesEnabled =
         fileManager.ui.gearMenu.hostedButton.hasAttribute('checked');
     var nowHostedFilesDisabled = !nowHostedFilesEnabled;
+
     /*
     var changeInfo = {hostedFilesDisabled: !nowHostedFilesDisabled};
     */
     var changeInfo = {};
     changeInfo['hostedFilesDisabled'] = !nowHostedFilesDisabled;
     chrome.fileManagerPrivate.setPreferences(changeInfo);
+    if (nowHostedFilesDisabled) {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.SHOW_GOOGLE_DOCS_FILES_OFF);
+    } else {
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.SHOW_GOOGLE_DOCS_FILES_ON);
+    }
   },
   /**
    * @param {!Event} event Command event.
@@ -953,8 +1008,34 @@ CommandHandler.COMMANDS_['paste-into-folder'] = /** @type {Command} */ ({
   }
 });
 
-CommandHandler.COMMANDS_['cut'] = CommandUtil.defaultCommand;
-CommandHandler.COMMANDS_['copy'] = CommandUtil.defaultCommand;
+/**
+ * Cut/Copy command.
+ * @type {Command}
+ * @private
+ */
+CommandHandler.cutCopyCommand_ = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  execute: function(event, fileManager) {
+    // Cancel check-select-mode on cut/copy.  Any further selection of a dir
+    // should start a new selection rather than add to the existing selection.
+    fileManager.directoryModel.getFileListSelection().setCheckSelectMode(false);
+    fileManager.document.execCommand(event.command.id);
+  },
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  canExecute: function(event, fileManager) {
+    event.canExecute =
+        fileManager.document.queryCommandEnabled(event.command.id);
+  }
+});
+
+CommandHandler.COMMANDS_['cut'] = CommandHandler.cutCopyCommand_;
+CommandHandler.COMMANDS_['copy'] = CommandHandler.cutCopyCommand_;
 
 /**
  * Initiates file renaming.
@@ -970,8 +1051,9 @@ CommandHandler.COMMANDS_['rename'] = /** @type {Command} */ ({
         event.target instanceof DirectoryItem) {
       var isRemovableRoot = false;
       var entry = CommandUtil.getCommandEntry(event.target);
+      var volumeInfo = null;
       if (entry) {
-        var volumeInfo = fileManager.volumeManager.getVolumeInfo(entry);
+        volumeInfo = fileManager.volumeManager.getVolumeInfo(entry);
         // Checks whether the target is actually external drive or just a folder
         // inside the drive.
         if (volumeInfo &&
@@ -1062,10 +1144,15 @@ CommandHandler.COMMANDS_['volume-help'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   execute: function(event, fileManager) {
-    if (fileManager.directoryModel.isOnDrive())
+    if (fileManager.directoryModel.isOnDrive()) {
       util.visitURL(str('GOOGLE_DRIVE_HELP_URL'));
-    else
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.DRIVE_HELP);
+    } else {
       util.visitURL(str('FILES_APP_HELP_URL'));
+      CommandHandler.recordMenuItemSelected_(
+          CommandHandler.MenuCommandsForUMA.HELP);
+    }
   },
   /**
    * @param {!Event} event Command event.
@@ -1095,6 +1182,8 @@ CommandHandler.COMMANDS_['drive-buy-more-space'] = /** @type {Command} */ ({
    */
   execute: function(event, fileManager) {
     util.visitURL(str('GOOGLE_DRIVE_BUY_STORAGE_URL'));
+    CommandHandler.recordMenuItemSelected_(
+        CommandHandler.MenuCommandsForUMA.DRIVE_BUY_MORE_SPACE);
   },
   canExecute: CommandUtil.canExecuteVisibleOnDriveInNormalAppModeOnly
 });
@@ -1110,6 +1199,8 @@ CommandHandler.COMMANDS_['drive-go-to-drive'] = /** @type {Command} */ ({
    */
   execute: function(event, fileManager) {
     util.visitURL(str('GOOGLE_DRIVE_ROOT_URL'));
+    CommandHandler.recordMenuItemSelected_(
+        CommandHandler.MenuCommandsForUMA.DRIVE_GO_TO_DRIVE);
   },
   canExecute: CommandUtil.canExecuteVisibleOnDriveInNormalAppModeOnly
 });
@@ -1241,8 +1332,9 @@ CommandHandler.COMMANDS_['search'] = /** @type {Command} */ ({
     // Cancel item selection.
     fileManager.directoryModel.clearSelection();
 
-    // Focus the search box.
+    // Focus and unhide the search box.
     var element = fileManager.document.querySelector('#search-box input');
+    element.hidden = false;
     element.focus();
     element.select();
   },
@@ -1340,7 +1432,12 @@ CommandHandler.COMMANDS_['zip-selection'] = /** @type {Command} */ ({
     if (CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_) {
       fileManager.taskController.getFileTasks()
           .then(function(tasks) {
-            tasks.execute(FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID);
+            if (fileManager.directoryModel.isOnDrive() ||
+                fileManager.directoryModel.isOnMTP()) {
+              tasks.execute(FileTasks.ZIP_ARCHIVER_ZIP_USING_TMP_TASK_ID);
+            } else {
+              tasks.execute(FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID);
+            }
           })
           .catch(function(error) {
             if (error)
@@ -1349,7 +1446,7 @@ CommandHandler.COMMANDS_['zip-selection'] = /** @type {Command} */ ({
     } else {
       var selectionEntries = fileManager.getSelection().entries;
       fileManager.fileOperationManager.zipSelection(
-          /** @type {!DirectoryEntry} */ (dirEntry), selectionEntries);
+          selectionEntries, /** @type {!DirectoryEntry} */ (dirEntry));
     }
   },
   /**
@@ -1362,11 +1459,11 @@ CommandHandler.COMMANDS_['zip-selection'] = /** @type {Command} */ ({
 
     var isOnEligibleLocation = CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ ?
         true :
-        !fileManager.directoryModel.isOnDrive();
+        !fileManager.directoryModel.isOnDrive() &&
+            !fileManager.directoryModel.isOnMTP();
 
     event.canExecute = dirEntry && !fileManager.directoryModel.isReadOnly() &&
-        !fileManager.directoryModel.isOnMTP() && isOnEligibleLocation &&
-        selection && selection.totalCount > 0;
+        isOnEligibleLocation && selection && selection.totalCount > 0;
   }
 });
 
@@ -1670,6 +1767,25 @@ CommandHandler.COMMANDS_['open-gear-menu'] = /** @type {Command} */ ({
 });
 
 /**
+ * Focus the first button visible on action bar (at the top).
+ * @type {Command}
+ */
+CommandHandler.COMMANDS_['focus-action-bar'] = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  execute: function(event, fileManager) {
+    fileManager.ui.actionbar.querySelector('button:not([hidden])').focus();
+  },
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  canExecute: CommandUtil.canExecuteAlways
+});
+
+/**
  * Handle back button.
  * @type {Command}
  */
@@ -1800,4 +1916,19 @@ CommandHandler.COMMANDS_['set-wallpaper'] = /** @type {Command} */ ({
     event.canExecute = type.subtype === 'JPEG' || type.subtype === 'PNG';
     event.command.setHidden(false);
   }
+});
+
+/**
+ * Opens settings/storage sub page.
+ * @type {Command}
+ */
+CommandHandler.COMMANDS_['volume-storage'] = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  execute: function(event, fileManager) {
+    chrome.fileManagerPrivate.openSettingsSubpage('storage');
+  },
+  canExecute: CommandUtil.canExecuteAlways
 });

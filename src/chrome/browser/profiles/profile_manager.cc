@@ -56,7 +56,6 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -81,6 +80,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/search_engines/default_search_manager.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
@@ -577,8 +577,9 @@ void ProfileManager::CreateProfileAsync(
     DCHECK(base::IsStringASCII(icon_url));
     if (profiles::IsDefaultAvatarIconUrl(icon_url, &icon_index)) {
       // add profile to cache with user selected name and avatar
-      GetProfileAttributesStorage().AddProfile(profile_path, name,
-          std::string(), base::string16(), icon_index, supervised_user_id);
+      GetProfileAttributesStorage().AddProfile(
+          profile_path, name, std::string(), base::string16(), icon_index,
+          supervised_user_id, EmptyAccountId());
     }
 
     if (!supervised_user_id.empty()) {
@@ -711,8 +712,15 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles(
         continue;
       }
       Profile* profile = GetProfile(user_data_dir.AppendASCII(profile_path));
-      if (profile)
+      if (profile) {
+        // crbug.com/823338 -> CHECK that the profiles aren't guest or
+        // incognito, causing a crash during session restore.
+        CHECK(!profile->IsGuestSession())
+            << "Guest profiles shouldn't have been saved as active profiles";
+        CHECK(!profile->IsOffTheRecord())
+            << "OTR profiles shouldn't have been saved as active profiles";
         to_return.push_back(profile);
+      }
     }
   }
   return to_return;
@@ -884,7 +892,6 @@ void ProfileManager::AutoloadProfiles() {
 
 void ProfileManager::CleanUpEphemeralProfiles() {
   const std::string last_used_profile = GetLastUsedProfileName();
-
   bool last_active_profile_deleted = false;
   base::FilePath new_profile_path;
   std::vector<base::FilePath> profiles_to_delete;
@@ -902,8 +909,11 @@ void ProfileManager::CleanUpEphemeralProfiles() {
     }
   }
 
-  // If the last active profile was ephemeral, set a new one.
-  if (last_active_profile_deleted) {
+  // If the last active profile was ephemeral or all profiles are deleted due to
+  // ephemeral, set a new one.
+  if (last_active_profile_deleted ||
+      (entries.size() == profiles_to_delete.size() &&
+       profiles_to_delete.size() > 0)) {
     if (new_profile_path.empty())
       new_profile_path = GenerateNextProfileDirectoryPath();
 
@@ -1173,6 +1183,12 @@ void ProfileManager::Observe(
     std::set<std::string> profile_paths;
     std::vector<Profile*>::const_iterator it;
     for (it = active_profiles_.begin(); it != active_profiles_.end(); ++it) {
+      // crbug.com/823338 -> CHECK that the profiles aren't guest or incognito,
+      // causing a crash during session restore.
+      CHECK(!(*it)->IsGuestSession())
+          << "Guest profiles shouldn't be saved as active profiles";
+      CHECK(!(*it)->IsOffTheRecord())
+          << "OTR profiles shouldn't be saved as active profiles";
       std::string profile_path = (*it)->GetPath().BaseName().MaybeAsASCII();
       // Some profiles might become ephemeral after they are created.
       // Don't persist the System Profile as one of the last actives, it should
@@ -1320,21 +1336,6 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // Generates notifications from the above, if experiment is enabled.
   ContentSuggestionsNotifierServiceFactory::GetForProfile(profile);
 #endif
-
-  // TODO(crbug.com/709094, crbug.com/761485): UserEventServiceFactory
-  // initializes asynchronously, but it needs to be ready to receive user
-  // events in order for ConsentAuditor to record consents when the user
-  // signs in, which means that it needs to be initialized early enough in
-  // the Profile lifetime.
-  //
-  // This early initialization can be removed once the linked bugs are fixed
-  // and UserEventService is able to initialize synchronously.
-  //
-  // Note also that this code is technically not necessary, as UserEventService
-  // already happens to be initialized early in practice through other
-  // components that use it, but ConsentAuditor should not depend on that.
-  if (!go_off_the_record)
-    browser_sync::UserEventServiceFactory::GetForProfile(profile);
 }
 
 void ProfileManager::DoFinalInitLogging(Profile* profile) {
@@ -1677,8 +1678,16 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
   std::string supervised_user_id =
       profile->GetPrefs()->GetString(prefs::kSupervisedUserId);
 
+  AccountId account_id(EmptyAccountId());
+#if defined(OS_CHROMEOS)
+  user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (user)
+    account_id = user->GetAccountId();
+#endif
+
   storage.AddProfile(profile->GetPath(), profile_name, account_info.gaia,
-                     username, icon_index, supervised_user_id);
+                     username, icon_index, supervised_user_id, account_id);
 
   if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles)) {
     ProfileAttributesEntry* entry;

@@ -56,6 +56,9 @@ class TabWebContentsDelegateAndroid
                            const gfx::RectF& active_rect) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
+  void AdjustPreviewsStateForNavigation(
+      content::WebContents* web_contents,
+      content::PreviewsState* previews_state) override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -74,11 +77,14 @@ class TabWebContentsDelegateAndroid
       const content::OpenURLParams& params) override;
   bool ShouldResumeRequestsForCreatedWindow() override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
                       bool* was_blocked) override;
+  blink::WebSecurityStyle GetSecurityStyle(
+      content::WebContents* web_contents,
+      content::SecurityStyleExplanations* security_style_explanations) override;
   void RequestAppBannerFromDevTools(
       content::WebContents* web_contents) override;
   void OnAudioStateChanged(content::WebContents* web_contents,

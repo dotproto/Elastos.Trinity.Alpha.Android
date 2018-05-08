@@ -766,14 +766,10 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     local_scope = {}
     if deps_content:
       try:
-        vars_override = {}
-        if self.parent:
-          vars_override = self.parent.get_vars()
-        vars_override.update(self.get_vars())
         local_scope = gclient_eval.Parse(
             deps_content, expand_vars,
             self._get_option('validate_syntax', False),
-            filepath, vars_override)
+            filepath, self.get_vars())
       except SyntaxError as e:
         gclient_utils.SyntaxErrorToError(filepath, e)
 
@@ -962,6 +958,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         return origin
       if origin.endswith('.git') and origin[:-len('.git')] in candidates:
         return origin[:-len('.git')]
+      if origin + '.git' in candidates:
+        return origin + '.git'
     if self.name in candidates:
       return self.name
     return None
@@ -1018,13 +1016,14 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         while file_list[i].startswith(('\\', '/')):
           file_list[i] = file_list[i][1:]
 
-    # Always parse the DEPS file.
-    self.ParseDepsFile(expand_vars=(command != 'flatten'))
+    if self.recursion_limit:
+      self.ParseDepsFile(expand_vars=(command != 'flatten'))
+
     self._run_is_done(file_list or [], parsed_url)
-    if command in ('update', 'revert') and not options.noprehooks:
-      self.RunPreDepsHooks()
 
     if self.recursion_limit:
+      if command in ('update', 'revert') and not options.noprehooks:
+        self.RunPreDepsHooks()
       # Parse the dependencies of this dependency.
       for s in self.dependencies:
         if s.should_process:
@@ -1369,8 +1368,15 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         'checkout_x64': 'x64' in self.target_cpu,
         'host_cpu': detect_host_arch.HostArch(),
     }
-    # Variables defined in DEPS file override built-in ones.
+    # Variable precedence:
+    # - built-in
+    # - DEPS vars
+    # - parents, from first to last
+    # - custom_vars overrides
     result.update(self._vars)
+    if self.parent:
+      parent_vars = self.parent.get_vars()
+      result.update(parent_vars)
     result.update(self.custom_vars or {})
     return result
 
@@ -2936,7 +2942,50 @@ def CMDrevinfo(parser, args):
   return 0
 
 
+def CMDgetdep(parser, args):
+  """Gets revision information and variable values from a DEPS file."""
+  parser.add_option('--var', action='append',
+                    dest='vars', metavar='VAR', default=[],
+                    help='Gets the value of a given variable.')
+  parser.add_option('-r', '--revision', action='append',
+                    dest='revisions', metavar='DEP', default=[],
+                    help='Gets the revision/version for the given dependency. '
+                         'If it is a git dependency, dep must be a path. If it '
+                         'is a CIPD dependency, dep must be of the form '
+                         'path:package.')
+  parser.add_option('--deps-file', default='DEPS',
+                    # TODO(ehmaldonado): Try to find the DEPS file pointed by
+                    # .gclient first.
+                    help='The DEPS file to be edited. Defaults to the DEPS '
+                         'file in the current directory.')
+  (options, args) = parser.parse_args(args)
+
+  if not os.path.isfile(options.deps_file):
+    raise gclient_utils.Error(
+        'DEPS file %s does not exist.' % options.deps_file)
+  with open(options.deps_file) as f:
+    contents = f.read()
+  local_scope = gclient_eval.Parse(
+      contents, expand_vars=True, validate_syntax=True,
+      filename=options.deps_file)
+
+  for var in options.vars:
+    print(gclient_eval.GetVar(local_scope, var))
+
+  for name in options.revisions:
+    if ':' in name:
+      name, _, package = name.partition(':')
+      if not name or not package:
+        parser.error(
+            'Wrong CIPD format: %s:%s should be of the form path:pkg.'
+            % (name, package))
+      print(gclient_eval.GetCIPD(local_scope, name, package))
+    else:
+      print(gclient_eval.GetRevision(local_scope, name))
+
+
 def CMDsetdep(parser, args):
+  """Modifies dependency revisions and variable values in a DEPS file"""
   parser.add_option('--var', action='append',
                     dest='vars', metavar='VAR=VAL', default=[],
                     help='Sets a variable to the given value with the format '
@@ -2956,6 +3005,11 @@ def CMDsetdep(parser, args):
                     help='The DEPS file to be edited. Defaults to the DEPS '
                          'file in the current directory.')
   (options, args) = parser.parse_args(args)
+  if args:
+    parser.error('Unused arguments: "%s"' % '" "'.join(args))
+  if not options.revisions and not options.vars:
+    parser.error(
+        'You must specify at least one variable or revision to modify.')
 
   if not os.path.isfile(options.deps_file):
     raise gclient_utils.Error(
@@ -2969,7 +3023,7 @@ def CMDsetdep(parser, args):
   for var in options.vars:
     name, _, value = var.partition('=')
     if not name or not value:
-      raise gclient_utils.Error(
+      parser.error(
           'Wrong var format: %s should be of the form name=value.' % var)
     if name in local_scope['vars']:
       gclient_eval.SetVar(local_scope, name, value)
@@ -2979,12 +3033,12 @@ def CMDsetdep(parser, args):
   for revision in options.revisions:
     name, _, value = revision.partition('@')
     if not name or not value:
-      raise gclient_utils.Error(
+      parser.error(
           'Wrong dep format: %s should be of the form dep@rev.' % revision)
     if ':' in name:
       name, _, package = name.partition(':')
       if not name or not package:
-        raise gclient_utils.Error(
+        parser.error(
             'Wrong CIPD format: %s:%s should be of the form path:pkg@version.'
             % (name, package))
       gclient_eval.SetCIPD(local_scope, name, package, value)

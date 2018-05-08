@@ -23,6 +23,10 @@ namespace autofill {
 enum FieldPropertiesFlags {
   NO_FLAGS = 0u,
   USER_TYPED = 1u << 0,
+  // AUTOFILLED means that at least one character of the field value comes from
+  // being autofilled. This is different from
+  // WebFormControlElement::IsAutofilled(). It is meant to be used for password
+  // fields, to determine whether viewing the value needs user reauthentication.
   AUTOFILLED = 1u << 1,
   HAD_FOCUS = 1u << 2,
   // Use this flag, if some error occurred in flags processing.
@@ -78,6 +82,12 @@ struct FormFieldData {
   // other information isn't changed.
   bool SimilarFieldAs(const FormFieldData& field) const;
 
+  // Returns true for all of textfield-looking types such as text, password,
+  // search, email, url, and number. It must work the same way as Blink function
+  // WebInputElement::IsTextField(), and it returns false if |*this| represents
+  // a textarea.
+  bool IsTextInputElement() const;
+
   // Note: operator==() performs a full-field-comparison(byte by byte), this is
   // different from SameFieldAs(), which ignores comparison for those "values"
   // not regarded as part of identity of the field, such as is_autofilled and
@@ -109,6 +119,13 @@ struct FormFieldData {
   RoleAttribute role;
   base::i18n::TextDirection text_direction;
   FieldPropertiesMask properties_mask;
+
+  // Data members from the next block are used for parsing only, they are not
+  // serialised for storage.
+  bool is_enabled;
+  bool is_readonly;
+  bool is_default;
+  base::string16 typed_value;
 
   // For the HTML snippet |<option value="US">United States</option>|, the
   // value is "US" and the contents are "United States".

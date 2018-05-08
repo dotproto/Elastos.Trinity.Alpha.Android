@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_notification_controller_chromeos.h"
+#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_notification_controller.h"
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -11,19 +11,20 @@
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 
+namespace chromeos {
 namespace {
 
 const char kPhoneName[] = "Nexus 6";
 
 class TestableNotificationController
-    : public chromeos::EasyUnlockNotificationControllerChromeOS {
+    : public EasyUnlockNotificationController {
  public:
   explicit TestableNotificationController(Profile* profile)
-      : EasyUnlockNotificationControllerChromeOS(profile) {}
+      : EasyUnlockNotificationController(profile) {}
 
   ~TestableNotificationController() override {}
 
-  // EasyUnlockNotificationControllerChromeOS:
+  // EasyUnlockNotificationController:
   MOCK_METHOD0(LaunchEasyUnlockSettings, void());
   MOCK_METHOD0(LockScreen, void());
 
@@ -31,14 +32,11 @@ class TestableNotificationController
   DISALLOW_COPY_AND_ASSIGN(TestableNotificationController);
 };
 
-}  // namespace
-
-class EasyUnlockNotificationControllerChromeOSTest
-    : public BrowserWithTestWindowTest {
+class EasyUnlockNotificationControllerTest : public BrowserWithTestWindowTest {
  protected:
-  EasyUnlockNotificationControllerChromeOSTest() {}
+  EasyUnlockNotificationControllerTest() {}
 
-  ~EasyUnlockNotificationControllerChromeOSTest() override {}
+  ~EasyUnlockNotificationControllerTest() override {}
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
@@ -57,10 +55,10 @@ class EasyUnlockNotificationControllerChromeOSTest
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(EasyUnlockNotificationControllerChromeOSTest);
+  DISALLOW_COPY_AND_ASSIGN(EasyUnlockNotificationControllerTest);
 };
 
-TEST_F(EasyUnlockNotificationControllerChromeOSTest,
+TEST_F(EasyUnlockNotificationControllerTest,
        TestShowChromebookAddedNotification) {
   const char kNotificationId[] = "easyunlock_notification_ids.chromebook_added";
 
@@ -73,14 +71,14 @@ TEST_F(EasyUnlockNotificationControllerChromeOSTest,
 
   // Clicking notification button should launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->ButtonClick(0);
+  notification->delegate()->Click(0, base::nullopt);
 
   // Clicking the notification itself should also launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->Click();
+  notification->delegate()->Click(base::nullopt, base::nullopt);
 }
 
-TEST_F(EasyUnlockNotificationControllerChromeOSTest,
+TEST_F(EasyUnlockNotificationControllerTest,
        TestShowPairingChangeNotification) {
   const char kNotificationId[] = "easyunlock_notification_ids.pairing_change";
 
@@ -93,17 +91,17 @@ TEST_F(EasyUnlockNotificationControllerChromeOSTest,
 
   // Clicking 1st notification button should lock screen settings.
   EXPECT_CALL(*notification_controller_, LockScreen());
-  notification->ButtonClick(0);
+  notification->delegate()->Click(0, base::nullopt);
 
   // Clicking 2nd notification button should launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->ButtonClick(1);
+  notification->delegate()->Click(1, base::nullopt);
 
   // Clicking the notification itself should do nothing.
-  notification->Click();
+  notification->delegate()->Click(base::nullopt, base::nullopt);
 }
 
-TEST_F(EasyUnlockNotificationControllerChromeOSTest,
+TEST_F(EasyUnlockNotificationControllerTest,
        TestShowPairingChangeAppliedNotification) {
   const char kNotificationId[] =
       "easyunlock_notification_ids.pairing_change_applied";
@@ -121,14 +119,14 @@ TEST_F(EasyUnlockNotificationControllerChromeOSTest,
 
   // Clicking notification button should launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->ButtonClick(0);
+  notification->delegate()->Click(0, base::nullopt);
 
   // Clicking the notification itself should also launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->Click();
+  notification->delegate()->Click(base::nullopt, base::nullopt);
 }
 
-TEST_F(EasyUnlockNotificationControllerChromeOSTest,
+TEST_F(EasyUnlockNotificationControllerTest,
        PairingAppliedRemovesPairingChange) {
   const char kPairingChangeId[] = "easyunlock_notification_ids.pairing_change";
   const char kPairingAppliedId[] =
@@ -142,8 +140,7 @@ TEST_F(EasyUnlockNotificationControllerChromeOSTest,
   EXPECT_TRUE(display_service_->GetNotification(kPairingAppliedId));
 }
 
-TEST_F(EasyUnlockNotificationControllerChromeOSTest,
-       TestShowPromotionNotification) {
+TEST_F(EasyUnlockNotificationControllerTest, TestShowPromotionNotification) {
   const char kNotificationId[] = "easyunlock_notification_ids.promotion";
 
   notification_controller_->ShowPromotionNotification();
@@ -155,9 +152,12 @@ TEST_F(EasyUnlockNotificationControllerChromeOSTest,
 
   // Clicking notification button should launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->ButtonClick(0);
+  notification->delegate()->Click(0, base::nullopt);
 
   // Clicking the notification itself should also launch settings.
   EXPECT_CALL(*notification_controller_, LaunchEasyUnlockSettings());
-  notification->Click();
+  notification->delegate()->Click(base::nullopt, base::nullopt);
 }
+
+}  // namespace
+}  // namespace chromeos

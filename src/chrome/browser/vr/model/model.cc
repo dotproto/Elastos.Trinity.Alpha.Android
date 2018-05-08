@@ -18,6 +18,8 @@ bool IsOpaqueUiMode(UiMode mode) {
     case kModeEditingOmnibox:
       return true;
     case kModeRepositionWindow:
+    case kModeModalPrompt:
+    case kModeVoiceSearchListening:
       return false;
   }
   NOTREACHED();
@@ -26,9 +28,8 @@ bool IsOpaqueUiMode(UiMode mode) {
 
 }  // namespace
 
-Model::Model() {}
-
-Model::~Model() {}
+Model::Model() = default;
+Model::~Model() = default;
 
 const ColorScheme& Model::color_scheme() const {
   ColorScheme::Mode mode = ColorScheme::kModeNormal;
@@ -63,6 +64,10 @@ void Model::toggle_mode(UiMode mode) {
     return;
   }
   push_mode(mode);
+}
+
+UiMode Model::get_mode() const {
+  return ui_modes.back();
 }
 
 UiMode Model::get_last_opaque_mode() const {
@@ -118,6 +123,12 @@ bool Model::web_vr_autopresentation_enabled() const {
 
 bool Model::reposition_window_enabled() const {
   return ui_modes.back() == kModeRepositionWindow;
+}
+
+bool Model::reposition_window_permitted() const {
+  return !editing_input && !editing_web_input &&
+         active_modal_prompt_type == kModalPromptTypeNone &&
+         !hosted_platform_ui.hosted_ui_enabled;
 }
 
 }  // namespace vr

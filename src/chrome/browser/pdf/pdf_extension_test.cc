@@ -39,6 +39,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/download/public/common/download_item.h"
+#include "components/viz/common/features.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/test/zoom_test_utils.h"
 #include "components/zoom/zoom_controller.h"
@@ -104,8 +105,7 @@ bool GetGuestCallback(WebContents** guest_out, WebContents* guest) {
   return false;
 }
 
-class PDFExtensionTest : public ExtensionApiTest,
-                         public testing::WithParamInterface<int> {
+class PDFExtensionTest : public ExtensionApiTest {
  public:
   ~PDFExtensionTest() override {}
 
@@ -242,6 +242,7 @@ class PDFExtensionTest : public ExtensionApiTest,
       ASSERT_FALSE(filename.empty());
 
       std::string pdf_file = dir_name + "/" + filename;
+      SCOPED_TRACE(pdf_file);
       if (static_cast<int>(base::Hash(filename) % kNumberLoadTestParts) == k) {
         LOG(INFO) << "Loading: " << pdf_file;
         bool success = LoadPdf(embedded_test_server()->GetURL("/" + pdf_file));
@@ -264,7 +265,7 @@ class PDFExtensionTest : public ExtensionApiTest,
         web_contents->GetBrowserContext()->GetGuestManager();
     WebContents* guest_contents = nullptr;
     ASSERT_NO_FATAL_FAILURE(guest_manager->ForEachGuest(
-        web_contents, base::Bind(&GetGuestCallback, &guest_contents)));
+        web_contents, base::BindRepeating(&GetGuestCallback, &guest_contents)));
     ASSERT_TRUE(guest_contents);
     ASSERT_TRUE(content::ExecuteScript(
         guest_contents,
@@ -348,7 +349,37 @@ class PDFExtensionTest : public ExtensionApiTest,
   }
 };
 
-IN_PROC_BROWSER_TEST_P(PDFExtensionTest, Load) {
+class PDFExtensionLoadTest : public PDFExtensionTest,
+                             public testing::WithParamInterface<int> {
+ public:
+  PDFExtensionLoadTest() {}
+};
+
+class PDFExtensionHitTestTest : public PDFExtensionTest,
+                                public testing::WithParamInterface<bool> {
+ public:
+  PDFExtensionHitTestTest() {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    PDFExtensionTest::SetUpCommandLine(command_line);
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(features::kEnableVizHitTestDrawQuad);
+    }
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Disabled because it's flaky.
+// See the issue for details: https://crbug.com/826055.
+#if defined(MEMORY_SANITIZER) || defined(LEAK_SANITIZER) || \
+    defined(ADDRESS_SANITIZER)
+#define MAYBE_Load DISABLED_Load
+#else
+#define MAYBE_Load Load
+#endif
+IN_PROC_BROWSER_TEST_P(PDFExtensionLoadTest, MAYBE_Load) {
 #if defined(GOOGLE_CHROME_BUILD)
   // Load private PDFs.
   LoadAllPdfsTest("pdf_private", GetParam());
@@ -415,10 +446,14 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DisablePlugin) {
   downloads[0]->Cancel(false);
 }
 
-// We break PDFTest.Load up into kNumberLoadTestParts.
+// We break PDFExtensionLoadTest up into kNumberLoadTestParts.
 INSTANTIATE_TEST_CASE_P(PDFTestFiles,
-                        PDFExtensionTest,
+                        PDFExtensionLoadTest,
                         testing::Range(0, kNumberLoadTestParts));
+
+INSTANTIATE_TEST_CASE_P(/* no prefix */,
+                        PDFExtensionHitTestTest,
+                        testing::Bool());
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Basic) {
   RunTestsInFile("basic_test.js", "test.pdf");
@@ -947,7 +982,16 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, OpenFromFTP) {
   EXPECT_EQ(base::ASCIIToUTF16("test.pdf"), GetActiveWebContents()->GetTitle());
 }
 
-IN_PROC_BROWSER_TEST_F(PDFExtensionTest, MultipleDomains) {
+// For both PDFExtensionTest and PDFIsolatedExtensionTest, MultipleDomains case
+// flakily times out on Win7 Tests (dbg)(1) and win_chromium_dbg_ng bots.
+// https://crbug.com/825038
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_MultipleDomains DISABLED_MultipleDomains
+#else
+#define MAYBE_MultipleDomains MultipleDomains
+#endif
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, MAYBE_MultipleDomains) {
   for (const auto& url :
        {embedded_test_server()->GetURL("a.com", "/pdf/test.pdf"),
         embedded_test_server()->GetURL("b.com", "/pdf/test.pdf"),
@@ -972,7 +1016,8 @@ class PDFIsolatedExtensionTest : public PDFExtensionTest {
   base::test::ScopedFeatureList features_;
 };
 
-IN_PROC_BROWSER_TEST_F(PDFIsolatedExtensionTest, MultipleDomains) {
+// See MAYBE_MultipleDomains definition, above. https://crbug.com/825038
+IN_PROC_BROWSER_TEST_F(PDFIsolatedExtensionTest, MAYBE_MultipleDomains) {
   for (const auto& url :
        {embedded_test_server()->GetURL("a.com", "/pdf/test.pdf"),
         embedded_test_server()->GetURL("b.com", "/pdf/test.pdf"),
@@ -1131,7 +1176,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionLinkClickTest, ShiftLeft) {
   WebContents* web_contents = GetActiveWebContents();
 
   content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+      chrome::NOTIFICATION_BROWSER_OPENED,
       content::NotificationService::AllSources());
   content::SimulateMouseClickAt(web_contents, blink::WebInputEvent::kShiftKey,
                                 blink::WebMouseEvent::Button::kLeft,
@@ -1587,7 +1632,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, CtrlWheelInvokesCustomZoom) {
 
 #endif  // defined(OS_MACOSX)
 
-IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ContextMenuCoordinates) {
+IN_PROC_BROWSER_TEST_P(PDFExtensionHitTestTest, ContextMenuCoordinates) {
   GURL url = embedded_test_server()->GetURL("/pdf/pdf_embed.html");
 
   // Load page with embedded PDF and make sure it succeeds.
@@ -1618,7 +1663,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ContextMenuCoordinates) {
   auto context_menu_filter = base::MakeRefCounted<content::ContextMenuFilter>();
   guest_process_host->AddFilter(context_menu_filter.get());
 
-  ContextMenuWaiter menu_observer(content::NotificationService::AllSources());
+  ContextMenuWaiter menu_observer;
   // Send mouse right-click to activate context menu.
   content::SimulateRoutedMouseClickAt(embedder_contents, kDefaultKeyModifier,
                                       blink::WebMouseEvent::Button::kRight,
@@ -1639,4 +1684,23 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ContextMenuCoordinates) {
   // TODO(wjmaclean): If it ever becomes possible to filter outgoing IPCs
   // from the RenderProcessHost, we should verify the ViewMsg_PluginActionAt
   // message is sent with the same coordinates as in the ContextMenuParams.
+}
+
+// The plugin document and the mime handler should both use the same background
+// color.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BackgroundColor) {
+  WebContents* guest_contents =
+      LoadPdfGetGuestContents(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(guest_contents);
+  const std::string script =
+      "window.domAutomationController.send("
+      "    window.getComputedStyle(document.body, null)."
+      "    getPropertyValue('background-color'))";
+  std::string outer;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(GetActiveWebContents(),
+                                                     script, &outer));
+  std::string inner;
+  ASSERT_TRUE(
+      content::ExecuteScriptAndExtractString(guest_contents, script, &inner));
+  EXPECT_EQ(inner, outer);
 }

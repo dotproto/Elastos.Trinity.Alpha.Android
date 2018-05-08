@@ -12,7 +12,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
@@ -180,7 +179,7 @@ class SectionList {
 std::string GetVersionString(version_info::Channel channel) {
   // Build a version string that matches syncer::MakeUserAgentForSync with the
   // addition of channel info and proper OS names.
-  // chrome::GetChannelString() returns empty string for stable channel or
+  // chrome::GetChannelName() returns empty string for stable channel or
   // unofficial builds, the channel string otherwise. We want to have "-devel"
   // for unofficial builds only.
   std::string version_modifier = version_info::GetChannelString(channel);
@@ -242,23 +241,12 @@ std::string GetConnectionStatus(const SyncService::SyncTokenStatus& status) {
 
 }  // namespace
 
-std::unique_ptr<base::DictionaryValue> ConstructAboutInformation_DEPRECATED(
-    SyncService* service,
-    version_info::Channel channel) {
-  AccountInfo primary_account_info;
-  if (service->signin())
-    primary_account_info = service->signin()->GetAuthenticatedAccountInfo();
-
-  return ConstructAboutInformation(service, primary_account_info, channel);
-}
-
 // This function both defines the structure of the message to be returned and
 // its contents.  Most of the message consists of simple fields in about:sync
 // which are grouped into sections and populated with the help of the SyncStat
 // classes defined above.
 std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     SyncService* service,
-    AccountInfo primary_account_info,
     version_info::Channel channel) {
   auto about_info = std::make_unique<base::DictionaryValue>();
 
@@ -414,7 +402,7 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     sync_id->Set(full_status.sync_id);
   if (is_status_valid && !full_status.invalidator_client_id.empty())
     invalidator_id->Set(full_status.invalidator_client_id);
-  username->Set(primary_account_info.email);
+  username->Set(service->GetAuthenticatedAccountInfo().email);
 
   // Credentials.
   request_token_time->Set(GetTimeStr(token_status.token_request_time, "n/a"));
@@ -464,10 +452,8 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
 
   // Status from Last Completed Session.
   if (snapshot.is_initialized()) {
-    if (snapshot.legacy_updates_source() !=
-        sync_pb::GetUpdatesCallerInfo::UNKNOWN) {
-      session_source->Set(
-          ProtoEnumToString(snapshot.legacy_updates_source()));
+    if (snapshot.get_updates_origin() != sync_pb::SyncEnums::UNKNOWN_ORIGIN) {
+      session_source->Set(ProtoEnumToString(snapshot.get_updates_origin()));
     }
     get_key_result->Set(GetSyncerErrorString(
         snapshot.model_neutral_state().last_get_key_result));

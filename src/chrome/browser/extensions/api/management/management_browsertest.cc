@@ -364,23 +364,21 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
   ASSERT_TRUE(registry->disabled_extensions().is_empty());
   const Extension* extension = InstallExtension(v1_path, 1);
   ASSERT_TRUE(extension);
-  listener1.WaitUntilSatisfied();
+  EXPECT_TRUE(listener1.WaitUntilSatisfied());
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   ASSERT_EQ("ogjcoiohnmldgjemafoockdghcjciccf", extension->id());
   ASSERT_EQ("1.0", extension->VersionString());
-
-  extensions::ExtensionUpdater::CheckParams params;
-  params.callback =
-      base::Bind(&NotificationListener::OnFinished,
-                 base::Unretained(&notification_listener));
 
   // Run autoupdate and make sure version 2 of the extension was installed.
   ExtensionTestMessageListener listener2("v2 installed", false);
 
   extensions::TestExtensionRegistryObserver install_observer(registry);
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params1;
+  params1.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                    base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params1));
   install_observer.WaitForExtensionWillBeInstalled();
-  listener2.WaitUntilSatisfied();
+  EXPECT_TRUE(listener2.WaitUntilSatisfied());
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   extension = service->GetExtensionById(
       "ogjcoiohnmldgjemafoockdghcjciccf", false);
@@ -400,7 +398,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v3.crx"),
                                      basedir.AppendASCII("v3.crx"));
 
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params2;
+  params2.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                    base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params2));
   ASSERT_TRUE(WaitForExtensionInstallError());
   ASSERT_TRUE(notification_listener.started());
   ASSERT_TRUE(notification_listener.finished());
@@ -466,23 +467,21 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
   const size_t disabled_size_before = registry->disabled_extensions().size();
   const Extension* extension = InstallExtension(v1_path, 1);
   ASSERT_TRUE(extension);
-  listener1.WaitUntilSatisfied();
+  EXPECT_TRUE(listener1.WaitUntilSatisfied());
   DisableExtension(extension->id());
   ASSERT_EQ(disabled_size_before + 1, registry->disabled_extensions().size());
   ASSERT_EQ(enabled_size_before, registry->enabled_extensions().size());
   ASSERT_EQ("ogjcoiohnmldgjemafoockdghcjciccf", extension->id());
   ASSERT_EQ("1.0", extension->VersionString());
 
-  extensions::ExtensionUpdater::CheckParams params;
-  params.callback =
-      base::Bind(&NotificationListener::OnFinished,
-                 base::Unretained(&notification_listener));
-
   ExtensionTestMessageListener listener2("v2 installed", false);
   extensions::TestExtensionRegistryObserver install_observer(registry);
   // Run autoupdate and make sure version 2 of the extension was installed but
   // is still disabled.
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params;
+  params.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                   base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params));
   install_observer.WaitForExtensionWillBeInstalled();
   ASSERT_EQ(disabled_size_before + 1, registry->disabled_extensions().size());
   ASSERT_EQ(enabled_size_before, registry->enabled_extensions().size());
@@ -497,7 +496,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
   // When we enabled it, it should then make the callback.
   ASSERT_FALSE(listener2.was_satisfied());
   EnableExtension(extension->id());
-  listener2.WaitUntilSatisfied();
+  EXPECT_TRUE(listener2.WaitUntilSatisfied());
   ASSERT_TRUE(notification_listener.started());
   ASSERT_TRUE(notification_listener.finished());
   ASSERT_TRUE(base::ContainsKey(notification_listener.updates(),
@@ -509,7 +508,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
   ExtensionService* service = extensions::ExtensionSystem::Get(
       browser()->profile())->extension_service();
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";
-  extensions::ExtensionUpdater::CheckParams params;
 
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
@@ -556,7 +554,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
 
   extensions::TestExtensionRegistryObserver install_observer(registry);
   // Run autoupdate and make sure version 2 of the extension was installed.
-  service->updater()->CheckNow(params);
+  service->updater()->CheckNow(extensions::ExtensionUpdater::CheckParams());
   install_observer.WaitForExtensionWillBeInstalled();
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   const Extension* extension = service->GetExtensionById(kExtensionId, false);

@@ -24,6 +24,7 @@
 #include "base/rand_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browsing_data/browsing_data_remover_impl.h"
@@ -233,7 +234,7 @@ storage::ExternalMountPoints* BrowserContext::GetMountPoints(
   // Ensure that these methods are called on the UI thread, except for
   // unittests where a UI thread might not have been created.
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
-         !BrowserThread::IsMessageLoopValid(BrowserThread::UI));
+         !BrowserThread::IsThreadInitialized(BrowserThread::UI));
 
 #if defined(OS_CHROMEOS)
   if (!context->GetUserData(kMountPointsKey)) {
@@ -338,26 +339,6 @@ void BrowserContext::CreateMemoryBackedBlob(BrowserContext* browser_context,
 }
 
 // static
-void BrowserContext::CreateFileBackedBlob(
-    BrowserContext* browser_context,
-    const base::FilePath& path,
-    int64_t offset,
-    int64_t size,
-    const base::Time& expected_modification_time,
-    BlobCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  ChromeBlobStorageContext* blob_context =
-      ChromeBlobStorageContext::GetFor(browser_context);
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&ChromeBlobStorageContext::CreateFileBackedBlob,
-                     base::WrapRefCounted(blob_context), path, offset, size,
-                     expected_modification_time),
-      std::move(callback));
-}
-
-// static
 BrowserContext::BlobContextGetter BrowserContext::GetBlobStorageContext(
     BrowserContext* browser_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -382,6 +363,14 @@ void BrowserContext::DeliverPushMessage(
 
 // static
 void BrowserContext::NotifyWillBeDestroyed(BrowserContext* browser_context) {
+  // Make sure NotifyWillBeDestroyed is idempotent.  This helps facilitate the
+  // pattern where NotifyWillBeDestroyed is called from *both*
+  // ShellBrowserContext and its derived classes (e.g.
+  // LayoutTestBrowserContext).
+  if (browser_context->was_notify_will_be_destroyed_called_)
+    return;
+  browser_context->was_notify_will_be_destroyed_called_ = true;
+
   // Service Workers must shutdown before the browser context is destroyed,
   // since they keep render process hosts alive and the codebase assumes that
   // render process hosts die before their profile (browser context) dies.
@@ -425,7 +414,7 @@ void BrowserContext::SaveSessionState(BrowserContext* browser_context) {
       base::BindOnce(&storage::DatabaseTracker::SetForceKeepSessionState,
                      base::WrapRefCounted(database_tracker)));
 
-  if (BrowserThread::IsMessageLoopValid(BrowserThread::IO)) {
+  if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(
@@ -575,7 +564,7 @@ ServiceManagerConnection* BrowserContext::GetServiceManagerConnectionFor(
 }
 
 BrowserContext::BrowserContext()
-    : media_device_id_salt_(CreateRandomMediaDeviceIDSalt()) {}
+    : unique_id_(base::UnguessableToken::Create().ToString()) {}
 
 BrowserContext::~BrowserContext() {
   CHECK(GetUserData(kMojoWasInitialized))
@@ -584,6 +573,8 @@ BrowserContext::~BrowserContext() {
 
   DCHECK(!GetUserData(kStoragePartitionMapKeyName))
       << "StoragePartitionMap is not shut down properly";
+
+  DCHECK(was_notify_will_be_destroyed_called_);
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcEventLogger* const logger = WebRtcEventLogger::Get();
@@ -604,15 +595,16 @@ void BrowserContext::ShutdownStoragePartitions() {
 }
 
 std::string BrowserContext::GetMediaDeviceIDSalt() {
-  return media_device_id_salt_;
+  return unique_id_;
 }
 
 // static
 std::string BrowserContext::CreateRandomMediaDeviceIDSalt() {
-  std::string salt;
-  base::Base64Encode(base::RandBytesAsString(16), &salt);
-  DCHECK(!salt.empty());
-  return salt;
+  return base::UnguessableToken::Create().ToString();
+}
+
+const std::string& BrowserContext::UniqueId() const {
+  return unique_id_;
 }
 
 media::VideoDecodePerfHistory* BrowserContext::GetVideoDecodePerfHistory() {

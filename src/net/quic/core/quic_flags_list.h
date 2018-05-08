@@ -98,10 +98,6 @@ QUIC_FLAG(uint32_t, FLAGS_quic_send_buffer_max_data_slice_size, 4096u)
 // protocol.
 QUIC_FLAG(bool, FLAGS_quic_supports_tls_handshake, false)
 
-// If true, QUIC can take ownership of data provided in a reference counted
-// memory to avoid data copy.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_use_mem_slices, false)
-
 // Allow QUIC to accept initial packet numbers that are random, not 1.
 QUIC_FLAG(bool, FLAGS_quic_restart_flag_quic_enable_accept_random_ipn, false)
 
@@ -118,22 +114,9 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_stream_too_long, false)
 // TLP instead of 2.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_one_tlp, false)
 
-// If true, when WINDOW_UPDATE is received, add stream to session's write
-// blocked list and let session unblock it later.
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_quic_streams_unblocked_by_session2,
-          true)
-
 // When true, allows two connection options to run experiments with using max
 // ack delay as described in QUIC IETF.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_max_ack_delay, false)
-
-// If ture, sender will close connection when there are too many outstanding
-// sent packets
-QUIC_FLAG(
-    bool,
-    FLAGS_quic_reloadable_flag_quic_close_session_on_too_many_outstanding_sent_packets,
-    true)
 
 // If true, enable QUIC v99.
 QUIC_FLAG(bool, FLAGS_quic_enable_version_99, false)
@@ -144,18 +127,6 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_version_42_2, true)
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_37, true)
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_38, true)
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_41, false)
-
-// Delays construction of QuicCryptoServerStream::HandshakerDelegate
-// until QuicCryptoServerStream::OnSuccessfulVersionNegotiation is called
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_delay_quic_server_handshaker_construction,
-          false)
-// Controls whether QuicConnection::OnProtocolVersionMismatch calls
-// QuicFramer::set_version before or after calling
-// OnSuccessfulVersionNegotiation.
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_quic_store_version_before_signalling,
-          false)
 
 // When true, enable connection options to have no min TLP and RTO,
 // and also allow IETF style TLP.
@@ -168,29 +139,17 @@ QUIC_FLAG(bool,
 
 // If true, framer will process and report ack frame incrementally.
 QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_quic_use_incremental_ack_processing2,
+          FLAGS_quic_reloadable_flag_quic_use_incremental_ack_processing3,
           false)
-
-// If true, Http2FrameDecoderAdapter will pass decoded HTTP/2 SETTINGS through
-// the SpdyFramerVisitorInterface callback OnSetting(), which will also accept
-// unknown SETTINGS IDs.
-QUIC_FLAG(bool, FLAGS_quic_restart_flag_http2_propagate_unknown_settings, false)
 
 // If true, enable fast path in QuicStream::OnStreamDataAcked.
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_fast_path_on_stream_data_acked,
           false)
 
-// If true, fix a use-after-free bug caused by writing an out-of-order queued
-// packet.
-QUIC_FLAG(
-    bool,
-    FLAGS_quic_reloadable_flag_quic_fix_write_out_of_order_queued_packet_crash,
-    false)
-
 // If true, QUIC streams are registered in the QuicStream constructor instead
 // of in the QuicSpdyStream constructor.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_register_streams_early2, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_register_streams_early2, true)
 
 // If this flag and
 // FLAGS_quic_reloadable_flag_quic_fix_write_out_of_order_queued_packet_crash
@@ -206,19 +165,92 @@ QUIC_FLAG(
 // processing the packet header.
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_server_early_version_negotiation,
-          false)
+          true)
 
 // If true, QUIC will always discard outgoing packets after connection close.
 // Currently out-of-order outgoing packets are not discarded
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_always_discard_packets_after_close,
-          false)
+          true)
 
 // If true, stop sending a redundant PING every 20 acks.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_remove_redundant_ping, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_remove_redundant_ping, true)
 
 // If true, when a stream is reset by peer with error, it should not be added to
 // zombie streams.
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_reset_stream_is_not_zombie,
           true)
+
+// If true, when a packet write for connectivity probe does not complete
+// successfully synchronously, connection will not be affected, i.e., blocked or
+// closed, if the probing packet writer is not the default writer.
+QUIC_FLAG(
+    bool,
+    FLAGS_quic_reloadable_flag_quic_handle_write_results_for_connectivity_probe,
+    true)
+
+// If true, a separate QuicAlarm in QuicConnection is used to trigger
+// OnPathDegrading() instead of using retransmission_alarm_.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_path_degrading_alarm2, true)
+
+// Remove special logic for headers stream from QuicWriteBlockedList and
+// replace it with a static streams map.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_register_static_streams, false)
+
+// Base the QUIC crypto retransmission timer on the last sent crypto packet.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_better_crypto_retransmission,
+          true)
+
+// If true, enable server proxy support in QUIC.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_server_proxy2, false)
+
+// If true, compare offset with last byte acked to determine whether it is
+// disjoint before calling IntervalSet::IsDisjoint.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fast_is_disjoint, false)
+
+// If true, enable fast path in QuicStreamSequencerBuffer::OnStreamData.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fast_path_on_stream_data, false)
+
+// When true, set the initial congestion control window from connection options
+// in QuicSentPacketManager rather than TcpCubicSenderBytes.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_unified_iw_options, false)
+
+// If true, check again that the writer isn\'t blocked before calling
+// QuicConnection::OnCanWrite from WriteAndBundleAcksIfNotBlocked
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_is_write_blocked, true)
+
+// If true, use the send alarm instead of the resume_writes alarm in
+// QuicConnection.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_unified_send_alarm, false)
+
+// If true, do not use QUIC's MSPC handshake tag and instead require MIDS.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_no_mspc, false)
+
+// If true, simplify pacing sender logic.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_simplify_pacing_sender, false)
+
+// Number of packets that the pacing sender allows in bursts during pacing.
+QUIC_FLAG(int32_t, FLAGS_quic_lumpy_pacing_size, 1)
+
+// Congestion window fraction that the pacing sender allows in bursts during
+// pacing.
+QUIC_FLAG(double, FLAGS_quic_lumpy_pacing_cwnd_fraction, 0.25f)
+
+// If true, respect IETF QUIC header format.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_respect_ietf_header, false)
+
+// If true, detect losses from last largest lost packet number.
+
+// If true, enable fast path in QuicStreamSendBuffer::FreeMemSlices.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_incremental_loss_detection,
+          false);
+
+// If true, enable fast path in QuicStreamSendBuffer::FreeMemSlices.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fast_free_mem_slice, false)
+
+// Default enables QUIC ack decimation and adds a connection option to disable
+// it.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_ack_decimation, false)

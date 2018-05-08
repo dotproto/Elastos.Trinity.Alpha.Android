@@ -20,6 +20,7 @@
 #include "chrome/browser/vr/text_input_delegate.h"
 #include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
+#include "chrome/browser/vr/ui_test_input.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace base {
@@ -46,19 +47,21 @@ class VrGLThread : public base::android::JavaHandlerThread,
       const UiInitialState& ui_initial_state,
       bool reprojected_rendering,
       bool daydream_support,
-      bool pause_content);
+      bool pause_content,
+      bool low_density);
 
   ~VrGLThread() override;
   base::WeakPtr<VrShellGl> GetVrShellGl();
-  void SetInputConnection(base::WeakPtr<VrInputConnection> weak_connection);
+  void SetInputConnection(VrInputConnection* input_connection);
 
   // GlBrowserInterface implementation (GL calling to VrShell).
   void ContentSurfaceCreated(jobject surface,
                              gl::SurfaceTexture* texture) override;
   void ContentOverlaySurfaceCreated(jobject surface,
                                     gl::SurfaceTexture* texture) override;
-  void GvrDelegateReady(
-      gvr::ViewerType viewer_type,
+  void GvrDelegateReady(gvr::ViewerType viewer_type) override;
+  void SendRequestPresentReply(
+      bool success,
       device::mojom::VRDisplayFrameTransportOptionsPtr) override;
   void DialogSurfaceCreated(jobject surface,
                             gl::SurfaceTexture* texture) override;
@@ -81,6 +84,18 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void ExitFullscreen() override;
   void Navigate(GURL gurl, NavigationMethod method) override;
   void NavigateBack() override;
+  void NavigateForward() override;
+  void ReloadTab() override;
+  void OpenNewTab(bool incognito) override;
+  void OpenBookmarks() override;
+  void OpenRecentTabs() override;
+  void OpenHistory() override;
+  void OpenDownloads() override;
+  void OpenShare() override;
+  void OpenSettings() override;
+  void CloseAllTabs() override;
+  void CloseAllIncognitoTabs() override;
+  void OpenFeedback() override;
   void ExitCct() override;
   void CloseHostedDialog() override;
   void OnUnsupportedMode(UiUnsupportedMode mode) override;
@@ -90,9 +105,10 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void SetVoiceSearchActive(bool active) override;
   void StartAutocomplete(const AutocompleteRequest& request) override;
   void StopAutocomplete() override;
+  void ShowPageInfo() override;
 
   // BrowserUiInterface implementation (Browser calling to UI).
-  void SetWebVrMode(bool enabled, bool show_toast) override;
+  void SetWebVrMode(bool enabled) override;
   void SetFullscreen(bool enabled) override;
   void SetToolbarState(const ToolbarState& state) override;
   void SetIncognito(bool incognito) override;
@@ -100,11 +116,7 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void SetLoadProgress(float progress) override;
   void SetIsExiting() override;
   void SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) override;
-  void SetVideoCaptureEnabled(bool enabled) override;
-  void SetScreenCaptureEnabled(bool enabled) override;
-  void SetAudioCaptureEnabled(bool enabled) override;
-  void SetBluetoothConnected(bool enabled) override;
-  void SetLocationAccessEnabled(bool enabled) override;
+  void SetCapturingState(const CapturingStateModel& state) override;
   void ShowExitVrPrompt(UiUnsupportedMode reason) override;
   void SetSpeechRecognitionEnabled(bool enabled) override;
   void SetRecognitionResult(const base::string16& result) override;
@@ -115,11 +127,17 @@ class VrGLThread : public base::android::JavaHandlerThread,
                       std::unique_ptr<Assets> assets,
                       const base::Version& component_version) override;
   void OnAssetsUnavailable() override;
+  void SetRegularTabsOpen(bool open) override;
+  void SetIncognitoTabsOpen(bool open) override;
+  void SetOverlayTextureEmpty(bool empty) override;
   void ShowSoftInput(bool show) override;
   void UpdateWebInputIndices(int selection_start,
                              int selection_end,
                              int composition_start,
                              int composition_end) override;
+
+  void ReportUiActivityResultForTesting(
+      const VrUiTestActivityResult& result) override;
 
  protected:
   void Init() override;
@@ -138,6 +156,10 @@ class VrGLThread : public base::android::JavaHandlerThread,
   base::WeakPtr<VrShell> weak_vr_shell_;
   base::WeakPtr<BrowserUiInterface> weak_browser_ui_;
   base::WeakPtr<VrInputConnection> weak_input_connection_;
+  // Both VrInputConnection and VrGlThread are owned by VrShell. In VrShell, we
+  // made sure that this input_connection_ is up to date and destroyed after
+  // VrGlThread. So it is safe to use raw pointer here.
+  VrInputConnection* input_connection_;
 
   // This state is used for initializing vr_shell_gl_.
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
@@ -146,6 +168,7 @@ class VrGLThread : public base::android::JavaHandlerThread,
   bool reprojected_rendering_;
   bool daydream_support_;
   bool pause_content_;
+  bool low_density_;
 
   DISALLOW_COPY_AND_ASSIGN(VrGLThread);
 };

@@ -57,6 +57,7 @@ class ArcImeService : public KeyedService,
   class ArcWindowDelegate {
    public:
     virtual ~ArcWindowDelegate() {}
+    virtual bool IsExoWindow(const aura::Window* window) const = 0;
     virtual bool IsArcWindow(const aura::Window* window) const = 0;
     virtual void RegisterFocusObserver() = 0;
     virtual void UnregisterFocusObserver() = 0;
@@ -95,6 +96,7 @@ class ArcImeService : public KeyedService,
       const base::string16& text_in_range,
       const gfx::Range& selection_range,
       bool is_screen_coordinates) override;
+  void RequestHideIme() override;
 
   // Overridden from keyboard::KeyboardControllerObserver.
   void OnKeyboardAppearanceChanged(

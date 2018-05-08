@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -18,6 +19,8 @@
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/contextual/contextual_suggestion.h"
 #include "components/ntp_snippets/contextual/contextual_suggestions_fetcher.h"
+#include "components/ntp_snippets/contextual/contextual_suggestions_metrics_reporter.h"
+#include "components/ntp_snippets/contextual/contextual_suggestions_test_utils.h"
 #include "components/ntp_snippets/remote/cached_image_fetcher.h"
 #include "components/ntp_snippets/remote/json_to_categories.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
@@ -28,6 +31,11 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
+using contextual_suggestions::ClusterBuilder;
+using contextual_suggestions::ContextualSuggestionsResult;
+using contextual_suggestions::MockClustersCallback;
+using contextual_suggestions::PeekConditions;
+using contextual_suggestions::ReportFetchMetricsCallback;
 using testing::_;
 using testing::AllOf;
 using testing::ElementsAre;
@@ -40,37 +48,30 @@ namespace ntp_snippets {
 
 namespace {
 
-ACTION_TEMPLATE(MoveArg,
-                HAS_1_TEMPLATE_PARAMS(int, k),
-                AND_1_VALUE_PARAMS(out)) {
-  *out = std::move(*::testing::get<k>(args));
-};
-
 // Always fetches the result that was set by SetFakeResponse.
 class FakeContextualSuggestionsFetcher : public ContextualSuggestionsFetcher {
  public:
-  void FetchContextualSuggestions(
+  void FetchContextualSuggestionsClusters(
       const GURL& url,
-      SuggestionsAvailableCallback callback) override {
-    std::move(callback).Run(fake_status_, std::move(fake_suggestions_));
-    fake_suggestions_ = base::nullopt;
+      FetchClustersCallback callback,
+      ReportFetchMetricsCallback metrics_callback) override {
+    ContextualSuggestionsResult result;
+    result.peek_text = "peek text";
+    result.clusters = std::move(fake_suggestions_);
+    result.peek_conditions = peek_conditions_;
+    std::move(callback).Run(std::move(result));
+    fake_suggestions_.clear();
   }
 
-  void SetFakeResponse(Status fake_status,
-                       OptionalSuggestions fake_suggestions) {
-    fake_status_ = fake_status;
+  void SetFakeResponse(std::vector<Cluster> fake_suggestions,
+                       PeekConditions peek_conditions = PeekConditions()) {
     fake_suggestions_ = std::move(fake_suggestions);
+    peek_conditions_ = peek_conditions;
   }
-
-  const std::string& GetLastStatusForTesting() const override { return empty_; }
-  const std::string& GetLastJsonForTesting() const override { return empty_; }
-  const GURL& GetFetchUrlForTesting() const override { return empty_url_; }
 
  private:
-  std::string empty_;
-  GURL empty_url_;
-  Status fake_status_ = Status::Success();
-  OptionalSuggestions fake_suggestions_;
+  std::vector<Cluster> fake_suggestions_;
+  PeekConditions peek_conditions_;
 };
 
 // Always fetches a fake image if the given URL is valid.
@@ -93,29 +94,6 @@ class FakeCachedImageFetcher : public CachedImageFetcher {
   }
 };
 
-// GMock does not support movable-only types (ContentSuggestion).
-// Instead WrappedRun is used as callback and it redirects the call to a
-// method without movable-only types, which is then mocked.
-class MockFetchContextualSuggestionsCallback {
- public:
-  void WrappedRun(Status status,
-                  const GURL& url,
-                  std::vector<ContentSuggestion> suggestions) {
-    Run(status, url, &suggestions);
-  }
-
-  ContextualContentSuggestionsService::FetchContextualSuggestionsCallback
-  ToOnceCallback() {
-    return base::BindOnce(&MockFetchContextualSuggestionsCallback::WrappedRun,
-                          base::Unretained(this));
-  }
-
-  MOCK_METHOD3(Run,
-               void(Status status_code,
-                    const GURL& url,
-                    std::vector<ContentSuggestion>* suggestions));
-};
-
 }  // namespace
 
 class ContextualContentSuggestionsServiceTest : public testing::Test {
@@ -125,10 +103,13 @@ class ContextualContentSuggestionsServiceTest : public testing::Test {
     std::unique_ptr<FakeContextualSuggestionsFetcher> fetcher =
         std::make_unique<FakeContextualSuggestionsFetcher>();
     fetcher_ = fetcher.get();
+    auto metrics_reporter_provider = std::make_unique<
+        contextual_suggestions::ContextualSuggestionsMetricsReporterProvider>();
     source_ = std::make_unique<ContextualContentSuggestionsService>(
         std::move(fetcher),
         std::make_unique<FakeCachedImageFetcher>(&pref_service_),
-        std::unique_ptr<RemoteSuggestionsDatabase>());
+        std::unique_ptr<RemoteSuggestionsDatabase>(),
+        std::move(metrics_reporter_provider));
   }
 
   FakeContextualSuggestionsFetcher* fetcher() { return fetcher_; }
@@ -143,55 +124,6 @@ class ContextualContentSuggestionsServiceTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(ContextualContentSuggestionsServiceTest);
 };
 
-TEST_F(ContextualContentSuggestionsServiceTest,
-       ShouldFetchContextualSuggestion) {
-  MockFetchContextualSuggestionsCallback mock_suggestions_callback;
-  const std::string kValidFromUrl = "http://some.url";
-  const std::string kToUrl = "http://another.url";
-  ContextualSuggestionsFetcher::OptionalSuggestions contextual_suggestions =
-      ContextualSuggestion::PtrVector();
-  contextual_suggestions->push_back(
-      ContextualSuggestion::CreateForTesting(kToUrl, ""));
-  fetcher()->SetFakeResponse(Status::Success(),
-                             std::move(contextual_suggestions));
-  EXPECT_CALL(mock_suggestions_callback,
-              Run(Property(&Status::IsSuccess, true), GURL(kValidFromUrl),
-                  Pointee(ElementsAre(AllOf(
-                      Property(&ContentSuggestion::id,
-                               Property(&ContentSuggestion::ID::category,
-                                        Category::FromKnownCategory(
-                                            KnownCategories::CONTEXTUAL))),
-                      Property(&ContentSuggestion::url, GURL(kToUrl)))))));
-  source()->FetchContextualSuggestions(
-      GURL(kValidFromUrl), mock_suggestions_callback.ToOnceCallback());
-  base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(ContextualContentSuggestionsServiceTest,
-       ShouldRunCallbackOnEmptyResults) {
-  MockFetchContextualSuggestionsCallback mock_suggestions_callback;
-  const std::string kEmpty;
-  fetcher()->SetFakeResponse(Status::Success(),
-                             ContextualSuggestion::PtrVector());
-  EXPECT_CALL(mock_suggestions_callback, Run(Property(&Status::IsSuccess, true),
-                                             GURL(kEmpty), Pointee(IsEmpty())));
-  source()->FetchContextualSuggestions(
-      GURL(kEmpty), mock_suggestions_callback.ToOnceCallback());
-  base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(ContextualContentSuggestionsServiceTest, ShouldRunCallbackOnError) {
-  MockFetchContextualSuggestionsCallback mock_suggestions_callback;
-  const std::string kEmpty;
-  fetcher()->SetFakeResponse(Status(StatusCode::TEMPORARY_ERROR, ""),
-                             ContextualSuggestion::PtrVector());
-  EXPECT_CALL(mock_suggestions_callback,
-              Run(Property(&Status::IsSuccess, false), GURL(kEmpty),
-                  Pointee(IsEmpty())));
-  source()->FetchContextualSuggestions(
-      GURL(kEmpty), mock_suggestions_callback.ToOnceCallback());
-  base::RunLoop().RunUntilIdle();
-}
 
 TEST_F(ContextualContentSuggestionsServiceTest,
        ShouldFetchEmptyImageIfNotFound) {
@@ -201,39 +133,81 @@ TEST_F(ContextualContentSuggestionsServiceTest,
       Category::FromKnownCategory(KnownCategories::CONTEXTUAL), kEmpty);
   EXPECT_CALL(mock_image_fetched_callback,
               Run(Property(&gfx::Image::IsEmpty, true)));
-  source()->FetchContextualSuggestionImage(id,
-                                           mock_image_fetched_callback.Get());
+  source()->FetchContextualSuggestionImageLegacy(
+      id, mock_image_fetched_callback.Get());
   // TODO(gaschler): Verify with a mock that the image fetcher is not called if
   // the id is unknown.
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(ContextualContentSuggestionsServiceTest,
-       ShouldFetchImageForPreviouslyFetchedSuggestion) {
-  const std::string kValidFromUrl = "http://some.url";
-  const std::string kToUrl = "http://another.url";
-  const std::string kValidImageUrl = "http://some.url/image.png";
-  ContextualSuggestionsFetcher::OptionalSuggestions contextual_suggestions =
-      ContextualSuggestion::PtrVector();
-  contextual_suggestions->push_back(
-      ContextualSuggestion::CreateForTesting(kToUrl, kValidImageUrl));
-  fetcher()->SetFakeResponse(Status::Success(),
-                             std::move(contextual_suggestions));
-  MockFetchContextualSuggestionsCallback mock_suggestions_callback;
-  std::vector<ContentSuggestion> suggestions;
-  EXPECT_CALL(mock_suggestions_callback, Run(_, _, _))
-      .WillOnce(MoveArg<2>(&suggestions));
-  source()->FetchContextualSuggestions(
-      GURL(kValidFromUrl), mock_suggestions_callback.ToOnceCallback());
+       ShouldFetchContextualSuggestionsClusters) {
+  MockClustersCallback mock_callback;
+  std::vector<Cluster> clusters;
+  GURL context_url("http://www.from.url");
+
+  clusters.emplace_back(ClusterBuilder("Title")
+                            .AddSuggestion(SuggestionBuilder(context_url)
+                                               .Title("Title1")
+                                               .PublisherName("from.url")
+                                               .Snippet("Summary")
+                                               .ImageId("abc")
+                                               .Build())
+                            .Build());
+
+  fetcher()->SetFakeResponse(std::move(clusters));
+  source()->FetchContextualSuggestionClusters(
+      context_url, mock_callback.ToOnceCallback(), base::DoNothing());
   base::RunLoop().RunUntilIdle();
 
-  ASSERT_THAT(suggestions, Not(IsEmpty()));
-  base::MockCallback<ImageFetchedCallback> mock_image_fetched_callback;
-  EXPECT_CALL(mock_image_fetched_callback,
-              Run(Property(&gfx::Image::IsEmpty, false)));
-  source()->FetchContextualSuggestionImage(suggestions[0].id(),
-                                           mock_image_fetched_callback.Get());
+  EXPECT_TRUE(mock_callback.has_run);
+}
+
+TEST_F(ContextualContentSuggestionsServiceTest, ShouldRejectInvalidUrls) {
+  std::vector<Cluster> clusters;
+  for (GURL invalid_url :
+       {GURL("htp:/"), GURL("www.foobar"), GURL("http://127.0.0.1/"),
+        GURL("file://some.file"), GURL("chrome://settings"), GURL("")}) {
+    MockClustersCallback mock_callback;
+    source()->FetchContextualSuggestionClusters(
+        invalid_url,
+        base::BindOnce(&MockClustersCallback::Done,
+                       base::Unretained(&mock_callback)),
+        base::DoNothing());
+    base::RunLoop().RunUntilIdle();
+    EXPECT_TRUE(mock_callback.has_run);
+    EXPECT_EQ(mock_callback.response_peek_text, "");
+    EXPECT_EQ(mock_callback.response_clusters.size(), 0u);
+  }
+}
+
+TEST_F(ContextualContentSuggestionsServiceTest,
+       ShouldNotReportLowConfidenceResults) {
+  MockClustersCallback mock_callback;
+  std::vector<Cluster> clusters;
+  GURL context_url("http://www.from.url");
+
+  clusters.emplace_back(ClusterBuilder("Title")
+                            .AddSuggestion(SuggestionBuilder(context_url)
+                                               .Title("Title1")
+                                               .PublisherName("from.url")
+                                               .Snippet("Summary")
+                                               .ImageId("abc")
+                                               .Build())
+                            .Build());
+
+  PeekConditions peek_conditions;
+  peek_conditions.confidence = 0.5;
+
+  fetcher()->SetFakeResponse(std::move(clusters), peek_conditions);
+
+  source()->FetchContextualSuggestionClusters(
+      context_url, mock_callback.ToOnceCallback(), base::DoNothing());
   base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(mock_callback.has_run);
+  EXPECT_EQ(mock_callback.response_clusters.size(), 0u);
+  EXPECT_EQ(mock_callback.response_peek_text, std::string());
 }
 
 }  // namespace ntp_snippets

@@ -435,9 +435,23 @@ bool X509Certificate::HasExpired() const {
   return base::Time::Now() > valid_expiry();
 }
 
-bool X509Certificate::Equals(const X509Certificate* other) const {
+bool X509Certificate::EqualsExcludingChain(const X509Certificate* other) const {
   return x509_util::CryptoBufferEqual(cert_buffer_.get(),
                                       other->cert_buffer_.get());
+}
+
+bool X509Certificate::EqualsIncludingChain(const X509Certificate* other) const {
+  if (intermediate_ca_certs_.size() != other->intermediate_ca_certs_.size() ||
+      !EqualsExcludingChain(other)) {
+    return false;
+  }
+  for (size_t i = 0; i < intermediate_ca_certs_.size(); ++i) {
+    if (!x509_util::CryptoBufferEqual(intermediate_ca_certs_[i].get(),
+                                      other->intermediate_ca_certs_[i].get())) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool X509Certificate::IsIssuedByEncoded(

@@ -13,7 +13,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_type.h"
 #include "net/http/http_request_headers.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -71,6 +71,10 @@ class ServiceWorkerUtils {
                                          bool* has_range_out,
                                          uint64_t* offset_out,
                                          uint64_t* size_out);
+
+  static bool ShouldBypassCacheDueToUpdateViaCache(
+      bool is_main_script,
+      blink::mojom::ServiceWorkerUpdateViaCache cache_mode);
 };
 
 class CONTENT_EXPORT LongestScopeMatcher {

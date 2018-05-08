@@ -21,16 +21,10 @@ namespace {
 using testing::Return;
 using testing::_;
 
-MATCHER(IsEmptyMetadataBatch, "") {
-  return arg != nullptr &&
-         sync_pb::ModelTypeState().SerializeAsString() ==
-             arg->GetModelTypeState().SerializeAsString() &&
-         arg->TakeAllMetadata().empty();
-}
-
 class ModelTypeSyncBridgeTest : public ::testing::Test {
  public:
-  ModelTypeSyncBridgeTest() : bridge_(mock_processor_.FactoryForBridgeTest()) {}
+  ModelTypeSyncBridgeTest()
+      : bridge_(mock_processor_.CreateForwardingProcessor()) {}
   ~ModelTypeSyncBridgeTest() override {}
 
   void OnSyncStarting() {
@@ -47,26 +41,13 @@ class ModelTypeSyncBridgeTest : public ::testing::Test {
 
 // OnSyncStarting should create a processor and call OnSyncStarting on it.
 TEST_F(ModelTypeSyncBridgeTest, OnSyncStarting) {
-  EXPECT_CALL(*processor(), OnSyncStarting(_, _));
+  EXPECT_CALL(*processor(), DoOnSyncStarting(_, _));
   OnSyncStarting();
 }
 
 // DisableSync should call DisableSync on the processor.
 TEST_F(ModelTypeSyncBridgeTest, DisableSync) {
   EXPECT_CALL(*processor(), DisableSync());
-  bridge()->DisableSync();
-}
-
-// DisableSync should propagate the model readiness (IsTrackingMetadata()).
-TEST_F(ModelTypeSyncBridgeTest, PropagateModelReadyToSyncInDisableSync) {
-  // Model is not ready to sync, so it should remain so after DisableSync().
-  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(false));
-  EXPECT_CALL(*processor(), DoModelReadyToSync(_)).Times(0);
-  bridge()->DisableSync();
-
-  // If the Model is ready to sync, so it should remain so after DisableSync().
-  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
-  EXPECT_CALL(*processor(), DoModelReadyToSync(IsEmptyMetadataBatch()));
   bridge()->DisableSync();
 }
 

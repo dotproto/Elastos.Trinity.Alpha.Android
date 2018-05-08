@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "services/service_manager/public/mojom/connector.mojom.h"
 #include "services/ui/common/task_runner_test_base.h"
@@ -822,7 +822,7 @@ TEST_F(WindowTreeTest, NewTopLevelWindow) {
   child_binding->client()->set_record_on_change_completed(true);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -1279,7 +1279,7 @@ TEST_F(WindowTreeTest, ValidMoveLoopWithWM) {
   child_binding->client()->set_record_on_change_completed(true);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -1330,7 +1330,7 @@ TEST_F(WindowTreeTest, MoveLoopAckOKByWM) {
   child_binding->client()->set_record_on_change_completed(true);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -1391,7 +1391,7 @@ TEST_F(WindowTreeTest, WindowManagerCantMoveLoop) {
   child_binding->client()->set_record_on_change_completed(true);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -1440,7 +1440,7 @@ TEST_F(WindowTreeTest, RevertWindowBoundsOnMoveLoopFailure) {
   child_binding->client()->set_record_on_change_completed(true);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -1586,7 +1586,7 @@ TEST_F(WindowTreeTest, SetModalTypeForwardedToWindowManager) {
   WindowTree* child_tree = CreateNewTree(&child_binding);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);
@@ -2103,7 +2103,7 @@ TEST_F(WindowTreeTest, PerformWmAction) {
   WindowTree* child_tree = CreateNewTree(&child_binding);
 
   // Create a new top level window.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   const uint32_t initial_change_id = 17;
   // Explicitly use an id that does not contain the client id.
   const ClientWindowId embed_window_id2_in_child(child_tree->id(), 27);

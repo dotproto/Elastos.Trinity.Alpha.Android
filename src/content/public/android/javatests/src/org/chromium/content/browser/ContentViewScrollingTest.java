@@ -78,11 +78,6 @@ public class ContentViewScrollingTest {
             }
         }
 
-        @Override
-        public boolean super_awakenScrollBars(int startDelay, boolean invalidate) {
-            return false;
-        }
-
         /**
          * @return Whether OnScrollChanged() has been called.
          */
@@ -93,7 +88,7 @@ public class ContentViewScrollingTest {
         }
     }
 
-    private RenderCoordinates mCoordinates;
+    private RenderCoordinatesImpl mCoordinates;
 
     private void waitForScroll(final boolean hugLeft, final boolean hugTop) {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -116,7 +111,7 @@ public class ContentViewScrollingTest {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mCoordinates.getLastFrameViewportWidthCss() != 0;
+                return mCoordinates.getLastFrameViewportWidthPixInt() != 0;
             }
         });
     }
@@ -135,7 +130,7 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().getContainerView().scrollTo(x, y);
+                mActivityTestRule.getContainerView().scrollTo(x, y);
             }
         });
     }
@@ -144,7 +139,7 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().getContainerView().scrollBy(dx, dy);
+                mActivityTestRule.getContainerView().scrollBy(dx, dy);
             }
         });
     }
@@ -160,8 +155,7 @@ public class ContentViewScrollingTest {
                                 deltaAxisX, deltaAxisY, 0);
                 leftJoystickMotionEvent.setSource(
                         leftJoystickMotionEvent.getSource() | InputDevice.SOURCE_CLASS_JOYSTICK);
-                mActivityTestRule.getContentViewCore().getContainerView().onGenericMotionEvent(
-                        leftJoystickMotionEvent);
+                mActivityTestRule.getContainerView().onGenericMotionEvent(leftJoystickMotionEvent);
             }
         });
     }

@@ -13,20 +13,6 @@
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "ui/gfx/image/image.h"
 
-namespace {
-
-// TODO(estade): remove this function. NotificationPlatformBridge should either
-// get Profile* pointers or, longer term, all profile management should be moved
-// up a layer to NativeNotificationDisplayService.
-Profile* GetProfileFromId(const std::string& profile_id, bool incognito) {
-  ProfileManager* manager = g_browser_process->profile_manager();
-  Profile* profile =
-      manager->GetProfile(manager->user_data_dir().AppendASCII(profile_id));
-  return incognito ? profile->GetOffTheRecordProfile() : profile;
-}
-
-}  // namespace
-
 // static
 NotificationPlatformBridge* NotificationPlatformBridge::Create() {
   return new NotificationPlatformBridgeChromeOs();
@@ -45,15 +31,12 @@ NotificationPlatformBridgeChromeOs::~NotificationPlatformBridgeChromeOs() {}
 
 void NotificationPlatformBridgeChromeOs::Display(
     NotificationHandler::Type notification_type,
-    const std::string& profile_id,
-    bool is_incognito,
+    Profile* profile,
     const message_center::Notification& notification,
     std::unique_ptr<NotificationCommon::Metadata> metadata) {
   auto active_notification = std::make_unique<ProfileNotification>(
-      GetProfileFromId(profile_id, is_incognito), notification,
-      notification_type);
-  impl_->Display(NotificationHandler::Type::MAX, std::string(), false,
-                 active_notification->notification(), std::move(metadata));
+      profile, notification, notification_type);
+  impl_->Display(active_notification->notification());
 
   std::string profile_notification_id =
       active_notification->notification().id();
@@ -62,21 +45,29 @@ void NotificationPlatformBridgeChromeOs::Display(
 }
 
 void NotificationPlatformBridgeChromeOs::Close(
-    const std::string& profile_id,
+    Profile* profile,
     const std::string& notification_id) {
-  impl_->Close(profile_id, notification_id);
+  const std::string profile_notification_id =
+      ProfileNotification::GetProfileNotificationId(
+          notification_id, NotificationUIManager::GetProfileID(profile));
+
+  impl_->Close(profile_notification_id);
 }
 
 void NotificationPlatformBridgeChromeOs::GetDisplayed(
-    const std::string& profile_id,
-    bool incognito,
+    Profile* profile,
     GetDisplayedNotificationsCallback callback) const {
-  impl_->GetDisplayed(profile_id, incognito, std::move(callback));
+  // Right now, this is only used to get web notifications that were created by
+  // and have outlived a previous browser process. Ash itself doesn't outlive
+  // the browser process, so there's no need to implement.
+  std::move(callback).Run(std::make_unique<std::set<std::string>>(), false);
 }
 
 void NotificationPlatformBridgeChromeOs::SetReadyCallback(
     NotificationBridgeReadyCallback callback) {
-  impl_->SetReadyCallback(std::move(callback));
+  // We don't handle the absence of Ash or a failure to open a Mojo connection,
+  // so just assume the client is ready.
+  std::move(callback).Run(true);
 }
 
 void NotificationPlatformBridgeChromeOs::HandleNotificationClosed(
@@ -102,7 +93,8 @@ void NotificationPlatformBridgeChromeOs::HandleNotificationClicked(
     const std::string& id) {
   ProfileNotification* notification = GetProfileNotification(id);
   if (notification->type() == NotificationHandler::Type::TRANSIENT) {
-    notification->notification().delegate()->Click();
+    notification->notification().delegate()->Click(base::nullopt,
+                                                   base::nullopt);
   } else {
     NotificationDisplayServiceImpl::GetForProfile(notification->profile())
         ->ProcessNotificationOperation(
@@ -119,12 +111,7 @@ void NotificationPlatformBridgeChromeOs::HandleNotificationButtonClicked(
     const base::Optional<base::string16>& reply) {
   ProfileNotification* notification = GetProfileNotification(id);
   if (notification->type() == NotificationHandler::Type::TRANSIENT) {
-    if (reply) {
-      notification->notification().delegate()->ButtonClickWithReply(
-          button_index, *reply);
-    } else {
-      notification->notification().delegate()->ButtonClick(button_index);
-    }
+    notification->notification().delegate()->Click(button_index, reply);
   } else {
     NotificationDisplayServiceImpl::GetForProfile(notification->profile())
         ->ProcessNotificationOperation(

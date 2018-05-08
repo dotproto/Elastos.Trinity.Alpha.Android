@@ -6,12 +6,12 @@
 
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "media/base/renderer_factory.h"
-#include "third_party/WebKit/public/platform/WebAudioDevice.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
-#include "third_party/WebKit/public/platform/WebSocketHandshakeThrottle.h"
-#include "third_party/WebKit/public/platform/WebSpeechSynthesizer.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor.h"
+#include "third_party/blink/public/platform/web_audio_device.h"
+#include "third_party/blink/public/platform/web_media_stream_center.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
+#include "third_party/blink/public/platform/web_socket_handshake_throttle.h"
+#include "third_party/blink/public/platform/web_speech_synthesizer.h"
 #include "ui/gfx/icc_profile.h"
 #include "url/gurl.h"
 
@@ -83,6 +83,11 @@ ContentRendererClient::CreateWebSocketHandshakeThrottle() {
   return nullptr;
 }
 
+std::unique_ptr<WebSocketHandshakeThrottleProvider>
+ContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
+  return nullptr;
+}
+
 std::unique_ptr<blink::WebSpeechSynthesizer>
 ContentRendererClient::OverrideSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
@@ -99,7 +104,7 @@ bool ContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return true;
 }
 
-bool ContentRendererClient::AllowStoppingWhenProcessBackgrounded() {
+bool ContentRendererClient::AllowFreezingWhenProcessBackgrounded() {
   return false;
 }
 
@@ -134,13 +139,12 @@ bool ContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
   return false;
 }
 
-bool ContentRendererClient::WillSendRequest(
-    blink::WebLocalFrame* frame,
-    ui::PageTransition transition_type,
-    const blink::WebURL& url,
-    GURL* new_url) {
-  return false;
-}
+void ContentRendererClient::WillSendRequest(blink::WebLocalFrame* frame,
+                                            ui::PageTransition transition_type,
+                                            const blink::WebURL& url,
+                                            const url::Origin* initiator_origin,
+                                            GURL* new_url,
+                                            bool* attach_same_site_cookies) {}
 
 bool ContentRendererClient::IsPrefetchOnly(
     RenderFrame* render_frame,
@@ -214,10 +218,6 @@ ContentRendererClient::CreateMediaStreamRendererFactory() {
 bool ContentRendererClient::ShouldReportDetailedMessageForSource(
     const base::string16& source) const {
   return false;
-}
-
-bool ContentRendererClient::ShouldGatherSiteIsolationStats() const {
-  return true;
 }
 
 std::unique_ptr<blink::WebContentSettingsClient>

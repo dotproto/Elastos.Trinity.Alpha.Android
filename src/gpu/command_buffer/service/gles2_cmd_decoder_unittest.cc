@@ -196,6 +196,9 @@ TEST_P(GLES2DecoderTest, IsBuffer) {
   EXPECT_FALSE(DoIsBuffer(client_buffer_id_));
   DoBindBuffer(GL_ARRAY_BUFFER, client_buffer_id_, kServiceBufferId);
   EXPECT_TRUE(DoIsBuffer(client_buffer_id_));
+  EXPECT_CALL(*gl_, BindBuffer(GL_ARRAY_BUFFER, 0))
+      .Times(1)
+      .RetiresOnSaturation();
   DoDeleteBuffer(client_buffer_id_, kServiceBufferId);
   EXPECT_FALSE(DoIsBuffer(client_buffer_id_));
 }
@@ -1083,8 +1086,7 @@ class SizeOnlyMemoryTracker : public MemoryTracker {
   // Ensure a certain amount of GPU memory is free. Returns true on success.
   MOCK_METHOD1(EnsureGPUMemoryAvailable, bool(size_t size_needed));
 
-  virtual void TrackMemoryAllocatedChange(size_t old_size,
-                                          size_t new_size) {
+  void TrackMemoryAllocatedChange(size_t old_size, size_t new_size) override {
     pool_info_.size += new_size - old_size;
   }
 
@@ -1097,7 +1099,7 @@ class SizeOnlyMemoryTracker : public MemoryTracker {
   uint64_t ShareGroupTracingGUID() const override { return 0; }
 
  private:
-  virtual ~SizeOnlyMemoryTracker() = default;
+  ~SizeOnlyMemoryTracker() override = default;
   struct PoolInfo {
     PoolInfo() : initial_size(0), size(0) {}
     size_t initial_size;

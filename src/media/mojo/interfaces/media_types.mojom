@@ -6,7 +6,7 @@ module media.mojom;
 
 import "gpu/ipc/common/mailbox_holder.mojom";
 import "mojo/public/mojom/base/time.mojom";
-import "mojo/common/values.mojom";
+import "mojo/public/mojom/base/values.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // See media/base/audio_codecs.h for descriptions.
@@ -64,6 +64,10 @@ enum VideoRotation;
 // See media/base/watch_time_keys.h for descriptions.
 [Native]
 enum WatchTimeKey;
+
+// See media/base/decrypt_config.h for descriptions.
+[Native]
+enum EncryptionMode;
 
 // This defines a mojo transport format for media::EncryptionPattern
 // See media/base/encryption_pattern.h for description.
@@ -157,9 +161,11 @@ struct SubsampleEntry;
 // This defines a mojo transport format for media::DecryptConfig.
 // See media/base/decrypt_config.h for descriptions.
 struct DecryptConfig {
+  EncryptionMode encryption_mode;
   string key_id;
   string iv;
   array<SubsampleEntry> subsamples;
+  EncryptionPattern? encryption_pattern;
 };
 
 // This defines a mojo transport format for media::DecoderBuffer.
@@ -238,7 +244,7 @@ struct VideoFrame {
   VideoFrameData data;
 
   // Extra properties associated with the VideoFrame.
-  mojo.common.mojom.DictionaryValue metadata;
+  mojo_base.mojom.DictionaryValue metadata;
 };
 
 // Possible choices for storing VideoFrame data.
@@ -282,3 +288,22 @@ struct PipelineStatistics {
   int64 audio_memory_usage;
   int64 video_memory_usage;
 };
+
+// Set of features for MediaCapabilities prediction.
+// TODO(liberato): consider generalizing this.
+struct PredictionFeatures {
+    // It would be nice to initialize this to VIDEO_CODEC_PROFILE_UNKNOWN (-1),
+    // but we can't do that with native enums.
+    VideoCodecProfile profile;
+    gfx.mojom.Size video_size;
+    int32 frames_per_sec = 0;
+};
+
+// Target values for MediaCapabilities predictions.
+// TODO(liberato): consider generalizing this.
+struct PredictionTargets {
+  uint32 frames_decoded = 0;
+  uint32 frames_dropped = 0;
+  uint32 frames_decoded_power_efficient = 0;
+};
+

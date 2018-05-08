@@ -67,11 +67,16 @@
        --iron-icon-fill-color: var(--settings-error-color);
       }
 
+      #sync-status[actionable].auth-error
+          iron-icon[icon='settings:sync-disabled'] {
+       --iron-icon-fill-color: var(--google-blue-500);
+      }
+
       #sync-status:not([actionable]) .subpage-arrow {
         display: none;
       }
 
-      .settings-box[actionable] .sync-error {
+      .settings-box[actionable].sync-error #syncSecondary {
         color: var(--settings-error-color);
       }
 
@@ -110,6 +115,21 @@
         left: auto;
         right: 0;
       }
+
+      settings-sync-account-control[showing-promo] {
+        /* When showing promo in this page, text should be larger. */
+        --promo-description: {
+          font-size: 0.9rem;
+          line-height: 1.625rem;
+        }
+        --promo-title: {
+          font-size: 1.1rem;
+          line-height: 1.625rem;
+        }
+        --promo-separator: {
+          display: none;
+        }
+      }
 </if>
     </style>
     <settings-animated-pages id="pages" section="people"
@@ -119,8 +139,13 @@
         <template is="dom-if" if="[[shouldShowSyncAccountControl_(diceEnabled_,
             syncStatus.syncSystemEnabled, syncStatus.signinAllowed)]]">
           <settings-sync-account-control
-              promo-label="$i18n{peopleSignInPrompt}"
-              promo-secondary-label="$i18n{peopleSignInPromptSecondary}">
+              sync-status="[[syncStatus]]"
+              promo-label-with-account="$i18n{peopleSignInPrompt}"
+              promo-label-with-no-account="$i18n{peopleSignInPrompt}"
+              promo-secondary-label-with-account=
+                  "$i18n{peopleSignInPromptSecondaryWithAccount}"
+              promo-secondary-label-with-no-account=
+                  "$i18n{peopleSignInPromptSecondaryWithNoAccount}">
           </settings-sync-account-control>
         </template>
         <template is="dom-if" if="[[!diceEnabled_]]">
@@ -155,7 +180,7 @@
 <if expr="not chromeos">
               <template is="dom-if" if="[[showSignin_(syncStatus)]]">
                 <div class="separator"></div>
-                <paper-button class="primary-button" on-click="onSigninTap_"
+                <paper-button class="action-button" on-click="onSigninTap_"
                     disabled="[[syncStatus.setupInProgress]]">
                   $i18n{syncSignin}
                 </paper-button>
@@ -209,25 +234,35 @@
         </template>
 </if>
 
-        <template is="dom-if"
-            if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
-          <div class="settings-box two-line" on-click="onSyncTap_"
-              id="sync-status" actionable$="[[isSyncStatusActionable_(
-              syncStatus)]]">
+        <template is="dom-if" if="[[isAdvancedSyncSettingsVisible_(
+            syncStatus, unifiedConsentEnabled_)]]">
+          <div class$="settings-box two-line
+                  [[getSyncStatusClass_(syncStatus)]]"
+              on-click="onSyncTap_" id="sync-status"
+              actionable$="[[isSyncStatusActionable_(syncStatus)]]">
             <div class="icon-container">
               <iron-icon id="sync-icon" icon$="[[getSyncIcon_(syncStatus)]]">
               </iron-icon>
             </div>
             <div class="middle">
               $i18n{sync}
-              <div class$="secondary [[getSyncStatusTextClass_(syncStatus)]]"
-                  id="syncSecondary">
+              <div class="secondary" id="syncSecondary">
                 [[syncStatus.statusText]]
               </div>
             </div>
             <paper-icon-button-light class="subpage-arrow">
               <button aria-label="$i18n{sync}"
                   aria-describedby="syncSecondary"></button>
+            </paper-icon-button-light>
+          </div>
+        </template>
+
+        <template is="dom-if" if="[[unifiedConsentEnabled_]]">
+          <div class="settings-box" id="sync-setup" on-click="onSyncTap_"
+              actionable>
+            <div class="start">$i18n{syncAndPersonalization}</div>
+            <paper-icon-button-light class="subpage-arrow">
+              <button aria-label="$i18n{sync}"></button>
             </paper-icon-button-light>
           </div>
         </template>
@@ -282,16 +317,21 @@
 
       </neon-animatable>
       <template is="dom-if" route-path="/syncSetup"
-          no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
+          no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus,
+              unifiedConsentEnabled_)]]">
         <settings-subpage
             associated-control="[[$$('#sync-status')]]"
             page-title="$i18n{syncPageTitle}"
-            no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
+            no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus,
+                unifiedConsentEnabled_)]]">
           <settings-sync-page
 <if expr="not chromeos">
-              setup-in-progress="[[syncStatus.setupInProgress]]"
+              dice-enabled="[[diceEnabled_]]"
 </if>
-          ></settings-sync-page>
+              unified-consent-enabled="[[unifiedConsentEnabled_]]"
+              sync-status="[[syncStatus]]" prefs="{{prefs}}"
+              page-visibility="[[pageVisibility.privacy]]">
+          </settings-sync-page>
         </settings-subpage>
       </template>
 <if expr="chromeos">
@@ -340,7 +380,7 @@
     </settings-animated-pages>
 
     <template is="dom-if" if="[[showDisconnectDialog_]]" restamp>
-      <dialog is="cr-dialog" id="disconnectDialog"
+      <cr-dialog id="disconnectDialog"
           ignore-popstate ignore-enter-key
           on-close="onDisconnectClosed_" close-text="$i18n{close}">
         <div slot="title">$i18n{syncDisconnectTitle}</div>
@@ -383,7 +423,7 @@
           </div>
         </template>
 </if>
-      </dialog>
+      </cr-dialog>
     </template>
 
     <template is="dom-if" if="[[showImportDataDialog_]]" restamp>

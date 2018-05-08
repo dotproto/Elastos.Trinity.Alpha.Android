@@ -5,12 +5,13 @@
 #ifndef CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PLATFORM_BRIDGE_WIN_H_
 #define CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PLATFORM_BRIDGE_WIN_H_
 
-#include <windows.ui.notifications.h>
-
 #include <string>
+
+#include <windows.ui.notifications.h>
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 
 namespace base {
@@ -30,14 +31,11 @@ class NotificationPlatformBridgeWin : public NotificationPlatformBridge {
 
   // NotificationPlatformBridge implementation.
   void Display(NotificationHandler::Type notification_type,
-               const std::string& profile_id,
-               bool incognito,
+               Profile* profile,
                const message_center::Notification& notification,
                std::unique_ptr<NotificationCommon::Metadata> metadata) override;
-  void Close(const std::string& profile_id,
-             const std::string& notification_id) override;
-  void GetDisplayed(const std::string& profile_id,
-                    bool incognito,
+  void Close(Profile* profile, const std::string& notification_id) override;
+  void GetDisplayed(Profile* profile,
                     GetDisplayedNotificationsCallback callback) const override;
   void SetReadyCallback(NotificationBridgeReadyCallback callback) override;
 
@@ -61,6 +59,8 @@ class NotificationPlatformBridgeWin : public NotificationPlatformBridge {
   FRIEND_TEST_ALL_PREFIXES(NotificationPlatformBridgeWinUITest, GetDisplayed);
   FRIEND_TEST_ALL_PREFIXES(NotificationPlatformBridgeWinUITest, HandleEvent);
   FRIEND_TEST_ALL_PREFIXES(NotificationPlatformBridgeWinUITest, HandleSettings);
+  FRIEND_TEST_ALL_PREFIXES(NotificationPlatformBridgeWinUITest,
+                           DisplayWithMockAC);
 
   // Simulates a click/dismiss event. Only for use in testing.
   // Note: Ownership of |notification| and |args| is retained by the caller.
@@ -75,11 +75,17 @@ class NotificationPlatformBridgeWin : public NotificationPlatformBridge {
       std::vector<ABI::Windows::UI::Notifications::IToastNotification*>*
           notifications);
 
+  // Sets a Toast Notifier to use to display notifications, when run in a test.
+  void SetNotifierForTesting(
+      ABI::Windows::UI::Notifications::IToastNotifier* notifier);
+
   // Obtain an IToastNotification interface from a given XML (provided by the
   // NotificationTemplateBuilder). For testing use only.
   HRESULT GetToastNotificationForTesting(
       const message_center::Notification& notification,
       const NotificationTemplateBuilder& notification_template_builder,
+      const std::string& profile_id,
+      bool incognito,
       ABI::Windows::UI::Notifications::IToastNotification** toast_notification);
 
   scoped_refptr<NotificationPlatformBridgeWinImpl> impl_;

@@ -15,9 +15,9 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "ios/web/public/web_thread.h"
+#include "ios/web_view/cwv_web_view_features.h"
 #include "ios/web_view/internal/app/web_view_io_thread.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -69,11 +69,12 @@ PrefService* ApplicationContext::GetLocalState() {
     scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple);
     flags_ui::PrefServiceFlagsStorage::RegisterPrefs(pref_registry.get());
     PrefProxyConfigTrackerImpl::RegisterPrefs(pref_registry.get());
-    ssl_config::SSLConfigServiceManager::RegisterPrefs(pref_registry.get());
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
     SigninManagerBase::RegisterPrefs(pref_registry.get());
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SIGNIN)
 
     base::FilePath local_state_path;
-    PathService::Get(base::DIR_APP_DATA, &local_state_path);
+    base::PathService::Get(base::DIR_APP_DATA, &local_state_path);
     local_state_path =
         local_state_path.Append(FILE_PATH_LITERAL("ChromeWebView"));
     local_state_path =

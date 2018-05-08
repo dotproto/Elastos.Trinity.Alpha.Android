@@ -14,8 +14,8 @@
 #include "chrome/common/buildflags.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/ui_features.h"
 
 namespace features {
@@ -32,7 +32,6 @@ extern const base::Feature kAllowAutoplayUnmutedInWebappManifestScope;
 #if defined(OS_MACOSX)
 extern const base::Feature kAppleScriptExecuteJavaScriptMenuItem;
 extern const base::Feature kShow10_9ObsoleteInfobar;
-extern const base::Feature kViewsProfileChooser;
 extern const base::Feature kViewsTaskManager;
 #endif  // defined(OS_MACOSX)
 
@@ -77,6 +76,10 @@ extern const base::Feature kDialogTouchBar;
 extern const base::Feature kTabStripKeyboardFocus;
 #endif  // defined(OS_MACOSX)
 
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX)
+extern const base::Feature kCertDualVerificationTrialFeature;
+#endif
+
 extern const base::Feature kChangePictureVideoMode;
 
 #if defined(OS_ANDROID)
@@ -115,11 +118,6 @@ extern const base::Feature kDownloadsForeground;
 extern const base::Feature kDownloadsLocationChange;
 #endif
 
-#if defined(OS_CHROMEOS)
-extern const base::Feature kEnableUnifiedMultiDeviceSettings;
-extern const base::Feature kEnableUnifiedMultiDeviceSetup;
-#endif
-
 extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalAppBanners;
@@ -130,13 +128,14 @@ extern const base::Feature kExperimentalCrostiniUI;
 
 extern const base::Feature kExperimentalKeyboardLockUI;
 
+extern const base::Feature kExternalExtensionDefaultButtonControl;
+
 // Android expects this string from Java code, so it is always needed.
 // TODO(crbug.com/731802): Use #if BUILDFLAG(ENABLE_VR_BROWSING) instead.
 #if BUILDFLAG(ENABLE_VR) || defined(OS_ANDROID)
 extern const base::Feature kVrBrowsing;
 #endif
 #if BUILDFLAG(ENABLE_VR)
-extern const base::Feature kVrBrowserKeyboard;
 extern const base::Feature kVrBrowsingExperimentalFeatures;
 extern const base::Feature kVrBrowsingExperimentalRendering;
 
@@ -149,6 +148,8 @@ extern const base::Feature kOpenVR;
 #endif  // ENABLE_OPENVR
 
 #endif  // ENABLE_VR
+
+extern const base::Feature kFullscreenExitUI;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kFullscreenToolbarReveal;
@@ -166,6 +167,10 @@ extern const base::Feature kGrantNotificationsToDSE;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kHappinessTrackingSystem;
+#endif
+
+#if !defined(OS_ANDROID)
+extern const base::Feature kViewsCastDialog;
 #endif
 
 extern const base::Feature kImportantSitesInCbd;
@@ -187,8 +192,6 @@ extern const base::Feature kMacRTL;
 extern const base::Feature kMacFullSizeContentView;
 extern const base::Feature kMacSystemShareMenu;
 #endif
-
-extern const base::Feature kMaterialDesignBookmarks;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kMacMaterialDesignDownloadShelf;
@@ -225,6 +228,12 @@ extern const base::Feature kNetworkPrediction;
 #if defined(OS_POSIX)
 extern const base::Feature kNtlmV2Enabled;
 #endif
+
+extern const base::Feature kNtpBackgrounds;
+
+extern const base::Feature kNtpIcons;
+
+extern const base::Feature kNtpUIMd;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
@@ -279,11 +288,20 @@ extern const base::Feature kSecurityKeyAttestationPrompt;
 extern const base::Feature kShowAllDialogsWithViewsToolkit;
 #endif
 
-extern const base::Feature kSimplifiedFullscreenUI;
+#if defined(OS_ANDROID)
+extern const base::Feature kShowTrustedPublisherURL;
+#endif
+
+extern const base::Feature kSiteSettings;
 
 #if defined(OS_ANDROID)
 extern const base::Feature kSiteNotificationChannels;
 #endif
+
+extern const base::Feature kSitePerProcess;
+
+extern const base::Feature kSitePerProcessOnlyForHighMemoryClients;
+extern const char kSitePerProcessOnlyForHighMemoryClientsParamName[];
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kNativeSmb;
@@ -291,16 +309,10 @@ extern const base::Feature kNativeSmb;
 
 extern const base::Feature kSoundContentSetting;
 
-extern const base::Feature kSupervisedUserCreation;
-
 extern const base::Feature kSupervisedUserCommittedInterstitials;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kSysInternals;
-#endif
-
-#if defined(SYZYASAN)
-extern const base::Feature kSyzyasanDeferredFree;
 #endif
 
 #if !defined(OS_ANDROID)
@@ -309,11 +321,11 @@ extern const base::Feature kTabMetricsLogging;
 
 extern const base::Feature kTopSitesFromSiteEngagement;
 
-extern const base::Feature kUnifiedConsent;
-
 extern const base::Feature kUseGoogleLocalNtp;
 
 #if defined(OS_CHROMEOS)
+extern const base::Feature kAdaptiveScreenBrightnessLogging;
+
 extern const base::Feature kUserActivityEventLogging;
 #endif
 
@@ -338,13 +350,13 @@ extern const base::Feature kCrosCompUpdates;
 
 extern const base::Feature kCrOSComponent;
 
-extern const base::Feature kCrOSContainer;
-
 extern const base::Feature kInstantTethering;
 
 extern const base::Feature kEasyUnlockPromotions;
 
 extern const base::Feature kTPMFirmwareUpdate;
+
+extern const base::Feature kCrOSEnableUSMUserService;
 #endif  // defined(OS_CHROMEOS)
 
 bool PrefServiceEnabled();

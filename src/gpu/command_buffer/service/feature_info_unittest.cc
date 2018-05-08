@@ -385,6 +385,24 @@ TEST_P(FeatureInfoTest, InitializeWithANGLE) {
   EXPECT_TRUE(info_->gl_version_info().is_angle);
 }
 
+TEST_P(FeatureInfoTest, InitializeWithANGLED3D9Ex) {
+  SetupInitExpectationsWithGLVersion("", "ANGLE (foo bar Direct3D9Ex baz)", "");
+  EXPECT_TRUE(info_->gl_version_info().is_angle);
+  EXPECT_TRUE(info_->gl_version_info().is_d3d);
+}
+
+TEST_P(FeatureInfoTest, InitializeWithANGLED3D11) {
+  SetupInitExpectationsWithGLVersion("", "ANGLE (foo bar Direct3D11 baz)", "");
+  EXPECT_TRUE(info_->gl_version_info().is_angle);
+  EXPECT_TRUE(info_->gl_version_info().is_d3d);
+}
+
+TEST_P(FeatureInfoTest, InitializeWithANGLEOpenGL) {
+  SetupInitExpectationsWithGLVersion("", "ANGLE (foo bar OpenGL baz)", "");
+  EXPECT_TRUE(info_->gl_version_info().is_angle);
+  EXPECT_FALSE(info_->gl_version_info().is_d3d);
+}
+
 TEST_P(FeatureInfoTest, InitializeNPOTExtensionGLES) {
   SetupInitExpectations("GL_OES_texture_npot");
   EXPECT_TRUE(gl::HasExtension(info_->extensions(), "GL_OES_texture_npot"));
@@ -1427,8 +1445,16 @@ TEST_P(FeatureInfoTest, InitializeVAOsWithClientSideArrays) {
   workarounds.use_client_side_arrays_for_stream_buffers = true;
   SetupInitExpectationsWithWorkarounds("GL_OES_vertex_array_object",
                                        workarounds);
-  EXPECT_TRUE(info_->workarounds().use_client_side_arrays_for_stream_buffers);
-  EXPECT_FALSE(info_->feature_flags().native_vertex_array_object);
+  if (GetContextType() == CONTEXT_TYPE_OPENGLES2) {
+    EXPECT_TRUE(info_->workarounds().use_client_side_arrays_for_stream_buffers);
+    EXPECT_FALSE(info_->feature_flags().native_vertex_array_object);
+  } else {  // CONTEXT_TYPE_OPENGLES3
+    // We only turn on use_client_side_arrays_for_stream_buffers on ES2
+    // contexts. See https://crbug.com/826509.
+    EXPECT_FALSE(
+        info_->workarounds().use_client_side_arrays_for_stream_buffers);
+    EXPECT_TRUE(info_->feature_flags().native_vertex_array_object);
+  }
 }
 
 TEST_P(FeatureInfoTest, InitializeEXT_blend_minmax) {

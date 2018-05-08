@@ -5,7 +5,6 @@
 #include "ui/views/views_delegate.h"
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/views/views_touch_selection_controller_factory.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -99,12 +98,6 @@ void ViewsDelegate::AddRef() {
 }
 
 void ViewsDelegate::ReleaseRef() {
-}
-
-content::WebContents* ViewsDelegate::CreateWebContents(
-    content::BrowserContext* browser_context,
-    content::SiteInstance* site_instance) {
-  return nullptr;
 }
 
 base::TimeDelta ViewsDelegate::GetTextfieldPasswordRevealDuration() {

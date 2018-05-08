@@ -12,6 +12,7 @@
 #include "net/http/http_request_headers.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 #include "url/url_util.h"
 
 namespace {
@@ -40,6 +41,18 @@ std::string ExtractMIMETypeFromMediaType(const std::string& media_type) {
   return std::string();
 }
 
+// url::Origin::Serialize() serializes all Origins with a 'file' scheme to
+// 'file://', but it isn't desirable for CORS check. Returns 'null' instead to
+// be aligned with HTTP Origin header calculation in Blink SecurityOrigin.
+// |allow_file_origin| is used to realize a behavior change that
+// the --allow-file-access-from-files command-line flag needs.
+// TODO(mkwst): Generalize and move to url/Origin.
+std::string Serialize(const url::Origin& origin, bool allow_file_origin) {
+  if (!allow_file_origin && origin.scheme() == url::kFileScheme)
+    return "null";
+  return origin.Serialize();
+}
+
 }  // namespace
 
 namespace network {
@@ -50,7 +63,11 @@ namespace header_names {
 
 const char kAccessControlAllowCredentials[] =
     "Access-Control-Allow-Credentials";
+const char kAccessControlAllowExternal[] = "Access-Control-Allow-External";
+const char kAccessControlAllowHeaders[] = "Access-Control-Allow-Headers";
+const char kAccessControlAllowMethods[] = "Access-Control-Allow-Methods";
 const char kAccessControlAllowOrigin[] = "Access-Control-Allow-Origin";
+const char kAccessControlMaxAge[] = "Access-Control-Max-Age";
 const char kAccessControlRequestExternal[] = "Access-Control-Request-External";
 const char kAccessControlRequestHeaders[] = "Access-Control-Request-Headers";
 const char kAccessControlRequestMethod[] = "Access-Control-Request-Method";
@@ -64,7 +81,10 @@ base::Optional<mojom::CORSError> CheckAccess(
     const base::Optional<std::string>& allow_origin_header,
     const base::Optional<std::string>& allow_credentials_header,
     mojom::FetchCredentialsMode credentials_mode,
-    const url::Origin& origin) {
+    const url::Origin& origin,
+    bool allow_file_origin) {
+  // TODO(toyoshim): This response status code check should not be needed. We
+  // have another status code check after a CheckAccess() call if it is needed.
   if (!response_status_code)
     return mojom::CORSError::kInvalidResponse;
 
@@ -74,6 +94,7 @@ base::Optional<mojom::CORSError> CheckAccess(
     // See https://fetch.spec.whatwg.org/#cors-protocol-and-credentials.
     if (credentials_mode != mojom::FetchCredentialsMode::kInclude)
       return base::nullopt;
+
     // Since the credential is a concept for network schemes, we perform the
     // wildcard check only for HTTP and HTTPS. This is a quick hack to allow
     // data URL (see https://crbug.com/315152).
@@ -84,7 +105,7 @@ base::Optional<mojom::CORSError> CheckAccess(
       return mojom::CORSError::kWildcardOriginNotAllowed;
   } else if (!allow_origin_header) {
     return mojom::CORSError::kMissingAllowOriginHeader;
-  } else if (*allow_origin_header != origin.Serialize()) {
+  } else if (*allow_origin_header != Serialize(origin, allow_file_origin)) {
     // We do not use url::Origin::IsSameOriginWith() here for two reasons below.
     //  1. Allow "null" to match here. The latest spec does not have a clear
     //     information about this (https://fetch.spec.whatwg.org/#cors-check),
@@ -122,9 +143,48 @@ base::Optional<mojom::CORSError> CheckAccess(
     // This check should be case sensitive.
     // See also https://fetch.spec.whatwg.org/#http-new-header-syntax.
     if (allow_credentials_header != kLowerCaseTrue)
-      return mojom::CORSError::kDisallowCredentialsNotSetToTrue;
+      return mojom::CORSError::kInvalidAllowCredentials;
   }
   return base::nullopt;
+}
+
+base::Optional<mojom::CORSError> CheckPreflightAccess(
+    const GURL& response_url,
+    const int response_status_code,
+    const base::Optional<std::string>& allow_origin_header,
+    const base::Optional<std::string>& allow_credentials_header,
+    mojom::FetchCredentialsMode actual_credentials_mode,
+    const url::Origin& origin,
+    bool allow_file_origin) {
+  base::Optional<mojom::CORSError> error =
+      CheckAccess(response_url, response_status_code, allow_origin_header,
+                  allow_credentials_header, actual_credentials_mode, origin,
+                  allow_file_origin);
+  if (!error)
+    return base::nullopt;
+
+  // TODO(toyoshim): Remove following two lines when the status code check is
+  // removed from CheckAccess().
+  if (*error == mojom::CORSError::kInvalidResponse)
+    return error;
+
+  switch (*error) {
+    case mojom::CORSError::kWildcardOriginNotAllowed:
+      return mojom::CORSError::kPreflightWildcardOriginNotAllowed;
+    case mojom::CORSError::kMissingAllowOriginHeader:
+      return mojom::CORSError::kPreflightMissingAllowOriginHeader;
+    case mojom::CORSError::kMultipleAllowOriginValues:
+      return mojom::CORSError::kPreflightMultipleAllowOriginValues;
+    case mojom::CORSError::kInvalidAllowOriginValue:
+      return mojom::CORSError::kPreflightInvalidAllowOriginValue;
+    case mojom::CORSError::kAllowOriginMismatch:
+      return mojom::CORSError::kPreflightAllowOriginMismatch;
+    case mojom::CORSError::kInvalidAllowCredentials:
+      return mojom::CORSError::kPreflightInvalidAllowCredentials;
+    default:
+      NOTREACHED();
+  }
+  return error;
 }
 
 base::Optional<mojom::CORSError> CheckRedirectLocation(const GURL& redirect_url,
@@ -156,7 +216,7 @@ base::Optional<mojom::CORSError> CheckPreflight(const int status_code) {
   // Fetch API Spec: https://fetch.spec.whatwg.org/#cors-preflight-fetch
   // CORS Spec: http://www.w3.org/TR/cors/#cross-origin-request-with-preflight-0
   // https://crbug.com/452394
-  if (200 <= status_code && status_code < 300)
+  if (IsOkStatus(status_code))
     return base::nullopt;
   return mojom::CORSError::kPreflightInvalidStatus;
 }
@@ -221,6 +281,14 @@ bool IsCORSSafelistedHeader(const std::string& name, const std::string& value) {
   return false;
 }
 
+bool IsForbiddenMethod(const std::string& method) {
+  static const std::vector<std::string> forbidden_methods = {"trace", "track",
+                                                             "connect"};
+  const std::string lower_method = base::ToLowerASCII(method);
+  return std::find(forbidden_methods.begin(), forbidden_methods.end(),
+                   lower_method) != forbidden_methods.end();
+}
+
 bool IsForbiddenHeader(const std::string& name) {
   // http://fetch.spec.whatwg.org/#forbidden-header-name
   // "A forbidden header name is a header name that is one of:
@@ -259,6 +327,10 @@ bool IsForbiddenHeader(const std::string& name) {
     return true;
   }
   return forbidden_names.find(lower_name) != forbidden_names.end();
+}
+
+bool IsOkStatus(int status) {
+  return status >= 200 && status < 300;
 }
 
 }  // namespace cors

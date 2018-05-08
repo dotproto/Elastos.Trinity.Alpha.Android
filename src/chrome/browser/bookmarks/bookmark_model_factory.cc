@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/deferred_sequenced_task_runner.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -27,21 +26,6 @@
 #include "content/public/browser/browser_thread.h"
 
 using bookmarks::BookmarkModel;
-
-namespace {
-
-bool IsBookmarkUndoServiceEnabled() {
-  bool register_bookmark_undo_service_as_observer = true;
-#if !defined(OS_ANDROID)
-  register_bookmark_undo_service_as_observer =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBookmarkUndo) ||
-      MdBookmarksUI::IsEnabled();
-#endif  // !defined(OS_ANDROID)
-  return register_bookmark_undo_service_as_observer;
-}
-
-}  // namespace
 
 // static
 BookmarkModel* BookmarkModelFactory::GetForBrowserContext(
@@ -85,8 +69,7 @@ KeyedService* BookmarkModelFactory::BuildServiceInstanceFor(
                            ->GetBookmarkTaskRunner(),
                        content::BrowserThread::GetTaskRunnerForThread(
                            content::BrowserThread::UI));
-  if (IsBookmarkUndoServiceEnabled())
-    BookmarkUndoServiceFactory::GetForProfile(profile)->Start(bookmark_model);
+  BookmarkUndoServiceFactory::GetForProfile(profile)->Start(bookmark_model);
 
   return bookmark_model;
 }

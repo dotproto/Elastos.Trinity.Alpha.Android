@@ -7,7 +7,6 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/memory/shared_memory.h"
-#include "cc/ipc/cc_param_traits.h"
 #include "content/common/android/sync_compositor_statics.h"
 #include "content/common/input/sync_compositor_messages.h"
 #include "content/public/common/content_switches.h"
@@ -146,7 +145,7 @@ void SynchronousCompositorProxy::DemandDrawHw(
     PopulateCommonParams(&common_renderer_params);
     // Did not swap.
     std::move(hardware_draw_reply_)
-        .Run(common_renderer_params, 0u, base::nullopt);
+        .Run(common_renderer_params, 0u, 0u, base::nullopt);
   }
 }
 
@@ -191,7 +190,8 @@ void SynchronousCompositorProxy::DemandDrawSw(
     SyncCompositorCommonRendererParams common_renderer_params;
     PopulateCommonParams(&common_renderer_params);
     // Did not swap.
-    std::move(software_draw_reply_).Run(common_renderer_params, base::nullopt);
+    std::move(software_draw_reply_)
+        .Run(common_renderer_params, 0u, base::nullopt);
   }
 }
 
@@ -228,10 +228,11 @@ void SynchronousCompositorProxy::SubmitCompositorFrame(
   if (hardware_draw_reply_) {
     std::move(hardware_draw_reply_)
         .Run(common_renderer_params, layer_tree_frame_sink_id,
-             std::move(frame));
+             NextMetadataVersion(), std::move(frame));
   } else if (software_draw_reply_) {
     std::move(software_draw_reply_)
-        .Run(common_renderer_params, std::move(frame.metadata));
+        .Run(common_renderer_params, NextMetadataVersion(),
+             std::move(frame.metadata));
   } else {
     NOTREACHED();
   }
@@ -329,6 +330,10 @@ void SynchronousCompositorProxy::ZoomBy(float zoom_delta,
   SyncCompositorCommonRendererParams common_renderer_params;
   PopulateCommonParams(&common_renderer_params);
   std::move(zoom_by_reply_).Run(common_renderer_params);
+}
+
+uint32_t SynchronousCompositorProxy::NextMetadataVersion() {
+  return ++metadata_version_;
 }
 
 }  // namespace content

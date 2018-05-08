@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/location_bar/zoom_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -31,9 +32,8 @@
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
-#include "net/test/url_request/url_request_mock_http_job.h"
-#include "net/url_request/url_request_filter.h"
 #include "services/network/public/cpp/features.h"
+#include "ui/base/ui_base_switches.h"
 
 class LocationBarViewBrowserTest : public InProcessBrowserTest {
  public:
@@ -118,90 +118,76 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewBrowserTest, BubblesCloseOnHide) {
   EXPECT_FALSE(ZoomBubbleView::GetZoomBubble());
 }
 
-// After AddUrlHandler() is called, requests to this hostname will be mocked
+class TouchLocationBarViewBrowserTest : public LocationBarViewBrowserTest {
+ public:
+  TouchLocationBarViewBrowserTest() = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(
+        switches::kTopChromeMD, switches::kTopChromeMDMaterialTouchOptimized);
+    LocationBarViewBrowserTest::SetUpCommandLine(command_line);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TouchLocationBarViewBrowserTest);
+};
+
+// Test the corners of the OmniboxViewViews do not get drawn on top of the
+// rounded corners of the omnibox in touch mode.
+IN_PROC_BROWSER_TEST_F(TouchLocationBarViewBrowserTest, OmniboxViewViewsSize) {
+  // Make sure all the LocationBarView children are invisible. This should
+  // ensure there are no trailing decorations at the end of the omnibox
+  // (currently, the LocationIconView is *always* added as a leading decoration,
+  // so it's not possible to test the leading side).
+  views::View* omnibox_view_views = GetLocationBarView()->omnibox_view();
+  for (int i = 0; i < GetLocationBarView()->child_count(); ++i) {
+    views::View* child = GetLocationBarView()->child_at(i);
+    if (child != omnibox_view_views)
+      child->SetVisible(false);
+  }
+
+  GetLocationBarView()->Layout();
+  // Check |omnibox_view_views| is not wider than the LocationBarView with its
+  // rounded ends removed.
+  EXPECT_LE(omnibox_view_views->width(),
+            GetLocationBarView()->width() - GetLocationBarView()->height());
+  // Check the trailing edge of |omnibox_view_views| does not exceed the
+  // trailing edge of the LocationBarView with its endcap removed.
+  EXPECT_LE(omnibox_view_views->bounds().right(),
+            GetLocationBarView()->GetLocalBoundsWithoutEndcaps().right());
+}
+
+// Make sure the IME autocomplete selection text is positioned correctly when
+// there are no trailing decorations.
+IN_PROC_BROWSER_TEST_F(TouchLocationBarViewBrowserTest,
+                       IMEInlineAutocompletePosition) {
+  // Make sure all the LocationBarView children are invisible. This should
+  // ensure there are no trailing decorations at the end of the omnibox.
+  OmniboxViewViews* omnibox_view_views = GetLocationBarView()->omnibox_view();
+  views::Label* ime_inline_autocomplete_view =
+      GetLocationBarView()->ime_inline_autocomplete_view_;
+  for (int i = 0; i < GetLocationBarView()->child_count(); ++i) {
+    views::View* child = GetLocationBarView()->child_at(i);
+    if (child != omnibox_view_views)
+      child->SetVisible(false);
+  }
+  omnibox_view_views->SetText(base::UTF8ToUTF16("谷"));
+  GetLocationBarView()->SetImeInlineAutocompletion(base::UTF8ToUTF16("歌"));
+  EXPECT_TRUE(ime_inline_autocomplete_view->visible());
+
+  GetLocationBarView()->Layout();
+
+  // Make sure the IME inline autocomplete view starts at the end of
+  // |omnibox_view_views|.
+  EXPECT_EQ(omnibox_view_views->bounds().right(),
+            ime_inline_autocomplete_view->x());
+}
+
+// After SetUpInterceptor() is called, requests to this hostname will be mocked
 // and use specified certificate validation results. This allows tests to mock
 // Extended Validation (EV) certificate connections.
 const char kMockSecureHostname[] = "example-secure.test";
 const GURL kMockSecureURL = GURL("https://example-secure.test");
-
-// A URLRequestMockHTTPJob which mocks a TLS connection with a certificate
-// verification result specified in |cert_status|. Additionally sets the
-// |ct_policy_compliance| so that the requirements for EV certificates are met.
-class TestHttpsURLRequestJob : public net::URLRequestMockHTTPJob {
- public:
-  TestHttpsURLRequestJob(net::URLRequest* request,
-                         net::NetworkDelegate* network_delegate,
-                         const base::FilePath& file_path,
-                         scoped_refptr<net::X509Certificate> cert,
-                         net::CertStatus cert_status)
-      : net::URLRequestMockHTTPJob(request, network_delegate, file_path),
-        cert_(std::move(cert)),
-        cert_status_(cert_status) {}
-
-  void GetResponseInfo(net::HttpResponseInfo* info) override {
-    net::URLRequestMockHTTPJob::GetResponseInfo(info);
-    info->ssl_info.cert = cert_;
-    info->ssl_info.cert_status = cert_status_;
-    info->ssl_info.ct_policy_compliance =
-        net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
-  }
-
- protected:
-  ~TestHttpsURLRequestJob() override {}
-
- private:
-  const scoped_refptr<net::X509Certificate> cert_;
-  const net::CertStatus cert_status_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestHttpsURLRequestJob);
-};
-
-// A URLRequestInterceptor that handles requests with TestHttpsURLRequestJob
-// jobs.
-class TestHttpsInterceptor : public net::URLRequestInterceptor {
- public:
-  TestHttpsInterceptor(const base::FilePath& base_path,
-                       scoped_refptr<net::X509Certificate> cert,
-                       net::CertStatus cert_status)
-      : base_path_(base_path),
-        cert_(std::move(cert)),
-        cert_status_(cert_status) {}
-  ~TestHttpsInterceptor() override {}
-
-  // net::URLRequestInterceptor:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    return new TestHttpsURLRequestJob(request, network_delegate, base_path_,
-                                      cert_, cert_status_);
-  }
-
- private:
-  const base::FilePath base_path_;
-  const scoped_refptr<net::X509Certificate> cert_;
-  const net::CertStatus cert_status_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestHttpsInterceptor);
-};
-
-// Installs a handler to serve HTTPS requests to |kMockSecureHostname| with
-// connections using |cert| that have |cert_status| as their certificate
-// verification results.
-void AddUrlHandler(const base::FilePath& base_path,
-                   scoped_refptr<net::X509Certificate> cert,
-                   net::CertStatus cert_status) {
-  net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
-  filter->AddHostnameInterceptor(
-      "https", kMockSecureHostname,
-      std::unique_ptr<net::URLRequestInterceptor>(
-          new TestHttpsInterceptor(base_path, cert, cert_status)));
-}
-
-// Resets the URL handler. Only one handler can be set at a time.
-void RemoveUrlHandler() {
-  net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
-  filter->RemoveHostnameHandler("https", kMockSecureHostname);
-}
 
 class SecurityIndicatorTest : public InProcessBrowserTest {
  public:
@@ -221,30 +207,12 @@ class SecurityIndicatorTest : public InProcessBrowserTest {
   }
 
   void SetUpInterceptor(net::CertStatus cert_status) {
-    // TODO(crbug.com/821557): Remove the non network service code path once
-    // the URLLoader intercepts frame requests.
-    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
-      url_loader_interceptor_ = std::make_unique<content::URLLoaderInterceptor>(
-          base::BindRepeating(&SecurityIndicatorTest::InterceptURLLoad,
-                              base::Unretained(this), cert_status));
-    } else {
-      base::FilePath serve_file;
-      PathService::Get(chrome::DIR_TEST_DATA, &serve_file);
-      serve_file = serve_file.Append(FILE_PATH_LITERAL("title1.html"));
-      content::BrowserThread::PostTask(
-          content::BrowserThread::IO, FROM_HERE,
-          base::BindOnce(&AddUrlHandler, serve_file, cert_, cert_status));
-    }
+    url_loader_interceptor_ = std::make_unique<content::URLLoaderInterceptor>(
+        base::BindRepeating(&SecurityIndicatorTest::InterceptURLLoad,
+                            base::Unretained(this), cert_status));
   }
 
-  void ResetInterceptor() {
-    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
-      url_loader_interceptor_.reset();
-    } else {
-      content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                       base::BindOnce(&RemoveUrlHandler));
-    }
-  }
+  void ResetInterceptor() { url_loader_interceptor_.reset(); }
 
   bool InterceptURLLoad(net::CertStatus cert_status,
                         content::URLLoaderInterceptor::RequestParams* params) {
@@ -257,7 +225,8 @@ class SecurityIndicatorTest : public InProcessBrowserTest {
         net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
     network::ResourceResponseHead resource_response;
     resource_response.mime_type = "text/html";
-    params->client->OnReceiveResponse(resource_response, ssl_info,
+    resource_response.ssl_info = ssl_info;
+    params->client->OnReceiveResponse(resource_response,
                                       /*downloaded_file=*/nullptr);
     network::URLLoaderCompletionStatus completion_status;
     completion_status.ssl_info = ssl_info;

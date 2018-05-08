@@ -10,6 +10,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
@@ -29,6 +30,7 @@
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/decoder_client.h"
+#include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
@@ -160,6 +162,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   bool OnWaitSyncToken(const SyncToken& sync_token) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
+  void OnSwapBuffers(uint32_t flags) override;
 
 // ImageTransportSurfaceDelegate implementation:
 #if defined(OS_WIN)
@@ -237,7 +240,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
     // work.
     virtual void ScheduleDelayedWork(base::OnceClosure task) = 0;
 
-    virtual bool UseVirtualizedGLContexts() = 0;
+    virtual bool ForceVirtualizedGLContexts() = 0;
     virtual SyncPointManager* sync_point_manager() = 0;
     virtual bool BlockThreadOnWaitSyncToken() const = 0;
 
@@ -280,20 +283,20 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
     SurfaceHandle window;
     const ContextCreationAttribs& attribs;
     Capabilities* capabilities;  // Ouptut.
-    InProcessCommandBuffer* context_group;
+    InProcessCommandBuffer* share_command_buffer;
     ImageFactory* image_factory;
 
     InitializeOnGpuThreadParams(bool is_offscreen,
                                 SurfaceHandle window,
                                 const ContextCreationAttribs& attribs,
                                 Capabilities* capabilities,
-                                InProcessCommandBuffer* share_group,
+                                InProcessCommandBuffer* share_command_buffer,
                                 ImageFactory* image_factory)
         : is_offscreen(is_offscreen),
           window(window),
           attribs(attribs),
           capabilities(capabilities),
-          context_group(share_group),
+          share_command_buffer(share_command_buffer),
           image_factory(image_factory) {}
   };
 
@@ -347,7 +350,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
 
   scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
   std::unique_ptr<TransferBufferManager> transfer_buffer_manager_;
-  std::unique_ptr<gles2::GLES2Decoder> decoder_;
+  std::unique_ptr<DecoderContext> decoder_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<SyncPointOrderData> sync_point_order_data_;

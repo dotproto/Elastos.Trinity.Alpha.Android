@@ -15,8 +15,8 @@
 
 namespace chromeos {
 
+class UserBoardViewMojo;
 class UserSelectionScreen;
-class UserSelectionScreenProxy;
 
 // ViewsScreenLocker acts like LoginScreenClient::Delegate which handles method
 // calls coming from ash into chrome.
@@ -62,6 +62,9 @@ class ViewsScreenLocker : public LoginScreenClient::Delegate,
   void HandleOnNoPodFocused() override;
   bool HandleFocusLockScreenApps(bool reverse) override;
   void HandleLoginAsGuest() override;
+  void HandleLaunchPublicSession(const AccountId& account_id,
+                                 const std::string& locale,
+                                 const std::string& input_method) override;
 
   // PowerManagerClient::Observer:
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
@@ -84,7 +87,7 @@ class ViewsScreenLocker : public LoginScreenClient::Delegate,
   void OnAllowedInputMethodsChanged();
   void OnDevChannelInfoUpdated();
 
-  std::unique_ptr<UserSelectionScreenProxy> user_selection_screen_proxy_;
+  std::unique_ptr<UserBoardViewMojo> user_board_view_mojo_;
   std::unique_ptr<UserSelectionScreen> user_selection_screen_;
 
   // The ScreenLocker that owns this instance.

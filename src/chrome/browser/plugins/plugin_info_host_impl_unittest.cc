@@ -7,7 +7,6 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -308,6 +307,23 @@ TEST_F(PluginInfoHostImplTest, RunAllFlashInAllowMode) {
                                 security_status, content::kFlashPluginName,
                                 &status);
   EXPECT_THAT(status, Eq(chrome::mojom::PluginStatus::kAllowed));
+}
+
+TEST_F(PluginInfoHostImplTest, PluginsAllowedInWhitelistedSchemes) {
+  VerifyPluginContentSetting(GURL("http://example.com"), "foo",
+                             CONTENT_SETTING_DETECT_IMPORTANT_CONTENT, true,
+                             false);
+  VerifyPluginContentSetting(GURL("https://example.com"), "foo",
+                             CONTENT_SETTING_DETECT_IMPORTANT_CONTENT, true,
+                             false);
+  VerifyPluginContentSetting(GURL("file://foobar/"), "foo",
+                             CONTENT_SETTING_DETECT_IMPORTANT_CONTENT, true,
+                             false);
+  VerifyPluginContentSetting(GURL("chrome-extension://extension-id"), "foo",
+                             CONTENT_SETTING_DETECT_IMPORTANT_CONTENT, true,
+                             false);
+  VerifyPluginContentSetting(GURL("unknown-scheme://foobar"), "foo",
+                             CONTENT_SETTING_BLOCK, true, false);
 }
 
 TEST_F(PluginInfoHostImplTest, GetPluginContentSetting) {

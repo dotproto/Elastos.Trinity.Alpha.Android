@@ -9,8 +9,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/mock_model_type_change_processor.h"
@@ -23,7 +25,9 @@ namespace syncer {
 namespace {
 
 using sync_pb::UserEventSpecifics;
+using testing::_;
 using testing::ElementsAre;
+using testing::Eq;
 using testing::Invoke;
 using testing::IsEmpty;
 using testing::IsNull;
@@ -34,7 +38,7 @@ using testing::Return;
 using testing::SaveArg;
 using testing::SizeIs;
 using testing::UnorderedElementsAre;
-using testing::_;
+using WriteBatch = ModelTypeStore::WriteBatch;
 
 MATCHER_P(MatchesUserEvent, expected, "") {
   if (!arg.has_user_event()) {
@@ -97,10 +101,11 @@ class UserEventSyncBridgeTest : public testing::Test {
   UserEventSyncBridgeTest() {
     bridge_ = std::make_unique<UserEventSyncBridge>(
         ModelTypeStoreTestUtil::FactoryForInMemoryStoreForTest(),
-        mock_processor_.FactoryForBridgeTest(), &test_global_id_mapper_);
+        mock_processor_.CreateForwardingProcessor(), &test_global_id_mapper_,
+        &fake_sync_service_);
     ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
     ON_CALL(*processor(), DisableSync()).WillByDefault(Invoke([this]() {
-      bridge_->ApplyDisableSyncChanges({});
+      bridge_->ApplyDisableSyncChanges(WriteBatch::CreateMetadataChangeList());
     }));
   }
 
@@ -112,6 +117,7 @@ class UserEventSyncBridgeTest : public testing::Test {
 
   UserEventSyncBridge* bridge() { return bridge_.get(); }
   MockModelTypeChangeProcessor* processor() { return &mock_processor_; }
+  FakeSyncService* sync_service() { return &fake_sync_service_; }
   TestGlobalIdMapper* mapper() { return &test_global_id_mapper_; }
 
   std::map<std::string, sync_pb::EntitySpecifics> GetAllData() {
@@ -167,11 +173,12 @@ class UserEventSyncBridgeTest : public testing::Test {
   std::unique_ptr<UserEventSyncBridge> bridge_;
   testing::NiceMock<MockModelTypeChangeProcessor> mock_processor_;
   TestGlobalIdMapper test_global_id_mapper_;
+  FakeSyncService fake_sync_service_;
   base::MessageLoop message_loop_;
 };
 
 TEST_F(UserEventSyncBridgeTest, MetadataIsInitialized) {
-  EXPECT_CALL(*processor(), DoModelReadyToSync(NotNull()));
+  EXPECT_CALL(*processor(), DoModelReadyToSync(_, NotNull()));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -194,8 +201,29 @@ TEST_F(UserEventSyncBridgeTest, DisableSync) {
 
   EXPECT_CALL(*processor(), DisableSync());
   bridge()->DisableSync();
+  // The bridge may asynchronously query the store to choose what to delete.
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_THAT(GetAllData(), IsEmpty());
+}
+
+TEST_F(UserEventSyncBridgeTest, DisableSyncShouldKeepConsents) {
+  UserEventSpecifics user_event_specifics(CreateSpecifics(2u, 2u, 2u));
+  auto* consent = user_event_specifics.mutable_user_consent();
+  consent->set_feature(UserEventSpecifics::UserConsent::CHROME_SYNC);
+  consent->set_account_id("account_id");
+  bridge()->RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(user_event_specifics));
+  ASSERT_THAT(GetAllData(), SizeIs(1));
+
+  EXPECT_CALL(*processor(), DisableSync());
+  bridge()->DisableSync();
+  // The bridge may asynchronously query the store to choose what to delete.
+  base::RunLoop().RunUntilIdle();
+
+  // User consent specific must be persisted when sync is disabled.
+  EXPECT_THAT(GetAllData(),
+              ElementsAre(Pair(_, MatchesUserEvent(user_event_specifics))));
 }
 
 TEST_F(UserEventSyncBridgeTest, MultipleRecords) {
@@ -319,6 +347,257 @@ TEST_F(UserEventSyncBridgeTest, RecordBeforeMetadataLoads) {
   ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(false));
   bridge()->RecordUserEvent(SpecificsUniquePtr(1u, 2u, 3u));
   EXPECT_THAT(GetAllData(), IsEmpty());
+}
+
+// User consents should be buffered if the bridge is not fully initialized.
+// Other events should get dropped.
+TEST_F(UserEventSyncBridgeTest, RecordWithLateInitializedStore) {
+  // Wait until bridge() is ready to avoid interference with processor() mock.
+  base::RunLoop().RunUntilIdle();
+
+  UserEventSpecifics consent1 = CreateSpecifics(1u, 1u, 1u);
+  consent1.mutable_user_consent()->set_account_id("account_id");
+  UserEventSpecifics consent2 = CreateSpecifics(2u, 2u, 2u);
+  consent2.mutable_user_consent()->set_account_id("account_id");
+  UserEventSpecifics specifics1 = CreateSpecifics(3u, 3u, 3u);
+  UserEventSpecifics specifics2 = CreateSpecifics(4u, 4u, 4u);
+
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(false));
+  ModelType store_init_type;
+  ModelTypeStore::InitCallback store_init_callback;
+  UserEventSyncBridge late_init_bridge(
+      base::BindLambdaForTesting(
+          [&](ModelType type, ModelTypeStore::InitCallback callback) {
+            store_init_type = type;
+            store_init_callback = std::move(callback);
+          }),
+      processor()->CreateForwardingProcessor(), mapper(), sync_service());
+
+  // Record events before the store is created. Only the consent will be
+  // buffered, the other event is dropped.
+  late_init_bridge.RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(consent1));
+  late_init_bridge.RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(specifics1));
+
+  // Initialize the store.
+  EXPECT_CALL(*processor(), DoModelReadyToSync(&late_init_bridge, NotNull()));
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+  std::move(store_init_callback)
+      .Run(/*error=*/base::nullopt,
+           ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(store_init_type));
+  base::RunLoop().RunUntilIdle();
+
+  AccountInfo info;
+  info.account_id = "account_id";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+  late_init_bridge.OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                                  /*start_callback=*/base::DoNothing());
+
+  // Record events after metadata is ready.
+  late_init_bridge.RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(consent2));
+  late_init_bridge.RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(specifics2));
+
+  base::RunLoop().RunUntilIdle();
+  ASSERT_THAT(
+      GetAllData(),
+      UnorderedElementsAre(
+          Pair(GetStorageKey(consent1), MatchesUserEvent(consent1)),
+          Pair(GetStorageKey(consent2), MatchesUserEvent(consent2)),
+          Pair(GetStorageKey(specifics2), MatchesUserEvent(specifics2))));
+}
+
+TEST_F(UserEventSyncBridgeTest,
+       ShouldReportPreviouslyPersistedConsentsWhenSyncIsReenabled) {
+  UserEventSpecifics consent = CreateSpecifics(1u, 1u, 1u);
+  consent.mutable_user_consent()->set_account_id("account_id");
+
+  bridge()->RecordUserEvent(std::make_unique<UserEventSpecifics>(consent));
+
+  EXPECT_CALL(*processor(), DisableSync());
+  bridge()->DisableSync();
+  // The bridge may asynchronously query the store to choose what to delete.
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_THAT(GetAllData(), SizeIs(1));
+
+  // Reenable sync.
+  AccountInfo info;
+  info.account_id = "account_id";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+  std::string storage_key;
+  EXPECT_CALL(*processor(), DoPut(_, _, _)).WillOnce(SaveArg<0>(&storage_key));
+  bridge()->OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                           /*start_callback=*/base::DoNothing());
+
+  // The bridge may asynchronously query the store to choose what to resubmit.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(storage_key, Eq(GetStorageKey(consent)));
+}
+
+TEST_F(UserEventSyncBridgeTest,
+       ShouldReportPersistedConsentsOnStartupEvenWithLateStoreInitialization) {
+  // Wait until bridge() is ready to avoid interference with processor() mock.
+  base::RunLoop().RunUntilIdle();
+
+  UserEventSpecifics consent = CreateSpecifics(1u, 1u, 1u);
+  consent.mutable_user_consent()->set_account_id("account_id");
+
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(false));
+  ModelType store_init_type;
+  ModelTypeStore::InitCallback store_init_callback;
+  UserEventSyncBridge late_init_bridge(
+      base::BindLambdaForTesting(
+          [&](ModelType type, ModelTypeStore::InitCallback callback) {
+            store_init_type = type;
+            store_init_callback = std::move(callback);
+          }),
+      processor()->CreateForwardingProcessor(), mapper(), sync_service());
+
+  // Sync is active, but the store is not ready yet.
+  AccountInfo info;
+  info.account_id = "account_id";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+  EXPECT_CALL(*processor(), DoModelReadyToSync(_, _)).Times(0);
+  late_init_bridge.OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                                  /*start_callback=*/base::DoNothing());
+
+  // Initialize the store.
+  std::unique_ptr<ModelTypeStore> store =
+      ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(store_init_type);
+
+  // TODO(vitaliii): Try to avoid putting the data directly into the store (e.g.
+  // by using a forwarding store), because this is an implementation detail.
+  // However, currently the bridge owns the store and there is no obvious way to
+  // preserve it.
+
+  // Put the consent manually to simulate a restart with disabled sync.
+  auto batch = store->CreateWriteBatch();
+  batch->WriteData(GetStorageKey(consent), consent.SerializeAsString());
+  store->CommitWriteBatch(std::move(batch), base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_CALL(*processor(), DoModelReadyToSync(&late_init_bridge, NotNull()));
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+  std::string storage_key;
+  EXPECT_CALL(*processor(), DoPut(_, _, _)).WillOnce(SaveArg<0>(&storage_key));
+  std::move(store_init_callback)
+      .Run(/*error=*/base::nullopt,
+           ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(store_init_type));
+
+  // The bridge may asynchronously query the store to choose what to resubmit.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(storage_key, Eq(GetStorageKey(consent)));
+}
+
+TEST_F(UserEventSyncBridgeTest,
+       ShouldReportPersistedConsentsOnStartupEvenWithLateSyncInitialization) {
+  // Wait until bridge() is ready to avoid interference with processor() mock.
+  base::RunLoop().RunUntilIdle();
+
+  UserEventSpecifics consent = CreateSpecifics(1u, 1u, 1u);
+  consent.mutable_user_consent()->set_account_id("account_id");
+
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(false));
+  ModelType store_init_type;
+  ModelTypeStore::InitCallback store_init_callback;
+  UserEventSyncBridge late_init_bridge(
+      base::BindLambdaForTesting(
+          [&](ModelType type, ModelTypeStore::InitCallback callback) {
+            store_init_type = type;
+            store_init_callback = std::move(callback);
+          }),
+      processor()->CreateForwardingProcessor(), mapper(), sync_service());
+
+  // Initialize the store.
+  std::unique_ptr<ModelTypeStore> store =
+      ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(store_init_type);
+
+  // TODO(vitaliii): Try to avoid putting the data directly into the store (e.g.
+  // by using a forwarding store), because this is an implementation detail.
+  // However, currently the bridge owns the store and there is no obvious way to
+  // preserve it.
+
+  // Put the consent manually to simulate a restart with disabled sync.
+  auto batch = store->CreateWriteBatch();
+  batch->WriteData(GetStorageKey(consent), consent.SerializeAsString());
+  store->CommitWriteBatch(std::move(batch), base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  // The store has been initialized, but the sync is not active yet.
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+  EXPECT_CALL(*processor(), DoModelReadyToSync(&late_init_bridge, NotNull()));
+  std::move(store_init_callback)
+      .Run(/*error=*/base::nullopt,
+           ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(store_init_type));
+  base::RunLoop().RunUntilIdle();
+
+  AccountInfo info;
+  info.account_id = "account_id";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+  late_init_bridge.OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                                  /*start_callback=*/base::DoNothing());
+
+  std::string storage_key;
+  EXPECT_CALL(*processor(), DoPut(_, _, _)).WillOnce(SaveArg<0>(&storage_key));
+  // The bridge may asynchronously query the store to choose what to resubmit.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(storage_key, Eq(GetStorageKey(consent)));
+}
+
+TEST_F(UserEventSyncBridgeTest, ShouldSubmitPersistedConsentOnlyIfSameAccount) {
+  AccountInfo info;
+  info.account_id = "first_account";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+  UserEventSpecifics user_event_specifics(CreateSpecifics(2u, 2u, 2u));
+  auto* consent = user_event_specifics.mutable_user_consent();
+  consent->set_account_id("first_account");
+  bridge()->RecordUserEvent(
+      std::make_unique<UserEventSpecifics>(user_event_specifics));
+  ASSERT_THAT(GetAllData(), SizeIs(1));
+
+  EXPECT_CALL(*processor(), DisableSync());
+  bridge()->DisableSync();
+  // The bridge may asynchronously query the store to choose what to delete.
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_THAT(GetAllData(),
+              ElementsAre(Pair(_, MatchesUserEvent(user_event_specifics))));
+
+  // A new user signs in and enables sync.
+  info.account_id = "second_account";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+
+  // The previous account consent should not be resubmited, because the new sync
+  // account is different.
+  EXPECT_CALL(*processor(), DoPut(_, _, _)).Times(0);
+  ON_CALL(*processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+  bridge()->OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                           /*start_callback=*/base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_CALL(*processor(), DisableSync());
+  bridge()->DisableSync();
+  base::RunLoop().RunUntilIdle();
+
+  // The previous user signs in again and enables sync.
+  info.account_id = "first_account";
+  sync_service()->SetAuthenticatedAccountInfo(info);
+
+  std::string storage_key;
+  EXPECT_CALL(*processor(), DoPut(_, _, _)).WillOnce(SaveArg<0>(&storage_key));
+  bridge()->OnSyncStarting(/*error_handler=*/base::DoNothing(),
+                           /*start_callback=*/base::DoNothing());
+  // The bridge may asynchronously query the store to choose what to resubmit.
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(storage_key, Eq(GetStorageKey(user_event_specifics)));
 }
 
 }  // namespace

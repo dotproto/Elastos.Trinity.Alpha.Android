@@ -29,12 +29,18 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AttestationStatement {
   // https://www.w3.org/TR/2017/WD-webauthn-20170505/#defined-attestation-formats
   // This is not a CBOR-encoded byte array, but the map that will be
   // nested within another CBOR object and encoded then.
-  virtual cbor::CBORValue::MapValue GetAsCBORMap() = 0;
+  virtual cbor::CBORValue::MapValue GetAsCBORMap() const = 0;
+
+  // Returns true if the attestation is known to be inappropriately identifying.
+  // Some tokens return unique attestation certificates even when the bit to
+  // request that is not set. (Normal attestation certificates are not
+  // indended to be trackable.)
+  virtual bool IsAttestationCertificateInappropriatelyIdentifying() = 0;
 
   const std::string& format_name() { return format_; }
 
  protected:
-  AttestationStatement(std::string format);
+  explicit AttestationStatement(std::string format);
 
  private:
   const std::string format_;
@@ -49,9 +55,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) NoneAttestationStatement
     : public AttestationStatement {
  public:
   NoneAttestationStatement();
-
   ~NoneAttestationStatement() override;
-  cbor::CBORValue::MapValue GetAsCBORMap() override;
+
+  bool IsAttestationCertificateInappropriatelyIdentifying() override;
+  cbor::CBORValue::MapValue GetAsCBORMap() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NoneAttestationStatement);

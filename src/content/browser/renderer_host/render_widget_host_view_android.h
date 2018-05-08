@@ -31,9 +31,9 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/android/delegated_frame_host_android.h"
 #include "ui/android/view_android.h"
-#include "ui/android/view_client.h"
 #include "ui/android/window_android_observer.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/events/android/event_handler_android.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -65,16 +65,16 @@ struct ContextMenuParams;
 // -----------------------------------------------------------------------------
 class CONTENT_EXPORT RenderWidgetHostViewAndroid
     : public RenderWidgetHostViewBase,
-      public ui::GestureProviderClient,
-      public ui::ViewAndroidObserver,
-      public ui::ViewClient,
-      public ui::WindowAndroidObserver,
-      public viz::FrameEvictorClient,
       public StylusTextSelectorClient,
-      public ui::TouchSelectionControllerClient,
       public content::TextInputManager::Observer,
       public ui::DelegatedFrameHostAndroid::Client,
-      public viz::BeginFrameObserver {
+      public ui::EventHandlerAndroid,
+      public ui::GestureProviderClient,
+      public ui::TouchSelectionControllerClient,
+      public ui::ViewAndroidObserver,
+      public ui::WindowAndroidObserver,
+      public viz::BeginFrameObserver,
+      public viz::FrameEvictorClient {
  public:
   RenderWidgetHostViewAndroid(RenderWidgetHostImpl* widget,
                               gfx::NativeView parent_native_view);
@@ -105,7 +105,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void SetSize(const gfx::Size& size) override;
   void SetBounds(const gfx::Rect& rect) override;
-  gfx::Vector2dF GetLastScrollOffset() const override;
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void Focus() override;
@@ -121,6 +120,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
+  void EnsureSurfaceSynchronizedForLayoutTest() override;
+  uint32_t GetCaptureSequenceNumber() const override;
   bool DoBrowserControlsShrinkBlinkSize() const override;
   float GetTopControlsHeight() const override;
   float GetBottomControlsHeight() const override;
@@ -158,6 +159,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       viz::mojom::HitTestRegionListPtr hit_test_region_list) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
+  bool RequestRepaintForTesting() override;
   void SetIsInVR(bool is_in_vr) override;
   bool IsInVR() const override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
@@ -183,8 +185,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   GetTouchSelectionControllerClientManager() override;
   viz::LocalSurfaceId GetLocalSurfaceId() const override;
   void OnRenderWidgetInit() override;
+  void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
 
-  // ui::ViewClient implementation.
+  // ui::EventHandlerAndroid implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
@@ -283,14 +286,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetDoubleTapSupportEnabled(bool enabled);
   void SetMultiTouchZoomSupportEnabled(bool enabled);
 
-  void WasResized();
+  bool SynchronizeVisualProperties();
 
   bool HasValidFrame() const;
 
   void MoveCaret(const gfx::Point& point);
   void ShowContextMenuAtPoint(const gfx::Point& point, ui::MenuSourceType);
   void DismissTextHandles();
-  void SetTextHandlesTemporarilyHidden(bool hidden);
+  void SetTextHandlesTemporarilyHidden(bool hide_handles);
   void OnSelectWordAroundCaretAck(bool did_select,
                                   int start_adjust,
                                   int end_adjust);
@@ -304,8 +307,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   }
 
   void OnOverscrollRefreshHandlerAvailable();
-
-  static void OnContextLost();
 
   // TextInputManager::Observer overrides.
   void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
@@ -333,8 +334,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void LostFocus();
 
  private:
+  MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
+
   void RunAckCallbacks();
 
+  bool ShouldRouteEvents() const;
   void SendReclaimCompositorResources(bool is_swap_ack);
 
   void OnFrameMetadataUpdated(
@@ -389,6 +393,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnFocusInternal();
   void LostFocusInternal();
 
+  void SetTextHandlesHiddenForStylus(bool hide_handles);
+
   // The begin frame source being observed.  Null if none.
   viz::BeginFrameSource* begin_frame_source_;
   viz::BeginFrameArgs last_begin_frame_args_;
@@ -408,6 +414,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Used to customize behavior for virtual reality mode, such as the
   // appearance of overscroll glow and the keyboard.
   bool is_in_vr_;
+
+  // Specifies whether touch selection handles are hidden due to stylus.
+  bool handles_hidden_by_stylus_ = false;
+
+  // Specifies whether touch selection handles are hidden due to text selection.
+  bool handles_hidden_by_selection_ui_ = false;
 
   ImeAdapterAndroid* ime_adapter_android_;
   TapDisambiguator* tap_disambiguator_;
@@ -465,9 +477,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   bool observing_root_window_;
 
-  // The last scroll offset of the view.
-  gfx::Vector2dF last_scroll_offset_;
-
   bool controls_initialized_ = false;
   float prev_top_shown_pix_;
   float prev_bottom_shown_pix_;
@@ -485,6 +494,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   base::ObserverList<DestructionObserver> destruction_observers_;
 
   MouseWheelPhaseHandler mouse_wheel_phase_handler_;
+  uint32_t latest_capture_sequence_number_ = 0u;
 
   base::WeakPtrFactory<RenderWidgetHostViewAndroid> weak_ptr_factory_;
 

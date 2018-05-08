@@ -29,7 +29,8 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/surface_manager.h"
 #include "media/base/video_decoder_config.h"
-#include "media/media_features.h"
+#include "media/base/video_util.h"
+#include "media/media_buildflags.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -51,11 +52,9 @@ enum { kBufferCountBeforeGC = 1024 };
 
 struct GpuVideoDecoder::PendingDecoderBuffer {
   PendingDecoderBuffer(std::unique_ptr<base::SharedMemory> s,
-                       const scoped_refptr<DecoderBuffer>& b,
                        const DecodeCB& done_cb)
-      : shared_memory(std::move(s)), buffer(b), done_cb(done_cb) {}
+      : shared_memory(std::move(s)), done_cb(done_cb) {}
   std::unique_ptr<base::SharedMemory> shared_memory;
-  scoped_refptr<DecoderBuffer> buffer;
   DecodeCB done_cb;
 };
 
@@ -394,7 +393,7 @@ void GpuVideoDecoder::DestroyVDA() {
   DestroyPictureBuffers(&assigned_picture_buffers_);
 }
 
-void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void GpuVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                              const DecodeCB& decode_cb) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(pending_reset_cb_.is_null());
@@ -444,19 +443,23 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                                    shared_memory->handle(), size, 0,
                                    buffer->timestamp());
 
-  if (buffer->decrypt_config())
-    bitstream_buffer.SetDecryptConfig(*buffer->decrypt_config());
+  if (buffer->decrypt_config()) {
+    bitstream_buffer.SetDecryptionSettings(
+        buffer->decrypt_config()->key_id(), buffer->decrypt_config()->iv(),
+        buffer->decrypt_config()->subsamples());
+  }
 
   // Mask against 30 bits, to avoid (undefined) wraparound on signed integer.
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & 0x3FFFFFFF;
   DCHECK(
       !base::ContainsKey(bitstream_buffers_in_decoder_, bitstream_buffer.id()));
+  RecordBufferData(bitstream_buffer, *buffer);
+
   bitstream_buffers_in_decoder_.emplace(
       bitstream_buffer.id(),
-      PendingDecoderBuffer(std::move(shared_memory), buffer, decode_cb));
+      PendingDecoderBuffer(std::move(shared_memory), decode_cb));
   DCHECK_LE(static_cast<int>(bitstream_buffers_in_decoder_.size()),
             kMaxInFlightDecodes);
-  RecordBufferData(bitstream_buffer, *buffer.get());
 
   vda_->Decode(bitstream_buffer);
 }
@@ -649,7 +652,10 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
       BindToCurrentLoop(base::Bind(
           &GpuVideoDecoder::ReleaseMailbox, weak_factory_.GetWeakPtr(),
           factories_, picture.picture_buffer_id(), pb.client_texture_ids())),
-      pb.size(), visible_rect, natural_size, timestamp));
+      pb.size(), visible_rect,
+      GetNaturalSize(visible_rect,
+                     GetPixelAspectRatio(visible_rect, natural_size)),
+      timestamp));
   if (!frame) {
     DLOG(ERROR) << "Create frame failed for: " << picture.picture_buffer_id();
     NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);

@@ -23,12 +23,12 @@
 #include "media/base/decrypt_config.h"
 #include "media/cdm/api/content_decryption_module_ext.h"
 #include "media/cdm/json_web_key.h"
+#include "media/cdm/library_cdm/cdm_host_proxy.h"
+#include "media/cdm/library_cdm/cdm_host_proxy_impl.h"
 #include "media/cdm/library_cdm/clear_key_cdm/cdm_file_io_test.h"
-#include "media/cdm/library_cdm/clear_key_cdm/cdm_host_proxy.h"
-#include "media/cdm/library_cdm/clear_key_cdm/cdm_host_proxy_impl.h"
 #include "media/cdm/library_cdm/clear_key_cdm/cdm_proxy_test.h"
 #include "media/cdm/library_cdm/clear_key_cdm/cdm_video_decoder.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #if defined(CLEAR_KEY_CDM_USE_FFMPEG_DECODER)
 #include "base/at_exit.h"
@@ -80,8 +80,8 @@ const char kDummyIndividualizationRequest[] = "dummy individualization request";
 
 static bool g_is_cdm_module_initialized = false;
 
-// Copies |input_buffer| into a media::DecoderBuffer. If the |input_buffer| is
-// empty, an empty (end-of-stream) media::DecoderBuffer is returned.
+// Copies |input_buffer| into a DecoderBuffer. If the |input_buffer| is
+// empty, an empty (end-of-stream) DecoderBuffer is returned.
 static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
     const cdm::InputBuffer_2& input_buffer) {
   if (!input_buffer.data) {
@@ -95,9 +95,9 @@ static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
   output_buffer->set_timestamp(
       base::TimeDelta::FromMicroseconds(input_buffer.timestamp));
 
-  // TODO(xhwang): Unify how to check whether a buffer is encrypted.
-  // See http://crbug.com/675003
-  if (input_buffer.iv_size != 0) {
+  // TODO(crbug.com/658026): Support other schemes.
+  if (input_buffer.encryption_scheme == cdm::EncryptionScheme::kCenc) {
+    DCHECK_GT(input_buffer.iv_size, 0u);
     DCHECK_GT(input_buffer.key_id_size, 0u);
     std::vector<media::SubsampleEntry> subsamples;
     for (uint32_t i = 0; i < input_buffer.num_subsamples; ++i) {
@@ -106,15 +106,12 @@ static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
                                 input_buffer.subsamples[i].cipher_bytes));
     }
 
-    std::unique_ptr<media::DecryptConfig> decrypt_config(
-        new media::DecryptConfig(
-            std::string(reinterpret_cast<const char*>(input_buffer.key_id),
-                        input_buffer.key_id_size),
-            std::string(reinterpret_cast<const char*>(input_buffer.iv),
-                        input_buffer.iv_size),
-            subsamples));
-
-    output_buffer->set_decrypt_config(std::move(decrypt_config));
+    output_buffer->set_decrypt_config(media::DecryptConfig::CreateCencConfig(
+        std::string(reinterpret_cast<const char*>(input_buffer.key_id),
+                    input_buffer.key_id_size),
+        std::string(reinterpret_cast<const char*>(input_buffer.iv),
+                    input_buffer.iv_size),
+        subsamples));
   }
 
   return output_buffer;
@@ -263,9 +260,10 @@ void* CreateCdmInstance(int cdm_interface_version,
     return nullptr;
   }
 
-  // We support both CDM_9 and CDM_10.
+  // We support CDM_9, CDM_10 and CDM_11.
   using CDM_9 = cdm::ContentDecryptionModule_9;
   using CDM_10 = cdm::ContentDecryptionModule_10;
+  using CDM_11 = cdm::ContentDecryptionModule_11;
 
   if (cdm_interface_version == CDM_9::kVersion) {
     CDM_9::Host* host = static_cast<CDM_9::Host*>(
@@ -285,6 +283,17 @@ void* CreateCdmInstance(int cdm_interface_version,
 
     DVLOG(1) << __func__ << ": Create ClearKeyCdm with CDM_10::Host.";
     return static_cast<CDM_10*>(
+        new media::ClearKeyCdm(host, key_system_string));
+  }
+
+  if (cdm_interface_version == CDM_11::kVersion) {
+    CDM_11::Host* host = static_cast<CDM_11::Host*>(
+        get_cdm_host_func(CDM_11::Host::kVersion, user_data));
+    if (!host)
+      return nullptr;
+
+    DVLOG(1) << __func__ << ": Create ClearKeyCdm with CDM_11::Host.";
+    return static_cast<CDM_11*>(
         new media::ClearKeyCdm(host, key_system_string));
   }
 
@@ -643,13 +652,12 @@ void ClearKeyCdm::TimerExpired(void* context) {
   ScheduleNextRenewal();
 }
 
-static void CopyDecryptResults(
-    media::Decryptor::Status* status_copy,
-    scoped_refptr<media::DecoderBuffer>* buffer_copy,
-    media::Decryptor::Status status,
-    const scoped_refptr<media::DecoderBuffer>& buffer) {
+static void CopyDecryptResults(media::Decryptor::Status* status_copy,
+                               scoped_refptr<DecoderBuffer>* buffer_copy,
+                               media::Decryptor::Status status,
+                               scoped_refptr<DecoderBuffer> buffer) {
   *status_copy = status;
-  *buffer_copy = buffer;
+  *buffer_copy = std::move(buffer);
 }
 
 cdm::Status ClearKeyCdm::Decrypt(const cdm::InputBuffer_1& encrypted_buffer,
@@ -662,7 +670,7 @@ cdm::Status ClearKeyCdm::Decrypt(const cdm::InputBuffer_2& encrypted_buffer,
   DVLOG(1) << __func__;
   DCHECK(encrypted_buffer.data);
 
-  scoped_refptr<media::DecoderBuffer> buffer;
+  scoped_refptr<DecoderBuffer> buffer;
   cdm::Status status = DecryptToMediaDecoderBuffer(encrypted_buffer, &buffer);
 
   if (status != cdm::kSuccess)
@@ -800,7 +808,7 @@ cdm::Status ClearKeyCdm::DecryptAndDecodeFrame(
   DVLOG(1) << __func__;
   TRACE_EVENT0("media", "ClearKeyCdm::DecryptAndDecodeFrame");
 
-  scoped_refptr<media::DecoderBuffer> buffer;
+  scoped_refptr<DecoderBuffer> buffer;
   cdm::Status status = DecryptToMediaDecoderBuffer(encrypted_buffer, &buffer);
 
   if (status != cdm::kSuccess)
@@ -838,7 +846,7 @@ cdm::Status ClearKeyCdm::DecryptAndDecodeSamples(
     CHECK(false) << "Crash in decrypt-and-decode with crash key system.";
   }
 
-  scoped_refptr<media::DecoderBuffer> buffer;
+  scoped_refptr<DecoderBuffer> buffer;
   cdm::Status status = DecryptToMediaDecoderBuffer(encrypted_buffer, &buffer);
 
   if (status != cdm::kSuccess)
@@ -883,7 +891,7 @@ void ClearKeyCdm::ScheduleNextRenewal() {
 
 cdm::Status ClearKeyCdm::DecryptToMediaDecoderBuffer(
     const cdm::InputBuffer_2& encrypted_buffer,
-    scoped_refptr<media::DecoderBuffer>* decrypted_buffer) {
+    scoped_refptr<DecoderBuffer>* decrypted_buffer) {
   DCHECK(decrypted_buffer);
 
   if (!IsSupportedBufferEncryptionScheme(encrypted_buffer.encryption_scheme,
@@ -891,14 +899,11 @@ cdm::Status ClearKeyCdm::DecryptToMediaDecoderBuffer(
     return cdm::kDecryptError;
   }
 
-  scoped_refptr<media::DecoderBuffer> buffer =
-      CopyDecoderBufferFrom(encrypted_buffer);
+  scoped_refptr<DecoderBuffer> buffer = CopyDecoderBufferFrom(encrypted_buffer);
 
-  // TODO(xhwang): Unify how to check whether a buffer is encrypted.
-  // See http://crbug.com/675003
-  if (buffer->end_of_stream() || !buffer->decrypt_config() ||
-      !buffer->decrypt_config()->is_encrypted()) {
-    *decrypted_buffer = buffer;
+  // EOS and unencrypted streams can be returned as-is.
+  if (buffer->end_of_stream() || !buffer->decrypt_config()) {
+    *decrypted_buffer = std::move(buffer);
     return cdm::kSuccess;
   }
 
@@ -907,7 +912,7 @@ cdm::Status ClearKeyCdm::DecryptToMediaDecoderBuffer(
   // The CDM does not care what the stream type is. Pass kVideo
   // for both audio and video decryption.
   cdm_->GetCdmContext()->GetDecryptor()->Decrypt(
-      media::Decryptor::kVideo, buffer,
+      media::Decryptor::kVideo, std::move(buffer),
       base::Bind(&CopyDecryptResults, &status, decrypted_buffer));
 
   if (status == media::Decryptor::kError)

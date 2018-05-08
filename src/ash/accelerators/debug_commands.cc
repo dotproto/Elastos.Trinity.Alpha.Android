@@ -109,9 +109,8 @@ void HandleToggleWallpaperMode() {
   static int index = 0;
   WallpaperController* wallpaper_controller =
       Shell::Get()->wallpaper_controller();
-  wallpaper::WallpaperInfo info("", wallpaper::WALLPAPER_LAYOUT_STRETCH,
-                                wallpaper::DEFAULT,
-                                base::Time::Now().LocalMidnight());
+  WallpaperInfo info("", WALLPAPER_LAYOUT_STRETCH, DEFAULT,
+                     base::Time::Now().LocalMidnight());
   switch (++index % 4) {
     case 0:
       wallpaper_controller->ShowDefaultWallpaperForTesting();
@@ -122,13 +121,13 @@ void HandleToggleWallpaperMode() {
           false /*preview_mode=*/);
       break;
     case 2:
-      info.layout = wallpaper::WALLPAPER_LAYOUT_CENTER;
+      info.layout = WALLPAPER_LAYOUT_CENTER;
       wallpaper_controller->ShowWallpaperImage(
           CreateWallpaperImage(SK_ColorBLUE, SK_ColorGREEN), info,
           false /*preview_mode=*/);
       break;
     case 3:
-      info.layout = wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
+      info.layout = WALLPAPER_LAYOUT_CENTER_CROPPED;
       wallpaper_controller->ShowWallpaperImage(
           CreateWallpaperImage(SK_ColorGREEN, SK_ColorRED), info,
           false /*preview_mode=*/);
@@ -145,8 +144,8 @@ void HandleToggleTouchscreen() {
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Touchscreen"));
   TouchDevicesController* controller = Shell::Get()->touch_devices_controller();
   controller->SetTouchscreenEnabled(
-      !controller->GetTouchscreenEnabled(TouchscreenEnabledSource::USER_PREF),
-      TouchscreenEnabledSource::USER_PREF);
+      !controller->GetTouchscreenEnabled(TouchDeviceEnabledSource::USER_PREF),
+      TouchDeviceEnabledSource::USER_PREF);
 }
 
 void HandleToggleTabletMode() {

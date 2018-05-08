@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -190,7 +189,7 @@ class MockSigninManager : public SigninManager {
   MOCK_METHOD3(DoSignOut,
                void(signin_metrics::ProfileSignout,
                     signin_metrics::SignoutDelete,
-                    bool revoke_all_tokens));
+                    RemoveAccountsOption remove_option));
 
   AccountTrackerService fake_service_;
 };
@@ -233,7 +232,10 @@ TEST_F(ChromeSigninClientSignoutTest, SignOut) {
       .Times(1);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+  EXPECT_CALL(
+      *manager_,
+      DoSignOut(source_metric, delete_metric,
+                SigninManager::RemoveAccountsOption::kRemoveAllAccounts))
       .Times(1);
 
   manager_->SignOut(source_metric, delete_metric);
@@ -252,7 +254,10 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutManager) {
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+  EXPECT_CALL(
+      *manager_,
+      DoSignOut(source_metric, delete_metric,
+                SigninManager::RemoveAccountsOption::kRemoveAllAccounts))
       .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 
@@ -262,7 +267,10 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutManager) {
       .Times(1);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+  EXPECT_CALL(
+      *manager_,
+      DoSignOut(source_metric, delete_metric,
+                SigninManager::RemoveAccountsOption::kRemoveAllAccounts))
       .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }
@@ -282,7 +290,10 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutForceSignin) {
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(0);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+  EXPECT_CALL(
+      *manager_,
+      DoSignOut(source_metric, delete_metric,
+                SigninManager::RemoveAccountsOption::kRemoveAllAccounts))
       .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }
@@ -305,7 +316,10 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutGuestSession) {
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(0);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+  EXPECT_CALL(
+      *manager_,
+      DoSignOut(source_metric, delete_metric,
+                SigninManager::RemoveAccountsOption::kRemoveAllAccounts))
       .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }

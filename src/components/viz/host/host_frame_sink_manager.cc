@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -52,6 +53,11 @@ void HostFrameSinkManager::BindAndSetManager(
 void HostFrameSinkManager::SetConnectionLostCallback(
     base::RepeatingClosure callback) {
   connection_lost_callback_ = std::move(callback);
+}
+
+void HostFrameSinkManager::SetBadMessageReceivedFromGpuCallback(
+    base::RepeatingClosure callback) {
+  bad_message_received_from_gpu_callback_ = std::move(callback);
 }
 
 void HostFrameSinkManager::RegisterFrameSinkId(const FrameSinkId& frame_sink_id,
@@ -138,7 +144,8 @@ void HostFrameSinkManager::CreateRootCompositorFrameSink(
   data.has_created_compositor_frame_sink = true;
 
   frame_sink_manager_->CreateRootCompositorFrameSink(std::move(params));
-  display_hit_test_query_[frame_sink_id] = std::make_unique<HitTestQuery>();
+  display_hit_test_query_[frame_sink_id] =
+      std::make_unique<HitTestQuery>(bad_message_received_from_gpu_callback_);
 }
 
 void HostFrameSinkManager::CreateCompositorFrameSink(
@@ -175,9 +182,16 @@ void HostFrameSinkManager::OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
     data.client->OnFrameTokenChanged(frame_token);
 }
 
-void HostFrameSinkManager::RegisterFrameSinkHierarchy(
+bool HostFrameSinkManager::RegisterFrameSinkHierarchy(
     const FrameSinkId& parent_frame_sink_id,
     const FrameSinkId& child_frame_sink_id) {
+  auto iter = frame_sink_data_map_.find(parent_frame_sink_id);
+  // |parent_frame_sink_id| isn't registered so it can't embed anything.
+  if (iter == frame_sink_data_map_.end() ||
+      !iter->second.IsFrameSinkRegistered()) {
+    return false;
+  }
+
   // Register and store the parent.
   frame_sink_manager_->RegisterFrameSinkHierarchy(parent_frame_sink_id,
                                                   child_frame_sink_id);
@@ -187,10 +201,11 @@ void HostFrameSinkManager::RegisterFrameSinkHierarchy(
   DCHECK(!base::ContainsValue(child_data.parents, parent_frame_sink_id));
   child_data.parents.push_back(parent_frame_sink_id);
 
-  FrameSinkData& parent_data = frame_sink_data_map_[parent_frame_sink_id];
-  DCHECK(parent_data.IsFrameSinkRegistered());
+  FrameSinkData& parent_data = iter->second;
   DCHECK(!base::ContainsValue(parent_data.children, child_frame_sink_id));
   parent_data.children.push_back(child_frame_sink_id);
+
+  return true;
 }
 
 void HostFrameSinkManager::UnregisterFrameSinkHierarchy(
@@ -249,9 +264,9 @@ void HostFrameSinkManager::EvictSurfaces(
 }
 
 void HostFrameSinkManager::RequestCopyOfOutput(
-    const FrameSinkId& frame_sink_id,
+    const SurfaceId& surface_id,
     std::unique_ptr<CopyOutputRequest> request) {
-  frame_sink_manager_->RequestCopyOfOutput(frame_sink_id, std::move(request));
+  frame_sink_manager_->RequestCopyOfOutput(surface_id, std::move(request));
 }
 
 std::unique_ptr<CompositorFrameSinkSupport>
@@ -397,11 +412,6 @@ void HostFrameSinkManager::OnFirstSurfaceActivation(
     frame_sink_data.client->OnFirstSurfaceActivation(surface_info);
 }
 
-void HostFrameSinkManager::OnClientConnectionClosed(
-    const FrameSinkId& frame_sink_id) {
-  // TODO(kylechar): Notify observers.
-}
-
 void HostFrameSinkManager::OnAggregatedHitTestRegionListUpdated(
     const FrameSinkId& frame_sink_id,
     mojo::ScopedSharedBufferHandle active_handle,
@@ -427,12 +437,6 @@ void HostFrameSinkManager::SwitchActiveAggregatedHitTestRegionList(
   // in-flight hit-test data.
   if (iter == display_hit_test_query_.end())
     return;
-
-  if (active_handle_index != 0u && active_handle_index != 1u) {
-    // TODO(riajiang): Report security fault. http://crbug.com/746470
-    NOTREACHED();
-    return;
-  }
   iter->second->SwitchActiveAggregatedHitTestRegionList(active_handle_index);
 }
 

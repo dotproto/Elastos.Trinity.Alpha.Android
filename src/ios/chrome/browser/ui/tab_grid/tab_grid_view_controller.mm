@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_view_controller.h"
 
 #include "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_image_data_source.h"
@@ -29,6 +30,27 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   TabGridConfigurationBottomToolbar = 1,
   TabGridConfigurationFloatingButton,
 };
+
+// Computes the page from the offset and width of |scrollView|.
+TabGridPage GetPageFromScrollView(UIScrollView* scrollView) {
+  CGFloat pageWidth = scrollView.frame.size.width;
+  NSUInteger page = lround(scrollView.contentOffset.x / pageWidth);
+  if (UseRTLLayout()) {
+    // In RTL, page indexes are inverted, so subtract |page| from the highest-
+    // index TabGridPage value.
+    return static_cast<TabGridPage>(TabGridPageRemoteTabs - page);
+  }
+  return static_cast<TabGridPage>(page);
+}
+
+NSUInteger GetPageIndexFromPage(TabGridPage page) {
+  if (UseRTLLayout()) {
+    // In RTL, page indexes are inverted, so subtract |page| from the highest-
+    // index TabGridPage value.
+    return static_cast<NSUInteger>(TabGridPageRemoteTabs - page);
+  }
+  return static_cast<NSUInteger>(page);
+}
 }  // namespace
 
 @interface TabGridViewController ()<GridViewControllerDelegate,
@@ -42,8 +64,9 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 @property(nonatomic, weak) UIView* scrollContentView;
 @property(nonatomic, weak) TabGridTopToolbar* topToolbar;
 @property(nonatomic, weak) TabGridBottomToolbar* bottomToolbar;
-@property(nonatomic, weak) UIButton* closeAllButton;
 @property(nonatomic, weak) UIButton* doneButton;
+@property(nonatomic, weak) UIButton* closeAllButton;
+@property(nonatomic, assign) BOOL undoCloseAllAvailable;
 // Clang does not allow property getters to start with the reserved word "new",
 // but provides a workaround. The getter must be set before the property is
 // declared.
@@ -51,7 +74,9 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 @property(nonatomic, weak) TabGridNewTabButton* newTabButton;
 @property(nonatomic, weak) TabGridNewTabButton* floatingButton;
 @property(nonatomic, assign) TabGridConfiguration configuration;
-
+// The page that was shown when entering the tab grid from the tab view.
+// This is used to decide whether the Done button is enabled.
+@property(nonatomic, assign) TabGridPage originalPage;
 @end
 
 @implementation TabGridViewController
@@ -71,11 +96,13 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 @synthesize scrollContentView = _scrollContentView;
 @synthesize topToolbar = _topToolbar;
 @synthesize bottomToolbar = _bottomToolbar;
-@synthesize closeAllButton = _closeAllButton;
 @synthesize doneButton = _doneButton;
+@synthesize closeAllButton = _closeAllButton;
+@synthesize undoCloseAllAvailable = _undoCloseAllAvailable;
 @synthesize newTabButton = _newTabButton;
 @synthesize floatingButton = _floatingButton;
 @synthesize configuration = _configuration;
+@synthesize originalPage = _originalPage;
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -103,11 +130,22 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   // Call the current page setter to sync the scroll view offset to the current
   // page value.
   self.currentPage = _currentPage;
+  self.originalPage = _currentPage;
+  [self.topToolbar.pageControl setSelectedPage:self.currentPage animated:YES];
   [self configureViewControllerForCurrentSizeClassesAndPage];
   if (animated && self.transitionCoordinator) {
     [self animateToolbarsForAppearance];
   }
   [super viewWillAppear:animated];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+  self.undoCloseAllAvailable = NO;
+  [self.regularTabsDelegate discardSavedClosedItems];
+  if (animated && self.transitionCoordinator) {
+    [self animateToolbarsForDisappearance];
+  }
+  [super viewWillDisappear:animated];
 }
 
 - (void)viewWillLayoutSubviews {
@@ -131,6 +169,19 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   self.regularTabsViewController.gridView.contentInset = contentInset;
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  auto animate = ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+    // Call the current page setter to sync the scroll view offset to the
+    // current page value.
+    self.currentPage = _currentPage;
+    [self configureViewControllerForCurrentSizeClassesAndPage];
+  };
+  [coordinator animateAlongsideTransition:animate completion:nil];
+}
+
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleLightContent;
 }
@@ -139,20 +190,26 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
   if (scrollView.dragging || scrollView.decelerating) {
+    // Only when user initiates scroll through dragging.
     CGFloat offsetWidth =
         self.scrollView.contentSize.width - self.scrollView.frame.size.width;
     CGFloat offset = scrollView.contentOffset.x / offsetWidth;
+    // In RTL, flip the offset.
+    if (UseRTLLayout())
+      offset = 1.0 - offset;
     self.topToolbar.pageControl.sliderPosition = offset;
+
+    TabGridPage page = GetPageFromScrollView(scrollView);
+    if (page != _currentPage) {
+      _currentPage = page;
+      [self configureButtonsForOriginalAndCurrentPage];
+    }
   }
 }
 
-- (void)scrollViewDidEndDecelerating:(UIScrollView*)scrollView {
-  // Bookkeeping for the current page.
-  CGFloat pageWidth = scrollView.frame.size.width;
-  float fractionalPage = scrollView.contentOffset.x / pageWidth;
-  NSUInteger page = lround(fractionalPage);
-  _currentPage = static_cast<TabGridPage>(page);
-  [self configureButtonsForCurrentPage];
+- (void)scrollViewDidEndScrollingAnimation:(UIScrollView*)scrollView {
+  _currentPage = GetPageFromScrollView(scrollView);
+  [self configureButtonsForOriginalAndCurrentPage];
 }
 
 #pragma mark - UIScrollViewAccessibilityDelegate
@@ -245,15 +302,15 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
     return;
   }
   CGFloat pageWidth = self.scrollView.frame.size.width;
-  NSUInteger page = static_cast<NSUInteger>(currentPage);
-  CGPoint offset = CGPointMake(page * pageWidth, 0);
+  NSUInteger pageIndex = GetPageIndexFromPage(currentPage);
+  CGPoint offset = CGPointMake(pageIndex * pageWidth, 0);
   // If the view is visible, animate the change. Otherwise don't.
   if (self.view.window == nil) {
     self.scrollView.contentOffset = offset;
     _currentPage = currentPage;
   } else {
     [self.scrollView setContentOffset:offset animated:YES];
-    // _currentPage is set in scrollViewDidEndDecelerating:
+    // _currentPage is set in scrollViewDidEndScrollingAnimation:
   }
 }
 
@@ -516,9 +573,6 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 
   [self.doneButton setTitle:l10n_util::GetNSString(IDS_IOS_TAB_GRID_DONE_BUTTON)
                    forState:UIControlStateNormal];
-  [self.closeAllButton
-      setTitle:l10n_util::GetNSString(IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON)
-      forState:UIControlStateNormal];
   self.doneButton.titleLabel.font =
       [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   self.closeAllButton.titleLabel.font =
@@ -526,8 +580,6 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   self.doneButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.closeAllButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.doneButton.accessibilityIdentifier = kTabGridDoneButtonIdentifier;
-  self.closeAllButton.accessibilityIdentifier =
-      kTabGridCloseAllButtonIdentifier;
   [self.doneButton addTarget:self
                       action:@selector(doneButtonTapped:)
             forControlEvents:UIControlEventTouchUpInside];
@@ -537,26 +589,55 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   [self.newTabButton addTarget:self
                         action:@selector(newTabButtonTapped:)
               forControlEvents:UIControlEventTouchUpInside];
-  [self configureButtonsForCurrentPage];
+  [self configureButtonsForOriginalAndCurrentPage];
 }
 
-- (void)configureButtonsForCurrentPage {
-  [self.topToolbar.pageControl setSelectedPage:self.currentPage animated:YES];
+- (void)configureButtonsForOriginalAndCurrentPage {
   self.newTabButton.page = self.currentPage;
-  switch (self.currentPage) {
+  switch (self.originalPage) {
     case TabGridPageIncognitoTabs:
-      self.doneButton.enabled = !self.incognitoTabsViewController.isGridEmpty;
-      self.closeAllButton.enabled = self.doneButton.enabled;
+      self.doneButton.enabled = !self.incognitoTabsViewController.gridEmpty;
       break;
     case TabGridPageRegularTabs:
-      self.doneButton.enabled = !self.regularTabsViewController.isGridEmpty;
-      self.closeAllButton.enabled = self.doneButton.enabled;
+      self.doneButton.enabled = !self.regularTabsViewController.gridEmpty;
       break;
     case TabGridPageRemoteTabs:
-      self.doneButton.enabled = YES;
+      NOTREACHED() << "It is not possible to have entered tab grid directly "
+                      "into remote tabs.";
+      break;
+  }
+  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
+}
+
+- (void)configureCloseAllButtonForCurrentPageAndUndoAvailability {
+  if (self.undoCloseAllAvailable &&
+      self.currentPage == TabGridPageRegularTabs) {
+    // Setup closeAllButton as undo button.
+    self.closeAllButton.enabled = YES;
+    [self.closeAllButton
+        setTitle:l10n_util::GetNSString(IDS_IOS_TAB_GRID_UNDO_CLOSE_ALL_BUTTON)
+        forState:UIControlStateNormal];
+    self.closeAllButton.accessibilityIdentifier =
+        kTabGridUndoCloseAllButtonIdentifier;
+    return;
+  }
+  // Otherwise setup as a Close All button.
+  switch (self.currentPage) {
+    case TabGridPageIncognitoTabs:
+      self.closeAllButton.enabled = !self.incognitoTabsViewController.gridEmpty;
+      break;
+    case TabGridPageRegularTabs:
+      self.closeAllButton.enabled = !self.regularTabsViewController.gridEmpty;
+      break;
+    case TabGridPageRemoteTabs:
       self.closeAllButton.enabled = NO;
       break;
   }
+  [self.closeAllButton
+      setTitle:l10n_util::GetNSString(IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON)
+      forState:UIControlStateNormal];
+  self.closeAllButton.accessibilityIdentifier =
+      kTabGridCloseAllButtonIdentifier;
 }
 
 // Translates the toolbar views offscreen and then animates them back in using
@@ -598,30 +679,79 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
                                               completion:cleanup];
 }
 
+// Translates the toolbar views offscreen using the transition coordinator.
+- (void)animateToolbarsForDisappearance {
+  DCHECK(self.transitionCoordinator);
+  // TODO(crbug.com/820410): Tune the timing of these animations.
+
+  // Capture the current toolbar transforms.
+  CGAffineTransform topToolbarBaseTransform = self.topToolbar.transform;
+  CGAffineTransform bottomToolbarBaseTransform = self.bottomToolbar.transform;
+  // Translate the top toolbar up offscreen by shifting it up by its height.
+  CGAffineTransform topToolbarOffsetTransform = CGAffineTransformTranslate(
+      self.topToolbar.transform, /*tx=*/0,
+      /*ty=*/-(self.topToolbar.bounds.size.height * 0.5));
+  // Translate the bottom toolbar down offscreen by shifting it down by its
+  // height.
+  CGAffineTransform bottomToolbarOffsetTransform = CGAffineTransformTranslate(
+      self.bottomToolbar.transform, /*tx=*/0,
+      /*ty=*/(self.topToolbar.bounds.size.height * 0.5));
+
+  // Block that animates the toolbar transforms, suitable for using with the
+  // transition coordinator.
+  auto animation = ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+    self.topToolbar.transform = topToolbarOffsetTransform;
+    self.bottomToolbar.transform = bottomToolbarOffsetTransform;
+  };
+
+  // Hide the scroll view (and thus the tab grids) until the transition
+  // completes.
+  self.scrollView.hidden = YES;
+  auto cleanup = ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+    self.scrollView.hidden = NO;
+    self.topToolbar.transform = topToolbarBaseTransform;
+    self.bottomToolbar.transform = bottomToolbarBaseTransform;
+  };
+
+  // Animate the toolbars into place alongside the current transition.
+  [self.transitionCoordinator animateAlongsideTransition:animation
+                                              completion:cleanup];
+}
+
 #pragma mark - GridViewControllerDelegate
 
 - (void)gridViewController:(GridViewController*)gridViewController
-      didSelectItemAtIndex:(NSUInteger)index {
+       didSelectItemWithID:(NSString*)itemID {
   if (gridViewController == self.regularTabsViewController) {
-    [self.regularTabsDelegate selectItemAtIndex:index];
+    [self.regularTabsDelegate selectItemWithID:itemID];
   } else if (gridViewController == self.incognitoTabsViewController) {
-    [self.incognitoTabsDelegate selectItemAtIndex:index];
+    [self.incognitoTabsDelegate selectItemWithID:itemID];
   }
-  [self.tabPresentationDelegate showActiveTab];
+  [self.tabPresentationDelegate showActiveTabInPage:self.currentPage];
 }
 
 - (void)gridViewController:(GridViewController*)gridViewController
-       didCloseItemAtIndex:(NSUInteger)index {
+        didCloseItemWithID:(NSString*)itemID {
   if (gridViewController == self.regularTabsViewController) {
-    [self.regularTabsDelegate closeItemAtIndex:index];
+    [self.regularTabsDelegate closeItemWithID:itemID];
   } else if (gridViewController == self.incognitoTabsViewController) {
-    [self.incognitoTabsDelegate closeItemAtIndex:index];
+    [self.incognitoTabsDelegate closeItemWithID:itemID];
+  }
+}
+
+- (void)gridViewController:(GridViewController*)gridViewController
+         didMoveItemWithID:(NSString*)itemID
+                   toIndex:(NSUInteger)destinationIndex {
+  if (gridViewController == self.regularTabsViewController) {
+    [self.regularTabsDelegate moveItemWithID:itemID toIndex:destinationIndex];
+  } else if (gridViewController == self.incognitoTabsViewController) {
+    [self.incognitoTabsDelegate moveItemWithID:itemID toIndex:destinationIndex];
   }
 }
 
 - (void)gridViewController:(GridViewController*)gridViewController
         didChangeItemCount:(NSUInteger)count {
-  [self configureButtonsForCurrentPage];
+  [self configureButtonsForOriginalAndCurrentPage];
   if (gridViewController == self.regularTabsViewController) {
     self.topToolbar.pageControl.regularTabCount = count;
   }
@@ -630,7 +760,7 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
 #pragma mark - Control actions
 
 - (void)doneButtonTapped:(id)sender {
-  [self.tabPresentationDelegate showActiveTab];
+  [self.tabPresentationDelegate showActiveTabInPage:self.originalPage];
 }
 
 - (void)closeAllButtonTapped:(id)sender {
@@ -639,10 +769,19 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
       [self.incognitoTabsDelegate closeAllItems];
       break;
     case TabGridPageRegularTabs:
-      [self.regularTabsDelegate closeAllItems];
+      DCHECK_EQ(self.undoCloseAllAvailable,
+                self.regularTabsViewController.gridEmpty);
+      if (self.undoCloseAllAvailable) {
+        [self.regularTabsDelegate undoCloseAllItems];
+      } else {
+        [self.incognitoTabsDelegate closeAllItems];
+        [self.regularTabsDelegate saveAndCloseAllItems];
+      }
+      self.undoCloseAllAvailable = !self.undoCloseAllAvailable;
+      [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
       break;
     case TabGridPageRemoteTabs:
-      // No-op. It is invalid to call close all tabs on remote tabs.
+      NOTREACHED() << "It is invalid to call close all tabs on remote tabs.";
       break;
   }
 }
@@ -651,16 +790,15 @@ typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
       [self.incognitoTabsDelegate addNewItem];
-      [self.tabPresentationDelegate showActiveTab];
       break;
     case TabGridPageRegularTabs:
       [self.regularTabsDelegate addNewItem];
-      [self.tabPresentationDelegate showActiveTab];
       break;
     case TabGridPageRemoteTabs:
-      // No-op. It is invalid to call insert new tab on remote tabs.
+      NOTREACHED() << "It is invalid to call insert new tab on remote tabs.";
       break;
   }
+  [self.tabPresentationDelegate showActiveTabInPage:self.currentPage];
 }
 
 - (void)pageControlChanged:(id)sender {

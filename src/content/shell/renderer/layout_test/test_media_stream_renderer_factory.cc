@@ -5,11 +5,10 @@
 #include "content/shell/renderer/layout_test/test_media_stream_renderer_factory.h"
 
 #include "content/shell/renderer/layout_test/test_media_stream_video_renderer.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/web/WebMediaStreamRegistry.h"
-#include "url/gurl.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/web/web_media_stream_registry.h"
 
 using namespace blink;
 
@@ -58,8 +57,7 @@ scoped_refptr<MediaStreamAudioRenderer>
 TestMediaStreamRendererFactory::GetAudioRenderer(
     const blink::WebMediaStream& web_stream,
     int render_frame_id,
-    const std::string& device_id,
-    const url::Origin& security_origin) {
+    const std::string& device_id) {
   return nullptr;
 }
 

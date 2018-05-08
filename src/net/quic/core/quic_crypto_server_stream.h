@@ -128,6 +128,10 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
 
     // Used by QuicCryptoStream to parse data received on this stream.
     virtual CryptoMessageParser* crypto_message_parser() = 0;
+
+    // Returns long header type for next sending handshake message.
+    virtual QuicLongHeaderType GetLongHeaderType(
+        QuicStreamOffset offset) const = 0;
   };
 
   class Helper {
@@ -182,6 +186,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   // configuration for the certificate used in the connection is accessible.
   bool ShouldSendExpectCTHeader() const;
 
+  QuicLongHeaderType GetLongHeaderType(QuicStreamOffset offset) const override;
   bool encryption_established() const override;
   bool handshake_confirmed() const override;
   const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
@@ -207,11 +212,6 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   //  TODO(jokulik): Remove once client stateless reject support
   // becomes the default.
   bool peer_supports_stateless_rejects_;
-
-  // Signifies whether |handshaker_| should be constructed in the
-  // QuicCryptoServerStream constructor, or whether it should be delayed until
-  // OnSuccessfulVersionNegotiation is called.
-  bool delay_handshaker_construction_;
 
   // Arguments from QuicCryptoServerStream constructor that might need to be
   // passed to the HandshakerDelegate constructor in its late construction.

@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_ACTION_FILTER_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "cc/input/touch_action.h"
 #include "content/common/content_export.h"
 
@@ -15,6 +16,13 @@ class WebGestureEvent;
 
 namespace content {
 
+class MockRenderWidgetHost;
+
+enum class FilterGestureEventResult {
+  kFilterGestureEventAllowed,
+  kFilterGestureEventFiltered
+};
+
 // The TouchActionFilter is responsible for filtering scroll and pinch gesture
 // events according to the CSS touch-action values the renderer has sent for
 // each touch point.
@@ -23,11 +31,12 @@ class CONTENT_EXPORT TouchActionFilter {
  public:
   TouchActionFilter();
 
-  // Returns true if the supplied gesture event should be dropped based on the
-  // current touch-action state. Otherwise returns false, and possibly modifies
-  // the event's directional parameters to make the event compatible with
-  // the effective touch-action.
-  bool FilterGestureEvent(blink::WebGestureEvent* gesture_event);
+  // Returns kFilterGestureEventFiltered if the supplied gesture event should be
+  // dropped based on the current touch-action state. Otherwise returns
+  // kFilterGestureEventAllowed, and possibly modifies the event's directional
+  // parameters to make the event compatible with the effective touch-action.
+  FilterGestureEventResult FilterGestureEvent(
+      blink::WebGestureEvent* gesture_event);
 
   // Called when a set-touch-action message is received from the renderer
   // for a touch start event that is currently in flight.
@@ -53,6 +62,8 @@ class CONTENT_EXPORT TouchActionFilter {
   void SetForceEnableZoom(bool enabled) { force_enable_zoom_ = enabled; }
 
  private:
+  friend class MockRenderWidgetHost;
+
   bool ShouldSuppressManipulation(const blink::WebGestureEvent&);
   bool FilterManipulationEventAndResetState();
 
@@ -76,7 +87,7 @@ class CONTENT_EXPORT TouchActionFilter {
   cc::TouchAction allowed_touch_action_;
 
   // Whitelisted touch action received from the compositor.
-  cc::TouchAction white_listed_touch_action_;
+  base::Optional<cc::TouchAction> white_listed_touch_action_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchActionFilter);
 };

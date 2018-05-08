@@ -14,6 +14,7 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/default_state.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_properties.h"
@@ -38,6 +39,12 @@
 namespace ash {
 namespace wm {
 namespace {
+
+bool IsTabletModeEnabled() {
+  return Shell::Get()
+      ->tablet_mode_controller()
+      ->IsTabletModeWindowManagerEnabled();
+}
 
 // A tentative class to set the bounds on the window.
 // TODO(oshima): Once all logic is cleaned up, move this to the real layout
@@ -533,6 +540,12 @@ void WindowState::AdjustSnappedBounds(gfx::Rect* bounds) {
 void WindowState::UpdateWindowPropertiesFromStateType() {
   ui::WindowShowState new_window_state =
       ToWindowShowState(current_state_->GetType());
+  // Clear |kPreMinimizedShowStateKey| property only when the window is actually
+  // Unminimized and not in tablet mode.
+  if (new_window_state != ui::SHOW_STATE_MINIMIZED && IsMinimized() &&
+      !IsTabletModeEnabled()) {
+    window()->ClearProperty(aura::client::kPreMinimizedShowStateKey);
+  }
   if (new_window_state != GetShowState()) {
     base::AutoReset<bool> resetter(&ignore_property_change_, true);
     window_->SetProperty(aura::client::kShowStateKey, new_window_state);
@@ -586,8 +599,7 @@ void WindowState::SetBoundsDirect(const gfx::Rect& bounds) {
         std::max(min_size.height(), actual_new_bounds.height()));
   }
   BoundsSetter().SetBounds(window_, actual_new_bounds);
-  if (!allow_set_bounds_direct())
-    wm::SnapWindowToPixelBoundary(window_);
+  wm::SnapWindowToPixelBoundary(window_);
 }
 
 void WindowState::SetBoundsConstrained(const gfx::Rect& bounds) {

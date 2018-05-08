@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -59,6 +60,7 @@
 #include "net/spdy/chromium/spdy_session.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
+#include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
@@ -241,11 +243,6 @@ IOSIOThread::IOSIOThread(PrefService* local_state,
   system_proxy_config_service_ = ProxyServiceFactory::CreateProxyConfigService(
       pref_proxy_config_tracker_.get());
 
-  ssl_config_service_manager_.reset(
-      ssl_config::SSLConfigServiceManager::CreateDefaultManager(
-          local_state,
-          web::WebThread::GetTaskRunnerForThread(web::WebThread::IO)));
-
   web::WebThread::SetDelegate(web::WebThread::IO, this);
 }
 
@@ -285,7 +282,7 @@ net::URLRequestContextGetter* IOSIOThread::system_url_request_context_getter() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if (!system_url_request_context_getter_.get()) {
     // If we're in unit_tests, IOSIOThread may not be run.
-    if (!web::WebThread::IsMessageLoopValid(web::WebThread::IO))
+    if (!web::WebThread::IsThreadInitialized(web::WebThread::IO))
       return nullptr;
     system_url_request_context_getter_ =
         new SystemURLRequestContextGetter(this);
@@ -325,7 +322,7 @@ void IOSIOThread::Init() {
 
   globals_->ct_policy_enforcer.reset(new net::CTPolicyEnforcer());
 
-  globals_->ssl_config_service = GetSSLConfigService();
+  globals_->ssl_config_service = new net::SSLConfigServiceDefaults();
 
   CreateDefaultAuthHandlerFactory();
   globals_->http_server_properties.reset(new net::HttpServerPropertiesImpl());
@@ -356,9 +353,11 @@ void IOSIOThread::Init() {
       base::CommandLine(base::CommandLine::NO_PROGRAM),
       /*is_quic_force_disabled=*/false, quic_user_agent_id, &params_);
 
-  globals_->system_proxy_resolution_service = ProxyServiceFactory::CreateProxyService(
-      net_log_, nullptr, globals_->system_network_delegate.get(),
-      std::move(system_proxy_config_service_), true /* quick_check_enabled */);
+  globals_->system_proxy_resolution_service =
+      ProxyServiceFactory::CreateProxyResolutionService(
+          net_log_, nullptr, globals_->system_network_delegate.get(),
+          std::move(system_proxy_config_service_),
+          true /* quick_check_enabled */);
 
   globals_->system_request_context.reset(
       ConstructSystemRequestContext(globals_, params_, net_log_));
@@ -407,10 +406,6 @@ void IOSIOThread::ClearHostCache() {
 const net::HttpNetworkSession::Params& IOSIOThread::NetworkSessionParams()
     const {
   return params_;
-}
-
-net::SSLConfigService* IOSIOThread::GetSSLConfigService() {
-  return ssl_config_service_manager_->Get();
 }
 
 void IOSIOThread::ChangedToOnTheRecordOnIOThread() {

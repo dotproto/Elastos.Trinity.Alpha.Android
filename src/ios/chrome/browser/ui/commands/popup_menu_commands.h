@@ -7,6 +7,12 @@
 
 #import <Foundation/Foundation.h>
 
+// Type of a popup menu command.
+typedef NS_ENUM(NSInteger, PopupMenuCommandType) {
+  PopupMenuCommandTypeToolsMenu,
+  PopupMenuCommandTypeDefault,
+};
+
 // Commands for the popup menu.
 @protocol PopupMenuCommands
 
@@ -21,7 +27,7 @@
 // Shows the popup for the search button.
 - (void)searchButtonPopup;
 // Dismisses the currently presented popup.
-- (void)dismissPopupMenu;
+- (void)dismissPopupMenuAnimated:(BOOL)animated;
 
 @end
 

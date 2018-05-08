@@ -46,12 +46,14 @@ base::Optional<SnapAreaData> FindClosestValidArea(
     const gfx::ScrollOffset& current_position,
     const gfx::ScrollOffset& target_position,
     const gfx::RectF& target_region,
+    const gfx::ScrollOffset& proximity_range,
     const SnapAreaList& list) {
   if (list.empty())
     return base::nullopt;
 
   base::Optional<SnapAreaData> closest_area;
-  float smallest_distance = std::numeric_limits<float>::max();
+  float smallest_distance =
+      search_axis == SearchAxis::kX ? proximity_range.x() : proximity_range.y();
   for (const SnapAreaData& area : list) {
     if (!SnappableOnAxis(area, search_axis))
       continue;
@@ -78,19 +80,27 @@ base::Optional<SnapAreaData> FindClosestValidArea(
 
 }  // namespace
 
-SnapContainerData::SnapContainerData() = default;
+SnapContainerData::SnapContainerData()
+    : proximity_range_(gfx::ScrollOffset(std::numeric_limits<float>::max(),
+                                         std::numeric_limits<float>::max())) {}
 
 SnapContainerData::SnapContainerData(ScrollSnapType type)
-    : scroll_snap_type_(type) {}
+    : scroll_snap_type_(type),
+      proximity_range_(gfx::ScrollOffset(std::numeric_limits<float>::max(),
+                                         std::numeric_limits<float>::max())) {}
 
 SnapContainerData::SnapContainerData(ScrollSnapType type, gfx::ScrollOffset max)
-    : scroll_snap_type_(type), max_position_(max) {}
+    : scroll_snap_type_(type),
+      max_position_(max),
+      proximity_range_(gfx::ScrollOffset(std::numeric_limits<float>::max(),
+                                         std::numeric_limits<float>::max())) {}
 
 SnapContainerData::SnapContainerData(const SnapContainerData& other) = default;
 
 SnapContainerData::SnapContainerData(SnapContainerData&& other)
     : scroll_snap_type_(other.scroll_snap_type_),
       max_position_(other.max_position_),
+      proximity_range_(other.proximity_range_),
       snap_area_list_(std::move(other.snap_area_list_)) {}
 
 SnapContainerData::~SnapContainerData() = default;
@@ -101,6 +111,7 @@ SnapContainerData& SnapContainerData::operator=(
 SnapContainerData& SnapContainerData::operator=(SnapContainerData&& other) {
   scroll_snap_type_ = other.scroll_snap_type_;
   max_position_ = other.max_position_;
+  proximity_range_ = other.proximity_range_;
   snap_area_list_ = std::move(other.snap_area_list_);
   return *this;
 }
@@ -109,31 +120,33 @@ void SnapContainerData::AddSnapAreaData(SnapAreaData snap_area_data) {
   snap_area_list_.push_back(snap_area_data);
 }
 
-gfx::ScrollOffset SnapContainerData::FindSnapPosition(
+bool SnapContainerData::FindSnapPosition(
     const gfx::ScrollOffset& current_position,
     bool should_snap_on_x,
-    bool should_snap_on_y) const {
+    bool should_snap_on_y,
+    gfx::ScrollOffset* snap_position) const {
   SnapAxis axis = scroll_snap_type_.axis;
   should_snap_on_x &= (axis == SnapAxis::kX || axis == SnapAxis::kBoth);
   should_snap_on_y &= (axis == SnapAxis::kY || axis == SnapAxis::kBoth);
   if (!should_snap_on_x && !should_snap_on_y)
-    return current_position;
+    return false;
 
-  gfx::ScrollOffset snap_position = current_position;
   base::Optional<SnapAreaData> closest_x, closest_y;
-
   // A region that includes every reachable scroll position.
   gfx::RectF scrollable_region(0, 0, max_position_.x(), max_position_.y());
   if (should_snap_on_x) {
-    closest_x =
-        FindClosestValidArea(SearchAxis::kX, current_position, current_position,
-                             scrollable_region, snap_area_list_);
+    closest_x = FindClosestValidArea(SearchAxis::kX, current_position,
+                                     current_position, scrollable_region,
+                                     proximity_range_, snap_area_list_);
   }
   if (should_snap_on_y) {
-    closest_y =
-        FindClosestValidArea(SearchAxis::kY, current_position, current_position,
-                             scrollable_region, snap_area_list_);
+    closest_y = FindClosestValidArea(SearchAxis::kY, current_position,
+                                     current_position, scrollable_region,
+                                     proximity_range_, snap_area_list_);
   }
+
+  if (!closest_x.has_value() && !closest_y.has_value())
+    return false;
 
   // If snapping in one axis pushes off-screen the other snap area, this snap
   // position is invalid. https://drafts.csswg.org/css-scroll-snap-1/#snap-scope
@@ -149,21 +162,23 @@ gfx::ScrollOffset SnapContainerData::FindSnapPosition(
                                 current_position.y());
       closest_y = FindClosestValidArea(
           SearchAxis::kY, current_position, snapped,
-          closest_x.value().visible_region, snap_area_list_);
+          closest_x.value().visible_region, proximity_range_, snap_area_list_);
     } else {
       gfx::ScrollOffset snapped(current_position.x(),
                                 closest_y.value().snap_position.y());
       closest_x = FindClosestValidArea(
           SearchAxis::kX, current_position, snapped,
-          closest_y.value().visible_region, snap_area_list_);
+          closest_y.value().visible_region, proximity_range_, snap_area_list_);
     }
   }
-  if (closest_x.has_value())
-    snap_position.set_x(closest_x.value().snap_position.x());
-  if (closest_y.has_value())
-    snap_position.set_y(closest_y.value().snap_position.y());
 
-  return snap_position;
+  *snap_position = current_position;
+  if (closest_x.has_value())
+    snap_position->set_x(closest_x.value().snap_position.x());
+  if (closest_y.has_value())
+    snap_position->set_y(closest_y.value().snap_position.y());
+
+  return true;
 }
 
 std::ostream& operator<<(std::ostream& ostream, const SnapAreaData& area_data) {

@@ -92,13 +92,9 @@ bool QuickUnlockNotificationController::ShouldShowPinNotification(
     return false;
   }
 
-  // Do not show the notification if the pin is already set.
-  PinStorage* pin_storage =
-      QuickUnlockFactory::GetForProfile(profile)->pin_storage();
-  if (pin_storage->IsPinSet())
-    return false;
-
-  // TODO(jdufault): Enable once quick unlock settings land(crbug.com/291747).
+  // TODO(jdufault): Enable once quick unlock settings land. See
+  // https://crbug.com/826773. Do not show the notification if the PIN is
+  // already set.
   return false;
 }
 
@@ -185,7 +181,9 @@ void QuickUnlockNotificationController::Close(bool by_user) {
 }
 
 // message_center::NotificationDelegate override:
-void QuickUnlockNotificationController::Click() {
+void QuickUnlockNotificationController::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   NavigateParams params(profile_, params_.url, ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = NavigateParams::SHOW_WINDOW;

@@ -8,13 +8,11 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
-#include "mojo/common/values_struct_traits.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace content {
@@ -115,17 +113,18 @@ void VideoCaptureHost::OnError(VideoCaptureControllerID controller_id) {
                      controller_id));
 }
 
-void VideoCaptureHost::OnBufferCreated(VideoCaptureControllerID controller_id,
-                                       mojo::ScopedSharedBufferHandle handle,
-                                       int length,
-                                       int buffer_id) {
+void VideoCaptureHost::OnNewBuffer(
+    VideoCaptureControllerID controller_id,
+    media::mojom::VideoBufferHandlePtr buffer_handle,
+    int length,
+    int buffer_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (controllers_.find(controller_id) == controllers_.end())
     return;
 
   if (base::ContainsKey(device_id_to_observer_map_, controller_id)) {
-    device_id_to_observer_map_[controller_id]->OnBufferCreated(
-        buffer_id, std::move(handle));
+    device_id_to_observer_map_[controller_id]->OnNewBuffer(
+        buffer_id, std::move(buffer_handle));
   }
 }
 

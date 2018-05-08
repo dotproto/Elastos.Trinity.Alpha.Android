@@ -62,14 +62,12 @@ VerifySignatureResult VerifySeedSignature(
 
   crypto::SignatureVerifier verifier;
   if (!verifier.VerifyInit(crypto::SignatureVerifier::ECDSA_SHA256,
-                           reinterpret_cast<const uint8_t*>(signature.data()),
-                           signature.size(), kPublicKey,
-                           arraysize(kPublicKey))) {
+                           base::as_bytes(base::make_span(signature)),
+                           kPublicKey)) {
     return VerifySignatureResult::INVALID_SIGNATURE;
   }
 
-  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(seed_bytes.data()),
-                        seed_bytes.size());
+  verifier.VerifyUpdate(base::as_bytes(base::make_span(seed_bytes)));
   if (!verifier.VerifyFinal())
     return VerifySignatureResult::INVALID_SEED;
 
@@ -111,7 +109,16 @@ UpdateSeedDateResult GetSeedDateChangeState(
 }  // namespace
 
 VariationsSeedStore::VariationsSeedStore(PrefService* local_state)
-    : local_state_(local_state) {}
+    : local_state_(local_state) {
+#if defined(OS_ANDROID)
+  // If there is a first run seed to import, do so as soon as possible. This is
+  // especially important because some clients query the seed store prefs
+  // directly rather than accessing them via the seed store API:
+  // https://crbug.com/829527
+  if (!local_state_->HasPrefPath(prefs::kVariationsSeedSignature))
+    ImportFirstRunJavaSeed();
+#endif  // OS_ANDROID
+}
 
 VariationsSeedStore::~VariationsSeedStore() {
 }
@@ -119,11 +126,6 @@ VariationsSeedStore::~VariationsSeedStore() {
 bool VariationsSeedStore::LoadSeed(VariationsSeed* seed,
                                    std::string* seed_data,
                                    std::string* base64_seed_signature) {
-#if defined(OS_ANDROID)
-  if (!local_state_->HasPrefPath(prefs::kVariationsSeedSignature))
-    ImportFirstRunJavaSeed();
-#endif  // OS_ANDROID
-
   LoadSeedResult result =
       LoadSeedImpl(SeedType::LATEST, seed, seed_data, base64_seed_signature);
   RecordLoadSeedResult(result);

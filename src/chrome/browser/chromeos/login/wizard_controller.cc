@@ -49,6 +49,7 @@
 #include "chrome/browser/chromeos/login/screens/kiosk_enable_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/chromeos/login/screens/network_view.h"
+#include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/chromeos/login/screens/reset_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
@@ -129,7 +130,8 @@ const chromeos::OobeScreen kResumableScreens[] = {
     chromeos::OobeScreen::SCREEN_TERMS_OF_SERVICE,
     chromeos::OobeScreen::SCREEN_SYNC_CONSENT,
     chromeos::OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE,
-    chromeos::OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK};
+    chromeos::OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK,
+    chromeos::OobeScreen::SCREEN_RECOMMEND_APPS};
 
 // Checks if device is in tablet mode, and that HID-detection screen is not
 // disabled by flag.
@@ -416,6 +418,9 @@ BaseScreen* WizardController::CreateScreen(OobeScreen screen) {
   } else if (screen == OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE) {
     return new ArcTermsOfServiceScreen(
         this, oobe_ui_->GetArcTermsOfServiceScreenView());
+  } else if (screen == OobeScreen::SCREEN_RECOMMEND_APPS) {
+    return new RecommendAppsScreen(this,
+                                   oobe_ui_->GetRecommendAppsScreenView());
   } else if (screen == OobeScreen::SCREEN_WRONG_HWID) {
     return new WrongHWIDScreen(this, oobe_ui_->GetWrongHWIDScreenView());
   } else if (screen == OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW) {
@@ -588,16 +593,6 @@ void WizardController::ShowTermsOfServiceScreen() {
 
 void WizardController::ShowSyncConsentScreen() {
 #if defined(GOOGLE_CHROME_BUILD)
-  const user_manager::UserManager* user_manager =
-      user_manager::UserManager::Get();
-  // Skip for non-regular users.
-  if (user_manager->IsLoggedInAsPublicAccount() ||
-      (user_manager->IsCurrentUserNonCryptohomeDataEphemeral() &&
-       user_manager->GetActiveUser()->GetType() !=
-           user_manager::USER_TYPE_REGULAR)) {
-    ShowArcTermsOfServiceScreen();
-    return;
-  }
   VLOG(1) << "Showing Sync Consent screen.";
   UpdateStatusAreaVisibilityForScreen(OobeScreen::SCREEN_SYNC_CONSENT);
   SetCurrentScreen(GetScreen(OobeScreen::SCREEN_SYNC_CONSENT));
@@ -612,9 +607,24 @@ void WizardController::ShowArcTermsOfServiceScreen() {
     UpdateStatusAreaVisibilityForScreen(
         OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE);
     SetCurrentScreen(GetScreen(OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE));
+    // Assistant Wizard also uses wizard for ARC opt-in, unlike other scenarios
+    // which use ArcSupport for now, because we're interested in only OOBE flow.
+    // Note that this part also needs to be updated on b/65861628.
+    // TODO(khmel): add unit test once we have support for OobeUI.
+    if (!host_->IsVoiceInteractionOobe()) {
+      ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
+          arc::prefs::kArcTermsShownInOobe, true);
+    }
   } else {
     ShowUserImageScreen();
   }
+}
+
+void WizardController::ShowRecommendAppsScreen() {
+  // TODO(rsgingerrs): should maybe check if ToS has been accepted
+  VLOG(1) << "Showing Recommend Apps screen.";
+  UpdateStatusAreaVisibilityForScreen(OobeScreen::SCREEN_RECOMMEND_APPS);
+  SetCurrentScreen(GetScreen(OobeScreen::SCREEN_RECOMMEND_APPS));
 }
 
 void WizardController::ShowWrongHWIDScreen() {
@@ -920,14 +930,16 @@ void WizardController::OnArcTermsOfServiceAccepted() {
   ShowUserImageScreen();
 }
 
+void WizardController::OnRecommendAppsSkipped() {
+  OnOobeFlowFinished(); // TODO(rsgingerrs): there may be a next step?
+}
+
 void WizardController::OnVoiceInteractionValuePropSkipped() {
   OnOobeFlowFinished();
 }
 
 void WizardController::OnVoiceInteractionValuePropAccepted() {
-  const Profile* profile = ProfileManager::GetActiveUserProfile();
-  if (is_in_session_oobe_ && !arc::IsArcPlayStoreEnabledForProfile(profile) &&
-      arc::IsPlayStoreAvailable()) {
+  if (is_in_session_oobe_ && arc::IsArcTermsOfServiceOobeNegotiationNeeded()) {
     ShowArcTermsOfServiceScreen();
     return;
   }
@@ -955,7 +967,8 @@ void WizardController::OnAutoEnrollmentCheckCompleted() {
 }
 
 void WizardController::OnDemoSetupClosed() {
-  ShowLoginScreen(LoginScreenContext());
+  DCHECK(previous_screen_);
+  SetCurrentScreen(previous_screen_);
 }
 
 void WizardController::OnOobeFlowFinished() {
@@ -1196,6 +1209,8 @@ void WizardController::AdvanceToScreen(OobeScreen screen) {
     ShowSyncConsentScreen();
   } else if (screen == OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE) {
     ShowArcTermsOfServiceScreen();
+  } else if (screen == OobeScreen::SCREEN_RECOMMEND_APPS) {
+    ShowRecommendAppsScreen();
   } else if (screen == OobeScreen::SCREEN_WRONG_HWID) {
     ShowWrongHWIDScreen();
   } else if (screen == OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK) {
@@ -1347,6 +1362,12 @@ void WizardController::OnExit(BaseScreen& /* screen */,
       break;
     case ScreenExitCode::SYNC_CONSENT_FINISHED:
       ShowArcTermsOfServiceScreen();
+      break;
+    case ScreenExitCode::RECOMMEND_APPS_SKIPPED:
+      OnRecommendAppsSkipped();
+      break;
+    case ScreenExitCode::RECOMMEND_APPS_SELECTED:
+      // TODO(rsgingerrs): Actions if user selects some apps to install
       break;
     case ScreenExitCode::DEMO_MODE_SETUP_CLOSED:
       OnDemoSetupClosed();

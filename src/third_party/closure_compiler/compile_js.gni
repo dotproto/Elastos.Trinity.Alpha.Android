@@ -3,11 +3,13 @@
 # found in the LICENSE file.
 
 import("//third_party/closure_compiler/closure_args.gni")
+import("//ui/webui/webui_features.gni")
 
 script_path = "//third_party/closure_compiler"
 compiler_path = "$script_path/compiler/compiler.jar"
 externs_path = "$script_path/externs"
 interfaces_path = "$script_path/interfaces"
+chrome_externs = "$externs_path/chrome.js"
 polymer_externs = "$externs_path/polymer-1.0.js"
 
 # Defines a target that creates an ordering for .js files to be used by
@@ -201,6 +203,7 @@ template("js_binary") {
     args += [ "--flags" ] + closure_flags
     args += [
       "--externs",
+      rebase_path("$chrome_externs", root_build_dir),
       rebase_path("$polymer_externs", root_build_dir),
     ]
     if (defined(externs_list)) {
@@ -219,8 +222,14 @@ template("js_binary") {
 
 # Defines a target that compiles a group of js_library targets.
 template("js_type_check") {
-  js_binary(target_name) {
-    sources = []
-    forward_variables_from(invoker, [ "deps" ])
+  if (closure_compile) {
+    js_binary(target_name) {
+      sources = []
+      forward_variables_from(invoker, [ "deps" ])
+    }
+  } else {
+    not_needed(invoker, "*")
+    group(target_name) {
+    }
   }
 }

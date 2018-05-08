@@ -286,7 +286,7 @@ class WidgetTestInteractive : public WidgetTest {
       gl::GLSurfaceTestSupport::InitializeOneOff();
       ui::RegisterPathProvider();
       base::FilePath ui_test_pak_path;
-      ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+      ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
       ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
     }
     WidgetTest::SetUp();
@@ -377,9 +377,7 @@ class TouchEventHandler : public ui::EventHandler {
   }
 
   void WaitForEvents() {
-    base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-    base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     quit_closure_ = run_loop.QuitClosure();
     run_loop.Run();
   }
@@ -543,11 +541,12 @@ TEST_F(WidgetTestInteractive, DisableCaptureWidgetFromMousePress) {
 
   gfx::Point location(20, 20);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&Widget::OnMouseEvent, base::Unretained(second),
-                            base::Owned(new ui::MouseEvent(
-                                ui::ET_MOUSE_RELEASED, location, location,
-                                ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                                ui::EF_LEFT_MOUSE_BUTTON))));
+      FROM_HERE,
+      base::BindOnce(
+          &Widget::OnMouseEvent, base::Unretained(second),
+          base::Owned(new ui::MouseEvent(
+              ui::ET_MOUSE_RELEASED, location, location, ui::EventTimeForNow(),
+              ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON))));
   ui::MouseEvent press(ui::ET_MOUSE_PRESSED, location, location,
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                        ui::EF_LEFT_MOUSE_BUTTON);
@@ -845,8 +844,9 @@ class WidgetActivationTest : public Widget {
 
   ~WidgetActivationTest() override {}
 
-  void OnNativeWidgetActivationChanged(bool active) override {
+  bool OnNativeWidgetActivationChanged(bool active) override {
     active_ = active;
+    return true;
   }
 
   bool active() const { return active_; }

@@ -9,13 +9,13 @@
 #include <set>
 #include <vector>
 
+#include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_common.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_uploader.h"
 
-// TODO(eladalon): Prevent uploading of logs when Chrome shutdown imminent.
-// https://crbug.com/775415
+// TODO(crbug.com/775415): Avoid uploading logs when Chrome shutdown imminent.
 
 class WebRtcRemoteEventLogManager final
     : public LogFileWriter,
@@ -60,12 +60,24 @@ class WebRtcRemoteEventLogManager final
   // 3. The maximum file size must be sensible.
   // The return value is true if all of the restrictions were observed, and if
   // a file was successfully created for this log.
+  //
+  // Upon failure, an error message specific to the failure (as opposed to a
+  // generic one) is produced only if that error message is useful for the
+  // caller:
+  // * Bad parameters.
+  // * Function called at a time when the caller could know it would fail,
+  //   such as for a peer connection that was already logged.
+  // We intentionally avoid giving specific errors in some cases, so as
+  // to avoid leaking information such as being in incognito mode, which we
+  // keep indistinguishable from other common cases, such as having too many
+  // active and/or pending logs.
   bool StartRemoteLogging(int render_process_id,
                           BrowserContextId browser_context_id,
                           const std::string& peer_connection_id,
                           const base::FilePath& browser_context_dir,
                           size_t max_file_size_bytes,
-                          const std::string& metadata);
+                          const std::string& metadata,
+                          std::string* error_message);
 
   // If an active remote-bound log exists for the given peer connection, this
   // will append |message| to that log.
@@ -78,6 +90,16 @@ class WebRtcRemoteEventLogManager final
   // True is returned if and only if |message| was written in its entirety to
   // an active log.
   bool EventLogWrite(const PeerConnectionKey& key, const std::string& message);
+
+  // Clear PENDING WebRTC event logs associated with a given browser context,
+  // in a  given time range, then post |reply| back to the thread from which
+  // the method was originally invoked (which can be any thread).
+  // Log files currently being written are not interrupted.
+  // Active uploads are not interrupted.
+  // TODO(crbug.com/775415): Allow interrupting active uploads.
+  void ClearCacheForBrowserContext(BrowserContextId browser_context_id,
+                                   const base::Time& delete_begin,
+                                   const base::Time& delete_end);
 
   // An implicit PeerConnectionRemoved() on all of the peer connections that
   // were associated with the renderer process.
@@ -157,7 +179,8 @@ class WebRtcRemoteEventLogManager final
   bool StartWritingLog(const PeerConnectionKey& key,
                        const base::FilePath& browser_context_dir,
                        size_t max_file_size_bytes,
-                       const std::string& metadata);
+                       const std::string& metadata,
+                       std::string* error_message);
 
   // Checks if the referenced peer connection has an associated active
   // remote-bound log. If it does, the log is changed from ACTIVE to PENDING.
@@ -178,6 +201,20 @@ class WebRtcRemoteEventLogManager final
   // this check is not too expensive.
   void PrunePendingLogs();
 
+  // PrunePendingLogs() and schedule the next proactive prune.
+  void RecurringPendingLogsPrune();
+
+  // Removes pending logs whose last modification date was between at or later
+  // than |delete_begin|, and earlier than |delete_end|.
+  // If a null time-point is given as either |delete_begin| or |delete_begin|,
+  // it is treated as "beginning-of-time" or "end-of-time", respectively.
+  // If |browser_context_id| is set, only logs associated with it are considered
+  // for removal; otherwise, all logs are considered.
+  void RemovePendingLogs(const base::Time& delete_begin,
+                         const base::Time& delete_end,
+                         base::Optional<BrowserContextId> browser_context_id =
+                             base::Optional<BrowserContextId>());
+
   // Return |true| if and only if we can start another active log (with respect
   // to limitations on the numbers active and pending logs).
   bool AdditionalActiveLogAllowed(BrowserContextId browser_context_id) const;
@@ -185,9 +222,11 @@ class WebRtcRemoteEventLogManager final
   // Initiating a new upload is only allowed when there are no active peer
   // connection which might be adversely affected by the bandwidth consumption
   // of the upload.
-  // TODO(eladalon): Add support for pausing/resuming an upload when peer
-  // connections are added/removed after an upload was already initiated.
-  // https://crbug.com/775415
+
+  // This can be overridden by a command line flag - see
+  // kWebRtcRemoteEventLogUploadNoSuppression.
+  // TODO(crbug.com/775415): Add support for pausing/resuming an upload when
+  // peer connections are added/removed after an upload was already initiated.
   bool UploadingAllowed() const;
 
   // If no upload is in progress, and if uploading is currently permissible,
@@ -216,6 +255,21 @@ class WebRtcRemoteEventLogManager final
   // This object is expected to be created and destroyed on the UI thread,
   // but live on its owner's internal, IO-capable task queue.
   SEQUENCE_CHECKER(io_task_sequence_checker_);
+
+  // Normally, uploading is suppressed while there are active peer connections.
+  // This may be disabled from the command line.
+  const bool upload_suppression_disabled_;
+
+  // Proactive pruning will be done only if this has a value, in which case,
+  // every |proactive_prune_scheduling_delta_|, pending logs will be pruned.
+  // This avoids them staying around on disk for longer than their expiration
+  // if no event occurs which triggers reactive pruning.
+  const base::Optional<base::TimeDelta> proactive_prune_scheduling_delta_;
+
+  // Proactive pruning, if enabled, starts with the first enabled browser
+  // context. To avoid unnecessary complexity, if that browser context is
+  // disabled, proactive pruning is not disabled.
+  bool proactive_prune_scheduling_started_;
 
   // This is used to inform WebRtcEventLogManager when remote-bound logging
   // of a peer connection starts/stops, which allows WebRtcEventLogManager to

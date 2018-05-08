@@ -26,6 +26,23 @@ static_library("account_info") {
     "account_info.cc",
     "account_info.h",
   ]
+  deps = [
+    "//components/signin/core/account_id",
+  ]
+}
+
+# Split into its own target to allow browser clients of the Identity Service to
+# record browser-specific signin metrics without having to depend on all of
+# //components/signin/core/browser.
+static_library("signin_metrics") {
+  sources = [
+    "signin_metrics.cc",
+    "signin_metrics.h",
+  ]
+  public_deps = [
+    "//base",
+    "//google_apis",
+  ]
 }
 
 static_library("browser") {
@@ -84,8 +101,6 @@ static_library("browser") {
     "signin_manager.h",
     "signin_manager_base.cc",
     "signin_manager_base.h",
-    "signin_metrics.cc",
-    "signin_metrics.h",
     "signin_pref_names.cc",
     "signin_pref_names.h",
     "signin_status_metrics_provider.cc",
@@ -109,6 +124,7 @@ static_library("browser") {
   public_deps = [
     ":account_info",
     ":signin_buildflags",
+    ":signin_metrics",
     "//base",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
@@ -178,6 +194,8 @@ static_library("test_support") {
     "fake_signin_manager.h",
     "scoped_account_consistency.cc",
     "scoped_account_consistency.h",
+    "scoped_unified_consent.cc",
+    "scoped_unified_consent.h",
     "test_signin_client.cc",
     "test_signin_client.h",
   ]
@@ -214,6 +232,7 @@ source_set("unit_tests") {
     "signin_header_helper_unittest.cc",
     "signin_investigator_unittest.cc",
     "signin_manager_unittest.cc",
+    "signin_metrics_unittest.cc",
     "signin_status_metrics_provider_unittest.cc",
     "webdata/token_service_table_unittest.cc",
   ]

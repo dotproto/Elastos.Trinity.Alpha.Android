@@ -43,15 +43,13 @@ class SimpleURLLoaderStreamConsumer;
 // complexity of the API.
 //
 // Deleting a SimpleURLLoader before it completes cancels the requests and frees
-// any resources it is using (including any partially downloaded files).
+// any resources it is using (including any partially downloaded files). A
+// SimpleURLLoader may be safely deleted while it's invoking any callback method
+// that was passed it.
 //
 // Each SimpleURLLoader can only be used for a single request.
 //
 // TODO(mmenke): Support the following:
-// * Consumer-provided methods to receive streaming (with backpressure).
-// * Uploads (Fixed strings, files, data streams (with backpressure), chunked
-// uploads). ResourceRequest may already have some support, but should make it
-// simple.
 // * Maybe some sort of retry backoff or delay?  ServiceURLLoaderContext enables
 // throttling for its URLFetchers.  Could additionally/alternatively support
 // 503 + Retry-After.
@@ -81,14 +79,16 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   static const size_t kMaxUploadStringSizeToCopy;
 
   // Callback used when downloading the response body as a std::string.
-  // |response_body| is the body of the response, or nullptr on failure.
+  // |response_body| is the body of the response, or nullptr on failure. It is
+  // safe to delete the SimpleURLLoader during the callback.
   using BodyAsStringCallback =
       base::OnceCallback<void(std::unique_ptr<std::string> response_body)>;
 
   // Callback used when download the response body to a file. On failure, |path|
-  // will be empty.
+  // will be empty. It is safe to delete the SimpleURLLoader during the
+  // callback.
   using DownloadToFileCompleteCallback =
-      base::OnceCallback<void(const base::FilePath& path)>;
+      base::OnceCallback<void(base::FilePath path)>;
 
   // Callback used when a redirect is being followed. It is safe to delete the
   // SimpleURLLoader during the callback.
@@ -96,11 +96,11 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
       base::RepeatingCallback<void(const net::RedirectInfo& redirect_info,
                                    const ResourceResponseHead& response_head)>;
 
-  // Callback used when a redirect is being followed. It is safe to delete the
+  // Callback used when a response is received. It is safe to delete the
   // SimpleURLLoader during the callback.
   using OnResponseStartedCallback =
-      base::RepeatingCallback<void(const GURL& final_url,
-                                   const ResourceResponseHead& response_head)>;
+      base::OnceCallback<void(const GURL& final_url,
+                              const ResourceResponseHead& response_head)>;
 
   // Creates a SimpleURLLoader for |resource_request|. The request can be
   // started by calling any one of the Download methods once. The loader may not
@@ -180,11 +180,10 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   virtual void SetOnRedirectCallback(
       const OnRedirectCallback& on_redirect_callback) = 0;
 
-  // Sets callback to be invoked when the response has started. May be called
-  // multiple times if retries are enabled.
+  // Sets callback to be invoked when the response has started.
   // Callback may delete the SimpleURLLoader.
   virtual void SetOnResponseStartedCallback(
-      const OnResponseStartedCallback& on_response_started_callback) = 0;
+      OnResponseStartedCallback on_response_started_callback) = 0;
 
   // Sets whether partially received results are allowed. Defaults to false.
   // When true, if an error is received after reading the body starts or the max

@@ -7,8 +7,8 @@
 
 #include <map>
 #include <memory>
-#include <unordered_map>
 
+#include "base/containers/flat_map.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "services/resource_coordinator/memory_instrumentation/coordinator_impl.h"
 #include "services/resource_coordinator/memory_instrumentation/graph.h"
@@ -19,20 +19,20 @@ namespace memory_instrumentation {
 class QueuedRequestDispatcher {
  public:
   using OSMemDumpMap =
-      std::unordered_map<base::ProcessId,
-                         memory_instrumentation::mojom::RawOSMemDumpPtr>;
-  using RequestGlobalMemoryDumpInternalCallback = base::Callback<
+      base::flat_map<base::ProcessId,
+                     memory_instrumentation::mojom::RawOSMemDumpPtr>;
+  using RequestGlobalMemoryDumpInternalCallback = base::OnceCallback<
       void(bool, uint64_t, memory_instrumentation::mojom::GlobalMemoryDumpPtr)>;
-  using ChromeCallback = base::Callback<void(
+  using ChromeCallback = base::RepeatingCallback<void(
       mojom::ClientProcess*,
       bool,
       uint64_t,
       std::unique_ptr<base::trace_event::ProcessMemoryDump>)>;
   using OsCallback =
-      base::Callback<void(mojom::ClientProcess*, bool, OSMemDumpMap)>;
-  using VmRegions = std::unordered_map<
-      base::ProcessId,
-      std::vector<memory_instrumentation::mojom::VmRegionPtr>>;
+      base::RepeatingCallback<void(mojom::ClientProcess*, bool, OSMemDumpMap)>;
+  using VmRegions =
+      base::flat_map<base::ProcessId,
+                     std::vector<memory_instrumentation::mojom::VmRegionPtr>>;
 
   struct ClientInfo {
     ClientInfo(mojom::ClientProcess* client,

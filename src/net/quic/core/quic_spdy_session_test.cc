@@ -34,8 +34,8 @@
 #include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_stream_send_buffer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "net/spdy/core/spdy_framer.h"
 #include "net/test/gtest_util.h"
+#include "net/third_party/spdy/core/spdy_framer.h"
 #include "testing/gmock_mutant.h"
 
 using testing::_;
@@ -78,6 +78,10 @@ class TestCryptoStream : public QuicCryptoStream, public QuicCryptoHandshaker {
   }
 
   // QuicCryptoStream implementation
+  QuicLongHeaderType GetLongHeaderType(
+      QuicStreamOffset /*offset*/) const override {
+    return HANDSHAKE;
+  }
   bool encryption_established() const override {
     return encryption_established_;
   }
@@ -135,7 +139,7 @@ class TestSession : public QuicSpdySession {
     Initialize();
     this->connection()->SetEncrypter(
         ENCRYPTION_FORWARD_SECURE,
-        new NullEncrypter(connection->perspective()));
+        QuicMakeUnique<NullEncrypter>(connection->perspective()));
   }
 
   ~TestSession() override { delete connection(); }
@@ -207,7 +211,8 @@ class TestSession : public QuicSpdySession {
 
   QuicConsumedData SendStreamData(QuicStream* stream) {
     struct iovec iov;
-    if (stream->id() != kCryptoStreamId) {
+    if (stream->id() != kCryptoStreamId &&
+        connection()->encryption_level() != ENCRYPTION_FORWARD_SECURE) {
       this->connection()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
     }
     MakeIOVector("not empty", &iov);
@@ -746,7 +751,6 @@ TEST_P(QuicSpdySessionTestServer,
   // Mark the crypto and headers streams as write blocked, we expect them to be
   // allowed to write later.
   session_.MarkConnectionLevelWriteBlocked(kCryptoStreamId);
-  session_.MarkConnectionLevelWriteBlocked(kHeadersStreamId);
 
   // Create a data stream, and although it is write blocked we never expect it
   // to be allowed to write as we are connection level flow control blocked.
@@ -758,8 +762,10 @@ TEST_P(QuicSpdySessionTestServer,
   // connection flow control blocked.
   TestCryptoStream* crypto_stream = session_.GetMutableCryptoStream();
   EXPECT_CALL(*crypto_stream, OnCanWrite());
+  QuicSpdySessionPeer::SetHeadersStream(&session_, nullptr);
   TestHeadersStream* headers_stream = new TestHeadersStream(&session_);
   QuicSpdySessionPeer::SetHeadersStream(&session_, headers_stream);
+  session_.MarkConnectionLevelWriteBlocked(kHeadersStreamId);
   EXPECT_CALL(*headers_stream, OnCanWrite());
 
   // After the crypto and header streams perform a write, the connection will be
@@ -916,22 +922,11 @@ TEST_P(QuicSpdySessionTestServer, HandshakeUnblocksFlowControlBlockedStream) {
   EXPECT_TRUE(session_.IsConnectionFlowControlBlocked());
   EXPECT_TRUE(session_.IsStreamFlowControlBlocked());
 
-  if (!session_.session_unblocks_stream()) {
-    // The handshake message will call OnCanWrite, so the stream can resume
-    // writing.
-    EXPECT_CALL(*stream2, OnCanWrite());
-  }
   // Now complete the crypto handshake, resulting in an increased flow control
   // send window.
   CryptoHandshakeMessage msg;
   session_.GetMutableCryptoStream()->OnHandshakeMessage(msg);
-  if (session_.session_unblocks_stream()) {
-    EXPECT_TRUE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, stream2->id()));
-  } else {
-    EXPECT_FALSE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, stream2->id()));
-  }
+  EXPECT_TRUE(QuicSessionPeer::IsStreamWriteBlocked(&session_, stream2->id()));
   // Stream is now unblocked.
   EXPECT_FALSE(stream2->flow_controller()->IsBlocked());
   EXPECT_FALSE(session_.IsConnectionFlowControlBlocked());
@@ -974,22 +969,12 @@ TEST_P(QuicSpdySessionTestServer,
   EXPECT_FALSE(session_.HasDataToWrite());
   EXPECT_TRUE(crypto_stream->HasBufferedData());
 
-  if (!session_.session_unblocks_stream()) {
-    // The handshake message will call OnCanWrite, so the stream can
-    // resume writing.
-    EXPECT_CALL(*crypto_stream, OnCanWrite());
-  }
   // Now complete the crypto handshake, resulting in an increased flow control
   // send window.
   CryptoHandshakeMessage msg;
   session_.GetMutableCryptoStream()->OnHandshakeMessage(msg);
-  if (session_.session_unblocks_stream()) {
-    EXPECT_TRUE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, kCryptoStreamId));
-  } else {
-    EXPECT_FALSE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, kCryptoStreamId));
-  }
+  EXPECT_TRUE(
+      QuicSessionPeer::IsStreamWriteBlocked(&session_, kCryptoStreamId));
   // Stream is now unblocked and will no longer have buffered data.
   EXPECT_FALSE(crypto_stream->flow_controller()->IsBlocked());
   EXPECT_FALSE(session_.IsConnectionFlowControlBlocked());
@@ -1049,15 +1034,9 @@ TEST_P(QuicSpdySessionTestServer,
   EXPECT_FALSE(headers_stream->flow_controller()->IsBlocked());
   EXPECT_FALSE(session_.IsConnectionFlowControlBlocked());
   EXPECT_FALSE(session_.IsStreamFlowControlBlocked());
-  if (session_.session_unblocks_stream()) {
-    EXPECT_TRUE(headers_stream->HasBufferedData());
-    EXPECT_TRUE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, kHeadersStreamId));
-  } else {
-    EXPECT_FALSE(headers_stream->HasBufferedData());
-    EXPECT_FALSE(
-        QuicSessionPeer::IsStreamWriteBlocked(&session_, kHeadersStreamId));
-  }
+  EXPECT_TRUE(headers_stream->HasBufferedData());
+  EXPECT_TRUE(
+      QuicSessionPeer::IsStreamWriteBlocked(&session_, kHeadersStreamId));
 }
 #endif  // !defined(OS_IOS)
 
@@ -1418,6 +1397,7 @@ TEST_P(QuicSpdySessionTestClient, EnableDHDTThroughConnectionOption) {
 }
 
 TEST_P(QuicSpdySessionTestClient, WritePriority) {
+  QuicSpdySessionPeer::SetHeadersStream(&session_, nullptr);
   TestHeadersStream* headers_stream = new TestHeadersStream(&session_);
   QuicSpdySessionPeer::SetHeadersStream(&session_, headers_stream);
 

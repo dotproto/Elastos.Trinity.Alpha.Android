@@ -9,7 +9,7 @@
 
 #include "ash/app_list/model/app_list_view_state.h"
 #include "ash/app_list/test/test_app_list_client.h"
-#include "ui/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 
 namespace app_list {
 class AppListView;
@@ -29,6 +29,9 @@ class AppListTestHelper {
   // Note: we usually don't care about the show source in tests.
   void ShowAndRunLoop(uint64_t display_id);
 
+  // Show the app list in |display_id|.
+  void Show(uint64_t display_id);
+
   // Show the app list in |display_id| triggered with |show_source|, and wait
   // until animation and mojo calls finish.
   void ShowAndRunLoop(uint64_t display_id,
@@ -36,6 +39,9 @@ class AppListTestHelper {
 
   // Dismiss the app list, and wait until animation and mojo calls finish.
   void DismissAndRunLoop();
+
+  // Dismiss the app list.
+  void Dismiss();
 
   // Toggle the app list in |display_id|, and wait until animation and mojo
   // calls finish.

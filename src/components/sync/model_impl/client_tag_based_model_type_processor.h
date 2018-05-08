@@ -41,7 +41,9 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
                                          public ModelTypeChangeProcessor {
  public:
   ClientTagBasedModelTypeProcessor(ModelType type,
-                                   ModelTypeSyncBridge* bridge,
+                                   const base::RepeatingClosure& dump_stack);
+  // Used only for unit-tests.
+  ClientTagBasedModelTypeProcessor(ModelType type,
                                    const base::RepeatingClosure& dump_stack,
                                    bool commit_only);
   ~ClientTagBasedModelTypeProcessor() override;
@@ -63,9 +65,10 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
                         const std::string& storage_key,
                         MetadataChangeList* metadata_change_list) override;
   void UntrackEntity(const EntityData& entity_data) override;
-  void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override;
+  void ModelReadyToSync(ModelTypeSyncBridge* bridge,
+                        std::unique_ptr<MetadataBatch> batch) override;
   void OnSyncStarting(const ModelErrorHandler& error_handler,
-                      const StartCallback& callback) override;
+                      StartCallback callback) override;
   void DisableSync() override;
   bool IsTrackingMetadata() override;
   void ReportError(const ModelError& error) override;
@@ -82,6 +85,8 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
 
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;
+
+  bool HasLocalChangesForTest() const;
 
  private:
   friend class ModelTypeDebugInfo;
@@ -112,17 +117,24 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void OnInitialUpdateReceived(const sync_pb::ModelTypeState& type_state,
                                const UpdateResponseDataList& updates);
 
-  // ModelTypeSyncBridge::GetData() callback for initial pending commit data.
-  void OnInitialPendingDataLoaded(std::unique_ptr<DataBatch> data_batch);
-
-  // ModelTypeSyncBridge::GetData() callback for re-encryption commit data.
-  void OnDataLoadedForReEncryption(std::unique_ptr<DataBatch> data_batch);
+  // ModelTypeSyncBridge::GetData() callback for pending loading data upon
+  // GetLocalChanges call.
+  void OnPendingDataLoaded(size_t max_entries,
+                           const GetLocalChangesCallback& callback,
+                           std::unique_ptr<DataBatch> data_batch);
 
   // Caches EntityData from the |data_batch| in the entity trackers.
   void ConsumeDataBatch(std::unique_ptr<DataBatch> data_batch);
 
+  // Prepares Commit requests and passes them to the GetLocalChanges callback.
+  void CommitLocalChanges(size_t max_entries,
+                          const GetLocalChangesCallback& callback);
+
   // Nudges worker if there are any local entities to be committed.
   void NudgeForCommitIfNeeded();
+
+  // Returns true if there are any local entities to be committed.
+  bool HasLocalChanges() const;
 
   // Computes the client tag hash for the given client |tag|.
   std::string GetHashForTag(const std::string& tag);
@@ -181,6 +193,13 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void RemoveEntity(ProcessorEntityTracker* entity,
                     MetadataChangeList* metadata_change_list);
 
+  // Resets the internal state of the processor to the one right after calling
+  // the ctor (with the exception of |bridge_| which remains intact).
+  // TODO(jkrcal): Replace the helper function by grouping the state naturally
+  // into a few structs / nested classes so that the state can be reset by
+  // resetting these structs.
+  void ResetState();
+
   /////////////////////
   // Processor state //
   /////////////////////
@@ -193,7 +212,7 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
 
   // ModelTypeSyncBridge linked to this processor. The bridge owns this
   // processor instance so the pointer should never become invalid.
-  ModelTypeSyncBridge* const bridge_;
+  ModelTypeSyncBridge* bridge_;
 
   // Function to capture and upload a stack trace when an error occurs.
   const base::RepeatingClosure dump_stack_;
@@ -205,13 +224,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   // The first model error that occurred, if any. Stored to track model state
   // and so it can be passed to sync if it happened prior to sync being ready.
   base::Optional<ModelError> model_error_;
-
-  // Whether we're waiting for the model to provide metadata.
-  bool waiting_for_metadata_ = true;
-
-  // Whether we're waiting for the model to provide initial commit data. Starts
-  // as false but will be set to true if we detect it's necessary to load data.
-  bool waiting_for_pending_data_ = false;
 
   ////////////////
   // Sync state //
@@ -255,7 +267,7 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   // model types. For this processor, being commit only means that on commit
   // confirmation, we should delete local data, because the model side never
   // intends to read it. This includes both data and metadata.
-  bool commit_only_;
+  const bool commit_only_;
 
   // The version which processor already ran garbage collection against on.
   // Cache this value is for saving resource purpose(ex. cpu, battery), so

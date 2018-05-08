@@ -8,7 +8,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
@@ -510,11 +509,7 @@ class RequestSocketCallback : public TestCompletionCallbackBase {
       // run through the MessageLoop once to get it completely released.
       handle_->socket()->Disconnect();
       handle_->Reset();
-      {
-        base::MessageLoop::ScopedNestableTaskAllower allow(
-            base::MessageLoop::current());
-        base::RunLoop().RunUntilIdle();
-      }
+      base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
       within_callback_ = true;
       scoped_refptr<TransportSocketParams> dest(new TransportSocketParams(
           HostPortPair("www.google.com", 80), false, OnHostResolutionCallback(),

@@ -69,7 +69,6 @@ void ResourceRequestInfo::AllocateForTesting(
       is_main_frame,                       // is_main_frame
       resource_type,                       // resource_type
       ui::PAGE_TRANSITION_LINK,            // transition_type
-      false,                               // should_replace_current_entry
       false,                               // is_download
       false,                               // is_stream
       allow_download,                      // allow_download
@@ -138,7 +137,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     bool is_main_frame,
     ResourceType resource_type,
     ui::PageTransition transition_type,
-    bool should_replace_current_entry,
     bool is_download,
     bool is_stream,
     bool allow_download,
@@ -164,7 +162,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       request_id_(request_id),
       render_frame_id_(render_frame_id),
       is_main_frame_(is_main_frame),
-      should_replace_current_entry_(should_replace_current_entry),
       is_download_(is_download),
       is_stream_(is_stream),
       allow_download_(allow_download),
@@ -345,26 +342,6 @@ int ResourceRequestInfoImpl::GetRequestID() const {
 
 GlobalRoutingID ResourceRequestInfoImpl::GetGlobalRoutingID() const {
   return GlobalRoutingID(GetChildID(), route_id_);
-}
-
-void ResourceRequestInfoImpl::UpdateForTransfer(
-    int route_id,
-    int render_frame_id,
-    int request_id,
-    ResourceRequesterInfo* requester_info,
-    network::mojom::URLLoaderRequest url_loader_request,
-    network::mojom::URLLoaderClientPtr url_loader_client) {
-  route_id_ = route_id;
-  render_frame_id_ = render_frame_id;
-  plugin_child_id_ = ChildProcessHost::kInvalidUniqueID;
-  request_id_ = request_id;
-  requester_info_ = requester_info;
-
-  // on_transfer_ is non-null only when MojoAsyncResourceHandler is used.
-  if (on_transfer_) {
-    on_transfer_.Run(std::move(url_loader_request),
-                     std::move(url_loader_client));
-  }
 }
 
 void ResourceRequestInfoImpl::ResetBody() {

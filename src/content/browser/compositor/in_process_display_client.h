@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_IN_PROCESS_DISPLAY_CLIENT_H_
 #define CONTENT_BROWSER_COMPOSITOR_IN_PROCESS_DISPLAY_CLIENT_H_
 
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/privileged/interfaces/compositing/display_private.mojom.h"
@@ -26,6 +27,8 @@ class InProcessDisplayClient : public viz::mojom::DisplayClient {
   // viz::mojom::DisplayClient implementation:
   void OnDisplayReceivedCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
+  void DidSwapAfterSnapshotRequestReceived(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   mojo::Binding<viz::mojom::DisplayClient> binding_;
 #if defined(OS_MACOSX)

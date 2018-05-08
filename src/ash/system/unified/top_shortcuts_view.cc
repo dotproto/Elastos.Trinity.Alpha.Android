@@ -35,7 +35,7 @@ views::View* CreateUserAvatarView() {
         gfx::CreateVectorIcon(kSystemMenuGuestIcon, kMenuIconColor);
     image_view->SetImage(icon, icon.size());
   } else {
-    image_view->SetImage(user_session->user_info->avatar,
+    image_view->SetImage(user_session->user_info->avatar->image,
                          gfx::Size(kTrayItemSize, kTrayItemSize));
   }
 
@@ -95,6 +95,10 @@ TopShortcutsView::TopShortcutsView(UnifiedSystemTrayController* controller)
 }
 
 TopShortcutsView::~TopShortcutsView() = default;
+
+void TopShortcutsView::SetExpanded(bool expanded) {
+  collapse_button_->UpdateIcon(expanded);
+}
 
 void TopShortcutsView::ButtonPressed(views::Button* sender,
                                      const ui::Event& event) {

@@ -117,9 +117,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {SUPERVISED_USER_SETTINGS, "MANAGED_USER_SETTING", "managed_user_settings",
      "Managed User Settings",
      sync_pb::EntitySpecifics::kManagedUserSettingFieldNumber, 26},
-    {SUPERVISED_USERS, "MANAGED_USER", "managed_users", "Managed Users",
-     sync_pb::EntitySpecifics::kManagedUserFieldNumber, 27},
-    {SUPERVISED_USER_SHARED_SETTINGS, "MANAGED_USER_SHARED_SETTING",
+    {DEPRECATED_SUPERVISED_USERS, "MANAGED_USER", "managed_users",
+     "Managed Users", sync_pb::EntitySpecifics::kManagedUserFieldNumber, 27},
+    {DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, "MANAGED_USER_SHARED_SETTING",
      "managed_user_shared_settings", "Managed User Shared Settings",
      sync_pb::EntitySpecifics::kManagedUserSharedSettingFieldNumber, 30},
     {ARTICLES, "ARTICLE", "articles", "Articles",
@@ -231,10 +231,10 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case SUPERVISED_USER_SETTINGS:
       specifics->mutable_managed_user_setting();
       break;
-    case SUPERVISED_USERS:
+    case DEPRECATED_SUPERVISED_USERS:
       specifics->mutable_managed_user();
       break;
-    case SUPERVISED_USER_SHARED_SETTINGS:
+    case DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS:
       specifics->mutable_managed_user_shared_setting();
       break;
     case ARTICLES:
@@ -384,9 +384,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_managed_user_setting())
     return SUPERVISED_USER_SETTINGS;
   if (specifics.has_managed_user())
-    return SUPERVISED_USERS;
+    return DEPRECATED_SUPERVISED_USERS;
   if (specifics.has_managed_user_shared_setting())
-    return SUPERVISED_USER_SHARED_SETTINGS;
+    return DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS;
   if (specifics.has_article())
     return ARTICLES;
   if (specifics.has_app_list())
@@ -446,10 +446,10 @@ ModelTypeSet EncryptableUserTypes() {
   // Supervised user settings are not encrypted since they are set server-side.
   encryptable_user_types.Remove(SUPERVISED_USER_SETTINGS);
   // Supervised users are not encrypted since they are managed server-side.
-  encryptable_user_types.Remove(SUPERVISED_USERS);
+  encryptable_user_types.Remove(DEPRECATED_SUPERVISED_USERS);
   // Supervised user shared settings are not encrypted since they are managed
   // server-side and shared between manager and supervised user.
-  encryptable_user_types.Remove(SUPERVISED_USER_SHARED_SETTINGS);
+  encryptable_user_types.Remove(DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS);
   // Supervised user whitelists are not encrypted since they are managed
   // server-side.
   encryptable_user_types.Remove(SUPERVISED_USER_WHITELISTS);
@@ -494,23 +494,6 @@ std::unique_ptr<base::Value> ModelTypeToValue(ModelType model_type) {
   }
   NOTREACHED();
   return std::make_unique<base::Value>(std::string());
-}
-
-ModelType ModelTypeFromValue(const base::Value& value) {
-  if (value.is_string()) {
-    std::string result;
-    bool success = value.GetAsString(&result);
-    DCHECK(success);
-    return ModelTypeFromString(result);
-  } else if (value.is_int()) {
-    int result = 0;
-    bool success = value.GetAsInteger(&result);
-    DCHECK(success);
-    return ModelTypeFromInt(result);
-  } else {
-    NOTREACHED() << "Unsupported value type: " << value.type();
-    return UNSPECIFIED;
-  }
 }
 
 ModelType ModelTypeFromString(const std::string& model_type_string) {
@@ -571,15 +554,6 @@ std::unique_ptr<base::ListValue> ModelTypeSetToValue(ModelTypeSet model_types) {
     value->AppendString(ModelTypeToString(it.Get()));
   }
   return value;
-}
-
-ModelTypeSet ModelTypeSetFromValue(const base::ListValue& value) {
-  ModelTypeSet result;
-  for (base::ListValue::const_iterator i = value.begin(); i != value.end();
-       ++i) {
-    result.Put(ModelTypeFromValue(*i));
-  }
-  return result;
 }
 
 // TODO(zea): remove all hardcoded tags in model associators and have them use

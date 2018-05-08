@@ -5,7 +5,6 @@
 #include "services/video_capture/virtual_device_mojo_adapter.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video/scoped_buffer_pool_reservation.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
@@ -54,14 +53,12 @@ int VirtualDeviceMojoAdapter::max_buffer_pool_buffer_count() {
 void VirtualDeviceMojoAdapter::RequestFrameBuffer(
     const gfx::Size& dimension,
     media::VideoPixelFormat pixel_format,
-    media::VideoPixelStorage pixel_storage,
     RequestFrameBufferCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   int buffer_id_to_drop = media::VideoCaptureBufferPool::kInvalidId;
   const int buffer_id = buffer_pool_->ReserveForProducer(
-      dimension, pixel_format, pixel_storage, 0 /* frame_feedback_id */,
-      &buffer_id_to_drop);
+      dimension, pixel_format, 0 /* frame_feedback_id */, &buffer_id_to_drop);
 
   // Remove dropped buffer if there is one.
   if (buffer_id_to_drop != media::VideoCaptureBufferPool::kInvalidId) {
@@ -84,9 +81,12 @@ void VirtualDeviceMojoAdapter::RequestFrameBuffer(
 
   if (!base::ContainsValue(known_buffer_ids_, buffer_id)) {
     if (receiver_.is_bound()) {
-      receiver_->OnNewBufferHandle(
-          buffer_id, buffer_pool_->GetHandleForInterProcessTransit(
-                         buffer_id, true /* read_only */));
+      media::mojom::VideoBufferHandlePtr buffer_handle =
+          media::mojom::VideoBufferHandle::New();
+      buffer_handle->set_shared_buffer_handle(
+          buffer_pool_->GetHandleForInterProcessTransit(buffer_id,
+                                                        true /* read_only */));
+      receiver_->OnNewBuffer(buffer_id, std::move(buffer_handle));
     }
     known_buffer_ids_.push_back(buffer_id);
 
@@ -145,9 +145,12 @@ void VirtualDeviceMojoAdapter::Start(
 
   // Notify receiver of known buffers */
   for (auto buffer_id : known_buffer_ids_) {
-    receiver_->OnNewBufferHandle(buffer_id,
-                                 buffer_pool_->GetHandleForInterProcessTransit(
-                                     buffer_id, true /* read_only */));
+    media::mojom::VideoBufferHandlePtr buffer_handle =
+        media::mojom::VideoBufferHandle::New();
+    buffer_handle->set_shared_buffer_handle(
+        buffer_pool_->GetHandleForInterProcessTransit(buffer_id,
+                                                      true /* read_only */));
+    receiver_->OnNewBuffer(buffer_id, std::move(buffer_handle));
   }
 }
 

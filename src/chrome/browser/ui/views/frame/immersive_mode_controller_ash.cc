@@ -282,10 +282,14 @@ void ImmersiveModeControllerAsh::OnImmersiveRevealEnded() {
     observer.OnImmersiveRevealEnded();
 }
 
+void ImmersiveModeControllerAsh::OnImmersiveFullscreenEntered() {}
+
 void ImmersiveModeControllerAsh::OnImmersiveFullscreenExited() {
   DestroyMashRevealWidget();
   browser_view_->top_container()->DestroyLayer();
   LayoutBrowserRootView();
+  for (Observer& observer : observers_)
+    observer.OnImmersiveFullscreenExited();
 }
 
 void ImmersiveModeControllerAsh::SetVisibleFraction(double visible_fraction) {

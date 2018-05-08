@@ -11,16 +11,16 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEventResult.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebImeTextSpan.h"
-#include "third_party/WebKit/public/web/WebInputMethodController.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebRange.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/platform/web_input_event_result.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_ime_text_span.h"
+#include "third_party/blink/public/web/web_input_method_controller.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_range.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/events/base_event_utils.h"
 #include "v8/include/v8.h"
@@ -367,9 +367,9 @@ std::vector<int> TextInputController::FirstRectForCharacterRange(
 void TextInputController::SetComposition(const std::string& text) {
   // Sends a keydown event with key code = 0xE5 to emulate input method
   // behavior.
-  blink::WebKeyboardEvent key_down(
-      blink::WebInputEvent::kRawKeyDown, blink::WebInputEvent::kNoModifiers,
-      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  blink::WebKeyboardEvent key_down(blink::WebInputEvent::kRawKeyDown,
+                                   blink::WebInputEvent::kNoModifiers,
+                                   ui::EventTimeForNow());
 
   key_down.windows_key_code = 0xE5;  // VKEY_PROCESSKEY
   view()->HandleInputEvent(blink::WebCoalescedInputEvent(key_down));
@@ -382,7 +382,7 @@ void TextInputController::SetComposition(const std::string& text) {
 
   std::vector<blink::WebImeTextSpan> ime_text_spans;
   ime_text_spans.push_back(blink::WebImeTextSpan(
-      blink::WebImeTextSpan::Type::kComposition, 0, textLength, SK_ColorBLACK,
+      blink::WebImeTextSpan::Type::kComposition, 0, textLength,
       ui::mojom::ImeTextSpanThickness::kThin, SK_ColorTRANSPARENT));
   if (auto* controller = GetInputMethodController()) {
     controller->SetComposition(

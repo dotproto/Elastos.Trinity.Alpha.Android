@@ -20,6 +20,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
+#include "base/test/gtest_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -211,7 +212,7 @@ TEST(ObserverListTest, BasicTest) {
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Self assignment.
-    it3 = it3;
+    it3 = *&it3;  // The *& defeats Clang's -Wself-assign warning.
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
   }
@@ -228,7 +229,7 @@ TEST(ObserverListTest, BasicTest) {
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Self assignment.
-    it3 = it3;
+    it3 = *&it3;  // The *& defeats Clang's -Wself-assign warning.
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
   }
@@ -255,7 +256,7 @@ TEST(ObserverListTest, BasicTest) {
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Self assignment.
-    it3 = it3;
+    it3 = *&it3;  // The *& defeats Clang's -Wself-assign warning.
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Iterator post increment.
@@ -278,7 +279,7 @@ TEST(ObserverListTest, BasicTest) {
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Self assignment.
-    it3 = it3;
+    it3 = *&it3;  // The *& defeats Clang's -Wself-assign warning.
     EXPECT_EQ(it3, it1);
     EXPECT_EQ(it3, it2);
     // Iterator post increment.
@@ -1244,18 +1245,14 @@ TEST(ObserverListTest, NonReentrantObserverList) {
   Adder a(1);
   non_reentrant_observer_list.AddObserver(&a);
 
-  ::testing::StrictMock<MockLogAssertHandler> handler;
-  EXPECT_CALL(handler, HandleLogAssert(_, _, _, _)).Times(1);
-  {
-    logging::ScopedLogAssertHandler scoped_handler_b(base::BindRepeating(
-        &MockLogAssertHandler::HandleLogAssert, base::Unretained(&handler)));
+  EXPECT_DCHECK_DEATH({
     for (const Foo& a : non_reentrant_observer_list) {
       for (const Foo& b : non_reentrant_observer_list) {
         std::ignore = a;
         std::ignore = b;
       }
     }
-  }
+  });
 }
 
 TEST(ObserverListTest, ReentrantObserverList) {

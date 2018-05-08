@@ -27,11 +27,14 @@ bool gDisableTriggeringForTesting = false;
 namespace banners {
 
 bool AppBannerManagerDesktop::IsEnabled() {
-  if (gDisableTriggeringForTesting)
-    return false;
-
   return base::FeatureList::IsEnabled(features::kAppBanners) ||
          IsExperimentalAppBannersEnabled();
+}
+
+// static
+AppBannerManager* AppBannerManager::FromWebContents(
+    content::WebContents* web_contents) {
+  return AppBannerManagerDesktop::FromWebContents(web_contents);
 }
 
 void AppBannerManagerDesktop::DisableTriggeringForTesting() {

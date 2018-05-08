@@ -207,11 +207,12 @@ error::Error RasterDecoderImpl::HandleBeginRasterCHROMIUM(
   GLuint sk_color = static_cast<GLuint>(c.sk_color);
   GLuint msaa_sample_count = static_cast<GLuint>(c.msaa_sample_count);
   GLboolean can_use_lcd_text = static_cast<GLboolean>(c.can_use_lcd_text);
-  GLboolean use_distance_field_text =
-      static_cast<GLboolean>(c.use_distance_field_text);
   GLint color_type = static_cast<GLint>(c.color_type);
+  GLuint color_space_transfer_cache_id =
+      static_cast<GLuint>(c.color_space_transfer_cache_id);
   DoBeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
-                        can_use_lcd_text, use_distance_field_text, color_type);
+                        can_use_lcd_text, color_type,
+                        color_space_transfer_cache_id);
   return error::kNoError;
 }
 
@@ -336,6 +337,43 @@ error::Error RasterDecoderImpl::HandleProduceTextureDirectImmediate(
     return error::kOutOfBounds;
   }
   DoProduceTextureDirect(texture, mailbox);
+  return error::kNoError;
+}
+
+error::Error RasterDecoderImpl::HandleCreateAndConsumeTextureINTERNALImmediate(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile raster::cmds::CreateAndConsumeTextureINTERNALImmediate& c =
+      *static_cast<const volatile raster::cmds::
+                       CreateAndConsumeTextureINTERNALImmediate*>(cmd_data);
+  GLuint texture_id = static_cast<GLuint>(c.texture_id);
+  bool use_buffer = static_cast<bool>(c.use_buffer);
+  gfx::BufferUsage buffer_usage = static_cast<gfx::BufferUsage>(c.buffer_usage);
+  viz::ResourceFormat format = static_cast<viz::ResourceFormat>(c.format);
+  uint32_t data_size;
+  if (!GLES2Util::ComputeDataSize<GLbyte, 16>(1, &data_size)) {
+    return error::kOutOfBounds;
+  }
+  if (data_size > immediate_data_size) {
+    return error::kOutOfBounds;
+  }
+  volatile const GLbyte* mailbox = GetImmediateDataAs<volatile const GLbyte*>(
+      c, data_size, immediate_data_size);
+  if (!validators_->gfx_buffer_usage.IsValid(buffer_usage)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCreateAndConsumeTextureINTERNAL",
+                                    buffer_usage, "buffer_usage");
+    return error::kNoError;
+  }
+  if (!validators_->viz_resource_format.IsValid(format)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCreateAndConsumeTextureINTERNAL", format,
+                                    "format");
+    return error::kNoError;
+  }
+  if (mailbox == NULL) {
+    return error::kOutOfBounds;
+  }
+  DoCreateAndConsumeTextureINTERNAL(texture_id, use_buffer, buffer_usage,
+                                    format, mailbox);
   return error::kNoError;
 }
 

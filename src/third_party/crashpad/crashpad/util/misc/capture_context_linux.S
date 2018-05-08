@@ -15,10 +15,17 @@
 // namespace crashpad {
 // void CaptureContext(ucontext_t* context);
 // }  // namespace crashpad
-#define CAPTURECONTEXT_SYMBOL _ZN8crashpad14CaptureContextEP8ucontext
+
+// The type name for a ucontext_t varies by libc implementation and version.
+// Bionic and glibc 2.25 typedef ucontext_t from struct ucontext. glibc 2.26+
+// typedef ucontext_t from struct ucontext_t. Alias the symbol names to maintain
+// compatibility with both possibilities.
+#define CAPTURECONTEXT_SYMBOL _ZN8crashpad14CaptureContextEP10ucontext_t
+#define CAPTURECONTEXT_SYMBOL2 _ZN8crashpad14CaptureContextEP8ucontext
 
   .text
   .globl CAPTURECONTEXT_SYMBOL
+  .globl CAPTURECONTEXT_SYMBOL2
 #if defined(__i386__) || defined(__x86_64__)
   .balign 16, 0x90
 #elif defined(__arm__) || defined(__aarch64__)
@@ -26,6 +33,7 @@
 #endif
 
 CAPTURECONTEXT_SYMBOL:
+CAPTURECONTEXT_SYMBOL2:
 
 #if defined(__i386__)
 
@@ -120,6 +128,8 @@ CAPTURECONTEXT_SYMBOL:
   movl %ecx, 0x5c(%eax)  // context->uc_mcontext.xss
 
   // TODO(jperaza): save floating-point registers.
+  xorl %ecx, %ecx
+  movl %ecx, 0x60(%eax)  // context->uc_mcontext.fpregs
 
   // Clean up by restoring clobbered registers, even those considered volatile
   // by the ABI, so that the captured context represents the state at this
@@ -216,13 +226,14 @@ CAPTURECONTEXT_SYMBOL:
   movq %r8, 0xd0(%rdi)  // context->uc_mcontext.oldmask
   movq %r8, 0xd8(%rdi)  // context->uc_mcontext.cr2
 
+  // TODO(jperaza): save floating-point registers.
+  movq %r8, 0xe0(%rdi)  // context->uc_mcontext.fpregs
+
   // Clean up by restoring clobbered registers, even those considered volatile
   // by the ABI, so that the captured context represents the state at this
   // function’s exit.
   movq 0x90(%rdi), %rax
   movq 0x28(%rdi), %r8
-
-  // TODO(jperaza): save floating-point registers.
 
   popfq
 

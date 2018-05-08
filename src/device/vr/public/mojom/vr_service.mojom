@@ -86,8 +86,15 @@ struct VRPose {
 struct VRDisplayCapabilities {
   bool hasPosition;
   bool hasExternalDisplay;
+
   // Indicates whether the display can actively show imagery on a headset.
   bool canPresent;
+
+  // If true, this is an AR display that can provide a background image along
+  // with each pose. Clients who want them should send a frame image request
+  // via getFrameData instead of getPose.
+  // TODO(https://crbug.com/836349): this may need to change.
+  bool can_provide_pass_through_images;
 };
 
 // Information about the optical properties for an eye in a VRDisplay.
@@ -113,6 +120,8 @@ struct VRDisplayInfo {
   // required for devices which have the canPresent capability.
   VREyeParameters? leftEye;
   VREyeParameters? rightEye;
+  float webvr_default_framebuffer_scale = 1.0;
+  float webxr_default_framebuffer_scale = 1.0;
 };
 
 // Options supplied by the Renderer when requesting presentation.
@@ -120,8 +129,15 @@ struct VRRequestPresentOptions {
   // If true, must use a render path that can preserve drawing buffer
   // contents across frames. If false, each frame is drawn independently.
   bool preserve_drawing_buffer;
+
   // If true, indicates that WebXR input poses should be reported on VSync.
   bool webxr_input;
+
+  // If true, Renderer has support for using shared buffer draw. Currently true
+  // for WebXR. Device-side prerequisite support is checked separately, this
+  // flag is an opt-in to ensure it's not used for WebVR 1.1 which lacks
+  // the required drawing buffer rebinding support.
+  bool shared_buffer_draw_supported;
 };
 
 // Frame transport method from the Renderer's point of view.
@@ -134,9 +150,9 @@ enum VRDisplayFrameTransportMethod {
   SUBMIT_AS_TEXTURE_HANDLE = 1,
   SUBMIT_AS_MAILBOX_HOLDER = 2,
 
-  // Not yet implemented: Renderer should draw directly into
-  // a texture mailbox provided for each frame in OnVSync.
-  // DRAW_INTO_TEXTURE_MAILBOX = 3,
+  // Renderer should draw directly into a texture mailbox
+  // provided for each frame in OnVSync.
+  DRAW_INTO_TEXTURE_MAILBOX = 3,
 };
 
 struct VRDisplayFrameTransportOptions {
@@ -148,6 +164,22 @@ struct VRDisplayFrameTransportOptions {
   bool wait_for_transfer_notification;
   bool wait_for_render_notification;
   bool wait_for_gpu_fence;
+};
+
+// The data needed for each frame for a magic window experience
+// that uses a background image / projection matrix instead of
+// just a VRPose - ex: non-exclusive AR needs a camera image and
+// to get a projection matrix directly from the backend rather than
+// FOV values to support features like focus.
+struct VRMagicWindowFrameData {
+  VRPose pose;
+  gpu.mojom.MailboxHolder buffer_holder;
+  gfx.mojom.Size buffer_size;
+  // TODO(https://crbug.com/838515): Is this delta since the last
+  // frame? OR an unspecified origin? Something else?
+  mojo_base.mojom.TimeDelta time_delta;
+  array<float, 16> projection_matrix;
+
 };
 
 enum VRDisplayEventReason {
@@ -216,16 +248,31 @@ interface VRDisplayHost {
   // a failure result but must be non-null for a success result.
   RequestPresent(VRSubmitFrameClient client,
                  VRPresentationProvider& request,
-                 VRRequestPresentOptions options) => (
+                 VRRequestPresentOptions options,
+                 bool triggered_by_displayactive) => (
                      bool success,
                      VRDisplayFrameTransportOptions? transport_options);
   ExitPresent();
 };
 
-// Provides the necessary functionality for a non-presenting WebVR page to draw
-// magic window content.
+// Provides the necessary functionality for a non-presenting WebXR session to
+// draw magic window content.
+// For AR displays (VRDisplayCapabilities.can_provide_pass_through_images
+// is true), clients can use GetFrameData to get images.
+// TODO(836478): rename VRMagicWindowProvider to NonExclusiveWindowProvider or
+// similar.
 interface VRMagicWindowProvider {
   GetPose() => (VRPose? pose);
+
+  // rotation is analogous to display::Display::Rotation and must be
+  // 0, 1, 2, or 3 representing increments of 90 degrees.
+  // Different devices can have different native orientations - 0
+  // is the native orientation, and then increments of 90 degrees
+  // from there.
+  // TODO(https://crbug.com/836948): use Rotation from display mojom.
+  // TODO(https://crbug.com/837944): frame_data should not be optional.
+  GetFrameData(gfx.mojom.Size frame_size, int16 display_rotation) =>
+      (VRMagicWindowFrameData? frame_data);
 };
 
 // Provides the necessary functionality for a presenting WebVR page to draw
@@ -239,10 +286,20 @@ interface VRPresentationProvider {
   // be reused after the frame arrives from the compositor. Negative IDs imply
   // no mapping.
   GetVSync() => (VRPose? pose, mojo_base.mojom.TimeDelta time, int16 frame_id,
-                 VSyncStatus status);
+                 VSyncStatus status, gpu.mojom.MailboxHolder? buffer_holder);
 
   UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
                     gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
+
+  // Call this if the animation loop exited without submitting a frame to
+  // ensure that every GetVSync has a matching Submit call. This happens for
+  // WebXR if there were no drawing operations to the opaque framebuffer, and
+  // for WebVR 1.1 if the application didn't call SubmitFrame. Usable with any
+  // VRDisplayFrameTransportMethod. This path does *not* call the
+  // SubmitFrameClient methods such as OnSubmitFrameTransferred. This is
+  // intended to help separate frames while presenting, it may or may not
+  // be called for the last animating frame when presentation ends.
+  SubmitFrameMissing(int16 frame_id, gpu.mojom.SyncToken sync_token);
 
   // VRDisplayFrameTransportMethod SUBMIT_AS_MAILBOX_HOLDER
   SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder,
@@ -252,6 +309,10 @@ interface VRPresentationProvider {
   // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
   // this is Windows only.
   SubmitFrameWithTextureHandle(int16 frameId, handle texture);
+
+  // VRDisplayFrameTransportMethod DRAW_INTO_TEXTURE_MAILBOX
+  SubmitFrameDrawnIntoTexture(int16 frameId, gpu.mojom.SyncToken sync_token,
+                              mojo_base.mojom.TimeDelta time_waited);
 };
 
 interface VRDisplayClient {

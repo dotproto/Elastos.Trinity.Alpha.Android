@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "components/safe_browsing/password_protection/password_protection_service.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
+#include "components/sessions/core/session_id.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "ui/base/ui_features.h"
 #include "url/origin.h"
@@ -88,6 +89,10 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   static bool ShouldShowChangePasswordSettingUI(Profile* profile);
 
+  // Called by ChromeWebUIControllerFactory class to determine if Chrome should
+  // show chrome://reset-password page.
+  static bool IsPasswordReuseProtectionConfigured(Profile* profile);
+
   void ShowModalWarning(content::WebContents* web_contents,
                         const std::string& verdict_token) override;
 
@@ -139,12 +144,36 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   bool IsURLWhitelistedForPasswordEntry(const GURL& url,
                                         RequestOutcome* reason) const override;
 
+  // Gets the type of sync account associated with current profile or
+  // |NOT_SIGNED_IN|.
+  LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
+  GetSyncAccountType() const override;
+
+  // Gets the detailed warning text that should show in the modal warning dialog
+  // and page info bubble.
+  base::string16 GetWarningDetailText();
+
+  // If password protection trigger is configured via enterprise policy, gets
+  // the name of the organization that owns the enterprise policy. Otherwise,
+  // returns an empty string.
+  std::string GetOrganizationName();
+
+  // Triggers "safeBrowsingPrivate.OnPolicySpecifiedPasswordReuseDetected"
+  // extension API for enterprise reporting.
+  // |is_phishing_url| indicates if the password reuse happened on a phishing
+  // page.
+  void OnPolicySpecifiedPasswordReuseDetected(const GURL& url,
+                                              bool is_phishing_url) override;
+
+  // Triggers "safeBrowsingPrivate.OnPolicySpecifiedPasswordChanged" API.
+  void OnPolicySpecifiedPasswordChanged() override;
+
  protected:
   // PasswordProtectionService overrides.
   // Obtains referrer chain of |event_url| and |event_tab_id| and add this
   // info into |frame|.
   void FillReferrerChain(const GURL& event_url,
-                         int event_tab_id,
+                         SessionID event_tab_id,
                          LoginReputationClientRequest::Frame* frame) override;
 
   bool IsExtendedReporting() override;
@@ -162,9 +191,6 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   void MaybeLogPasswordReuseDetectedEvent(
       content::WebContents* web_contents) override;
 
-  LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
-  GetSyncAccountType() const override;
-
   void MaybeLogPasswordReuseLookupEvent(
       content::WebContents* web_contents,
       PasswordProtectionService::RequestOutcome outcome,
@@ -181,7 +207,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
       const history::URLRows& deleted_rows) override;
 
   // Gets |account_info_| based on |profile_|.
-  AccountInfo GetAccountInfo() const;
+  virtual AccountInfo GetAccountInfo() const;
 
   void HandleUserActionOnModalWarning(
       content::WebContents* web_contents,
@@ -227,6 +253,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
  private:
   friend class MockChromePasswordProtectionService;
   friend class ChromePasswordProtectionServiceBrowserTest;
+  FRIEND_TEST_ALL_PREFIXES(
+      ChromePasswordProtectionServiceTest,
+      VerifyOnPolicySpecifiedPasswordReuseDetectedEventForPhishingReuse);
 
   // Gets prefs associated with |profile_|.
   PrefService* GetPrefs();
@@ -257,6 +286,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
       int64_t navigation_id,
       sync_pb::UserEventSpecifics::GaiaPasswordReuse::
           PasswordReuseDialogInteraction::InteractionResult interaction_result);
+
+  void OnModalWarningShown(content::WebContents* web_contents,
+                           const std::string& verdict_token);
 
   // Constructor used for tests only.
   ChromePasswordProtectionService(

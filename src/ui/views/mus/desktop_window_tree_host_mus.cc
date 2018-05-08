@@ -4,7 +4,6 @@
 
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
@@ -211,7 +210,7 @@ DesktopWindowTreeHostMus::DesktopWindowTreeHostMus(
   MusClient::Get()->AddObserver(this);
   MusClient::Get()->window_tree_client()->focus_synchronizer()->AddObserver(
       this);
-  desktop_native_widget_aura_->content_window()->AddObserver(this);
+  content_window()->AddObserver(this);
   // DesktopNativeWidgetAura registers the association between |content_window_|
   // and Widget, but code may also want to go from the root (window()) to the
   // Widget. This call enables that.
@@ -226,7 +225,7 @@ DesktopWindowTreeHostMus::~DesktopWindowTreeHostMus() {
   // the cursor-client needs to be unset on the root-window before
   // |cursor_manager_| is destroyed.
   aura::client::SetCursorClient(window(), nullptr);
-  desktop_native_widget_aura_->content_window()->RemoveObserver(this);
+  content_window()->RemoveObserver(this);
   MusClient::Get()->RemoveObserver(this);
   MusClient::Get()->window_tree_client()->focus_synchronizer()->RemoveObserver(
       this);
@@ -281,7 +280,8 @@ float DesktopWindowTreeHostMus::GetScaleFactor() const {
 }
 
 void DesktopWindowTreeHostMus::SetBoundsInDIP(const gfx::Rect& bounds_in_dip) {
-  SetBoundsInPixels(gfx::ConvertRectToPixel(GetScaleFactor(), bounds_in_dip));
+  SetBoundsInPixels(gfx::ConvertRectToPixel(GetScaleFactor(), bounds_in_dip),
+                    viz::LocalSurfaceId());
 }
 
 bool DesktopWindowTreeHostMus::ShouldSendClientAreaToServer() const {
@@ -293,8 +293,7 @@ bool DesktopWindowTreeHostMus::ShouldSendClientAreaToServer() const {
   return type == WIP::TYPE_WINDOW || type == WIP::TYPE_PANEL;
 }
 
-void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
-                                    const Widget::InitParams& params) {
+void DesktopWindowTreeHostMus::Init(const Widget::InitParams& params) {
   // |TYPE_WINDOW| and |TYPE_PANEL| are forced to transparent as otherwise the
   // window is opaque and the client decorations drawn by the window manager
   // would not be seen.
@@ -302,7 +301,7 @@ void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
       params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW ||
       params.type == Widget::InitParams::TYPE_WINDOW ||
       params.type == Widget::InitParams::TYPE_PANEL;
-  content_window->SetTransparent(transparent);
+  content_window()->SetTransparent(transparent);
   window()->SetTransparent(transparent);
 
   window()->SetProperty(aura::client::kShowStateKey, params.show_state);
@@ -325,18 +324,14 @@ void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
         params.parent->GetHost()->window(), window());
   }
 
-  if (!params.accept_events) {
+  if (!params.accept_events)
     window()->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
-  } else {
-    aura::WindowPortMus::Get(content_window)->SetCanAcceptDrops(true);
-  }
+  else
+    aura::WindowPortMus::Get(content_window())->SetCanAcceptDrops(true);
 }
 
 void DesktopWindowTreeHostMus::OnNativeWidgetCreated(
     const Widget::InitParams& params) {
-  window()->SetName(params.name);
-  desktop_native_widget_aura_->content_window()->SetName(
-      "DesktopNativeWidgetAura - content window");
   if (params.parent && params.parent->GetHost()) {
     parent_ = static_cast<DesktopWindowTreeHostMus*>(params.parent->GetHost());
     parent_->children_.insert(this);
@@ -396,8 +391,8 @@ void DesktopWindowTreeHostMus::Close() {
   // Close doesn't delete this immediately, as 'this' may still be on the stack
   // resulting in possible crashes when the stack unwindes.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&DesktopWindowTreeHostMus::CloseNow,
-                            close_widget_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&DesktopWindowTreeHostMus::CloseNow,
+                                close_widget_factory_.GetWeakPtr()));
 }
 
 void DesktopWindowTreeHostMus::CloseNow() {
@@ -495,10 +490,9 @@ void DesktopWindowTreeHostMus::CenterWindow(const gfx::Size& size) {
   gfx::Rect bounds_to_center_in = GetWorkAreaBoundsInScreen();
 
   // If there is a transient parent and it fits |size|, then center over it.
-  aura::Window* content_window = desktop_native_widget_aura_->content_window();
-  if (wm::GetTransientParent(content_window)) {
+  if (wm::GetTransientParent(content_window())) {
     gfx::Rect transient_parent_bounds =
-        wm::GetTransientParent(content_window)->GetBoundsInScreen();
+        wm::GetTransientParent(content_window())->GetBoundsInScreen();
     if (transient_parent_bounds.height() >= size.height() &&
         transient_parent_bounds.width() >= size.width()) {
       bounds_to_center_in = transient_parent_bounds;
@@ -792,7 +786,7 @@ void DesktopWindowTreeHostMus::OnActiveFocusClientChanged(
 void DesktopWindowTreeHostMus::OnWindowPropertyChanged(aura::Window* window,
                                                        const void* key,
                                                        intptr_t old) {
-  DCHECK_EQ(window, desktop_native_widget_aura_->content_window());
+  DCHECK_EQ(window, content_window());
   DCHECK(!window->GetRootWindow() || this->window() == window->GetRootWindow());
   if (!this->window())
     return;
@@ -831,7 +825,8 @@ void DesktopWindowTreeHostMus::HideImpl() {
 }
 
 void DesktopWindowTreeHostMus::SetBoundsInPixels(
-    const gfx::Rect& bounds_in_pixels) {
+    const gfx::Rect& bounds_in_pixels,
+    const viz::LocalSurfaceId& local_surface_id) {
   gfx::Rect final_bounds_in_pixels = bounds_in_pixels;
   if (GetBoundsInPixels().size() != bounds_in_pixels.size()) {
     gfx::Size size = bounds_in_pixels.size();
@@ -844,11 +839,16 @@ void DesktopWindowTreeHostMus::SetBoundsInPixels(
     final_bounds_in_pixels.set_size(size);
   }
   const gfx::Rect old_bounds_in_pixels = GetBoundsInPixels();
-  WindowTreeHostMus::SetBoundsInPixels(final_bounds_in_pixels);
+  WindowTreeHostMus::SetBoundsInPixels(final_bounds_in_pixels,
+                                       local_surface_id);
   if (old_bounds_in_pixels.size() != final_bounds_in_pixels.size()) {
     SendClientAreaToServer();
     SendHitTestMaskToServer();
   }
+}
+
+aura::Window* DesktopWindowTreeHostMus::content_window() {
+  return desktop_native_widget_aura_->content_window();
 }
 
 }  // namespace views

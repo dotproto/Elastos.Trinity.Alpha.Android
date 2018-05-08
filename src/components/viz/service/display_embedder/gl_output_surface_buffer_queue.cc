@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -19,7 +18,7 @@
 namespace viz {
 
 GLOutputSurfaceBufferQueue::GLOutputSurfaceBufferQueue(
-    scoped_refptr<InProcessContextProvider> context_provider,
+    scoped_refptr<VizProcessContextProvider> context_provider,
     gpu::SurfaceHandle surface_handle,
     SyntheticBeginFrameSource* synthetic_begin_frame_source,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,

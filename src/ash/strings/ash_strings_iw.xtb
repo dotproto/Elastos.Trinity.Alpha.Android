@@ -23,6 +23,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">מפעיל</translation>
 <translation id="1525508553941733066">סגור</translation>
+<translation id="1537254971476575106">מגדיל למסך מלא</translation>
 <translation id="15373452373711364">סמן עכבר גדול</translation>
 <translation id="1550523713251050646">לחץ לקבלת אפשרויות נוספות</translation>
 <translation id="1567387640189251553">חוברה מקלדת אחרת מאז שהזנת את הסיסמה בפעם האחרונה. ייתכן שהיא מנסה לתעד את ההקשות שלך.</translation>
@@ -31,6 +32,7 @@
 <translation id="1658406695958299976">מצטערים, עדיין אי אפשר לאמת את הסיסמה שלך. חשוב לדעת: אם שינית לאחרונה את הסיסמה, הסיסמה החדשה תיכנס לתוקף רק אחרי יציאה מהחשבון. צריך להשתמש כאן בסיסמה הישנה.</translation>
 <translation id="1677472565718498478">זמן נותר - <ph name="TIME" /></translation>
 <translation id="1698760176351776263">‏כתובת IPv6: <ph name="ADDRESS" /></translation>
+<translation id="170389796989115980">מנהל המכשיר עשוי לנטר את הפעילות שלך.</translation>
 <translation id="1734367976349034509">המכשיר הזה מנוהל על ידי ארגון</translation>
 <translation id="1746730358044914197">מנהל המערכת שלך מגדיר את שיטות הקלט.</translation>
 <translation id="1747827819627189109">המקלדת שמופיעה במסך מופעלת</translation>
@@ -45,16 +47,18 @@
 <translation id="1942830294380034169">לחצן גלישה</translation>
 <translation id="1951012854035635156">Assistant</translation>
 <translation id="1957803754585243749">‎0°‎</translation>
+<translation id="1957958912175573503">בחירת שפה</translation>
 <translation id="1969011864782743497">‏<ph name="DEVICE_NAME" />‏ (USB)</translation>
 <translation id="1995660704900986789">כיבוי</translation>
 <translation id="2012624427112548395">Ctrl+Search+H</translation>
 <translation id="2049639323467105390">מכשיר זה מנוהל על ידי <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">לאורך</translation>
 <translation id="2067602449040652523">בהירות מקלדת</translation>
+<translation id="2081529251031312395">ל-$1 עדיין תהיה אפשרות להיכנס מאוחר יותר.</translation>
 <translation id="2122028596993374965">הפסק להעביר את <ph name="TAB_NAME" /> אל <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">מטען בעל מתח נמוך</translation>
+<translation id="2135456203358955318">מגדיל במצב מעוגן</translation>
 <translation id="2144487987174258011">‏הפעל מחדש כדי לעדכן את Adobe Flash Player</translation>
-<translation id="2191905770366256395">המקלדת הניתנת לניתוק זקוקה לעדכון קריטי</translation>
 <translation id="2208323208084708176">מצב שולחן עבודה מאוחד</translation>
 <translation id="2220572644011485463">‏PIN או סיסמה</translation>
 <translation id="225680501294068881">סורק לאיתור מכשירים...</translation>
@@ -63,6 +67,7 @@
 <translation id="2292698582925480719">קנה המידה של התצוגה</translation>
 <translation id="2303600792989757991">החלף סקירת חלון</translation>
 <translation id="2338501278241028356">‏יש להפעיל את Bluetooth כדי לאתר מכשירים קרובים</translation>
+<translation id="2339073806695260576">הקשה על לחצן הסטיילוס במדף מאפשרת לכתוב הערות, לצלם את המסך ולהשתמש בסמן הלייזר או בזכוכית המגדלת.</translation>
 <translation id="2351266942280602854">שפה וקלט</translation>
 <translation id="2352467521400612932">הגדרות סטיילוס</translation>
 <translation id="2354174487190027830">מפעיל את <ph name="NAME" /></translation>
@@ -79,6 +84,8 @@
 <translation id="2653659639078652383">שלח</translation>
 <translation id="2675319268637823299">מנהל מערכת ביטל את ההרשאה של <ph name="USER_EMAIL" /> לכניסה עם מספר חשבונות.
     כדי להמשיך, כל המשתמשים חייבים לבצע יציאה.</translation>
+<translation id="2696763960464195425">כשיוצאים מהחשבון הפרטים מוסרים. <ph name="LEARN_MORE" /></translation>
+<translation id="2700493154570097719">בחירת מקלדת</translation>
 <translation id="2718395828230677721">תאורת לילה</translation>
 <translation id="2727977024730340865">מחובר למטען בעל מתח נמוך. ייתכן שטעינת הסוללה לא תהיה אמינה.</translation>
 <translation id="2761704814324807722">מגש מערכת, שעה <ph name="TIME" />‏, <ph name="BATTERY" /></translation>
@@ -239,14 +246,12 @@
 <translation id="6521655319214113338">קלט בכתב-יד</translation>
 <translation id="6528179044667508675">נא לא להפריע</translation>
 <translation id="6537270692134705506">צילום מסך</translation>
-<translation id="6580955892089546165">תכונה זו מאפשרת לך לגשת במהירות לכל משתמש המחובר לחשבון, בלי שתצטרך להזין סיסמה.
-
-השתמש בתכונה הזו רק עם חשבונות שאתה סומך עליהם.</translation>
 <translation id="6585808820553845416">הפעילות באתר תסתיים בעוד <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">‏חיפוש+Shift‏+K</translation>
 <translation id="6650933572246256093">‏מכשיר ה-Bluetooth ‏"<ph name="DEVICE_NAME" />" מבקש הרשאה לביצוע התאמה. הזן את מפתח הסיסמה הבא במכשיר הזה: <ph name="PASSKEY" /></translation>
 <translation id="6657585470893396449">סיסמה</translation>
 <translation id="6691659475504239918">Search+Shift+H</translation>
+<translation id="6696025732084565524">המקלדת הניתנת לניתוק זקוקה לעדכון קריטי</translation>
 <translation id="6700713906295497288">‏לחצן תפריט IME</translation>
 <translation id="6713285437468012787">‏מכשיר ה-Bluetooth‏ "<ph name="DEVICE_NAME" />" הותאם והוא זמין כעת לכל המשתמשים. אתה יכול להסיר את ההתאמה הזו ב'הגדרות'.</translation>
 <translation id="6715542151869432661">לא נמצאו מכשירים ניידים.</translation>
@@ -260,7 +265,6 @@
 <translation id="7029814467594812963">צא מההפעלה</translation>
 <translation id="7034339000180558234">מעביר את <ph name="TAB_NAME" /> אל <ph name="RECEIVER_NAME" /></translation>
 <translation id="7052914147756339792">הגדר טפט...</translation>
-<translation id="7054808953701320293">הבנתי, אל תציג הודעה זו שוב.</translation>
 <translation id="7066646422045619941">מנהל המערכת השבית את הרשת הזו.</translation>
 <translation id="7067196344162293536">סיבוב אוטומטי</translation>
 <translation id="7098389117866926363">‏מכשיר עם יציאת USB-C (יציאה שמאלית מאחור)</translation>
@@ -299,8 +303,6 @@
 <translation id="7994370417837006925">כניסה עם מספר חשבונות</translation>
 <translation id="8000066093800657092">אין רשת</translation>
 <translation id="8054466585765276473">מחשב זמן סוללה</translation>
-<translation id="8056430285089645882">הבנתי, אל תציג הודעה זו שוב.</translation>
-<translation id="8088137642766812908">שים לב, התכונה הזו עלולה לגרום נזק</translation>
 <translation id="8098591350844501178">הפסק להעביר את המסך אל <ph name="RECEIVER_NAME" /></translation>
 <translation id="8132793192354020517">מחובר ל<ph name="NAME" /></translation>
 <translation id="813913629614996137">מאתחל...</translation>
@@ -326,10 +328,8 @@
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">חובר מטען בעל מתח נמוך</translation>
 <translation id="8734991477317290293">ייתכן שהיא מנסה לתעד את ההקשות שלך.</translation>
+<translation id="8809737090443522491">יש להזין שם של אפליקציה או מסמך</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
-<translation id="8814715559352963456">העברת חלונות לשולחן עבודה אחר עלולה לגרום להתנהגות בלתי צפויה.
-
-ייתכן שהודעות, חלונות ותיבות דו-שיח יתפצלו בהמשך בין שולחנות עבודה.</translation>
 <translation id="8825534185036233643">אין תמיכה בשיקוף מסך עם יותר משני מסכים.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">לחצן 'הקודם'</translation>

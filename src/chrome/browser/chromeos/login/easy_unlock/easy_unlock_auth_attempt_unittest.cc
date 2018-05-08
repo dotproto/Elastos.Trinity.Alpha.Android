@@ -11,10 +11,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_app_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
-#include "components/proximity_auth/screenlock_bridge.h"
-#include "components/proximity_auth/switches.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace chromeos {
 namespace {
 
 // Fake user ids used in tests.
@@ -51,7 +52,7 @@ std::string GetSessionKey() {
 
 // Fake app manager used by the EasyUnlockAuthAttempt during tests.
 // It tracks screenlockPrivate.onAuthAttempted events.
-class FakeAppManager : public chromeos::EasyUnlockAppManager {
+class FakeAppManager : public EasyUnlockAppManager {
  public:
   FakeAppManager()
       : auth_attempt_count_(0u), auth_attempt_should_fail_(false) {}
@@ -68,13 +69,6 @@ class FakeAppManager : public chromeos::EasyUnlockAppManager {
   void DisableAppIfLoaded() override { ADD_FAILURE() << "Not reached"; }
 
   void ReloadApp() override { ADD_FAILURE() << "Not reached"; }
-
-  bool SendUserUpdatedEvent(const std::string& user_id,
-                            bool is_logged_in,
-                            bool data_ready) override {
-    ADD_FAILURE() << "Not reached";
-    return false;
-  }
 
   bool SendAuthAttemptEvent() override {
     ++auth_attempt_count_;
@@ -129,7 +123,8 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
   }
 
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
-  void ShowBannerMessage(const base::string16& message) override {
+  void ShowBannerMessage(const base::string16& message,
+                         bool is_warning) override {
     ADD_FAILURE() << "Should not be reached.";
   }
 
@@ -185,7 +180,7 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
       state_ = STATE_SIGNIN_CANCELED;
     } else {
       ASSERT_EQ(expected_secret_, secret);
-      ASSERT_EQ(chromeos::EasyUnlockKeyManager::GetKeyLabel(0u), key_label);
+      ASSERT_EQ(EasyUnlockKeyManager::GetKeyLabel(0u), key_label);
       state_ = STATE_SIGNIN_DONE;
     }
   }
@@ -206,10 +201,9 @@ class EasyUnlockAuthAttemptUnlockTest : public testing::Test {
 
   void SetUp() override {
     app_manager_.reset(new FakeAppManager());
-    auth_attempt_.reset(new chromeos::EasyUnlockAuthAttempt(
-        app_manager_.get(), test_account_id1_,
-        chromeos::EasyUnlockAuthAttempt::TYPE_UNLOCK,
-        chromeos::EasyUnlockAuthAttempt::FinalizedCallback()));
+    auth_attempt_.reset(
+        new EasyUnlockAuthAttempt(app_manager_.get(), test_account_id1_,
+                                  EasyUnlockAuthAttempt::TYPE_UNLOCK));
   }
 
   void TearDown() override {
@@ -225,7 +219,7 @@ class EasyUnlockAuthAttemptUnlockTest : public testing::Test {
         lock_handler_.get());
   }
 
-  std::unique_ptr<chromeos::EasyUnlockAuthAttempt> auth_attempt_;
+  std::unique_ptr<EasyUnlockAuthAttempt> auth_attempt_;
   std::unique_ptr<FakeAppManager> app_manager_;
   std::unique_ptr<TestLockHandler> lock_handler_;
 
@@ -349,10 +343,9 @@ class EasyUnlockAuthAttemptSigninTest : public testing::Test {
 
   void SetUp() override {
     app_manager_.reset(new FakeAppManager());
-    auth_attempt_.reset(new chromeos::EasyUnlockAuthAttempt(
-        app_manager_.get(), test_account_id1_,
-        chromeos::EasyUnlockAuthAttempt::TYPE_SIGNIN,
-        chromeos::EasyUnlockAuthAttempt::FinalizedCallback()));
+    auth_attempt_.reset(
+        new EasyUnlockAuthAttempt(app_manager_.get(), test_account_id1_,
+                                  EasyUnlockAuthAttempt::TYPE_SIGNIN));
   }
 
   void TearDown() override {
@@ -368,7 +361,7 @@ class EasyUnlockAuthAttemptSigninTest : public testing::Test {
         lock_handler_.get());
   }
 
-  std::unique_ptr<chromeos::EasyUnlockAuthAttempt> auth_attempt_;
+  std::unique_ptr<EasyUnlockAuthAttempt> auth_attempt_;
   std::unique_ptr<FakeAppManager> app_manager_;
   std::unique_ptr<TestLockHandler> lock_handler_;
 
@@ -533,3 +526,4 @@ TEST_F(EasyUnlockAuthAttemptSigninTest, FinalizeSigninCalledForWrongUser) {
 }
 
 }  // namespace
+}  // namespace chromeos

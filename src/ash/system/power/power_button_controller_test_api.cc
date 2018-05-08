@@ -20,16 +20,16 @@ PowerButtonControllerTestApi::PowerButtonControllerTestApi(
 
 PowerButtonControllerTestApi::~PowerButtonControllerTestApi() = default;
 
-bool PowerButtonControllerTestApi::ShutdownTimerIsRunning() const {
-  return controller_->shutdown_timer_.IsRunning();
+bool PowerButtonControllerTestApi::PreShutdownTimerIsRunning() const {
+  return controller_->pre_shutdown_timer_.IsRunning();
 }
 
-bool PowerButtonControllerTestApi::TriggerShutdownTimeout() {
-  if (!controller_->shutdown_timer_.IsRunning())
+bool PowerButtonControllerTestApi::TriggerPreShutdownTimeout() {
+  if (!controller_->pre_shutdown_timer_.IsRunning())
     return false;
 
-  base::Closure task = controller_->shutdown_timer_.user_task();
-  controller_->shutdown_timer_.Stop();
+  base::Closure task = controller_->pre_shutdown_timer_.user_task();
+  controller_->pre_shutdown_timer_.Stop();
   task.Run();
   return true;
 }
@@ -70,12 +70,7 @@ bool PowerButtonControllerTestApi::IsMenuOpened() const {
 }
 
 bool PowerButtonControllerTestApi::MenuHasSignOutItem() const {
-  return IsMenuOpened() &&
-         GetPowerButtonMenuView()->sign_out_item_for_testing();
-}
-
-bool PowerButtonControllerTestApi::ShouldTurnScreenOffForTap() const {
-  return controller_->turn_screen_off_for_tap_;
+  return IsMenuOpened() && GetPowerButtonMenuView()->sign_out_item_for_test();
 }
 
 PowerButtonScreenshotController*
@@ -88,7 +83,8 @@ void PowerButtonControllerTestApi::SetPowerButtonType(
   controller_->button_type_ = button_type;
 }
 
-void PowerButtonControllerTestApi::SetTickClock(base::TickClock* tick_clock) {
+void PowerButtonControllerTestApi::SetTickClock(
+    const base::TickClock* tick_clock) {
   DCHECK(tick_clock);
   controller_->tick_clock_ = tick_clock;
 
@@ -99,7 +95,7 @@ void PowerButtonControllerTestApi::SetTickClock(base::TickClock* tick_clock) {
 
 void PowerButtonControllerTestApi::SetTurnScreenOffForTap(
     bool turn_screen_off_for_tap) {
-  controller_->turn_screen_off_for_tap_ = turn_screen_off_for_tap;
+  controller_->default_turn_screen_off_for_tap_ = turn_screen_off_for_tap;
 }
 
 void PowerButtonControllerTestApi::SetShowMenuAnimationDone(

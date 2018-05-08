@@ -20,12 +20,13 @@
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/url_loader_throttle_provider.h"
+#include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "media/base/decode_capabilities.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
-#include "third_party/WebKit/public/mojom/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
-#include "third_party/WebKit/public/web/WebNavigationPolicy.h"
-#include "third_party/WebKit/public/web/WebNavigationType.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/web_content_settings_client.h"
+#include "third_party/blink/public/web/web_navigation_policy.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
 #include "ui/base/page_transition_types.h"
 #include "v8/include/v8.h"
 
@@ -47,7 +48,6 @@ class WebMIDIAccessor;
 class WebMIDIAccessorClient;
 class WebPlugin;
 class WebPrescientNetworking;
-class WebSocketHandshakeThrottle;
 class WebSpeechSynthesizer;
 class WebSpeechSynthesizerClient;
 class WebThemeEngine;
@@ -147,6 +147,13 @@ class CONTENT_EXPORT ContentRendererClient {
       std::string* error_html,
       base::string16* error_description) {}
 
+  // Returns as |error_description| a brief description of the error that
+  // ocurred. The out parameter may be not written to in certain cases (lack of
+  // information on the error code)
+  virtual void GetErrorDescription(const blink::WebURLRequest& failed_request,
+                                   const blink::WebURLError& error,
+                                   base::string16* error_description) {}
+
   // Allows the embedder to control when media resources are loaded. Embedders
   // can run |closure| immediately if they don't wish to defer media resource
   // loading.  If |has_played_media_before| is true, the render frame has
@@ -175,8 +182,15 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to provide a WebSocketHandshakeThrottle. If it returns
   // NULL then none will be used.
+  // TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
+  // default (https://crbug.com/825740).
   virtual std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle();
+
+  // Allows the embedder to provide a WebSocketHandshakeThrottleProvider. If it
+  // returns NULL then none will be used.
+  virtual std::unique_ptr<WebSocketHandshakeThrottleProvider>
+  CreateWebSocketHandshakeThrottleProvider();
 
   // Allows the embedder to override the WebSpeechSynthesizer used.
   // If it returns NULL the content layer will provide an engine.
@@ -199,7 +213,7 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if the renderer process should allow task suspension
   // after the process has been backgrounded. Defaults to false.
-  virtual bool AllowStoppingWhenProcessBackgrounded();
+  virtual bool AllowFreezingWhenProcessBackgrounded();
 
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
@@ -237,12 +251,18 @@ class CONTENT_EXPORT ContentRendererClient {
                           bool* send_referrer);
 
   // Notifies the embedder that the given frame is requesting the resource at
-  // |url|. If the function returns true, the url is changed to |new_url|.
-  virtual bool WillSendRequest(
-      blink::WebLocalFrame* frame,
-      ui::PageTransition transition_type,
-      const blink::WebURL& url,
-      GURL* new_url);
+  // |url|. If the function returns a valid |new_url|, the request must be
+  // updated to use it. The |attach_same_site_cookies| output parameter
+  // determines whether SameSite cookies should be attached to the request.
+  // TODO(nasko): When moved over to Network Service, find a way to perform
+  // this check on the browser side, so untrusted renderer processes cannot
+  // influence whether SameSite cookies are attached.
+  virtual void WillSendRequest(blink::WebLocalFrame* frame,
+                               ui::PageTransition transition_type,
+                               const blink::WebURL& url,
+                               const url::Origin* initiator_origin,
+                               GURL* new_url,
+                               bool* attach_same_site_cookies);
 
   // Returns true if the request is associated with a document that is in
   // ""prefetch only" mode, and will not be rendered.
@@ -300,11 +320,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // and can be external or internal.
   virtual bool ShouldReportDetailedMessageForSource(
       const base::string16& source) const;
-
-  // Returns true if we should gather stats during resource loads as if the
-  // cross-site document blocking policy were enabled. Does not actually block
-  // any pages.
-  virtual bool ShouldGatherSiteIsolationStats() const;
 
   // Creates a permission client for in-renderer worker.
   virtual std::unique_ptr<blink::WebContentSettingsClient>

@@ -10,6 +10,8 @@ import android.os.StrictMode;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
@@ -47,6 +49,9 @@ public class ChromePreferenceManager {
     private static final String CHROME_DEFAULT_BROWSER = "applink.chrome_default_browser";
     private static final String CHROME_MODERN_DESIGN_ENABLED_KEY = "chrome_modern_design_enabled";
 
+    private static final String HOME_PAGE_BUTTON_FORCE_ENABLED_KEY =
+            "home_page_button_force_enabled";
+
     private static final String CONTENT_SUGGESTIONS_SHOWN_KEY = "content_suggestions_shown";
 
     private static final String SETTINGS_PERSONALIZED_SIGNIN_PROMO_DISMISSED =
@@ -71,6 +76,9 @@ public class ChromePreferenceManager {
 
     private static final String COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY =
             "command_line_on_non_rooted_enabled";
+
+    private static final String VERIFIED_DIGITAL_ASSET_LINKS =
+            "verified_digital_asset_links";
 
     private static class LazyHolder {
         static final ChromePreferenceManager INSTANCE = new ChromePreferenceManager();
@@ -422,6 +430,22 @@ public class ChromePreferenceManager {
     }
 
     /**
+     * Set whether or not the home page button is force enabled.
+     * @param isEnabled If the home page button is force enabled.
+     */
+    public void setHomePageButtonForceEnabled(boolean isEnabled) {
+        writeBoolean(HOME_PAGE_BUTTON_FORCE_ENABLED_KEY, isEnabled);
+    }
+
+    /**
+     * Get whether or not the home page button is force enabled.
+     * @return True if the home page button is force enabled.
+     */
+    public boolean isHomePageButtonForceEnabled() {
+        return mSharedPreferences.getBoolean(HOME_PAGE_BUTTON_FORCE_ENABLED_KEY, false);
+    }
+
+    /**
      * Clean up unused Chrome Home preferences.
      */
     public void clearObsoleteChromeHomePrefs() {
@@ -491,6 +515,25 @@ public class ChromePreferenceManager {
      */
     public void setSoleEnabled(boolean isEnabled) {
         writeBoolean(SOLE_INTEGRATION_ENABLED_KEY, isEnabled);
+    }
+
+    /**
+     * Gets a set of Strings representing digital asset links that have been verified.
+     * Set by {@link #setVerifiedDigitalAssetLinks(Set)}.
+     */
+    public Set<String> getVerifiedDigitalAssetLinks() {
+        // From the official docs, modifying the result of a SharedPreferences.getStringSet can
+        // cause bad things to happen including exceptions or ruining the data.
+        return new HashSet<>(mSharedPreferences.getStringSet(VERIFIED_DIGITAL_ASSET_LINKS,
+                Collections.emptySet()));
+    }
+
+    /**
+     * Sets a set of digital asset links (represented a strings) that have been verified.
+     * Can be retrieved by {@link #getVerifiedDigitalAssetLinks()}.
+     */
+    public void setVerifiedDigitalAssetLinks(Set<String> links) {
+        mSharedPreferences.edit().putStringSet(VERIFIED_DIGITAL_ASSET_LINKS, links).apply();
     }
 
     /**

@@ -4,6 +4,8 @@
 
 #include "components/sync/model/fake_model_type_change_processor.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "components/sync/model/metadata_batch.h"
@@ -14,8 +16,7 @@ namespace syncer {
 
 // static
 std::unique_ptr<ModelTypeChangeProcessor> FakeModelTypeChangeProcessor::Create(
-    ModelType type,
-    ModelTypeSyncBridge* bridge) {
+    ModelType type) {
   return base::WrapUnique(new FakeModelTypeChangeProcessor());
 }
 
@@ -44,13 +45,14 @@ void FakeModelTypeChangeProcessor::UntrackEntity(
     const EntityData& entity_data) {}
 
 void FakeModelTypeChangeProcessor::ModelReadyToSync(
+    ModelTypeSyncBridge* bridge,
     std::unique_ptr<MetadataBatch> batch) {}
 
 void FakeModelTypeChangeProcessor::OnSyncStarting(
     const ModelErrorHandler& error_handler,
-    const StartCallback& callback) {
+    StartCallback callback) {
   if (!callback.is_null()) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
   }
 }
 

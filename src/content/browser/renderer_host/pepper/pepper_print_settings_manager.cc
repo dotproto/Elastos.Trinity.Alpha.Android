@@ -8,7 +8,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "ppapi/c/pp_errors.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "printing/printing_context.h"  // nogncheck
@@ -86,6 +86,7 @@ PepperPrintSettingsManager::Result ComputeDefaultPrintSettings() {
   settings.paper_size =
       PrintSizeToPPPrintSize(page_setup.physical_size(), device_units_per_inch);
   settings.dpi = print_settings.dpi();
+  settings.num_pages_per_sheet = print_settings.num_pages_per_sheet();
 
   // The remainder of the attributes are hard-coded to the defaults as set
   // elsewhere.

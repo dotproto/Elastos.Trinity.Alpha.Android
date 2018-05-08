@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/connection_observer.h"
 #include "components/cryptauth/wire_message.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace cryptauth {
 
@@ -48,10 +48,6 @@ void Connection::AddObserver(ConnectionObserver* observer) {
 
 void Connection::RemoveObserver(ConnectionObserver* observer) {
   observers_.RemoveObserver(observer);
-}
-
-std::string Connection::GetDeviceAddress() {
-  return remote_device_.bluetooth_address;
 }
 
 void Connection::SetStatus(Status status) {

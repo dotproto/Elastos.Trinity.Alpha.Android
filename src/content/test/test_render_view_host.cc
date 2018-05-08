@@ -96,10 +96,6 @@ TestRenderWidgetHostView::~TestRenderWidgetHostView() {
     manager->InvalidateFrameSinkId(frame_sink_id_);
 }
 
-gfx::Vector2dF TestRenderWidgetHostView::GetLastScrollOffset() const {
-  return gfx::Vector2dF();
-}
-
 gfx::NativeView TestRenderWidgetHostView::GetNativeView() const {
 #if defined(USE_AURA)
   return window_.get();
@@ -190,6 +186,11 @@ void TestRenderWidgetHostView::SubmitCompositorFrame(
   uint32_t frame_token = frame.metadata.frame_token;
   if (frame_token)
     OnFrameTokenChanged(frame_token);
+}
+
+void TestRenderWidgetHostView::TakeFallbackContentFrom(
+    RenderWidgetHostView* view) {
+  SetBackgroundColor(view->background_color());
 }
 
 bool TestRenderWidgetHostView::LockMouse() {

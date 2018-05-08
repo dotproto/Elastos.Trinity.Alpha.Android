@@ -411,7 +411,7 @@ NET_ERROR(NO_BUFFER_SPACE, -176)
 
 // There were no common signature algorithms between our client certificate
 // private key and the server's preferences.
-NET_ERROR(SSL_CLIENT_AUTH_NO_COMMON_ALGORITHMS, -1478)
+NET_ERROR(SSL_CLIENT_AUTH_NO_COMMON_ALGORITHMS, -177)
 
 // Certificate error codes
 //
@@ -741,6 +741,12 @@ NET_ERROR(SPDY_PUSHED_STREAM_NOT_AVAILABLE, -373)
 // A pushed stream was claimed and later reset by the server. When this happens,
 // the request should be retried.
 NET_ERROR(SPDY_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER, -374)
+
+// An HTTP transaction was retried too many times due for authentication or
+// invalid certificates. This may be due to a bug in the net stack that would
+// otherwise infinite loop, or if the server or proxy continually requests fresh
+// credentials or presents a fresh invalid certificate.
+NET_ERROR(TOO_MANY_RETRIES, -375)
 
 // The cache does not have the requested entry.
 NET_ERROR(CACHE_MISS, -400)

@@ -25,7 +25,7 @@ BlobDataItem::DataHandle::~DataHandle() = default;
 scoped_refptr<BlobDataItem> BlobDataItem::CreateBytes(
     base::span<const char> bytes) {
   auto item =
-      base::WrapRefCounted(new BlobDataItem(Type::kBytes, 0, bytes.length()));
+      base::WrapRefCounted(new BlobDataItem(Type::kBytes, 0, bytes.size()));
   item->bytes_.assign(bytes.begin(), bytes.end());
   return item;
 }
@@ -134,7 +134,7 @@ void BlobDataItem::AllocateBytes() {
 
 void BlobDataItem::PopulateBytes(base::span<const char> data) {
   DCHECK_EQ(type_, Type::kBytesDescription);
-  DCHECK_EQ(length_, data.length());
+  DCHECK_EQ(length_, data.size());
   type_ = Type::kBytes;
   bytes_.assign(data.begin(), data.end());
 }
@@ -165,16 +165,6 @@ void BlobDataItem::GrowFile(uint64_t new_length) {
   DCHECK_EQ(type_, Type::kFile);
   DCHECK_GE(new_length, length_);
   length_ = new_length;
-}
-
-// static
-void BlobDataItem::SetFileModificationTimes(
-    std::vector<scoped_refptr<BlobDataItem>> items,
-    std::vector<base::Time> times) {
-  DCHECK_EQ(items.size(), times.size());
-  for (size_t i = 0; i < items.size(); ++i) {
-    items[i]->expected_modification_time_ = times[i];
-  }
 }
 
 void PrintTo(const BlobDataItem& x, ::std::ostream* os) {

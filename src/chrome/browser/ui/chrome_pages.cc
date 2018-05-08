@@ -20,6 +20,7 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
@@ -36,7 +38,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
-#include "components/signin/core/browser/signin_header_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/common/constants.h"
@@ -69,17 +70,16 @@ const char kHashMark[] = "#";
 void OpenBookmarkManagerForNode(Browser* browser, int64_t node_id) {
   GURL url = GURL(kChromeUIBookmarksURL)
                  .Resolve(base::StringPrintf(
-                     MdBookmarksUI::IsEnabled() ? "/?id=%s" : "/#%s",
-                     base::Int64ToString(node_id).c_str()));
+                     "/?id=%s", base::Int64ToString(node_id).c_str()));
   NavigateParams params(GetSingletonTabNavigateParams(browser, url));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 void NavigateToSingletonTab(Browser* browser, const GURL& url) {
   NavigateParams params(GetSingletonTabNavigateParams(browser, url));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 // Shows either the help app or the appropriate help page for |source|. If
@@ -202,7 +202,7 @@ void ShowBookmarkManager(Browser* browser) {
   NavigateParams params(
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIBookmarksURL)));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 void ShowBookmarkManagerForNode(Browser* browser, int64_t node_id) {
@@ -215,7 +215,7 @@ void ShowHistory(Browser* browser) {
   NavigateParams params(
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIHistoryURL)));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 void ShowDownloads(Browser* browser) {
@@ -241,7 +241,7 @@ void ShowExtensions(Browser* browser,
     replacements.SetQueryStr(query);
     params.url = params.url.ReplaceComponents(replacements);
   }
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 void ShowConflicts(Browser* browser) {
@@ -327,7 +327,7 @@ void ShowSettingsSubPageInTabbedBrowser(Browser* browser,
   GURL gurl = GetSettingsUrl(sub_page);
   NavigateParams params(GetSingletonTabNavigateParams(browser, gurl));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 }
 
 void ShowContentSettingsExceptions(Browser* browser,
@@ -384,7 +384,7 @@ void ShowAboutChrome(Browser* browser) {
   NavigateParams params(
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIHelpURL)));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
 #endif
 }
 
@@ -409,32 +409,40 @@ void ShowBrowserSignin(Browser* browser,
   browser = displayer->browser();
 
 #if defined(OS_CHROMEOS)
-  // ChromeOS doesn't have the avatar bubble.
-  const bool can_show_avatar_bubble = false;
+  // ChromeOS always loads the chrome://chrome-signin in a tab.
+  const bool show_full_tab_chrome_signin_page = true;
 #else
-  // The sign-in modal dialog is presented as a tab-modal dialog (which is
-  // automatically dismissed when the page navigates). Displaying the dialog on
-  // a new tab that loads any page will lead to it being dismissed as soon as
-  // the new tab is loaded. So the sign-in dialog must only be presented on top
-  // of an existing tab.
+  // When Desktop Identity Consistency (aka DICE) is not enabled, Chrome uses
+  // a modal sign-in dialog for signing in. This sign-in modal dialog is
+  // presented as a tab-modal dialog (which is automatically dismissed when
+  // the page navigates). Displaying the dialog on a new tab that loads any
+  // page will lead to it being dismissed as soon as the new tab is loaded.
+  // So the sign-in dialog must only be presented on top of an existing tab.
   //
   // If ScopedTabbedBrowserDisplayer had to create a (non-incognito) Browser*,
   // it won't have any tabs yet. Fallback to the full-tab sign-in flow in this
   // case.
-  const bool can_show_avatar_bubble = !browser->tab_strip_model()->empty();
+  const bool show_full_tab_chrome_signin_page =
+      !signin::DiceMethodGreaterOrEqual(
+          AccountConsistencyModeManager::GetMethodForProfile(
+              browser->profile()),
+          signin::AccountConsistencyMethod::kDicePrepareMigration) &&
+      browser->tab_strip_model()->empty();
 #endif  // defined(OS_CHROMEOS)
-
-  if (can_show_avatar_bubble) {
-    browser->window()->ShowAvatarBubbleFromAvatarButton(
-        BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-        signin::ManageAccountsParams(), access_point, false);
-  } else {
+  if (show_full_tab_chrome_signin_page) {
     NavigateToSingletonTab(
         browser,
         signin::GetPromoURLForTab(
             access_point, signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT,
             false));
     DCHECK_GT(browser->tab_strip_model()->count(), 0);
+  } else {
+#if defined(OS_CHROMEOS)
+    NOTREACHED();
+#else
+    browser->signin_view_controller()->ShowSignin(
+        profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN, browser, access_point);
+#endif
   }
 }
 

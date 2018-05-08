@@ -59,7 +59,7 @@ using content::OpenURLParams;
 using content::WebContents;
 
 // If non-null there is a drag underway.
-static TabDragController* instance_ = NULL;
+static TabDragController* g_tab_drag_controller = NULL;
 
 namespace {
 
@@ -219,12 +219,12 @@ TabDragController::TabDragController()
       attach_index_(-1),
       window_finder_(std::make_unique<WindowFinder>()),
       weak_factory_(this) {
-  instance_ = this;
+  g_tab_drag_controller = this;
 }
 
 TabDragController::~TabDragController() {
-  if (instance_ == this)
-    instance_ = NULL;
+  if (g_tab_drag_controller == this)
+    g_tab_drag_controller = NULL;
 
   if (move_loop_widget_) {
     if (added_observer_to_move_loop_widget_)
@@ -308,13 +308,13 @@ void TabDragController::Init(TabStrip* source_tabstrip,
 
 // static
 bool TabDragController::IsAttachedTo(const TabStrip* tab_strip) {
-  return (instance_ && instance_->active() &&
-          instance_->attached_tabstrip() == tab_strip);
+  return (g_tab_drag_controller && g_tab_drag_controller->active() &&
+          g_tab_drag_controller->attached_tabstrip() == tab_strip);
 }
 
 // static
 bool TabDragController::IsActive() {
-  return instance_ && instance_->active();
+  return g_tab_drag_controller && g_tab_drag_controller->active();
 }
 
 void TabDragController::SetMoveBehavior(MoveBehavior behavior) {
@@ -914,8 +914,9 @@ void TabDragController::Attach(TabStrip* attached_tabstrip,
       }
       if (drag_data_[i].pinned)
         add_types |= TabStripModel::ADD_PINNED;
-      GetModel(attached_tabstrip_)->InsertWebContentsAt(
-          index + i, drag_data_[i].contents, add_types);
+      GetModel(attached_tabstrip_)
+          ->InsertWebContentsAt(
+              index + i, base::WrapUnique(drag_data_[i].contents), add_types);
 
       // If a sad tab is showing, the SadTabView needs to be updated.
       SadTabHelper* sad_tab_helper =
@@ -930,9 +931,11 @@ void TabDragController::Attach(TabStrip* attached_tabstrip,
   for (size_t i = 0; i < drag_data_.size(); ++i)
     drag_data_[i].attached_tab = tabs[i];
 
-  attached_tabstrip_->StartedDraggingTabs(tabs);
-
   ResetSelection(GetModel(attached_tabstrip_));
+
+  // This should be called after ResetSelection() in order to generate
+  // bounds correctly. http://crbug.com/836004
+  attached_tabstrip_->StartedDraggingTabs(tabs);
 
   // The size of the dragged tab may have changed. Adjust the x offset so that
   // ratio of mouse_offset_ to original width is maintained.
@@ -980,7 +983,10 @@ void TabDragController::Detach(ReleaseCapture release_capture) {
     // Hide the tab so that the user doesn't see it animate closed.
     drag_data_[i].attached_tab->SetVisible(false);
     drag_data_[i].attached_tab->set_detached();
-    attached_model->DetachWebContentsAt(index);
+
+    // TODO(erikchen): Fix ownership semantics for this class once all
+    // TabStripModel APIs have been migrated to use proper ownership semantics.
+    attached_model->DetachWebContentsAt(index).release();
 
     // Detaching may end up deleting the tab, drop references to it.
     drag_data_[i].attached_tab = NULL;
@@ -1454,12 +1460,14 @@ void TabDragController::RevertDragAt(size_t drag_index) {
     if (attached_tabstrip_ != source_tabstrip_) {
       // The Tab was inserted into another TabStrip. We need to put it back
       // into the original one.
-      GetModel(attached_tabstrip_)->DetachWebContentsAt(index);
+      std::unique_ptr<content::WebContents> detached_web_contents =
+          GetModel(attached_tabstrip_)->DetachWebContentsAt(index);
       // TODO(beng): (Cleanup) seems like we should use Attach() for this
       //             somehow.
-      GetModel(source_tabstrip_)->InsertWebContentsAt(
-          data->source_model_index, data->contents,
-          (data->pinned ? TabStripModel::ADD_PINNED : 0));
+      GetModel(source_tabstrip_)
+          ->InsertWebContentsAt(data->source_model_index,
+                                std::move(detached_web_contents),
+                                (data->pinned ? TabStripModel::ADD_PINNED : 0));
     } else {
       // The Tab was moved within the TabStrip where the drag was initiated.
       // Move it back to the starting location.
@@ -1470,9 +1478,10 @@ void TabDragController::RevertDragAt(size_t drag_index) {
     // The Tab was detached from the TabStrip where the drag began, and has not
     // been attached to any other TabStrip. We need to put it back into the
     // source TabStrip.
-    GetModel(source_tabstrip_)->InsertWebContentsAt(
-        data->source_model_index, data->contents,
-        (data->pinned ? TabStripModel::ADD_PINNED : 0));
+    GetModel(source_tabstrip_)
+        ->InsertWebContentsAt(data->source_model_index,
+                              base::WrapUnique(data->contents),
+                              (data->pinned ? TabStripModel::ADD_PINNED : 0));
   }
 }
 

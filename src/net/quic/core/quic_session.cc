@@ -37,6 +37,11 @@ QuicSession::QuicSession(QuicConnection* connection,
                          const QuicConfig& config)
     : connection_(connection),
       visitor_(owner),
+      register_streams_early_(
+          GetQuicReloadableFlag(quic_register_streams_early2)),
+      write_blocked_streams_(
+          GetQuicReloadableFlag(quic_register_static_streams) &&
+          register_streams_early_),
       config_(config),
       max_open_outgoing_streams_(kDefaultMaxStreamsPerConnection),
       max_open_incoming_streams_(config_.GetMaxIncomingDynamicStreamsToSend()),
@@ -58,12 +63,7 @@ QuicSession::QuicSession(QuicConnection* connection,
       currently_writing_stream_id_(0),
       goaway_sent_(false),
       goaway_received_(false),
-      control_frame_manager_(this),
-      can_use_slices_(GetQuicReloadableFlag(quic_use_mem_slices)),
-      session_unblocks_stream_(
-          GetQuicReloadableFlag(quic_streams_unblocked_by_session2)),
-      register_streams_early_(
-          GetQuicReloadableFlag(quic_register_streams_early2)) {
+      control_frame_manager_(this) {
   if (register_streams_early()) {
     QUIC_FLAG_COUNT(quic_reloadable_flag_quic_register_streams_early2);
   }
@@ -407,6 +407,14 @@ QuicConsumedData QuicSession::WritevData(QuicStream* stream,
     // up write blocked until OnCanWrite is next called.
     return QuicConsumedData(0, false);
   }
+  if (connection_->encryption_level() != ENCRYPTION_FORWARD_SECURE) {
+    // Set the next sending packets' long header type.
+    QuicLongHeaderType type = ZERO_RTT_PROTECTED;
+    if (id == kCryptoStreamId) {
+      type = GetCryptoStream()->GetLongHeaderType(offset);
+    }
+    connection_->SetLongHeaderType(type);
+  }
   QuicConsumedData data =
       connection_->SendStreamData(id, write_length, offset, state);
   if (offset >= stream->stream_bytes_written()) {
@@ -469,14 +477,14 @@ void QuicSession::InsertLocallyClosedStreamsHighestOffset(
 }
 
 void QuicSession::CloseStreamInner(QuicStreamId stream_id, bool locally_reset) {
-  QUIC_DLOG(INFO) << ENDPOINT << "Closing stream " << stream_id;
+  QUIC_DVLOG(1) << ENDPOINT << "Closing stream " << stream_id;
 
   DynamicStreamMap::iterator it = dynamic_stream_map_.find(stream_id);
   if (it == dynamic_stream_map_.end()) {
     // When CloseStreamInner has been called recursively (via
     // QuicStream::OnClose), the stream will already have been deleted
     // from stream_map_, so return immediately.
-    QUIC_DLOG(INFO) << ENDPOINT << "Stream is already closed: " << stream_id;
+    QUIC_DVLOG(1) << ENDPOINT << "Stream is already closed: " << stream_id;
     return;
   }
   QuicStream* stream = it->second.get();
@@ -561,7 +569,8 @@ void QuicSession::OnConfigNegotiated() {
   connection_->SetFromConfig(config_);
 
   uint32_t max_streams = 0;
-  if (config_.HasReceivedMaxIncomingDynamicStreams()) {
+  if (config_.do_not_use_mspc() ||
+      config_.HasReceivedMaxIncomingDynamicStreams()) {
     max_streams = config_.ReceivedMaxIncomingDynamicStreams();
   } else {
     max_streams = config_.MaxStreamsPerConnection();
@@ -740,21 +749,30 @@ void QuicSession::OnCryptoHandshakeMessageReceived(
 void QuicSession::RegisterStreamPriority(QuicStreamId id,
                                          bool is_static,
                                          SpdyPriority priority) {
+  // Static streams should not be registered unless register_streams_early
+  // is true.
+  DCHECK(register_streams_early() || !is_static);
   // Static streams do not need to be registered with the write blocked list,
   // since it has special handling for them.
-  if (register_streams_early() && is_static) {
+  if (!write_blocked_streams()->register_static_streams() &&
+      register_streams_early() && is_static) {
     return;
   }
-  write_blocked_streams()->RegisterStream(id, priority);
+
+  write_blocked_streams()->RegisterStream(id, is_static, priority);
 }
 
 void QuicSession::UnregisterStreamPriority(QuicStreamId id, bool is_static) {
+  // Static streams should not be registered unless register_streams_early
+  // is true.
+  DCHECK(register_streams_early() || !is_static);
   // Static streams do not need to be registered with the write blocked list,
   // since it has special handling for them.
-  if (register_streams_early() && is_static) {
+  if (!write_blocked_streams()->register_static_streams() &&
+      register_streams_early() && is_static) {
     return;
   }
-  write_blocked_streams()->UnregisterStream(id);
+  write_blocked_streams()->UnregisterStream(id, is_static);
 }
 
 void QuicSession::UpdateStreamPriority(QuicStreamId id,
@@ -768,8 +786,8 @@ QuicConfig* QuicSession::config() {
 
 void QuicSession::ActivateStream(std::unique_ptr<QuicStream> stream) {
   QuicStreamId stream_id = stream->id();
-  QUIC_DLOG(INFO) << ENDPOINT << "num_streams: " << dynamic_stream_map_.size()
-                  << ". activating " << stream_id;
+  QUIC_DVLOG(1) << ENDPOINT << "num_streams: " << dynamic_stream_map_.size()
+                << ". activating " << stream_id;
   DCHECK(!QuicContainsKey(dynamic_stream_map_, stream_id));
   DCHECK(!QuicContainsKey(static_stream_map_, stream_id));
   dynamic_stream_map_[stream_id] = std::move(stream);

@@ -8,10 +8,11 @@ import("//build/buildflag_header.gni")
 import("//testing/test.gni")
 
 # Generate a buildflag header for compile-time checking of Vulkan support.
-buildflag_header("features") {
-  header = "features.h"
+buildflag_header("buildflags") {
+  header = "buildflags.h"
   flags = [ "ENABLE_VULKAN=$enable_vulkan" ]
 }
+
 if (enable_vulkan) {
   vulkan_lib_dir = getenv("VULKAN_SDK") + "/lib"
   component("vulkan") {
@@ -80,7 +81,6 @@ if (enable_vulkan) {
       "tests/vulkan_tests_main.cc",
     ]
 
-    include_dirs = [ "/usr/include" ]
     if (current_cpu == "x64") {
       lib_dirs = [
         "/usr/lib/x86_64-linux-gnu",

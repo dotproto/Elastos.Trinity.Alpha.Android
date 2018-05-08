@@ -90,8 +90,9 @@ class VIEWS_EXPORT Textfield : public View,
   // features. The flags is the bit map of ui::TextInputFlags.
   void SetTextInputFlags(int flags);
 
-  // Gets the text for the Textfield. Call sites should take care to not reveal
-  // the text for a password textfield.
+  // Gets the text for the Textfield.
+  // NOTE: Call sites should take care to not reveal the text for a password
+  // textfield.
   const base::string16& text() const { return model_->text(); }
 
   // Sets the text currently displayed in the Textfield.  This doesn't
@@ -109,8 +110,9 @@ class VIEWS_EXPORT Textfield : public View,
   // changes.
   void InsertOrReplaceText(const base::string16& new_text);
 
-  // Returns the text that is currently selected. Call sites should take care to
-  // not reveal the text for a password textfield.
+  // Returns the text that is currently selected.
+  // NOTE: Call sites should take care to not reveal the text for a password
+  // textfield.
   base::string16 GetSelectedText() const;
 
   // Select the entire text range. If |reversed| is true, the range will end at
@@ -364,7 +366,8 @@ class VIEWS_EXPORT Textfield : public View,
   // Returns the TextfieldModel's text/cursor/selection rendering model.
   gfx::RenderText* GetRenderText() const;
 
-  gfx::Point GetLastClickLocation() const;
+  // Returns the last click root location (relative to the root window).
+  gfx::Point GetLastClickRootLocation() const;
 
   // Get the text from the selection clipboard.
   virtual base::string16 GetSelectionClipboardText() const;

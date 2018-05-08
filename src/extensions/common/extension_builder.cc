@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension.h"
@@ -19,6 +18,7 @@ struct ExtensionBuilder::ManifestData {
   std::string name;
   std::vector<std::string> permissions;
   base::Optional<ActionType> action;
+  base::Optional<BackgroundPage> background_page;
   std::unique_ptr<base::DictionaryValue> extra;
 
   std::unique_ptr<base::DictionaryValue> GetValue() const {
@@ -59,6 +59,22 @@ struct ExtensionBuilder::ManifestData {
           break;
       }
       manifest.Set(action_key, std::make_unique<base::DictionaryValue>());
+    }
+
+    if (background_page) {
+      DictionaryBuilder background;
+      background.Set("page", "background_page.html");
+      bool persistent = false;
+      switch (*background_page) {
+        case BackgroundPage::PERSISTENT:
+          persistent = true;
+          break;
+        case BackgroundPage::EVENT:
+          persistent = false;
+          break;
+      }
+      background.Set("persistent", persistent);
+      manifest.Set("background", background.Build());
     }
 
     std::unique_ptr<base::DictionaryValue> result = manifest.Build();
@@ -121,6 +137,13 @@ ExtensionBuilder& ExtensionBuilder::AddPermissions(
 ExtensionBuilder& ExtensionBuilder::SetAction(ActionType action) {
   CHECK(manifest_data_);
   manifest_data_->action = action;
+  return *this;
+}
+
+ExtensionBuilder& ExtensionBuilder::SetBackgroundPage(
+    BackgroundPage background_page) {
+  CHECK(manifest_data_);
+  manifest_data_->background_page = background_page;
   return *this;
 }
 

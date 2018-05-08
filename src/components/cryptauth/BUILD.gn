@@ -6,6 +6,8 @@
 # user's account. This component both sends data about the current device and
 # requets data about associated devices.
 
+assert(is_chromeos, "CryptAuth is Chrome OS only")
+
 static_library("cryptauth") {
   sources = [
     "authenticator.cc",
@@ -43,9 +45,8 @@ static_library("cryptauth") {
     "cryptauth_service.h",
     "data_with_timestamp.cc",
     "data_with_timestamp.h",
-    "device_capability_manager.h",
-    "device_capability_manager_impl.cc",
-    "device_capability_manager_impl.h",
+    "device_classifier_util.cc",
+    "device_classifier_util.h",
     "device_to_device_authenticator.cc",
     "device_to_device_authenticator.h",
     "device_to_device_initiator_helper.cc",
@@ -54,6 +55,7 @@ static_library("cryptauth") {
     "device_to_device_secure_context.h",
     "foreground_eid_generator.cc",
     "foreground_eid_generator.h",
+    "gcm_device_info_provider.h",
     "local_device_data_provider.cc",
     "local_device_data_provider.h",
     "pref_names.cc",
@@ -76,8 +78,13 @@ static_library("cryptauth") {
     "secure_context.h",
     "secure_message_delegate.cc",
     "secure_message_delegate.h",
+    "secure_message_delegate_impl.cc",
+    "secure_message_delegate_impl.h",
     "session_keys.cc",
     "session_keys.h",
+    "software_feature_manager.h",
+    "software_feature_manager_impl.cc",
+    "software_feature_manager_impl.h",
     "switches.cc",
     "switches.h",
     "sync_scheduler.cc",
@@ -90,11 +97,13 @@ static_library("cryptauth") {
 
   deps = [
     "//base",
+    "//chromeos",
+    "//chromeos/components/proximity_auth/logging",
     "//components/cryptauth/ble",
     "//components/gcm_driver",
     "//components/gcm_driver/common",
     "//components/prefs",
-    "//components/proximity_auth/logging",
+    "//components/version_info",
     "//crypto",
     "//google_apis",
     "//net",
@@ -118,8 +127,12 @@ static_library("test_support") {
     "device_to_device_responder_operations.h",
     "fake_authenticator.cc",
     "fake_authenticator.h",
+    "fake_background_eid_generator.cc",
+    "fake_background_eid_generator.h",
     "fake_connection.cc",
     "fake_connection.h",
+    "fake_cryptauth_device_id_provider.cc",
+    "fake_cryptauth_device_id_provider.h",
     "fake_cryptauth_device_manager.cc",
     "fake_cryptauth_device_manager.h",
     "fake_cryptauth_enrollment_manager.cc",
@@ -128,8 +141,8 @@ static_library("test_support") {
     "fake_cryptauth_gcm_manager.h",
     "fake_cryptauth_service.cc",
     "fake_cryptauth_service.h",
-    "fake_device_capability_manager.cc",
-    "fake_device_capability_manager.h",
+    "fake_gcm_device_info_provider.cc",
+    "fake_gcm_device_info_provider.h",
     "fake_remote_device_provider.cc",
     "fake_remote_device_provider.h",
     "fake_secure_channel.cc",
@@ -138,6 +151,8 @@ static_library("test_support") {
     "fake_secure_context.h",
     "fake_secure_message_delegate.cc",
     "fake_secure_message_delegate.h",
+    "fake_software_feature_manager.cc",
+    "fake_software_feature_manager.h",
     "mock_cryptauth_client.cc",
     "mock_cryptauth_client.h",
     "mock_foreground_eid_generator.cc",
@@ -159,7 +174,7 @@ static_library("test_support") {
 
   deps = [
     "//base",
-    "//components/proximity_auth/logging",
+    "//chromeos/components/proximity_auth/logging",
     "//testing/gmock",
   ]
 }
@@ -176,7 +191,6 @@ source_set("unit_tests") {
     "cryptauth_enroller_impl_unittest.cc",
     "cryptauth_enrollment_manager_impl_unittest.cc",
     "cryptauth_gcm_manager_impl_unittest.cc",
-    "device_capability_manager_impl_unittest.cc",
     "device_to_device_authenticator_unittest.cc",
     "device_to_device_operations_unittest.cc",
     "device_to_device_secure_context_unittest.cc",
@@ -189,6 +203,7 @@ source_set("unit_tests") {
     "remote_device_provider_impl_unittest.cc",
     "secure_channel_unittest.cc",
     "session_keys_unittest.cc",
+    "software_feature_manager_impl_unittest.cc",
     "sync_scheduler_impl_unittest.cc",
     "wire_message_unittest.cc",
   ]

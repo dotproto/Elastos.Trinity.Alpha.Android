@@ -86,7 +86,7 @@ ServiceProcessRunningState GetServiceProcessRunningState(
     return SERVICE_OLDER_VERSION_RUNNING;
 
   // Get the version of the currently *running* instance of Chrome.
-  base::Version running_version(version_info::GetVersionNumber());
+  const base::Version& running_version = version_info::GetVersion();
   if (!running_version.IsValid()) {
     NOTREACHED() << "Failed to parse version info";
     // Our own version is invalid. This is an error case. Pretend that we
@@ -94,12 +94,11 @@ ServiceProcessRunningState GetServiceProcessRunningState(
     return SERVICE_NEWER_VERSION_RUNNING;
   }
 
-  if (running_version.CompareTo(service_version) > 0) {
-    return SERVICE_OLDER_VERSION_RUNNING;
-  } else if (service_version.CompareTo(running_version) > 0) {
-    return SERVICE_NEWER_VERSION_RUNNING;
-  }
-  return SERVICE_SAME_VERSION_RUNNING;
+  int comp = running_version.CompareTo(service_version);
+  if (comp == 0)
+    return SERVICE_SAME_VERSION_RUNNING;
+  return comp > 0 ? SERVICE_OLDER_VERSION_RUNNING
+                  : SERVICE_NEWER_VERSION_RUNNING;
 }
 
 }  // namespace
@@ -109,8 +108,7 @@ ServiceProcessRunningState GetServiceProcessRunningState(
 // use the user-data-dir and the version as a scoping prefix.
 std::string GetServiceProcessScopedVersionedName(
     const std::string& append_str) {
-  std::string versioned_str;
-  versioned_str.append(version_info::GetVersionNumber());
+  std::string versioned_str = version_info::GetVersionNumber();
   versioned_str.append(append_str);
   return GetServiceProcessScopedName(versioned_str);
 }
@@ -145,7 +143,7 @@ bool GetServiceProcessData(std::string* version, base::ProcessId* pid) {
 // the user-data-dir itself as we have limits on the size of the lock names.
 std::string GetServiceProcessScopedName(const std::string& append_str) {
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
 #if defined(OS_WIN)
   std::string user_data_dir_path = base::WideToUTF8(user_data_dir.value());
 #elif defined(OS_POSIX)
@@ -158,7 +156,7 @@ std::string GetServiceProcessScopedName(const std::string& append_str) {
 
 std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
   base::FilePath exe_path;
-  PathService::Get(content::CHILD_PROCESS_EXE, &exe_path);
+  base::PathService::Get(content::CHILD_PROCESS_EXE, &exe_path);
   DCHECK(!exe_path.empty()) << "Unable to get service process binary name.";
   std::unique_ptr<base::CommandLine> command_line(
       new base::CommandLine(exe_path));

@@ -12,11 +12,12 @@
 #include "content/public/browser/browser_context.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h"
+#include "third_party/blink/public/platform/modules/notifications/notification_service.mojom.h"
 #include "url/origin.h"
 
 namespace content {
 
+struct NotificationDatabaseData;
 class PlatformNotificationContextImpl;
 struct PlatformNotificationData;
 class ResourceContext;
@@ -50,6 +51,10 @@ class CONTENT_EXPORT BlinkNotificationServiceImpl
       const PlatformNotificationData& platform_notification_data,
       const NotificationResources& notification_resources,
       DisplayPersistentNotificationCallback) override;
+  void ClosePersistentNotification(const std::string& notification_id) override;
+  void GetNotifications(int64_t service_worker_registration_id,
+                        const std::string& filter_tag,
+                        GetNotificationsCallback callback) override;
 
  private:
   // Called when an error is detected on binding_.
@@ -82,6 +87,12 @@ class CONTENT_EXPORT BlinkNotificationServiceImpl
       const std::string& notification_id);
 
   blink::mojom::PermissionStatus CheckPermissionStatus();
+
+  void DidGetNotifications(
+      const std::string& filter_tag,
+      GetNotificationsCallback callback,
+      bool success,
+      const std::vector<NotificationDatabaseData>& notifications);
 
   // The notification context that owns this service instance.
   PlatformNotificationContextImpl* notification_context_;

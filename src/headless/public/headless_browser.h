@@ -119,12 +119,11 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
 #endif
 
   // Address at which DevTools should listen for connections. Disabled by
-  // default. Mutually exclusive with devtools_socket_fd.
+  // default.
   net::HostPortPair devtools_endpoint;
 
-  // The fd of an already-open socket inherited from a parent process. Disabled
-  // by default. Mutually exclusive with devtools_endpoint.
-  size_t devtools_socket_fd = 0;
+  // Enables remote debug over stdio pipes [in=3, out=4].
+  bool devtools_pipe_enabled = false;
 
   // A single way to test whether the devtools server has been requested.
   bool DevtoolsServerEnabled();
@@ -194,6 +193,12 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   // Whether or not all sites should have a dedicated process.
   bool site_per_process = false;
 
+  // Whether or not the net::HttpCache should be replaced with a custom one that
+  // intercepts metadata writes which are surfaced via
+  // HeadlessBrowserContext::Observer:OnMetadataForResource. The custom cache
+  // blacks holes all writes.
+  bool capture_resource_metadata = false;
+
   // Set a callback that is invoked to override WebPreferences for RenderViews
   // created within the HeadlessBrowser. Called whenever the WebPreferences of a
   // RenderView change. Executed on the browser main thread.
@@ -244,7 +249,7 @@ class HEADLESS_EXPORT HeadlessBrowser::Options::Builder {
   // Browser-wide settings.
 
   Builder& EnableDevToolsServer(const net::HostPortPair& endpoint);
-  Builder& EnableDevToolsServer(const size_t socket_fd);
+  Builder& EnableDevToolsPipe();
   Builder& SetMessagePump(base::MessagePump* message_pump);
   Builder& SetSingleProcessMode(bool single_process_mode);
   Builder& SetDisableSandbox(bool disable_sandbox);
@@ -277,6 +282,7 @@ class HEADLESS_EXPORT HeadlessBrowser::Options::Builder {
   Builder& SetOverrideWebPreferencesCallback(
       base::RepeatingCallback<void(WebPreferences*)> callback);
   Builder& SetCrashReporterEnabled(bool enabled);
+  Builder& SetCaptureResourceMetadata(bool capture_resource_metadata);
   Builder& SetCrashDumpsDir(const base::FilePath& dir);
   Builder& SetFontRenderHinting(
       gfx::FontRenderParams::Hinting font_render_hinting);

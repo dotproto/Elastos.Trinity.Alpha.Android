@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
@@ -19,13 +18,13 @@
 #include "content/renderer/render_thread_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/WebCanvas.h"
-#include "third_party/WebKit/public/platform/WebCursorInfo.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebLayer.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
+#include "third_party/blink/public/platform/web_canvas.h"
+#include "third_party/blink/public/platform/web_cursor_info.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_layer.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/web_widget.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gl/gpu_preference.h"
@@ -98,7 +97,7 @@ WebMouseEvent WebMouseEventFromGestureEvent(const WebGestureEvent& gesture) {
 
   WebMouseEvent mouse(type,
                       gesture.GetModifiers() | WebInputEvent::kLeftButtonDown,
-                      gesture.TimeStampSeconds());
+                      gesture.TimeStamp());
   mouse.button = WebMouseEvent::Button::kLeft;
   mouse.click_count = (mouse.GetType() == WebInputEvent::kMouseDown ||
                        mouse.GetType() == WebInputEvent::kMouseUp);
@@ -178,7 +177,7 @@ class PepperWidget : public WebWidget {
         case WebInputEvent::kGestureTap: {
           WebMouseEvent mouse(WebInputEvent::kMouseMove,
                               gesture_event->GetModifiers(),
-                              gesture_event->TimeStampSeconds());
+                              gesture_event->TimeStamp());
           mouse.SetPositionInWidget(gesture_event->PositionInWidget().x,
                                     gesture_event->PositionInWidget().y);
           mouse.SetPositionInScreen(gesture_event->PositionInScreen().x,
@@ -379,8 +378,9 @@ void RenderWidgetFullscreenPepper::Close() {
   RenderWidget::Close();
 }
 
-void RenderWidgetFullscreenPepper::OnResize(const ResizeParams& params) {
-  RenderWidget::OnResize(params);
+void RenderWidgetFullscreenPepper::OnSynchronizeVisualProperties(
+    const VisualProperties& visual_properties) {
+  RenderWidget::OnSynchronizeVisualProperties(visual_properties);
   UpdateLayerBounds();
 }
 

@@ -8,13 +8,16 @@
 #include <stdint.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/component_export.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "services/network/cookie_manager.h"
@@ -23,20 +26,29 @@
 #include "services/network/public/mojom/tcp_socket.mojom.h"
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/websocket.mojom.h"
 #include "services/network/socket_factory.h"
 #include "services/network/url_request_context_owner.h"
 
 namespace net {
 class CertVerifier;
+class HttpAuthPreferences;
+class NetworkQualityEstimator;
 class StaticHttpUserAgentSettings;
 class URLRequestContext;
 }  // namespace net
+
+namespace certificate_transparency {
+class CTPolicyManager;
+}
 
 namespace network {
 class NetworkService;
 class ResourceScheduler;
 class ResourceSchedulerClient;
+class URLLoaderFactory;
 class URLRequestContextBuilderMojo;
+class WebSocketFactory;
 
 // A NetworkContext creates and manages access to a URLRequestContext.
 //
@@ -68,10 +80,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // Creates a NetworkContext that wraps a consumer-provided URLRequestContext
   // that the NetworkContext does not own.
   // TODO(mmenke):  Remove this constructor when the network service ships.
-  NetworkContext(
-      NetworkService* network_service,
-      mojom::NetworkContextRequest request,
-      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter);
+  NetworkContext(NetworkService* network_service,
+                 mojom::NetworkContextRequest request,
+                 net::URLRequestContext* url_request_context);
 
   ~NetworkContext() override;
 
@@ -80,9 +91,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // Sets a global CertVerifier to use when initializing all profiles.
   static void SetCertVerifierForTesting(net::CertVerifier* cert_verifier);
 
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter() {
-    return url_request_context_getter_;
-  }
+  net::URLRequestContext* url_request_context() { return url_request_context_; }
 
   NetworkService* network_service() { return network_service_; }
 
@@ -108,11 +117,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       base::OnceClosure completion_callback) override;
   void ClearHttpCache(base::Time start_time,
                       base::Time end_time,
-                      mojom::ClearCacheUrlFilterPtr filter,
+                      mojom::ClearDataFilterPtr filter,
                       ClearHttpCacheCallback callback) override;
+  void ClearChannelIds(base::Time start_time,
+                       base::Time end_time,
+                       mojom::ClearDataFilterPtr filter,
+                       ClearChannelIdsCallback callback) override;
+  void ClearHttpAuthCache(base::Time start_time,
+                          ClearHttpAuthCacheCallback callback) override;
   void SetNetworkConditions(const std::string& profile_id,
                             mojom::NetworkConditionsPtr conditions) override;
   void SetAcceptLanguage(const std::string& new_accept_language) override;
+  void SetCTPolicy(
+      const std::vector<std::string>& required_hosts,
+      const std::vector<std::string>& excluded_hosts,
+      const std::vector<std::string>& excluded_spkis,
+      const std::vector<std::string>& excluded_legacy_spkis) override;
   void CreateUDPSocket(mojom::UDPSocketRequest request,
                        mojom::UDPSocketReceiverPtr receiver) override;
   void CreateTCPServerSocket(
@@ -128,12 +148,17 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojom::TCPConnectedSocketRequest request,
       mojom::TCPConnectedSocketObserverPtr observer,
       CreateTCPConnectedSocketCallback callback) override;
+  void CreateWebSocket(mojom::WebSocketRequest request,
+                       int32_t process_id,
+                       int32_t render_frame_id,
+                       const url::Origin& origin) override;
   void AddHSTSForTesting(const std::string& host,
                          base::Time expiry,
                          bool include_subdomains,
                          AddHSTSForTestingCallback callback) override;
-
-  net::URLRequestContext* GetURLRequestContext();
+  void SetFailingHttpTransactionForTesting(
+      int32_t rv,
+      SetFailingHttpTransactionForTestingCallback callback) override;
 
   // Called when the associated NetworkService is going away. Guaranteed to
   // destroy NetworkContext's URLRequestContext.
@@ -151,7 +176,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojom::NetworkContextParams* network_context_params,
       bool quic_disabled,
       net::NetLog* net_log,
+      net::NetworkQualityEstimator* network_quality_estimator,
       net::StaticHttpUserAgentSettings** out_http_user_agent_settings);
+
+  // Destroys the specified URLLoaderFactory.  Called by the URLLoaderFactory
+  // itself when it has not open pipes.
+  void DestroyURLLoaderFactory(URLLoaderFactory* url_loader_factory);
 
  private:
   // Constructor only used in tests.
@@ -171,16 +201,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::unique_ptr<ResourceScheduler> resource_scheduler_;
 
+  std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences_;
+
   // Holds owning pointer to |url_request_context_|. Will contain a nullptr for
   // |url_request_context| when the NetworkContextImpl doesn't own its own
   // URLRequestContext.
   URLRequestContextOwner url_request_context_owner_;
 
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
-
-  // Put it below |url_request_context_| so that it outlives all the
-  // NetworkServiceURLLoaderFactory instances.
-  mojo::StrongBindingSet<mojom::URLLoaderFactory> loader_factory_bindings_;
+  net::URLRequestContext* url_request_context_;
 
   mojom::NetworkContextParamsPtr params_;
 
@@ -188,9 +216,18 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::unique_ptr<CookieManager> cookie_manager_;
 
-  SocketFactory socket_factory_;
+  std::unique_ptr<SocketFactory> socket_factory_;
+
+#if !defined(OS_IOS)
+  std::unique_ptr<WebSocketFactory> websocket_factory_;
+#endif  // !defined(OS_IOS)
 
   std::vector<std::unique_ptr<HttpCacheDataRemover>> http_cache_data_removers_;
+
+  // This must be below |url_request_context_| so that the URLRequestContext
+  // outlives all the URLLoaderFactories and URLLoaders that depend on it.
+  std::set<std::unique_ptr<URLLoaderFactory>, base::UniquePtrComparator>
+      url_loader_factories_;
 
   int current_resource_scheduler_client_id_ = 0;
 
@@ -199,6 +236,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // TODO(yhirano): Consult with switches::kDisableResourceScheduler.
   constexpr static bool enable_resource_scheduler_ = true;
+
+  std::unique_ptr<certificate_transparency::CTPolicyManager> ct_policy_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContext);
 };

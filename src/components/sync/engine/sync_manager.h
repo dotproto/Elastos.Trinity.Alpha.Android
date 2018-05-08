@@ -267,6 +267,10 @@ class SyncManager {
 
     // Optional nigori state to be restored.
     std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state;
+
+    // Define the polling intervals. Must not be zero.
+    base::TimeDelta short_poll_interval;
+    base::TimeDelta long_poll_interval;
   };
 
   SyncManager();
@@ -300,6 +304,9 @@ class SyncManager {
 
   // Update tokens that we're using in Sync. Email must stay the same.
   virtual void UpdateCredentials(const SyncCredentials& credentials) = 0;
+
+  // Clears the authentication tokens.
+  virtual void InvalidateCredentials() = 0;
 
   // Put the syncer in normal mode ready to perform nudges and polls.
   virtual void StartSyncingNormally(base::Time last_poll_time) = 0;
@@ -370,9 +377,8 @@ class SyncManager {
   // Note: opens a transaction.  May be called on any thread.
   virtual bool ReceivedExperiment(Experiments* experiments) = 0;
 
-  // Uses a read-only transaction to determine if the directory being synced has
-  // any remaining unsynced items.  May be called on any thread.
-  virtual bool HasUnsyncedItems() = 0;
+  // Returns whether there are remaining unsynced items.
+  virtual bool HasUnsyncedItemsForTest() = 0;
 
   // Returns the SyncManager's encryption handler.
   virtual SyncEncryptionHandler* GetEncryptionHandler() = 0;

@@ -375,7 +375,14 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   current_decoder_config_ = stream->audio_decoder_config();
   DCHECK(current_decoder_config_.IsValidConfig());
 
+  auto output_device_info = sink_->GetOutputDeviceInfo();
+  const AudioParameters& hw_params = output_device_info.output_params();
+  ChannelLayout hw_channel_layout =
+      hw_params.IsValid() ? hw_params.channel_layout() : CHANNEL_LAYOUT_NONE;
+
   audio_buffer_stream_ = std::make_unique<AudioBufferStream>(
+      std::make_unique<AudioBufferStream::StreamTraits>(media_log_,
+                                                        hw_channel_layout),
       task_runner_, create_audio_decoders_cb_, media_log_);
 
   audio_buffer_stream_->set_config_change_observer(base::Bind(
@@ -385,8 +392,6 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   // failed.
   init_cb_ = BindToCurrentLoop(init_cb);
 
-  auto output_device_info = sink_->GetOutputDeviceInfo();
-  const AudioParameters& hw_params = output_device_info.output_params();
   AudioCodec codec = stream->audio_decoder_config().codec();
   if (auto* mc = GetMediaClient())
     is_passthrough_ = mc->IsSupportedBitstreamAudioCodec(codec);
@@ -679,12 +684,17 @@ void AudioRendererImpl::DecodedAudioReady(
       last_decoded_sample_rate_ = buffer->sample_rate();
 
       if (last_decoded_channel_layout_ != buffer->channel_layout()) {
-        last_decoded_channel_layout_ = buffer->channel_layout();
-        last_decoded_channels_ = buffer->channel_count();
-
-        // Input layouts should never be discrete.
-        DCHECK_NE(last_decoded_channel_layout_, CHANNEL_LAYOUT_DISCRETE);
-        ConfigureChannelMask();
+        if (buffer->channel_layout() == CHANNEL_LAYOUT_DISCRETE) {
+          MEDIA_LOG(ERROR, media_log_)
+              << "Unsupported midstream configuration change! Discrete channel"
+              << " layout not allowed by sink.";
+          HandleAbortedReadOrDecodeError(PIPELINE_ERROR_DECODE);
+          return;
+        } else {
+          last_decoded_channel_layout_ = buffer->channel_layout();
+          last_decoded_channels_ = buffer->channel_count();
+          ConfigureChannelMask();
+        }
       }
     }
 

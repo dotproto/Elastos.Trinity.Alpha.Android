@@ -65,9 +65,6 @@ class MockAutocompleteProviderClient
       KeywordProvider* keyword_provider) override {
     return nullptr;
   }
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override {
-    return nullptr;
-  }
 
   MOCK_CONST_METHOD0(GetAcceptLanguages, std::string());
   MOCK_METHOD0(GetEmbedderRepresentationOfAboutScheme, std::string());
@@ -76,7 +73,7 @@ class MockAutocompleteProviderClient
   MOCK_CONST_METHOD0(GetCurrentVisitTimestamp, base::Time());
   MOCK_CONST_METHOD0(IsOffTheRecord, bool());
   MOCK_CONST_METHOD0(SearchSuggestEnabled, bool());
-  MOCK_CONST_METHOD0(TabSyncEnabledAndUnencrypted, bool());
+  MOCK_CONST_METHOD0(IsTabUploadToGoogleActive, bool());
   MOCK_CONST_METHOD0(IsAuthenticated, bool());
   MOCK_METHOD6(
       Classify,

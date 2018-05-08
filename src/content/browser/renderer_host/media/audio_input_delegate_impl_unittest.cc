@@ -12,8 +12,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -106,11 +104,11 @@ class MockEventHandler : public media::AudioInputDelegate::EventHandler {
   MOCK_METHOD1(OnStreamError, void(int));
 };
 
-class MockUserInputMonitor : public media::UserInputMonitor {
+class MockUserInputMonitor : public media::UserInputMonitorBase {
  public:
   MockUserInputMonitor() {}
 
-  size_t GetKeyPressCount() const { return 0; }
+  uint32_t GetKeyPressCount() const override { return 0; }
 
   MOCK_METHOD0(StartKeyboardMonitoring, void());
   MOCK_METHOD0(StopKeyboardMonitoring, void());
@@ -157,7 +155,7 @@ class AudioInputDelegateTest : public testing::Test {
         base::BindRepeating(&ExpectNoOutputStreamCreation));
   }
 
-  ~AudioInputDelegateTest() {
+  ~AudioInputDelegateTest() override {
     audio_manager_.Shutdown();
 
     // MediaStreamManager expects to outlive the IO thread.

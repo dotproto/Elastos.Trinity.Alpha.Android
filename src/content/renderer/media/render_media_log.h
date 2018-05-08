@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -44,7 +45,7 @@ class CONTENT_EXPORT RenderMediaLog : public media::MediaLog {
   void RecordRapporWithSecurityOrigin(const std::string& metric) override;
 
   // Will reset |last_ipc_send_time_| with the value of NowTicks().
-  void SetTickClockForTesting(base::TickClock* tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
   void SetTaskRunnerForTesting(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
@@ -63,7 +64,7 @@ class CONTENT_EXPORT RenderMediaLog : public media::MediaLog {
   // sequence for throttled send on |task_runner_| and coherent retrieval by
   // GetErrorMessage().
   mutable base::Lock lock_;
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
   base::TimeTicks last_ipc_send_time_;
   std::vector<media::MediaLogEvent> queued_media_events_;
 

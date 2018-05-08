@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -83,11 +84,15 @@ SuggestionsProfile CreateSuggestionsProfile() {
 class MockSyncService : public syncer::FakeSyncService {
  public:
   MockSyncService() {}
-  virtual ~MockSyncService() {}
+  ~MockSyncService() override {}
   MOCK_CONST_METHOD0(CanSyncStart, bool());
   MOCK_CONST_METHOD0(IsSyncActive, bool());
   MOCK_CONST_METHOD0(ConfigurationDone, bool());
+  MOCK_CONST_METHOD0(IsLocalSyncEnabled, bool());
+  MOCK_CONST_METHOD0(IsUsingSecondaryPassphrase, bool());
+  MOCK_CONST_METHOD0(GetPreferredDataTypes, syncer::ModelTypeSet());
   MOCK_CONST_METHOD0(GetActiveDataTypes, syncer::ModelTypeSet());
+  MOCK_CONST_METHOD0(GetLastCycleSnapshot, syncer::SyncCycleSnapshot());
 };
 
 class TestSuggestionsStore : public suggestions::SuggestionsStore {
@@ -111,7 +116,7 @@ class TestSuggestionsStore : public suggestions::SuggestionsStore {
 class MockImageManager : public suggestions::ImageManager {
  public:
   MockImageManager() {}
-  virtual ~MockImageManager() {}
+  ~MockImageManager() override {}
   MOCK_METHOD1(Initialize, void(const SuggestionsProfile&));
   MOCK_METHOD2(GetImageForURL,
                void(const GURL&,
@@ -157,10 +162,31 @@ class SuggestionsServiceTest : public testing::Test {
     EXPECT_CALL(*sync_service(), ConfigurationDone())
         .Times(AnyNumber())
         .WillRepeatedly(Return(true));
+    EXPECT_CALL(*sync_service(), IsLocalSyncEnabled())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*sync_service(), IsUsingSecondaryPassphrase())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*sync_service(), GetPreferredDataTypes())
+        .Times(AnyNumber())
+        .WillRepeatedly(
+            Return(syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)));
     EXPECT_CALL(*sync_service(), GetActiveDataTypes())
         .Times(AnyNumber())
         .WillRepeatedly(
             Return(syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)));
+    EXPECT_CALL(*sync_service(), GetLastCycleSnapshot())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(syncer::SyncCycleSnapshot(
+            syncer::ModelNeutralState(), syncer::ProgressMarkerMap(), false, 5,
+            2, 7, false, 0, base::Time::Now(), base::Time::Now(),
+            std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+            std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+            sync_pb::SyncEnums::UNKNOWN_ORIGIN,
+            /*short_poll_interval=*/base::TimeDelta::FromMinutes(30),
+            /*long_poll_interval=*/base::TimeDelta::FromMinutes(180),
+            /*has_remaining_local_changes=*/false)));
     // These objects are owned by the SuggestionsService, but we keep the
     // pointers around for testing.
     test_suggestions_store_ = new TestSuggestionsStore();

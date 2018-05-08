@@ -41,6 +41,13 @@
 #include "ipc/handle_fuchsia.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "base/android/scoped_hardware_buffer_handle.h"
+#include "ipc/ipc_mojo_handle_attachment.h"
+#include "mojo/public/cpp/system/message_pipe.h"
+#include "mojo/public/cpp/system/scope_to_message_pipe.h"
+#endif
+
 namespace IPC {
 
 namespace {
@@ -567,31 +574,76 @@ void ParamTraits<base::FileDescriptor>::Log(const param_type& p,
 #endif  // defined(OS_POSIX)
 
 #if defined(OS_ANDROID)
-void ParamTraits<base::SharedMemoryHandle::Type>::Write(base::Pickle* m,
-                                                        const param_type& p) {
-  DCHECK(static_cast<int>(p) >= 0 && p <= base::SharedMemoryHandle::Type::LAST);
-  m->WriteInt(static_cast<int>(p));
+void ParamTraits<AHardwareBuffer*>::Write(base::Pickle* m,
+                                          const param_type& p) {
+  const bool is_valid = p != nullptr;
+  WriteParam(m, is_valid);
+  if (!is_valid)
+    return;
+
+  // Assume ownership of the input AHardwareBuffer.
+  auto handle = base::android::ScopedHardwareBufferHandle::Adopt(p);
+
+  // We must keep a ref to the AHardwareBuffer alive until the receiver has
+  // acquired its own reference. We do this by sending a message pipe handle
+  // along with the buffer. When the receiver deserializes (or even if they
+  // die without ever reading the message) their end of the pipe will be
+  // closed. We will eventually detect this and release the AHB reference.
+  mojo::MessagePipe tracking_pipe;
+  m->WriteAttachment(new internal::MojoHandleAttachment(
+      mojo::ScopedHandle::From(std::move(tracking_pipe.handle0))));
+  WriteParam(m,
+             base::FileDescriptor(handle.SerializeAsFileDescriptor().release(),
+                                  true /* auto_close */));
+
+  // Pass ownership of the input handle to our tracking pipe to keep the AHB
+  // alive long enough to be deserialized by the receiver.
+  mojo::ScopeToMessagePipe(std::move(handle), std::move(tracking_pipe.handle1));
 }
 
-bool ParamTraits<base::SharedMemoryHandle::Type>::Read(
-    const base::Pickle* m,
-    base::PickleIterator* iter,
-    param_type* r) {
-  int value;
-  if (!iter->ReadInt(&value))
+bool ParamTraits<AHardwareBuffer*>::Read(const base::Pickle* m,
+                                         base::PickleIterator* iter,
+                                         param_type* r) {
+  *r = nullptr;
+
+  bool is_valid;
+  if (!ReadParam(m, iter, &is_valid))
     return false;
-  if (value < 0 ||
-      value > static_cast<int>(base::SharedMemoryHandle::Type::LAST))
+  if (!is_valid)
+    return true;
+
+  scoped_refptr<base::Pickle::Attachment> tracking_pipe_attachment;
+  if (!m->ReadAttachment(iter, &tracking_pipe_attachment))
     return false;
-  *r = static_cast<param_type>(value);
+
+  // We keep this alive until the AHB is safely deserialized below. When this
+  // goes out of scope, the sender holding the other end of this pipe will treat
+  // this handle closure as a signal that it's safe to release their AHB
+  // keepalive ref.
+  mojo::ScopedHandle tracking_pipe =
+      static_cast<MessageAttachment*>(tracking_pipe_attachment.get())
+          ->TakeMojoHandle();
+
+  base::FileDescriptor descriptor;
+  if (!ReadParam(m, iter, &descriptor))
+    return false;
+
+  // NOTE: It is valid to deserialize an invalid FileDescriptor, so the success
+  // of |ReadParam()| above does not imply that |descriptor| is valid.
+  base::ScopedFD scoped_fd(descriptor.fd);
+  if (!scoped_fd.is_valid())
+    return false;
+
+  *r = base::android::ScopedHardwareBufferHandle::DeserializeFromFileDescriptor(
+           std::move(scoped_fd))
+           .Take();
   return true;
 }
 
-void ParamTraits<base::SharedMemoryHandle::Type>::Log(const param_type& p,
-                                                      std::string* l) {
-  l->append(base::IntToString(static_cast<int>(p)));
+void ParamTraits<AHardwareBuffer*>::Log(const param_type& p, std::string* l) {
+  l->append(base::StringPrintf("AHardwareBuffer(%p)", p));
 }
-#endif
+#endif  // defined(OS_ANDROID)
 
 void ParamTraits<base::SharedMemoryHandle>::Write(base::Pickle* m,
                                                   const param_type& p) {
@@ -614,10 +666,6 @@ void ParamTraits<base::SharedMemoryHandle>::Write(base::Pickle* m,
   WriteParam(m, handle_fuchsia);
 #else
 #if defined(OS_ANDROID)
-  // Android transfers both ashmem and AHardwareBuffer SharedMemoryHandle
-  // subtypes, both are transferred via file descriptor but need to be handled
-  // differently by the receiver. Write the type to distinguish.
-  WriteParam(m, p.GetType());
   WriteParam(m, p.IsReadOnly());
 
   // Ensure the region is read-only before sending it through IPC.
@@ -676,14 +724,9 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
     return false;
 #else
 #if defined(OS_ANDROID)
-  // Android uses both ashmen and AHardwareBuffer subtypes, get the actual type
-  // for use as a constructor argument alongside the file descriptor.
-  base::SharedMemoryHandle::Type android_subtype;
   bool is_read_only = false;
-  if (!ReadParam(m, iter, &android_subtype) ||
-      !ReadParam(m, iter, &is_read_only)) {
+  if (!ReadParam(m, iter, &is_read_only))
     return false;
-  }
 #endif
   scoped_refptr<base::Pickle::Attachment> attachment;
   if (!m->ReadAttachment(iter, &attachment))
@@ -697,7 +740,8 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
 
   base::UnguessableToken guid;
   uint64_t size;
-  if (!ReadParam(m, iter, &guid) || !ReadParam(m, iter, &size)) {
+  if (!ReadParam(m, iter, &guid) || !ReadParam(m, iter, &size) ||
+      !base::IsValueInRangeForNumericType<size_t>(size)) {
     return false;
   }
 
@@ -710,16 +754,6 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
 #elif defined(OS_FUCHSIA)
   *r = base::SharedMemoryHandle(handle_fuchsia.get_handle(),
                                 static_cast<size_t>(size), guid);
-#elif defined(OS_ANDROID)
-  *r = base::SharedMemoryHandle(
-      android_subtype,
-      base::FileDescriptor(
-          static_cast<internal::PlatformFileAttachment*>(attachment.get())
-              ->TakePlatformFile(),
-          true),
-      static_cast<size_t>(size), guid);
-  if (is_read_only)
-    r->SetReadOnly();
 #else
   *r = base::SharedMemoryHandle(
       base::FileDescriptor(
@@ -727,6 +761,11 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
               ->TakePlatformFile(),
           true),
       static_cast<size_t>(size), guid);
+#endif
+
+#if defined(OS_ANDROID)
+  if (is_read_only)
+    r->SetReadOnly();
 #endif
 
   return true;
@@ -753,6 +792,270 @@ void ParamTraits<base::SharedMemoryHandle>::Log(const param_type& p,
   l->append("read-only: ");
   LogParam(p.IsReadOnly(), l);
 #endif
+}
+
+void ParamTraits<base::ReadOnlySharedMemoryRegion>::Write(base::Pickle* m,
+                                                          const param_type& p) {
+  base::subtle::PlatformSharedMemoryRegion handle =
+      base::ReadOnlySharedMemoryRegion::TakeHandleForSerialization(
+          std::move(const_cast<param_type&>(p)));
+  WriteParam(m, std::move(handle));
+}
+
+bool ParamTraits<base::ReadOnlySharedMemoryRegion>::Read(
+    const base::Pickle* m,
+    base::PickleIterator* iter,
+    param_type* r) {
+  base::subtle::PlatformSharedMemoryRegion handle;
+  if (!ReadParam(m, iter, &handle))
+    return false;
+
+  *r = base::ReadOnlySharedMemoryRegion::Deserialize(std::move(handle));
+  return true;
+}
+
+void ParamTraits<base::ReadOnlySharedMemoryRegion>::Log(const param_type& p,
+                                                        std::string* l) {
+  *l = "<base::ReadOnlySharedMemoryRegion>";
+  // TODO(alexilin): currently there is no way to access underlying handle
+  // without destructing a ReadOnlySharedMemoryRegion instance.
+}
+
+void ParamTraits<base::WritableSharedMemoryRegion>::Write(base::Pickle* m,
+                                                          const param_type& p) {
+  base::subtle::PlatformSharedMemoryRegion handle =
+      base::WritableSharedMemoryRegion::TakeHandleForSerialization(
+          std::move(const_cast<param_type&>(p)));
+  WriteParam(m, std::move(handle));
+}
+
+bool ParamTraits<base::WritableSharedMemoryRegion>::Read(
+    const base::Pickle* m,
+    base::PickleIterator* iter,
+    param_type* r) {
+  base::subtle::PlatformSharedMemoryRegion handle;
+  if (!ReadParam(m, iter, &handle))
+    return false;
+
+  *r = base::WritableSharedMemoryRegion::Deserialize(std::move(handle));
+  return true;
+}
+
+void ParamTraits<base::WritableSharedMemoryRegion>::Log(const param_type& p,
+                                                        std::string* l) {
+  *l = "<base::WritableSharedMemoryRegion>";
+  // TODO(alexilin): currently there is no way to access underlying handle
+  // without destructing a ReadOnlySharedMemoryRegion instance.
+}
+
+void ParamTraits<base::UnsafeSharedMemoryRegion>::Write(base::Pickle* m,
+                                                        const param_type& p) {
+  base::subtle::PlatformSharedMemoryRegion handle =
+      base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
+          std::move(const_cast<param_type&>(p)));
+  WriteParam(m, std::move(handle));
+}
+
+bool ParamTraits<base::UnsafeSharedMemoryRegion>::Read(
+    const base::Pickle* m,
+    base::PickleIterator* iter,
+    param_type* r) {
+  base::subtle::PlatformSharedMemoryRegion handle;
+  if (!ReadParam(m, iter, &handle))
+    return false;
+
+  *r = base::UnsafeSharedMemoryRegion::Deserialize(std::move(handle));
+  return true;
+}
+
+void ParamTraits<base::UnsafeSharedMemoryRegion>::Log(const param_type& p,
+                                                      std::string* l) {
+  *l = "<base::UnsafeSharedMemoryRegion>";
+  // TODO(alexilin): currently there is no way to access underlying handle
+  // without destructing a ReadOnlySharedMemoryRegion instance.
+}
+
+void ParamTraits<base::subtle::PlatformSharedMemoryRegion>::Write(
+    base::Pickle* m,
+    const param_type& p) {
+  const bool valid = p.IsValid();
+  WriteParam(m, valid);
+
+  if (!valid)
+    return;
+
+  WriteParam(m, p.GetMode());
+  WriteParam(m, static_cast<uint64_t>(p.GetSize()));
+  WriteParam(m, p.GetGUID());
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  base::mac::ScopedMachSendRight h =
+      const_cast<param_type&>(p).PassPlatformHandle();
+  MachPortMac mach_port_mac(h.release());
+  WriteParam(m, mach_port_mac);
+#elif defined(OS_FUCHSIA)
+  base::ScopedZxHandle h = const_cast<param_type&>(p).PassPlatformHandle();
+  HandleFuchsia handle_fuchsia(h.release());
+  WriteParam(m, handle_fuchsia);
+#elif defined(OS_WIN)
+  base::win::ScopedHandle h = const_cast<param_type&>(p).PassPlatformHandle();
+  HandleWin handle_win(h.Take());
+  WriteParam(m, handle_win);
+#elif defined(OS_ANDROID)
+  m->WriteAttachment(new internal::PlatformFileAttachment(
+      base::ScopedFD(const_cast<param_type&>(p).PassPlatformHandle())));
+#else
+  base::subtle::ScopedFDPair h =
+      const_cast<param_type&>(p).PassPlatformHandle();
+  m->WriteAttachment(new internal::PlatformFileAttachment(std::move(h.fd)));
+  if (p.GetMode() ==
+      base::subtle::PlatformSharedMemoryRegion::Mode::kWritable) {
+    m->WriteAttachment(
+        new internal::PlatformFileAttachment(std::move(h.readonly_fd)));
+  }
+#endif
+}
+
+bool ParamTraits<base::subtle::PlatformSharedMemoryRegion>::Read(
+    const base::Pickle* m,
+    base::PickleIterator* iter,
+    param_type* r) {
+  bool valid;
+  if (!ReadParam(m, iter, &valid))
+    return false;
+  if (!valid) {
+    *r = base::subtle::PlatformSharedMemoryRegion();
+    return true;
+  }
+
+  base::subtle::PlatformSharedMemoryRegion::Mode mode;
+  uint64_t shm_size;
+  base::UnguessableToken guid;
+  if (!ReadParam(m, iter, &mode) || !ReadParam(m, iter, &shm_size) ||
+      !base::IsValueInRangeForNumericType<size_t>(shm_size) ||
+      !ReadParam(m, iter, &guid)) {
+    return false;
+  }
+  size_t size = static_cast<size_t>(shm_size);
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  MachPortMac mach_port_mac;
+  if (!ReadParam(m, iter, &mach_port_mac))
+    return false;
+  *r = base::subtle::PlatformSharedMemoryRegion::Take(
+      base::mac::ScopedMachSendRight(mach_port_mac.get_mach_port()), mode, size,
+      guid);
+#elif defined(OS_FUCHSIA)
+  HandleFuchsia handle_fuchsia;
+  if (!ReadParam(m, iter, &handle_fuchsia))
+    return false;
+  *r = base::subtle::PlatformSharedMemoryRegion::Take(
+      base::ScopedZxHandle(handle_fuchsia.get_handle()), mode, size, guid);
+#elif defined(OS_WIN)
+  HandleWin handle_win;
+  if (!ReadParam(m, iter, &handle_win))
+    return false;
+  *r = base::subtle::PlatformSharedMemoryRegion::Take(
+      base::win::ScopedHandle(handle_win.get_handle()), mode, size, guid);
+#else
+  scoped_refptr<base::Pickle::Attachment> attachment;
+  if (!m->ReadAttachment(iter, &attachment))
+    return false;
+  if (static_cast<MessageAttachment*>(attachment.get())->GetType() !=
+      MessageAttachment::Type::PLATFORM_FILE) {
+    return false;
+  }
+
+#if defined(OS_ANDROID)
+  *r = base::subtle::PlatformSharedMemoryRegion::Take(
+      base::ScopedFD(
+          static_cast<internal::PlatformFileAttachment*>(attachment.get())
+              ->TakePlatformFile()),
+      mode, size, guid);
+#else
+  scoped_refptr<base::Pickle::Attachment> readonly_attachment;
+  if (mode == base::subtle::PlatformSharedMemoryRegion::Mode::kWritable) {
+    if (!m->ReadAttachment(iter, &readonly_attachment))
+      return false;
+
+    if (static_cast<MessageAttachment*>(readonly_attachment.get())->GetType() !=
+        MessageAttachment::Type::PLATFORM_FILE) {
+      return false;
+    }
+  }
+  *r = base::subtle::PlatformSharedMemoryRegion::Take(
+      base::subtle::ScopedFDPair(
+          base::ScopedFD(
+              static_cast<internal::PlatformFileAttachment*>(attachment.get())
+                  ->TakePlatformFile()),
+          readonly_attachment
+              ? base::ScopedFD(static_cast<internal::PlatformFileAttachment*>(
+                                   readonly_attachment.get())
+                                   ->TakePlatformFile())
+              : base::ScopedFD()),
+      mode, size, guid);
+#endif  // defined(OS_ANDROID)
+
+#endif
+
+  return true;
+}
+
+void ParamTraits<base::subtle::PlatformSharedMemoryRegion>::Log(
+    const param_type& p,
+    std::string* l) {
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  l->append("Mach port: ");
+  LogParam(p.GetPlatformHandle(), l);
+#elif defined(OS_FUCHSIA) || defined(OS_WIN)
+  l->append("Handle: ");
+  LogParam(p.GetPlatformHandle(), l);
+#elif defined(OS_ANDROID)
+  l->append("FD: ");
+  LogParam(p.GetPlatformHandle(), l);
+#else
+  base::subtle::FDPair h = p.GetPlatformHandle();
+  l->append("FD: ");
+  LogParam(h.fd, l);
+  l->append("Read-only FD: ");
+  LogParam(h.readonly_fd, l);
+#endif
+
+  l->append("Mode: ");
+  LogParam(p.GetMode(), l);
+  l->append("size: ");
+  LogParam(static_cast<uint64_t>(p.GetSize()), l);
+  l->append("GUID: ");
+  LogParam(p.GetGUID(), l);
+}
+
+void ParamTraits<base::subtle::PlatformSharedMemoryRegion::Mode>::Write(
+    base::Pickle* m,
+    const param_type& value) {
+  DCHECK(static_cast<int>(value) >= 0 &&
+         static_cast<int>(value) <= static_cast<int>(param_type::kMaxValue));
+  m->WriteInt(static_cast<int>(value));
+}
+
+bool ParamTraits<base::subtle::PlatformSharedMemoryRegion::Mode>::Read(
+    const base::Pickle* m,
+    base::PickleIterator* iter,
+    param_type* p) {
+  int value;
+  if (!iter->ReadInt(&value))
+    return false;
+  if (!(static_cast<int>(value) >= 0 &&
+        static_cast<int>(value) <= static_cast<int>(param_type::kMaxValue))) {
+    return false;
+  }
+  *p = static_cast<param_type>(value);
+  return true;
+}
+
+void ParamTraits<base::subtle::PlatformSharedMemoryRegion::Mode>::Log(
+    const param_type& p,
+    std::string* l) {
+  LogParam(static_cast<int>(p), l);
 }
 
 #if defined(OS_WIN)

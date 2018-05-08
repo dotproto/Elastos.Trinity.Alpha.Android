@@ -4,7 +4,6 @@
 
 #include "ui/app_list/views/indicator_chip_view.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/background.h"
@@ -20,9 +19,8 @@ constexpr int kIndicatorHeight = 16;
 constexpr int kHorizontalPadding = 16;
 constexpr int kBorderCornerRadius = 8;
 
-constexpr SkColor kLabelColor = SkColorSetARGBMacro(0x8A, 0xFF, 0xFF, 0xFF);
-constexpr SkColor kBackgroundColor =
-    SkColorSetARGBMacro(0x14, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kLabelColor = SkColorSetARGB(0x8A, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kBackgroundColor = SkColorSetARGB(0x14, 0xFF, 0xFF, 0xFF);
 
 class IndicatorBackground : public views::Background {
  public:

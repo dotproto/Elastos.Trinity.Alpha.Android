@@ -61,31 +61,12 @@ class CBOR_EXPORT CBORReader {
     TOO_MUCH_NESTING,
     INVALID_UTF8,
     EXTRANEOUS_DATA,
-    DUPLICATE_KEY,
     OUT_OF_ORDER_KEY,
     NON_MINIMAL_CBOR_ENCODING,
     UNSUPPORTED_SIMPLE_VALUE,
     UNSUPPORTED_FLOATING_POINT_VALUE,
     OUT_OF_RANGE_INTEGER_VALUE,
-  };
-
-  // Encapsulates information extracted from the header of a CBOR data item,
-  // which consists of the initial byte, and a variable-length-encoded integer
-  // (if any).
-  //
-  // TODO(crbug.com/811717): This is an CBORReader internal detail which should
-  // not be exposed outside. We should switch to an event-based interface
-  // before adding another customer.
-  struct CBOR_EXPORT DataItemHeader {
-    // The major type decoded from the initial byte.
-    CBORValue::Type type;
-
-    // The raw 5-bit additional information from the initial byte.
-    uint8_t additional_info;
-
-    // The integer |value| decoded from the |additional_info| and the
-    // variable-length-encoded integer, if any.
-    uint64_t value;
+    UNKNOWN_ERROR,
   };
 
   // CBOR nested depth sufficient for most use cases.
@@ -97,7 +78,7 @@ class CBOR_EXPORT CBORReader {
   // formats is violated -including unknown additional info and incomplete
   // CBOR data- then an empty optional is returned. Optional |error_code_out|
   // can be provided by the caller to obtain additional information about
-  // decoding failures.
+  // decoding failures, which is always available if an empty value is returned.
   //
   // Fails if not all the data was consumed and sets |error_code_out| to
   // EXTRANEOUS_DATA in this case.
@@ -112,22 +93,28 @@ class CBOR_EXPORT CBORReader {
                                         DecoderError* error_code_out = nullptr,
                                         int max_nesting_level = kCBORMaxDepth);
 
-  // Reads and parses the header of CBOR data item from |input_data|. Optional
-  // |error_code_out| can be provided by the caller to obtain additional
-  // information about decoding failures. Never fails with EXTRANEOUS_DATA, but
-  // informs the caller of how many bytes were consumed through
-  // |num_bytes_consumed|.
-  static base::Optional<DataItemHeader> ReadDataItemHeader(
-      base::span<const uint8_t> input_data,
-      size_t* num_bytes_consumed = nullptr,
-      DecoderError* error_code_out = nullptr);
-
   // Translates errors to human-readable error messages.
   static const char* ErrorCodeToString(DecoderError error_code);
 
  private:
   CBORReader(base::span<const uint8_t>::const_iterator it,
              const base::span<const uint8_t>::const_iterator end);
+
+  // Encapsulates information extracted from the header of a CBOR data item,
+  // which consists of the initial byte, and a variable-length-encoded integer
+  // (if any).
+  struct DataItemHeader {
+    // The major type decoded from the initial byte.
+    CBORValue::Type type;
+
+    // The raw 5-bit additional information from the initial byte.
+    uint8_t additional_info;
+
+    // The integer |value| decoded from the |additional_info| and the
+    // variable-length-encoded integer, if any.
+    uint64_t value;
+  };
+
   base::Optional<DataItemHeader> DecodeDataItemHeader();
   base::Optional<CBORValue> DecodeCompleteDataItem(int max_nesting_level);
   base::Optional<CBORValue> DecodeValueToNegative(uint64_t value);
@@ -141,8 +128,6 @@ class CBOR_EXPORT CBORReader {
   base::Optional<CBORValue> ReadMapContent(const DataItemHeader& header,
                                            int max_nesting_level);
   bool CanConsume(uint64_t bytes);
-  void CheckExtraneousData();
-  bool CheckDuplicateKey(const CBORValue& new_key, CBORValue::MapValue* map);
   bool HasValidUTF8Format(const std::string& string_data);
   bool CheckOutOfOrderKey(const CBORValue& new_key, CBORValue::MapValue* map);
   bool CheckMinimalEncoding(uint8_t additional_bytes, uint64_t uint_data);

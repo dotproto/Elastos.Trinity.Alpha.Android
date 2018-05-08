@@ -53,8 +53,8 @@ const CGFloat kTestToolbarViewHeight = 50.0f;
   return _proxy;
 }
 
-- (CGFloat)headerHeightForContainerView:
-        (CRWWebControllerContainerView*)containerView {
+- (CGFloat)nativeContentHeaderHeightForContainerView:
+    (CRWWebControllerContainerView*)containerView {
   return 0;
 }
 

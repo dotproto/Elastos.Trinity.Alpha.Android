@@ -93,6 +93,14 @@ policy.Page.setPolicyValues = function(values) {
   }
 };
 
+function loadSession(sessionName) {
+  $('invalid-session-name-error').hidden = true;
+  $('session-name-field').value = '';
+  if (sessionName) {
+    chrome.send('loadSession', [sessionName]);
+  }
+}
+
 /** @override */
 policy.Page.prototype.initialize = function() {
   cr.ui.FocusOutlineManager.forDocument(document);
@@ -110,13 +118,14 @@ policy.Page.prototype.initialize = function() {
   };
 
   $('session-choice').onsubmit = () => {
-    $('invalid-session-name-error').hidden = true;
-    var session = $('session-name-field').value;
-    chrome.send('loadSession', [session]);
-    $('session-name-field').value = '';
+    loadSession($('session-name-field').value);
     // Return false in order to prevent the browser from reloading the whole
     // page.
     return false;
+  };
+
+  $('session-list').ondblclick = () => {
+    loadSession($('session-list').value);
   };
 
   $('show-unset').onchange = () => {
@@ -158,6 +167,10 @@ policy.Page.prototype.initialize = function() {
     if (sessionName && newSessionName) {
       chrome.send('renameSession', [sessionName, newSessionName]);
     }
+  };
+
+  $('export-policies-linux').onclick = (event) => {
+    chrome.send('exportLinux', [policy.Page.getInstance().getDictionary()]);
   };
 
   // Notify the browser that the page has loaded, causing it to send the
@@ -230,6 +243,8 @@ policy.Policy.prototype.setStatus_ = function(value) {
     status = loadTimeData.getString('unset');
   } else if (value.error) {
     status = value.error;
+  } else if (!value.valid) {
+    status = loadTimeData.getString('errorInvalidType');
   } else {
     status = loadTimeData.getString('ok');
   }
@@ -243,7 +258,7 @@ policy.Policy.prototype.setStatus_ = function(value) {
  */
 policy.Policy.prototype.setValue_ = function(value) {
   this.value = value;
-  if (!value) {
+  if (value === undefined) {
     value = '';
   } else if (typeof value != 'string') {
     value = JSON.stringify(value);

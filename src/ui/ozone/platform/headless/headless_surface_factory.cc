@@ -8,7 +8,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
@@ -62,7 +61,7 @@ class FileSurface : public SurfaceOzoneCanvas {
       base::PostTaskWithTraits(
           FROM_HERE,
           {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-          base::Bind(&WriteDataToFile, base_path_, bitmap));
+          base::BindOnce(&WriteDataToFile, base_path_, bitmap));
     }
   }
   std::unique_ptr<gfx::VSyncProvider> CreateVSyncProvider() override {
@@ -92,7 +91,8 @@ class TestPixmap : public gfx::NativePixmap {
                             int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             const gfx::Rect& display_bounds,
-                            const gfx::RectF& crop_rect) override {
+                            const gfx::RectF& crop_rect,
+                            bool enable_blend) override {
     return true;
   }
   gfx::NativePixmapHandle ExportHandle() override {
@@ -143,7 +143,13 @@ base::FilePath HeadlessSurfaceFactory::GetPathForWidget(
     return base_path_;
 
   // Disambiguate multiple window output files with the window id.
+#if defined(OS_WIN)
+  std::string path = base::IntToString(reinterpret_cast<int>(widget)) + ".png";
+  std::wstring wpath(path.begin(), path.end());
+  return base_path_.Append(wpath);
+#else
   return base_path_.Append(base::IntToString(widget) + ".png");
+#endif
 }
 
 std::vector<gl::GLImplementation>

@@ -39,6 +39,8 @@ std::string HistogramTypeToString(HistogramType type) {
       return "CUSTOM_HISTOGRAM";
     case SPARSE_HISTOGRAM:
       return "SPARSE_HISTOGRAM";
+    case DUMMY_HISTOGRAM:
+      return "DUMMY_HISTOGRAM";
   }
   NOTREACHED();
   return "UNKNOWN";
@@ -127,6 +129,8 @@ uint32_t HistogramBase::FindCorruption(const HistogramSamples& samples) const {
   // Not supported by default.
   return NO_INCONSISTENCIES;
 }
+
+void HistogramBase::ValidateHistogramContents() const {}
 
 void HistogramBase::WriteJSON(std::string* output,
                               JSONVerbosityLevel verbosity_level) const {

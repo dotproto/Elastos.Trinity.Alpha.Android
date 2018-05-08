@@ -4,21 +4,25 @@
 
 #include "ui/app_list/views/search_result_tile_item_view.h"
 
+#include <utility>
+
 #include "ash/app_list/model/app_list_view_state.h"
 #include "ash/app_list/model/search/search_result.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_metrics.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/pagination_model.h"
-#include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/search_result_container_view.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -46,16 +50,14 @@ constexpr int kSearchRatingStarVerticalSpacing = 2;
 constexpr int kIconSelectedSize = 56;
 constexpr int kIconSelectedCornerRadius = 4;
 // Icon selected color, #000 8%.
-constexpr int kIconSelectedColor = SkColorSetARGBMacro(0x14, 0x00, 0x00, 0x00);
+constexpr int kIconSelectedColor = SkColorSetARGB(0x14, 0x00, 0x00, 0x00);
 
-constexpr SkColor kSearchTitleColor =
-    SkColorSetARGBMacro(0xDF, 0x00, 0x00, 0x00);
+constexpr SkColor kSearchTitleColor = SkColorSetARGB(0xDF, 0x00, 0x00, 0x00);
 constexpr SkColor kSearchAppRatingColor =
-    SkColorSetARGBMacro(0x8F, 0x00, 0x00, 0x00);
-constexpr SkColor kSearchAppPriceColor =
-    SkColorSetARGBMacro(0xFF, 0x0F, 0x9D, 0x58);
+    SkColorSetARGB(0x8F, 0x00, 0x00, 0x00);
+constexpr SkColor kSearchAppPriceColor = SkColorSetARGB(0xFF, 0x0F, 0x9D, 0x58);
 constexpr SkColor kSearchRatingStarColor =
-    SkColorSetARGBMacro(0x8F, 0x00, 0x00, 0x00);
+    SkColorSetARGB(0x8F, 0x00, 0x00, 0x00);
 
 // The background image source for badge.
 class BadgeBackgroundImageSource : public gfx::CanvasImageSource {
@@ -91,6 +93,7 @@ SearchResultTileItemView::SearchResultTileItemView(
       pagination_model_(pagination_model),
       is_play_store_app_search_enabled_(
           features::IsPlayStoreAppSearchEnabled()),
+      context_menu_(this),
       weak_ptr_factory_(this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
@@ -159,7 +162,7 @@ SearchResultTileItemView::~SearchResultTileItemView() {
 void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   // Handle the case where this may be called from a nested run loop while its
   // context menu is showing. This cancels the menu (it's for the old item).
-  context_menu_runner_.reset();
+  context_menu_.Reset();
 
   SetVisible(!!item);
 
@@ -204,18 +207,10 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
       item_->display_type() == ash::SearchResultDisplayType::kTile &&
       item_->result_type() == ash::SearchResultType::kInstalledApp);
 
-  // Only refresh the icon if it's different from the old one. This prevents
-  // flickering.
   // If the new icon is null, it's being decoded asynchronously. Not updating it
   // now to prevent flickering from showing an empty icon while decoding.
-  if (!item->icon().isNull() &&
-      (!old_item || !item->icon().BackedBySameObjectAs(old_item->icon()))) {
-    OnIconChanged();
-  }
-  if (!old_item ||
-      !item->badge_icon().BackedBySameObjectAs(old_item->badge_icon())) {
-    OnBadgeIconChanged();
-  }
+  if (!item->icon().isNull())
+    OnMetadataChanged();
 
   base::string16 accessible_name = title_->text();
   if (rating_ && rating_->visible()) {
@@ -310,6 +305,7 @@ void SearchResultTileItemView::OnFocus() {
   }
   SetBackgroundHighlighted(true);
   UpdateBackgroundColor();
+  NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
 }
 
 void SearchResultTileItemView::OnBlur() {
@@ -330,8 +326,7 @@ void SearchResultTileItemView::PaintButtonContents(gfx::Canvas* canvas) {
   flags.setAntiAlias(true);
   flags.setStyle(cc::PaintFlags::kFill_Style);
   if (IsSuggestedAppTile()) {
-    rect.Inset((rect.width() - kGridSelectedSize) / 2,
-               (rect.height() - kGridSelectedSize) / 2);
+    rect.ClampToCenteredSize(gfx::Size(kGridSelectedSize, kGridSelectedSize));
     flags.setColor(kGridSelectedColor);
     canvas->DrawRoundRect(gfx::RectF(rect), kGridSelectedCornerRadius, flags);
   } else {
@@ -344,27 +339,17 @@ void SearchResultTileItemView::PaintButtonContents(gfx::Canvas* canvas) {
   }
 }
 
-void SearchResultTileItemView::OnIconChanged() {
+void SearchResultTileItemView::OnMetadataChanged() {
   SetIcon(item_->icon());
-  Layout();
-}
-
-void SearchResultTileItemView::OnBadgeIconChanged() {
   SetBadgeIcon(item_->badge_icon());
-  Layout();
-}
-
-void SearchResultTileItemView::OnRatingChanged() {
   SetRating(item_->rating());
-}
-
-void SearchResultTileItemView::OnFormattedPriceChanged() {
   SetPrice(item_->formatted_price());
+  Layout();
 }
 
 void SearchResultTileItemView::OnResultDestroying() {
   // The menu comes from |item_|. If we're showing a menu we need to cancel it.
-  context_menu_runner_.reset();
+  context_menu_.Reset();
 
   if (item_)
     item_->RemoveObserver(this);
@@ -380,8 +365,19 @@ void SearchResultTileItemView::ShowContextMenuForView(
   if (!item_)
     return;
 
-  ui::MenuModel* menu_model = item_->GetContextMenuModel();
-  if (!menu_model)
+  view_delegate_->GetSearchResultContextMenuModel(
+      item_->id(),
+      base::BindOnce(&SearchResultTileItemView::OnGetContextMenuModel,
+                     weak_ptr_factory_.GetWeakPtr(), source, point,
+                     source_type));
+}
+
+void SearchResultTileItemView::OnGetContextMenuModel(
+    views::View* source,
+    const gfx::Point& point,
+    ui::MenuSourceType source_type,
+    std::vector<ash::mojom::MenuItemPtr> menu) {
+  if (menu.empty() || context_menu_.IsRunning())
     return;
 
   if (IsSuggestedAppTile()) {
@@ -405,15 +401,37 @@ void SearchResultTileItemView::ShowContextMenuForView(
   if (!HasFocus())
     result_container_->ClearSelectedIndex();
 
-  context_menu_runner_.reset(new views::MenuRunner(
-      menu_model, views::MenuRunner::HAS_MNEMONICS,
+  int run_types = views::MenuRunner::HAS_MNEMONICS;
+  views::MenuAnchorPosition anchor_type = views::MENU_ANCHOR_TOPLEFT;
+  gfx::Rect anchor_rect = gfx::Rect(point, gfx::Size());
+
+  if (::features::IsTouchableAppContextMenuEnabled()) {
+    anchor_type = views::MENU_ANCHOR_BUBBLE_TOUCHABLE_LEFT;
+    run_types |= views::MenuRunner::USE_TOUCHABLE_LAYOUT |
+                 views::MenuRunner::CONTEXT_MENU |
+                 views::MenuRunner::FIXED_ANCHOR;
+    if (source_type == ui::MenuSourceType::MENU_SOURCE_TOUCH) {
+      anchor_rect = source->GetBoundsInScreen();
+      // Anchor the menu to the same rect that is used for selection highlight.
+      anchor_rect.ClampToCenteredSize(
+          gfx::Size(kGridSelectedSize, kGridSelectedSize));
+    }
+  }
+  context_menu_.Build(
+      std::move(menu), run_types,
       base::Bind(&SearchResultTileItemView::OnContextMenuClosed,
-                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now())));
-  context_menu_runner_->RunMenuAt(GetWidget(), nullptr,
-                                  gfx::Rect(point, gfx::Size()),
-                                  views::MENU_ANCHOR_TOPLEFT, source_type);
+                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+  context_menu_.Run(GetWidget(), nullptr, anchor_rect, anchor_type,
+                    source_type);
 
   source->RequestFocus();
+}
+
+void SearchResultTileItemView::ExecuteCommand(int command_id, int event_flags) {
+  if (item_) {
+    view_delegate_->ContextMenuItemSelected(item_->id(), command_id,
+                                            event_flags);
+  }
 }
 
 void SearchResultTileItemView::SetIcon(const gfx::ImageSkia& icon) {

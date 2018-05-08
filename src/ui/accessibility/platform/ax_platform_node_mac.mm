@@ -18,6 +18,16 @@
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/strings/grit/ui_strings.h"
 
+@interface AXPlatformNodeCocoa (Private)
+// Helper function for string attributes that don't require extra processing.
+- (NSString*)getStringAttribute:(ax::mojom::StringAttribute)attribute;
+// Returns AXValue, or nil if AXValue isn't an NSString.
+- (NSString*)getAXValueAsString;
+// Returns the text that should be announced for an event with type |eventType|,
+// or nil if it shouldn't be announced.
+- (NSString*)announcementTextForEvent:(ax::mojom::Event)eventType;
+@end
+
 namespace {
 
 using RoleMap = std::map<ax::mojom::Role, NSString*>;
@@ -231,6 +241,17 @@ const ActionList& GetActionList() {
 }
 
 void NotifyMacEvent(AXPlatformNodeCocoa* target, ax::mojom::Event event_type) {
+  NSString* announcement_text = [target announcementTextForEvent:event_type];
+  if (announcement_text) {
+    NSDictionary* notification_info = @{
+      NSAccessibilityAnnouncementKey : announcement_text,
+      NSAccessibilityPriorityKey : @(NSAccessibilityPriorityHigh)
+    };
+    NSAccessibilityPostNotificationWithUserInfo(
+        [NSApp mainWindow], NSAccessibilityAnnouncementRequestedNotification,
+        notification_info);
+    return;
+  }
   NSAccessibilityPostNotification(
       target, [AXPlatformNodeCocoa nativeNotificationFromAXEvent:event_type]);
 }
@@ -251,13 +272,6 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
 }
 
 }  // namespace
-
-@interface AXPlatformNodeCocoa ()
-// Helper function for string attributes that don't require extra processing.
-- (NSString*)getStringAttribute:(ax::mojom::StringAttribute)attribute;
-// Returns AXValue, or nil if AXValue isn't an NSString.
-- (NSString*)getAXValueAsString;
-@end
 
 @implementation AXPlatformNodeCocoa {
   ui::AXPlatformNodeBase* node_;  // Weak. Retains us.
@@ -315,6 +329,25 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
 - (NSString*)getAXValueAsString {
   id value = [self AXValue];
   return [value isKindOfClass:[NSString class]] ? value : nil;
+}
+
+- (NSString*)announcementTextForEvent:(ax::mojom::Event)eventType {
+  if (eventType == ax::mojom::Event::kAlert &&
+      node_->GetData().role == ax::mojom::Role::kAlert) {
+    // If there's no explicitly set accessible name, fall back to
+    // the inner text.
+    NSString* name =
+        [self getStringAttribute:ax::mojom::StringAttribute::kName];
+    return [name length] > 0 ? name
+                             : base::SysUTF16ToNSString(node_->GetText());
+  } else if (eventType == ax::mojom::Event::kLiveRegionChanged &&
+             node_->GetData().HasStringAttribute(
+                 ax::mojom::StringAttribute::kContainerLiveStatus)) {
+    // Live regions announce their inner text.
+    return base::SysUTF16ToNSString(node_->GetText());
+  }
+  // Only alerts and live regions have something to announce.
+  return nil;
 }
 
 // NSAccessibility informal protocol implementation.
@@ -516,7 +549,8 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
     // Since tabs use the Radio Button role on Mac, the standard way to set
     // them is via the value attribute rather than the selected attribute.
     if (node_->GetData().role == ax::mojom::Role::kTab)
-      return !node_->GetData().HasState(ax::mojom::State::kSelected);
+      return !node_->GetData().GetBoolAttribute(
+          ax::mojom::BoolAttribute::kSelected);
 
     return restriction != ax::mojom::Restriction::kReadOnly;
   }
@@ -721,7 +755,8 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
 // Misc attributes.
 
 - (NSNumber*)AXSelected {
-  return @(node_->GetData().HasState(ax::mojom::State::kSelected));
+  return
+      @(node_->GetData().GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
 }
 
 - (NSString*)AXPlaceholderValue {

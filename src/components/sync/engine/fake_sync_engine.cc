@@ -24,6 +24,8 @@ void FakeSyncEngine::TriggerRefresh(const ModelTypeSet& types) {}
 
 void FakeSyncEngine::UpdateCredentials(const SyncCredentials& credentials) {}
 
+void FakeSyncEngine::InvalidateCredentials() {}
+
 void FakeSyncEngine::StartConfiguration() {}
 
 void FakeSyncEngine::StartSyncingWithServer() {}
@@ -66,9 +68,8 @@ SyncEngine::Status FakeSyncEngine::GetDetailedStatus() {
   return SyncEngine::Status();
 }
 
-bool FakeSyncEngine::HasUnsyncedItems() const {
-  return false;
-}
+void FakeSyncEngine::HasUnsyncedItemsForTest(
+    base::OnceCallback<void(bool)> cb) const {}
 
 bool FakeSyncEngine::IsCryptographerReady(const BaseTransaction* trans) const {
   return false;

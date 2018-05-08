@@ -126,7 +126,7 @@ TEST(CertVerifyProcMacTest, MacCRLIntermediate) {
   ASSERT_TRUE(intermediate);
 
   scoped_refptr<X509Certificate> expected_intermediate = path_3_certs[2];
-  EXPECT_TRUE(expected_intermediate->Equals(intermediate.get()))
+  EXPECT_TRUE(expected_intermediate->EqualsExcludingChain(intermediate.get()))
       << "Expected: " << expected_intermediate->subject().common_name
       << " issued by " << expected_intermediate->issuer().common_name
       << "; Got: " << intermediate->subject().common_name << " issued by "
@@ -170,7 +170,6 @@ TEST(CertVerifyProcMacTest, MacKeychainReordering) {
                                   CertificateList(), &verify_result);
 
   ASSERT_EQ(OK, error);
-  EXPECT_EQ(0U, verify_result.cert_status);
   EXPECT_FALSE(verify_result.has_sha1);
   ASSERT_TRUE(verify_result.verified_cert.get());
 

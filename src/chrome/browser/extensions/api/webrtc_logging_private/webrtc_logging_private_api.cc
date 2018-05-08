@@ -110,8 +110,9 @@ content::RenderProcessHost* WebrtcLoggingPrivateFunction::RphFromRequest(
       return false;
     };
     guest_view::GuestViewManager::FromBrowserContext(browser_context())
-        ->ForEachGuest(GetSenderWebContents(),
-                       base::Bind(get_guest, &guests_found, &target_host));
+        ->ForEachGuest(
+            GetSenderWebContents(),
+            base::BindRepeating(get_guest, &guests_found, &target_host));
     if (!target_host) {
       SetError("No webview render process found");
       return nullptr;
@@ -578,6 +579,20 @@ bool WebrtcLoggingPrivateStartEventLoggingFunction::RunAsync() {
                      params->max_log_size_bytes, params->metadata, callback));
 
   return true;
+}
+
+// TODO(crbug.com/829748): Merge with super-class's FireCallback().
+void WebrtcLoggingPrivateStartEventLoggingFunction::FireCallback(
+    bool success,
+    const std::string& error_message) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (success) {
+    DCHECK(error_message.empty());
+  } else {
+    DCHECK(!error_message.empty());
+    SetError(error_message);
+  }
+  SendResponse(success);
 }
 
 bool WebrtcLoggingPrivateGetLogsDirectoryFunction::RunAsync() {

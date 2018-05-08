@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
@@ -240,7 +239,7 @@ void WindowServerTestBase::OnWmDisplayModified(
 ui::mojom::EventResult WindowServerTestBase::OnAccelerator(
     uint32_t accelerator_id,
     const ui::Event& event,
-    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
+    base::flat_map<std::string, std::vector<uint8_t>>* properties) {
   return window_manager_delegate_ ? window_manager_delegate_->OnAccelerator(
                                         accelerator_id, event, properties)
                                   : ui::mojom::EventResult::UNHANDLED;

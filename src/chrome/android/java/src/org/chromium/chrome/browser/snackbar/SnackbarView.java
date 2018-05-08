@@ -45,7 +45,6 @@ class SnackbarView {
     private final TemplatePreservingTextView mMessageView;
     private final TextView mActionButtonView;
     private final ImageView mProfileImageView;
-    private final View mShadowView;
     private final int mAnimationDuration;
     private final boolean mIsTablet;
     private ViewGroup mOriginalParent;
@@ -79,7 +78,7 @@ class SnackbarView {
     SnackbarView(Activity activity, OnClickListener listener, Snackbar snackbar,
             @Nullable ViewGroup parentView) {
         mActivity = activity;
-        mIsTablet = DeviceFormFactor.isTablet();
+        mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity);
 
         if (parentView == null) {
             mOriginalParent = findParentView(activity);
@@ -100,7 +99,6 @@ class SnackbarView {
         mActionButtonView = (TextView) mContainerView.findViewById(R.id.snackbar_button);
         mActionButtonView.setOnClickListener(listener);
         mProfileImageView = (ImageView) mContainerView.findViewById(R.id.snackbar_profile_image);
-        mShadowView = mContainerView.findViewById(R.id.snackbar_shadow);
 
         updateInternal(snackbar, false);
     }
@@ -240,13 +238,16 @@ class SnackbarView {
         int backgroundColor = snackbar.getBackgroundColor();
         if (backgroundColor == 0) {
             backgroundColor = ApiCompatibilityUtils.getColor(mContainerView.getResources(),
-                    useModernDesign() ? R.color.modern_primary_color
-                                      : R.color.snackbar_background_color);
+                    FeatureUtilities.isChromeModernDesignEnabled()
+                            ? R.color.modern_primary_color
+                            : R.color.snackbar_background_color);
         }
 
         int textAppearanceResId = snackbar.getTextAppearance();
         if (textAppearanceResId == 0) {
-            textAppearanceResId = useModernDesign() ? R.style.BlackBodyDefault : R.style.WhiteBody;
+            textAppearanceResId = FeatureUtilities.isChromeModernDesignEnabled()
+                    ? R.style.BlackBodyDefault
+                    : R.style.WhiteBody;
         }
         ApiCompatibilityUtils.setTextAppearance(mMessageView, textAppearanceResId);
 
@@ -274,10 +275,15 @@ class SnackbarView {
             mProfileImageView.setVisibility(View.GONE);
         }
 
-        if (useModernDesign()) {
+        if (FeatureUtilities.isChromeModernDesignEnabled()) {
             mActionButtonView.setTextColor(ApiCompatibilityUtils.getColor(
                     mContainerView.getResources(), R.color.blue_when_enabled));
-            mShadowView.setVisibility(View.VISIBLE);
+
+            mContainerView.findViewById(R.id.snackbar_shadow_top).setVisibility(View.VISIBLE);
+            if (mIsTablet) {
+                mContainerView.findViewById(R.id.snackbar_shadow_left).setVisibility(View.VISIBLE);
+                mContainerView.findViewById(R.id.snackbar_shadow_right).setVisibility(View.VISIBLE);
+            }
         }
         return true;
     }
@@ -320,9 +326,5 @@ class SnackbarView {
         } else {
             view.setText(text);
         }
-    }
-
-    private boolean useModernDesign() {
-        return !mIsTablet && FeatureUtilities.isChromeModernDesignEnabled();
     }
 }

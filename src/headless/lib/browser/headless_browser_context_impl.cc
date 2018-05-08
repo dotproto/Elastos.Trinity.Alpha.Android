@@ -84,13 +84,13 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
       context_options_(std::move(context_options)),
       resource_context_(std::make_unique<HeadlessResourceContext>()),
       should_remove_headers_(true),
-      permission_manager_(std::make_unique<HeadlessPermissionManager>(this)),
-      id_(base::GenerateGUID()) {
+      permission_manager_(std::make_unique<HeadlessPermissionManager>(this)) {
   InitWhileIOAllowed();
 }
 
 HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  NotifyWillBeDestroyed(this);
 
   // Inform observers that we're going away.
   {
@@ -208,8 +208,7 @@ void HeadlessBrowserContextImpl::Close() {
 
 void HeadlessBrowserContextImpl::InitWhileIOAllowed() {
   if (!context_options_->user_data_dir().empty()) {
-    path_ =
-        context_options_->user_data_dir().Append(FILE_PATH_LITERAL("Default"));
+    path_ = context_options_->user_data_dir().Append(kDefaultProfileName);
   } else {
     PathService::Get(base::DIR_EXE, &path_);
   }
@@ -372,7 +371,7 @@ bool HeadlessBrowserContextImpl::ShouldRemoveHeaders() const {
 }
 
 const std::string& HeadlessBrowserContextImpl::Id() const {
-  return id_;
+  return UniqueId();
 }
 
 void HeadlessBrowserContextImpl::AddObserver(Observer* obs) {
@@ -400,6 +399,14 @@ void HeadlessBrowserContextImpl::NotifyUrlRequestFailed(
   base::AutoLock lock(observers_lock_);
   for (auto& observer : observers_)
     observer.UrlRequestFailed(request, net_error, devtools_status);
+}
+
+void HeadlessBrowserContextImpl::NotifyMetadataForResource(const GURL& url,
+                                                           net::IOBuffer* buf,
+                                                           int buf_len) {
+  base::AutoLock lock(observers_lock_);
+  for (auto& observer : observers_)
+    observer.OnMetadataForResource(url, buf, buf_len);
 }
 
 void HeadlessBrowserContextImpl::SetNetworkConditions(
@@ -527,6 +534,13 @@ HeadlessBrowserContext::Builder&
 HeadlessBrowserContext::Builder::SetOverrideWebPreferencesCallback(
     base::RepeatingCallback<void(WebPreferences*)> callback) {
   options_->override_web_preferences_callback_ = std::move(callback);
+  return *this;
+}
+
+HeadlessBrowserContext::Builder&
+HeadlessBrowserContext::Builder::SetCaptureResourceMetadata(
+    bool capture_resource_metadata) {
+  options_->capture_resource_metadata_ = capture_resource_metadata;
   return *this;
 }
 

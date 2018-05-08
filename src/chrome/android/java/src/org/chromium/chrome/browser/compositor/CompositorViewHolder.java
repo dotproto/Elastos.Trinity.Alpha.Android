@@ -175,7 +175,7 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
-        View activeView = getActiveView();
+        View activeView = getContentView();
         if (activeView == null || !ViewCompat.isAttachedToWindow(activeView)) return null;
         return activeView.onResolvePointerIcon(event, pointerIndex);
     }
@@ -206,9 +206,9 @@ public class CompositorViewHolder extends FrameLayout
                 // Have content pick up the size and browser control information when the content
                 // view got laid out. Successive calls with the same values are ignored by
                 // ViewAndroid that stores the size.
-                View view = getActiveView();
+                View view = getContentView();
                 if (view != null) {
-                    setSize(getActiveWebContents(), view, view.getWidth(), view.getHeight());
+                    setSize(getWebContents(), view, view.getWidth(), view.getHeight());
                 }
                 onViewportChanged();
 
@@ -413,17 +413,17 @@ public class CompositorViewHolder extends FrameLayout
         return currentTab;
     }
 
-    private View getActiveView() {
+    private View getContentView() {
         Tab tab = getCurrentTab();
         return tab != null ? tab.getContentView() : null;
     }
 
     private ContentViewCore getActiveContent() {
         Tab tab = getCurrentTab();
-        return tab != null ? tab.getActiveContentViewCore() : null;
+        return tab != null ? tab.getContentViewCore() : null;
     }
 
-    private WebContents getActiveWebContents() {
+    private WebContents getWebContents() {
         Tab tab = getCurrentTab();
         return tab != null ? tab.getWebContents() : null;
     }
@@ -476,8 +476,8 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void onSurfaceResized(int width, int height) {
-        View view = getActiveView();
-        WebContents webContents = getActiveWebContents();
+        View view = getContentView();
+        WebContents webContents = getWebContents();
         if (view == null || webContents == null) return;
         onPhysicalBackingSizeChanged(webContents, width, height);
     }
@@ -534,7 +534,7 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public void onUpdateViewportSize() {
         // Reflect the changes that may have happend in in view/control size.
-        setSize(getActiveWebContents(), getActiveView(), getWidth(), getHeight());
+        setSize(getWebContents(), getContentView(), getWidth(), getHeight());
     }
 
     /**
@@ -556,7 +556,8 @@ public class CompositorViewHolder extends FrameLayout
         int actionMasked = SPenSupport.convertSPenEventAction(e.getActionMasked());
 
         if (actionMasked == MotionEvent.ACTION_DOWN
-                || actionMasked == MotionEvent.ACTION_HOVER_ENTER) {
+                || actionMasked == MotionEvent.ACTION_HOVER_ENTER
+                || actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
             if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
             webContents.getEventForwarder().setCurrentTouchEventOffsets(
                     -mCacheViewport.left, -mCacheViewport.top);
@@ -617,7 +618,6 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public float getHeightMinusBrowserControls() {
         return getHeight() - (getTopControlsHeightPixels() + getBottomControlsHeightPixels());
-
     }
 
     @Override
@@ -733,16 +733,12 @@ public class CompositorViewHolder extends FrameLayout
                 : ColorUtils.getTextBoxAlphaForToolbarBackground(mTabVisible);
     }
 
-    /**
-     * @return The height of the top browser controls in pixels.
-     */
+    @Override
     public int getTopControlsHeightPixels() {
         return mFullscreenManager != null ? mFullscreenManager.getTopControlsHeight() : 0;
     }
 
-    /**
-     * @return The height of the bottom conrols in pixels.
-     */
+    @Override
     public int getBottomControlsHeightPixels() {
         return mFullscreenManager != null ? mFullscreenManager.getBottomControlsHeight() : 0;
     }
@@ -856,7 +852,7 @@ public class CompositorViewHolder extends FrameLayout
 
                 if (content != null) {
                     assert content.isAlive();
-                    content.getContainerView().setVisibility(View.VISIBLE);
+                    getContentView().setVisibility(View.VISIBLE);
                     if (mFullscreenManager != null) mFullscreenManager.updateViewportSize();
                 }
 
@@ -875,7 +871,7 @@ public class CompositorViewHolder extends FrameLayout
                 setFocusableInTouchMode(true);
 
                 if (content != null) {
-                    if (content.isAlive()) content.getContainerView().setVisibility(View.INVISIBLE);
+                    if (content.isAlive()) getContentView().setVisibility(View.INVISIBLE);
                 }
                 removeView(mView);
             }
@@ -927,8 +923,7 @@ public class CompositorViewHolder extends FrameLayout
             onPhysicalBackingSizeChanged(
                     webContents, mCompositorView.getWidth(), mCompositorView.getHeight());
         }
-        View view = tab.getContentView();
-        if (view == null || (tab.isNativePage() && view == tab.getView())) return;
+        if (tab.getView() == null) return;
         tab.setTopControlsHeight(getTopControlsHeightPixels(), controlsResizeView());
         tab.setBottomControlsHeight(getBottomControlsHeightPixels());
     }

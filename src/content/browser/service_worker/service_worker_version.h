@@ -19,7 +19,6 @@
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
@@ -42,11 +41,11 @@
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/common/origin_trials/trial_token_validator.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_client.mojom.h"
-#include "third_party/WebKit/public/mojom/service_worker/service_worker_event_status.mojom.h"
-#include "third_party/WebKit/public/platform/web_feature.mojom.h"
+#include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom.h"
+#include "third_party/blink/public/platform/web_feature.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -438,7 +437,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void SimulatePingTimeoutForTesting();
 
   // Used to allow tests to change time for testing.
-  void SetTickClockForTesting(base::TickClock* tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   // Used to allow tests to change wall clock for testing.
   void SetClockForTesting(base::Clock* clock);
@@ -723,6 +722,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // has been fired or the worker has been stopped.
   void OnNoWorkInBrowser();
 
+  bool IsStartWorkerAllowed() const;
+
   const int64_t version_id_;
   const int64_t registration_id_;
   const GURL script_url_;
@@ -835,7 +836,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   ServiceWorkerStatusCode start_worker_status_ = SERVICE_WORKER_OK;
 
   // The clock used to vend tick time.
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // The clock used for actual (wall clock) time
   base::Clock* clock_;

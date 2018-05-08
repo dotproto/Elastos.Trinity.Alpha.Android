@@ -10,6 +10,7 @@
  */
 function share(path) {
   var appId;
+  var caller = getCaller();
   StepsRunner.run([
     // Set up File Manager.
     function() {
@@ -75,7 +76,8 @@ function share(path) {
           //             'but should be: 350x250',
           //             elements[0]);
           return elements[0] ?
-              undefined : pending('The share dialog is not found.');
+              undefined :
+              pending(caller, 'The share dialog is not found.');
         });
       }).
       then(this.next);
@@ -101,14 +103,18 @@ function share(path) {
       checkIfNoErrorsOccured(this.next);
     }
   ]);
+}
+
+/**
+ * Tests sharing a file on Drive.
+ */
+testcase.shareFile = function() {
+  share('world.ogv');
 };
 
 /**
- * Tests sharing a file on Drive
+ * Tests sharing a directory on Drive.
  */
-testcase.shareFile = share.bind(null, 'world.ogv');
-
-/**
- * Tests sharing a directory on Drive
- */
-testcase.shareDirectory = share.bind(null, 'photos');
+testcase.shareDirectory = function() {
+  share('photos');
+};

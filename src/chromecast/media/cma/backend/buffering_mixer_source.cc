@@ -17,13 +17,15 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/media/cma/backend/stream_mixer.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
+#include "media/audio/audio_device_description.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_timestamp_helper.h"
 
-#define POST_TASK_TO_CALLER_THREAD(task, ...) \
-  caller_task_runner_->PostTask(              \
-      FROM_HERE,                              \
-      base::BindOnce(&BufferingMixerSource::task, weak_this_, ##__VA_ARGS__));
+#define POST_TASK_TO_CALLER_THREAD(task, ...)                               \
+  shim_task_runner_->PostTask(                                              \
+      FROM_HERE, base::BindOnce(&PostTaskShim, caller_task_runner_,         \
+                                base::BindOnce(&BufferingMixerSource::task, \
+                                               weak_this_, ##__VA_ARGS__)));
 
 namespace chromecast {
 namespace media {
@@ -33,6 +35,16 @@ namespace {
 const int kNumOutputChannels = 2;
 const int64_t kInputQueueMs = 90;
 const int kFadeTimeMs = 5;
+
+// Special queue size and start threshold for "communications" streams to avoid
+// issues with voice calling.
+const int64_t kCommsInputQueueMs = 200;
+const int64_t kCommsStartThresholdMs = 150;
+
+void PostTaskShim(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                  base::OnceClosure task) {
+  task_runner->PostTask(FROM_HERE, std::move(task));
+}
 
 std::string AudioContentTypeToString(media::AudioContentType type) {
   switch (type) {
@@ -55,6 +67,20 @@ int64_t SamplesToMicroseconds(int64_t samples, int sample_rate) {
       .InMicroseconds();
 }
 
+int MaxQueuedFrames(const std::string& device_id, int sample_rate) {
+  if (device_id == ::media::AudioDeviceDescription::kCommunicationsDeviceId) {
+    return MsToSamples(kCommsInputQueueMs, sample_rate);
+  }
+  return MsToSamples(kInputQueueMs, sample_rate);
+}
+
+int StartThreshold(const std::string& device_id, int sample_rate) {
+  if (device_id == ::media::AudioDeviceDescription::kCommunicationsDeviceId) {
+    return MsToSamples(kCommsStartThresholdMs, sample_rate);
+  }
+  return 0;
+}
+
 }  // namespace
 
 BufferingMixerSource::LockedMembers::Members::Members(
@@ -70,7 +96,8 @@ BufferingMixerSource::LockedMembers::Members::Members(
       fader_(source,
              num_channels,
              MsToSamples(kFadeTimeMs, input_samples_per_second)),
-      zero_fader_frames_(false) {}
+      zero_fader_frames_(false),
+      started_(false) {}
 
 BufferingMixerSource::LockedMembers::Members::~Members() = default;
 
@@ -114,7 +141,8 @@ BufferingMixerSource::BufferingMixerSource(Delegate* delegate,
                                            bool primary,
                                            const std::string& device_id,
                                            AudioContentType content_type,
-                                           int playout_channel)
+                                           int playout_channel,
+                                           int64_t playback_start_timestamp)
     : delegate_(delegate),
       num_channels_(kNumOutputChannels),
       input_samples_per_second_(input_samples_per_second),
@@ -124,13 +152,18 @@ BufferingMixerSource::BufferingMixerSource(Delegate* delegate,
       playout_channel_(playout_channel),
       mixer_(StreamMixer::Get()),
       caller_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      max_queued_frames_(MsToSamples(kInputQueueMs, input_samples_per_second)),
+      shim_task_runner_(mixer_->shim_task_runner()),
+      max_queued_frames_(MaxQueuedFrames(device_id, input_samples_per_second)),
+      start_threshold_frames_(
+          StartThreshold(device_id, input_samples_per_second)),
+      playback_start_timestamp_(playback_start_timestamp),
       locked_members_(this, input_samples_per_second, num_channels_),
       weak_factory_(this) {
   LOG(INFO) << "Create " << device_id_ << " (" << this
             << "), content type = " << AudioContentTypeToString(content_type_);
   DCHECK(delegate_);
   DCHECK(mixer_);
+  DCHECK_LE(start_threshold_frames_, max_queued_frames_);
   weak_this_ = weak_factory_.GetWeakPtr();
 
   mixer_->AddInput(this);
@@ -184,15 +217,18 @@ BufferingMixerSource::RenderingDelay BufferingMixerSource::QueueData(
     LOG(INFO) << "End of stream for " << device_id_ << " (" << this << ")";
     locked->state_ = State::kGotEos;
   } else {
-    locked->queued_frames_ +=
-        data->data_size() / (num_channels_ * sizeof(float));
+    const int frames = data->data_size() / (num_channels_ * sizeof(float));
+    locked->queued_frames_ += frames;
     locked->queue_.push_back(std::move(data));
   }
 
-  RenderingDelay delay = locked->mixer_rendering_delay_;
-  delay.delay_microseconds += SamplesToMicroseconds(
-      locked->queued_frames_ + locked->extra_delay_frames_,
-      input_samples_per_second_);
+  RenderingDelay delay;
+  if (locked->started_) {
+    delay = locked->mixer_rendering_delay_;
+    delay.delay_microseconds += SamplesToMicroseconds(
+        locked->queued_frames_ + locked->extra_delay_frames_,
+        input_samples_per_second_);
+  }
   return delay;
 }
 
@@ -243,6 +279,20 @@ int BufferingMixerSource::FillAudioPlaybackFrames(
   DCHECK_EQ(num_channels_, buffer->channels());
   DCHECK_GE(buffer->frames(), num_frames);
 
+  int64_t playback_absolute_timestamp = rendering_delay.delay_microseconds +
+                                        rendering_delay.timestamp_microseconds;
+
+  // Don't write to the mixer yet if it's not time to start playback yet.
+  //
+  // TODO(almasrymina): mixer behaviour has playback_absolute_timestamp go up
+  // in chunks of 10ms, so we're going to start playback at
+  // playback_start_timestamp_ accurate to +10ms. Improve this to be sample
+  // accurate by writing a partial silence buffer when it's time to start
+  // playback.
+  if (playback_absolute_timestamp < playback_start_timestamp_) {
+    return 0;
+  }
+
   int filled = 0;
   bool queued_more_data = false;
   bool signal_eos = false;
@@ -254,10 +304,22 @@ int BufferingMixerSource::FillAudioPlaybackFrames(
     // In normal playback, don't pass data to the fader if we can't satisfy the
     // full request. This will allow us to buffer up more data so we can fully
     // fade in.
-    locked->zero_fader_frames_ =
-        (locked->state_ == State::kNormalPlayback &&
-         locked->queued_frames_ <
-             locked->fader_.FramesNeededFromSource(num_frames));
+    if (locked->state_ == State::kNormalPlayback &&
+        (locked->queued_frames_ <
+             locked->fader_.FramesNeededFromSource(num_frames) ||
+         (!locked->started_ &&
+          locked->queued_frames_ < start_threshold_frames_))) {
+      if (locked->started_) {
+        LOG(INFO) << "Stream underrun for " << device_id_ << " (" << this
+                  << ")";
+      }
+      locked->zero_fader_frames_ = true;
+      locked->started_ = false;
+    } else {
+      locked->zero_fader_frames_ = false;
+      locked->started_ = true;
+    }
+
     filled = locked->fader_.FillFrames(num_frames, buffer);
 
     locked->mixer_rendering_delay_ = rendering_delay;
@@ -291,6 +353,7 @@ int BufferingMixerSource::FillAudioPlaybackFrames(
   if (signal_eos) {
     POST_TASK_TO_CALLER_THREAD(PostEos);
   }
+
   if (remove_self) {
     mixer_->RemoveInput(this);
   }

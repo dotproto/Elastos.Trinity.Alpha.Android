@@ -40,7 +40,9 @@ enum V8CacheOptions {
   V8_CACHE_OPTIONS_DEFAULT,
   V8_CACHE_OPTIONS_NONE,
   V8_CACHE_OPTIONS_CODE,
-  V8_CACHE_OPTIONS_LAST = V8_CACHE_OPTIONS_CODE
+  V8_CACHE_OPTIONS_CODE_WITHOUT_HEAT_CHECK,
+  V8_CACHE_OPTIONS_FULLCODE_WITHOUT_HEAT_CHECK,
+  V8_CACHE_OPTIONS_LAST = V8_CACHE_OPTIONS_FULLCODE_WITHOUT_HEAT_CHECK
 };
 
 // ImageAnimationPolicy is used for controlling image animation
@@ -181,6 +183,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool shrinks_viewport_contents_to_fit;
   ViewportStyle viewport_style;
   bool always_show_context_menu_on_touch;
+  bool smooth_scroll_for_find_enabled;
   bool main_frame_resizes_are_orientation_changes;
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
@@ -236,7 +239,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool report_screen_size_in_physical_pixels_quirk;
   // Used by Android_WebView only to support legacy apps that inject script into
   // a top-level initial empty document and expect it to persist on navigation.
-  bool resue_global_for_unowned_main_frame;
+  bool reuse_global_for_unowned_main_frame;
   // Specifies default setting for spellcheck when the spellcheck attribute is
   // not explicitly specified.
   bool spellcheck_enabled_by_default;

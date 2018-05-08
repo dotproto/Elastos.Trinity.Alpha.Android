@@ -11,12 +11,11 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/common/profiling/constants.mojom.h"
-#include "chrome/profiling/profiling_service.h"
+#include "components/services/heap_profiling/heap_profiling_service.h"
+#include "components/services/heap_profiling/public/mojom/constants.mojom.h"
 #include "components/services/patch/patch_service.h"
 #include "components/services/patch/public/interfaces/constants.mojom.h"
 #include "components/services/unzip/public/interfaces/constants.mojom.h"
@@ -46,15 +45,17 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/services/media_gallery_util/media_gallery_util_service.h"
-#include "chrome/services/media_gallery_util/public/mojom/constants.mojom.h"
 #include "chrome/services/removable_storage_writer/public/mojom/constants.mojom.h"
 #include "chrome/services/removable_storage_writer/removable_storage_writer_service.h"
-#include "chrome/utility/extensions/extensions_handler.h"
 #if defined(OS_WIN)
 #include "chrome/services/wifi_util_win/public/mojom/constants.mojom.h"
 #include "chrome/services/wifi_util_win/wifi_util_win_service.h"
 #endif
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS) || defined(OS_ANDROID)
+#include "chrome/services/media_gallery_util/media_gallery_util_service.h"
+#include "chrome/services/media_gallery_util/public/mojom/constants.mojom.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -101,10 +102,6 @@ void RegisterRemovableStorageWriterService(
 
 ChromeContentUtilityClient::ChromeContentUtilityClient()
     : utility_process_running_elevated_(false) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::InitExtensionsClient();
-#endif
-
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
   printing_handler_ = std::make_unique<printing::PrintingHandler>();
 #endif
@@ -193,8 +190,8 @@ void ChromeContentUtilityClient::RegisterServices(
   service_manager::EmbeddedServiceInfo profiling_info;
   profiling_info.task_runner = content::ChildThread::Get()->GetIOTaskRunner();
   profiling_info.factory =
-      base::Bind(&profiling::ProfilingService::CreateService);
-  services->emplace(profiling::mojom::kServiceName, profiling_info);
+      base::Bind(&heap_profiling::HeapProfilingService::CreateService);
+  services->emplace(heap_profiling::mojom::kServiceName, profiling_info);
 
 #if !defined(OS_ANDROID)
   service_manager::EmbeddedServiceInfo proxy_resolver_info;
@@ -241,18 +238,19 @@ void ChromeContentUtilityClient::RegisterServices(
     services->emplace(unzip::mojom::kServiceName, service_info);
   }
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && !defined(OS_WIN)
+  // On Windows the service is running elevated.
+  RegisterRemovableStorageWriterService(services);
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS) && !defined(OS_WIN)
+
+#if BUILDFLAG(ENABLE_EXTENSIONS) || defined(OS_ANDROID)
   {
     service_manager::EmbeddedServiceInfo service_info;
     service_info.factory = base::Bind(&MediaGalleryUtilService::CreateService);
     services->emplace(chrome::mojom::kMediaGalleryUtilServiceName,
                       service_info);
   }
-#if !defined(OS_WIN)
-  // On Windows the service is running elevated.
-  RegisterRemovableStorageWriterService(services);
-#endif
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS) || defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
   // TODO(jamescook): Figure out why we have to do this when not using mash.
@@ -264,13 +262,6 @@ void ChromeContentUtilityClient::RegisterNetworkBinders(
     service_manager::BinderRegistry* registry) {
   if (g_network_binder_creation_callback.Get())
     g_network_binder_creation_callback.Get().Run(registry);
-}
-
-// static
-void ChromeContentUtilityClient::PreSandboxStartup() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::PreSandboxStartup();
-#endif
 }
 
 // static

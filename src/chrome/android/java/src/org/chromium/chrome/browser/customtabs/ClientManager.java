@@ -102,7 +102,7 @@ class ClientManager {
         }
 
         /**
-         * Disconnects from the remote process. Safe to call even if {@link connect()} returned
+         * Disconnects from the remote process. Safe to call even if {@link #connect} returned
          * false, or if the remote service died.
          */
         public void disconnect() {
@@ -133,20 +133,20 @@ class ClientManager {
         public final int uid;
         public final DisconnectCallback disconnectCallback;
         public final PostMessageHandler postMessageHandler;
-        public final Set<Uri> mLinkedUrls = new HashSet<>();
+        public final Set<Origin> mLinkedOrigins = new HashSet<>();
         public OriginVerifier originVerifier;
         public boolean mIgnoreFragments;
         public boolean lowConfidencePrediction;
         public boolean highConfidencePrediction;
         private String mPackageName;
         private boolean mShouldHideDomain;
-        private boolean mShouldPrerenderOnCellular;
+        private boolean mShouldSpeculateLoadOnCellular;
         private boolean mShouldSendNavigationInfo;
         private boolean mShouldSendBottomBarScrollState;
         private KeepAliveServiceConnection mKeepAliveConnection;
         private String mPredictedUrl;
         private long mLastMayLaunchUrlTimestamp;
-        private int mSpeculationMode;
+        private boolean mCanUseHiddenTab;
         private boolean mAllowParallelRequest;
 
         public SessionParams(Context context, int uid, DisconnectCallback callback,
@@ -156,7 +156,6 @@ class ClientManager {
             disconnectCallback = callback;
             this.postMessageHandler = postMessageHandler;
             if (postMessageHandler != null) this.postMessageHandler.setPackageName(mPackageName);
-            this.mSpeculationMode = CustomTabsConnection.SpeculationParams.PRERENDER;
         }
 
         /**
@@ -219,7 +218,7 @@ class ClientManager {
          * @return Whether the default parameters are used for this session.
          */
         public boolean isDefault() {
-            return !mIgnoreFragments && !mShouldPrerenderOnCellular;
+            return !mIgnoreFragments && !mShouldSpeculateLoadOnCellular;
         }
     }
 
@@ -382,7 +381,7 @@ class ClientManager {
     }
 
     public synchronized boolean validateRelationship(
-            CustomTabsSessionToken session, int relation, Uri origin, Bundle extras) {
+            CustomTabsSessionToken session, int relation, Origin origin, Bundle extras) {
         return validateRelationshipInternal(session, relation, origin, false);
     }
 
@@ -390,7 +389,7 @@ class ClientManager {
      * Validates the link between the client and the origin.
      */
     public synchronized void verifyAndInitializeWithPostMessageOriginForSession(
-            CustomTabsSessionToken session, Uri origin, @Relation int relation) {
+            CustomTabsSessionToken session, Origin origin, @Relation int relation) {
         validateRelationshipInternal(session, relation, origin, true);
     }
 
@@ -398,18 +397,29 @@ class ClientManager {
      * Can't be called on UI Thread.
      */
     private synchronized boolean validateRelationshipInternal(CustomTabsSessionToken session,
-            int relation, Uri origin, boolean initializePostMessageChannel) {
+            int relation, Origin origin, boolean initializePostMessageChannel) {
         SessionParams params = mSessionParams.get(session);
         if (params == null || TextUtils.isEmpty(params.getPackageName())) return false;
-        OriginVerificationListener listener = null;
-        if (initializePostMessageChannel) listener = params.postMessageHandler;
+
+        OriginVerificationListener listener = (packageName, verifiedOrigin, verified) -> {
+            assert origin.equals(verifiedOrigin);
+
+            CustomTabsCallback callback = getCallbackForSession(session);
+            if (callback != null) {
+                callback.onRelationshipValidationResult(relation, origin.uri(), verified, null);
+            }
+            if (initializePostMessageChannel) {
+                params.postMessageHandler.onOriginVerified(packageName, verifiedOrigin, verified);
+            }
+        };
+
         params.originVerifier = new OriginVerifier(listener, params.getPackageName(), relation);
-        ThreadUtils.runOnUiThread(() -> { params.originVerifier.start(new Origin(origin)); });
+        ThreadUtils.runOnUiThread(() -> { params.originVerifier.start(origin); });
         if (relation == CustomTabsService.RELATION_HANDLE_ALL_URLS
                 && InstalledAppProviderImpl.isAppInstalledAndAssociatedWithOrigin(
                            params.getPackageName(), URI.create(origin.toString()),
                            mContext.getPackageManager())) {
-            params.mLinkedUrls.add(origin);
+            params.mLinkedOrigins.add(origin);
         }
         return true;
     }
@@ -433,11 +443,11 @@ class ClientManager {
         if (params == null) return false;
         String packageName = params.getPackageName();
         if (TextUtils.isEmpty(packageName)) return false;
-        boolean isAppAssociatedWithOrigin = params.mLinkedUrls.contains(url);
+        Origin origin = new Origin(url);
+        boolean isAppAssociatedWithOrigin = params.mLinkedOrigins.contains(origin);
         if (!isAppAssociatedWithOrigin) return false;
 
         // Split path from the given Uri to get only the origin before web->native verification.
-        Origin origin = new Origin(url);
         if (OriginVerifier.isValidOrigin(
                     packageName, origin, CustomTabsService.RELATION_HANDLE_ALL_URLS)) {
             return true;
@@ -557,14 +567,14 @@ class ClientManager {
     }
 
     /**
-     * @return Whether the fragment should be ignored for prerender matching.
+     * @return Whether the fragment should be ignored for speculation matching.
      */
     public synchronized boolean getIgnoreFragmentsForSession(CustomTabsSessionToken session) {
         SessionParams params = mSessionParams.get(session);
         return params == null ? false : params.mIgnoreFragments;
     }
 
-    /** Sets whether the fragment should be ignored for prerender matching. */
+    /** Sets whether the fragment should be ignored for speculation matching. */
     public synchronized void setIgnoreFragmentsForSession(
             CustomTabsSessionToken session, boolean value) {
         SessionParams params = mSessionParams.get(session);
@@ -572,17 +582,17 @@ class ClientManager {
     }
 
     /**
-     * @return Whether prerender should be turned on for cellular networks for given session.
+     * @return Whether load speculation should be turned on for cellular networks for given session.
      */
-    public synchronized boolean shouldPrerenderOnCellularForSession(
+    public synchronized boolean shouldSpeculateLoadOnCellularForSession(
             CustomTabsSessionToken session) {
         SessionParams params = mSessionParams.get(session);
-        return params != null ? params.mShouldPrerenderOnCellular : false;
+        return params != null ? params.mShouldSpeculateLoadOnCellular : false;
     }
 
     /**
-     * @return Whether the session is using the default parameters (that is,
-     *         don't ignore fragments and don't prerender on cellular connections).
+     * @return Whether the session is using the default parameters (that is, don't ignore
+     *         fragments and don't speculate loads on cellular connections).
      */
     public synchronized boolean usesDefaultSessionParameters(CustomTabsSessionToken session) {
         SessionParams params = mSessionParams.get(session);
@@ -590,31 +600,47 @@ class ClientManager {
     }
 
     /**
-     * Sets whether prerender should be turned on for mobile networks for given session.
+     * Sets whether speculation should be turned on for mobile networks for given session.
+     * If it is turned on, hidden tab speculation is turned on as well.
      */
+    public synchronized void setSpeculateLoadOnCellularForSession(
+            CustomTabsSessionToken session, boolean shouldSpeculate) {
+        SessionParams params = mSessionParams.get(session);
+        if (params != null) {
+            params.mShouldSpeculateLoadOnCellular = shouldSpeculate;
+            params.mCanUseHiddenTab = shouldSpeculate;
+        }
+    }
+
+    /** TODO(mattcary): remove when downstream uses are removed. **/
     public synchronized void setPrerenderCellularForSession(
             CustomTabsSessionToken session, boolean prerender) {
-        SessionParams params = mSessionParams.get(session);
-        if (params != null) params.mShouldPrerenderOnCellular = prerender;
+        setSpeculateLoadOnCellularForSession(session, prerender);
     }
 
-    /**
-     * Sets the speculation mode to be used by default for given session.
-     */
+    /** TODO(mattcary): remove when downstream uses are removed. **/
     public synchronized void setSpeculationModeForSession(
-            CustomTabsSessionToken session, int speculationMode) {
-        SessionParams params = mSessionParams.get(session);
-        if (params != null) params.mSpeculationMode = speculationMode;
+            CustomTabsSessionToken session, int mode) {
+        // No-op.
     }
 
     /**
-     * Get the speculation mode to be used by default for the given session.
-     * If no value has been set will default to PRERENDER mode.
+     * Sets whether hidden tab speculation can be used.
      */
-    public synchronized int getSpeculationModeForSession(CustomTabsSessionToken session) {
+    public synchronized void setCanUseHiddenTab(
+            CustomTabsSessionToken session, boolean canUseHiddenTab) {
         SessionParams params = mSessionParams.get(session);
-        return params == null ? CustomTabsConnection.SpeculationParams.PRERENDER
-                              : params.mSpeculationMode;
+        if (params != null) {
+            params.mCanUseHiddenTab = canUseHiddenTab;
+        }
+    }
+
+    /**
+     * Get whether hidden tab speculation can be used. The default is false.
+     */
+    public synchronized boolean getCanUseHiddenTab(CustomTabsSessionToken session) {
+        SessionParams params = mSessionParams.get(session);
+        return params == null ? false : params.mCanUseHiddenTab;
     }
 
     public synchronized void setAllowParallelRequestForSession(
@@ -637,9 +663,9 @@ class ClientManager {
      * @param origin Origin to verify
      */
     public synchronized boolean isFirstPartyOriginForSession(
-            CustomTabsSessionToken session, Uri origin) {
-        return OriginVerifier.isValidOrigin(getClientPackageNameForSession(session),
-                new Origin(origin), CustomTabsService.RELATION_USE_AS_ORIGIN);
+            CustomTabsSessionToken session, Origin origin) {
+        return OriginVerifier.isValidOrigin(getClientPackageNameForSession(session), origin,
+                CustomTabsService.RELATION_USE_AS_ORIGIN);
     }
 
     /** Tries to bind to a client to keep it alive, and returns true for success. */

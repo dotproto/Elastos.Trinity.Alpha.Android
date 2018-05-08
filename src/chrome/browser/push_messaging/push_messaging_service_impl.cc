@@ -22,7 +22,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
@@ -41,6 +40,7 @@
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/public/rappor_utils.h"
@@ -55,7 +55,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/push_messaging_status.mojom.h"
 #include "content/public/common/push_subscription_options.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -88,15 +88,11 @@ const char kSilentPushUnsupportedMessage[] =
     "https://goo.gl/yqv4Q4 for more details.";
 
 void RecordDeliveryStatus(content::mojom::PushDeliveryStatus status) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PushMessaging.DeliveryStatus", status,
-      static_cast<int>(content::mojom::PushDeliveryStatus::LAST) + 1);
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.DeliveryStatus", status);
 }
 
 void RecordUnsubscribeReason(content::mojom::PushUnregistrationReason reason) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PushMessaging.UnregistrationReason", reason,
-      static_cast<int>(content::mojom::PushUnregistrationReason::LAST) + 1);
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.UnregistrationReason", reason);
 }
 
 void RecordUnsubscribeGCMResult(gcm::GCMClient::Result result) {

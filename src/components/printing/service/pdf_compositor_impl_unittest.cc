@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/printing/service/pdf_compositor_impl.h"
 #include "components/printing/service/public/cpp/pdf_service_mojo_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,7 +53,7 @@ class PdfCompositorImplTest : public testing::Test {
   }
 
   void OnCompositeToPdfCallback(mojom::PdfCompositor::Status status,
-                                mojo::ScopedSharedBufferHandle handle) {
+                                base::ReadOnlySharedMemoryRegion region) {
     // A stub for testing, no implementation.
   }
 
@@ -59,6 +61,22 @@ class PdfCompositorImplTest : public testing::Test {
   base::test::ScopedTaskEnvironment task_environment_;
   std::unique_ptr<base::RunLoop> run_loop_;
   bool is_ready_;
+};
+
+class PdfCompositorImplCrashKeyTest : public PdfCompositorImplTest {
+ public:
+  PdfCompositorImplCrashKeyTest() {}
+  ~PdfCompositorImplCrashKeyTest() override {}
+
+  void SetUp() override {
+    crash_reporter::ResetCrashKeysForTesting();
+    crash_reporter::InitializeCrashKeys();
+  }
+
+  void TearDown() override { crash_reporter::ResetCrashKeysForTesting(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PdfCompositorImplCrashKeyTest);
 };
 
 TEST_F(PdfCompositorImplTest, IsReadyToComposite) {
@@ -343,6 +361,15 @@ TEST_F(PdfCompositorImplTest, NotifyUnavailableSubframe) {
   EXPECT_CALL(impl, OnFulfillRequest(3u, 0)).Times(1);
   impl.NotifyUnavailableSubframe(8u);
   testing::Mock::VerifyAndClearExpectations(&impl);
+}
+
+TEST_F(PdfCompositorImplCrashKeyTest, SetCrashKey) {
+  PdfCompositorImpl impl("unittest", nullptr);
+  std::string url_str("https://www.example.com/");
+  GURL url(url_str);
+  impl.SetWebContentsURL(url);
+
+  EXPECT_EQ(crash_reporter::GetCrashKeyValue("main-frame-url"), url_str);
 }
 
 }  // namespace printing

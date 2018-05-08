@@ -62,8 +62,8 @@ body {
   display: none;
   font-family: arial, sans-serif;
   font-size: small;
-  height: 100%;
   margin: 0;
+  min-height: 100%;
   overflow-x: hidden;
 }
 
@@ -81,12 +81,11 @@ button {
 }
 
 #ntp-contents {
-/*  margin: 0 auto;
-  text-align: -webkit-center;
-  width: var(--content-width);*/
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 #logo,
@@ -531,7 +530,6 @@ html[dir=rtl] #attribution,
   right: 0;
   top: 0;
   transition: opacity 130ms;
-  z-index: 1;
 }
 
 #one-google.hidden {

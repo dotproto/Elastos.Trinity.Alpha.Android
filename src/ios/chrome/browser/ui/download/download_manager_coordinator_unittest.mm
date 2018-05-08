@@ -11,12 +11,16 @@
 #include "base/mac/foundation_util.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/user_action_tester.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #include "ios/chrome/browser/download/download_manager_metric_names.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/google_drive_app_util.h"
 #import "ios/chrome/browser/ui/download/download_manager_view_controller.h"
+#import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/test/fakes/fake_contained_presenter.h"
 #import "ios/chrome/test/fakes/fake_document_interaction_controller.h"
 #import "ios/chrome/test/scoped_key_window.h"
@@ -105,6 +109,7 @@ class DownloadManagerCoordinatorTest : public PlatformTest {
   id application_;
   DownloadManagerCoordinator* coordinator_;
   base::UserActionTester user_action_tester_;
+  base::HistogramTester histogram_tester_;
 };
 
 // Tests starting the coordinator. Verifies that view controller is presented
@@ -303,6 +308,12 @@ TEST_F(DownloadManagerCoordinatorTest, Close) {
   EXPECT_EQ(0U, base_view_controller_.childViewControllers.count);
   EXPECT_FALSE(coordinator_.downloadTask);
   EXPECT_EQ(web::DownloadTask::State::kCancelled, task.GetState());
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::NotStarted),
+      1);
+  histogram_tester_.ExpectTotalCount(
+      "Download.IOSDownloadInstallDrivePromoShown", 0);
 }
 
 // Tests presenting Install Google Drive dialog. Coordinator presents StoreKit
@@ -342,7 +353,7 @@ TEST_F(DownloadManagerCoordinatorTest, InstallDrive) {
   // Simulate Google Drive app installation and verify that expected user action
   // has been recorded.
   ASSERT_EQ(0, user_action_tester_.GetActionCount(
-                   kDownloadManagerGoogleDriveInstalled));
+                   "MobileDownloadFileUIInstallGoogleDrive"));
   // SKStoreProductViewController uses UIApplication, so it's not possible to
   // install the mock before the test run.
   application_ = OCMClassMock([UIApplication class]);
@@ -351,15 +362,16 @@ TEST_F(DownloadManagerCoordinatorTest, InstallDrive) {
   EXPECT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForActionTimeout, ^{
     base::RunLoop().RunUntilIdle();
     return user_action_tester_.GetActionCount(
-               kDownloadManagerGoogleDriveInstalled) == 1;
+               "MobileDownloadFileUIInstallGoogleDrive") == 1;
   }));
 }
 
-// Tests presenting Open In... menu.
+// Tests presenting Open In... menu without actually opening the download.
 TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
-  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
-  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
-  coordinator_.downloadTask = &task;
+  auto task =
+      std::make_unique<web::FakeDownloadTask>(GURL(kTestUrl), kTestMimeType);
+  task->SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = task.get();
   [coordinator_ start];
 
   EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
@@ -367,12 +379,11 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
       base_view_controller_.childViewControllers.firstObject;
   ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
 
-  // Start and complete the download.
+  // Start the download.
   base::FilePath path;
   ASSERT_TRUE(base::GetTempDir(&path));
-  task.Start(std::make_unique<net::URLFetcherFileWriter>(
+  task->Start(std::make_unique<net::URLFetcherFileWriter>(
       base::ThreadTaskRunnerHandle::Get(), path));
-  task.SetDone(true);
 
   // Stub UIDocumentInteractionController.
   FakeDocumentInteractionController* document_interaction_controller =
@@ -388,7 +399,9 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
   [view addLayoutGuide:guide];
   ASSERT_FALSE(document_interaction_controller.presentedOpenInMenu);
   @autoreleasepool {
-    // This call will retain coordinator, which should outlive thread bundle.
+    // These calls will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
     [viewController.delegate downloadManagerViewController:viewController
                           presentOpenInMenuWithLayoutGuide:guide];
   }
@@ -397,6 +410,291 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
       CGRectZero, document_interaction_controller.presentedOpenInMenu.rect));
   ASSERT_EQ(view, document_interaction_controller.presentedOpenInMenu.view);
   ASSERT_TRUE(document_interaction_controller.presentedOpenInMenu.animated);
+
+  // Complete the download to log UMA.
+  task->SetDone(true);
+
+  // Download task is destroyed without opening the file.
+  task = nullptr;
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileNetError", 0);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Completed),
+      1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadedFileAction",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadedFileAction::NoActionOrOpenedViaExtension),
+      1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadedFileAction",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadFileInBackground::SucceededWithoutBackgrounding),
+      1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadInstallDrivePromoShown",
+      static_cast<base::HistogramBase::Sample>(true), 1);
+}
+
+// Tests destroying download task for in progress download.
+TEST_F(DownloadManagerCoordinatorTest, DestroyInProgressDownload) {
+  auto task = CreateTestTask();
+  coordinator_.downloadTask = task.get();
+  web::DownloadTask* task_ptr = task.get();
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Start and the download.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+
+  // Starting download is async for model.
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForDownloadTimeout, ^{
+    base::RunLoop().RunUntilIdle();
+    return task_ptr->GetState() == web::DownloadTask::State::kInProgress;
+  }));
+
+  // Download task is destroyed before the download is complete.
+  task = nullptr;
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileNetError", 0);
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileAction", 0);
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileInBackground", 0);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Other), 1);
+  histogram_tester_.ExpectTotalCount(
+      "Download.IOSDownloadInstallDrivePromoShown", 0);
+}
+
+// Tests quitting the app during in-progress download.
+TEST_F(DownloadManagerCoordinatorTest, QuitDuringInProgressDownload) {
+  auto task = CreateTestTask();
+  coordinator_.downloadTask = task.get();
+  web::DownloadTask* task_ptr = task.get();
+  FakeWebStateListDelegate web_state_list_delegate;
+  WebStateList web_state_list(&web_state_list_delegate);
+  auto web_state = std::make_unique<web::TestWebState>();
+  web_state_list.InsertWebState(
+      0, std::move(web_state), WebStateList::INSERT_NO_FLAGS, WebStateOpener());
+  coordinator_.webStateList = &web_state_list;
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Start and the download.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+
+  // Starting download is async for model.
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForDownloadTimeout, ^{
+    base::RunLoop().RunUntilIdle();
+    return task_ptr->GetState() == web::DownloadTask::State::kInProgress;
+  }));
+
+  // Web States are closed without user action only during app termination.
+  web_state_list.CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
+
+  // Download task is destroyed before the download is complete.
+  task = nullptr;
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileNetError", 0);
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileAction", 0);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileInBackground",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadFileInBackground::CanceledAfterAppQuit),
+      1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Other), 1);
+  histogram_tester_.ExpectTotalCount(
+      "Download.IOSDownloadInstallDrivePromoShown", 0);
+  coordinator_.webStateList = nullptr;
+}
+
+// Tests opening the download in Google Drive app.
+TEST_F(DownloadManagerCoordinatorTest, OpenInDrive) {
+  application_ = OCMClassMock([UIApplication class]);
+  OCMStub([application_ sharedApplication]).andReturn(application_);
+  OCMStub([application_ canOpenURL:GetGoogleDriveAppUrl()]).andReturn(YES);
+  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = &task;
+  web::DownloadTask* task_ptr = &task;
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Stub UIDocumentInteractionController.
+  id document_interaction_controller =
+      [[FakeDocumentInteractionController alloc] init];
+  OCMStub([document_interaction_controller_class_
+              interactionControllerWithURL:[OCMArg any]])
+      .andReturn(document_interaction_controller);
+
+  // Start the download.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+  // Starting download is async for model.
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForDownloadTimeout, ^{
+    base::RunLoop().RunUntilIdle();
+    return task_ptr->GetState() == web::DownloadTask::State::kInProgress;
+  }));
+  task.SetDone(true);
+
+  // Present Open In... menu.
+  ASSERT_FALSE([document_interaction_controller presentedOpenInMenu]);
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate downloadManagerViewController:viewController
+                          presentOpenInMenuWithLayoutGuide:nil];
+  }
+  ASSERT_TRUE([document_interaction_controller presentedOpenInMenu]);
+
+  // Open the file in Google Drive app.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [[document_interaction_controller delegate]
+        documentInteractionController:document_interaction_controller
+        willBeginSendingToApplication:kGoogleDriveAppBundleID];
+  }
+
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileNetError", 0);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Completed),
+      1);
+  histogram_tester_.ExpectUniqueSample("Download.IOSDownloadedFileAction",
+                                       static_cast<base::HistogramBase::Sample>(
+                                           DownloadedFileAction::OpenedInDrive),
+                                       1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadInstallDrivePromoShown",
+      static_cast<base::HistogramBase::Sample>(false), 1);
+}
+
+// Tests opening the download in app other than Google Drive app.
+TEST_F(DownloadManagerCoordinatorTest, OpenInOtherApp) {
+  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = &task;
+  web::DownloadTask* task_ptr = &task;
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Stub UIDocumentInteractionController.
+  id document_interaction_controller =
+      [[FakeDocumentInteractionController alloc] init];
+  OCMStub([document_interaction_controller_class_
+              interactionControllerWithURL:[OCMArg any]])
+      .andReturn(document_interaction_controller);
+
+  // Start the download.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+  // Starting download is async for model.
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForDownloadTimeout, ^{
+    base::RunLoop().RunUntilIdle();
+    return task_ptr->GetState() == web::DownloadTask::State::kInProgress;
+  }));
+
+  // Present Open In... menu.
+  ASSERT_FALSE([document_interaction_controller presentedOpenInMenu]);
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate downloadManagerViewController:viewController
+                          presentOpenInMenuWithLayoutGuide:nil];
+  }
+  ASSERT_TRUE([document_interaction_controller presentedOpenInMenu]);
+
+  // Open the file in Google Drive app.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [[document_interaction_controller delegate]
+        documentInteractionController:document_interaction_controller
+        willBeginSendingToApplication:@"foo-app-id"];
+  }
+
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadedFileNetError", 0);
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileResult", 0);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadedFileAction",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadedFileAction::OpenedInOtherApp),
+      1);
+  histogram_tester_.ExpectTotalCount(
+      "Download.IOSDownloadInstallDrivePromoShown", 0);
+}
+
+// Tests the failure to present Open In... menu. Typically happens on iOS 10
+// where Files app is not installed.
+TEST_F(DownloadManagerCoordinatorTest, OpenInFailure) {
+  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = &task;
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Start and complete the download.
+  base::FilePath path;
+  ASSERT_TRUE(base::GetTempDir(&path));
+  task.Start(std::make_unique<net::URLFetcherFileWriter>(
+      base::ThreadTaskRunnerHandle::Get(), path));
+
+  // Stub UIDocumentInteractionController.
+  id document_interaction_controller =
+      [[FakeDocumentInteractionController alloc] init];
+  [document_interaction_controller setPresentsOpenInMenu:NO];
+  OCMStub([document_interaction_controller_class_
+              interactionControllerWithURL:[OCMArg any]])
+      .andReturn(document_interaction_controller);
+
+  // Attempt to present Open In... menu.
+  ASSERT_FALSE([document_interaction_controller presentedOpenInMenu]);
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate downloadManagerViewController:viewController
+                          presentOpenInMenuWithLayoutGuide:nil];
+  }
+  ASSERT_FALSE([document_interaction_controller presentedOpenInMenu]);
+
+  // Verify that UIAlert is presented.
+  ASSERT_TRUE([base_view_controller_.presentedViewController
+      isKindOfClass:[UIAlertController class]]);
+  UIAlertController* alert = base::mac::ObjCCast<UIAlertController>(
+      base_view_controller_.presentedViewController);
+  EXPECT_NSEQ(@"Unable to Open File", alert.title);
+  EXPECT_NSEQ(@"No application on this device can open the file.",
+              alert.message);
 }
 
 // Tests closing view controller while the download is in progress. Coordinator
@@ -421,7 +719,7 @@ TEST_F(DownloadManagerCoordinatorTest, CloseInProgressDownload) {
       isKindOfClass:[UIAlertController class]]);
   UIAlertController* alert = base::mac::ObjCCast<UIAlertController>(
       base_view_controller_.presentedViewController);
-  EXPECT_NSEQ(@"Cancel Download?", alert.title);
+  EXPECT_NSEQ(@"Stop Download?", alert.title);
   EXPECT_FALSE(alert.message);
 
   // Stop to avoid holding a dangling pointer to destroyed task.
@@ -497,6 +795,7 @@ TEST_F(DownloadManagerCoordinatorTest, StartDownload) {
   ASSERT_TRUE(GetDownloadsDirectory(&download_dir));
   EXPECT_TRUE(download_dir.IsParent(file));
 
+  histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileInBackground", 0);
   ASSERT_EQ(0,
             user_action_tester_.GetActionCount("MobileDownloadRetryDownload"));
 }
@@ -506,14 +805,22 @@ TEST_F(DownloadManagerCoordinatorTest, StartDownload) {
 TEST_F(DownloadManagerCoordinatorTest, RetryingDownload) {
   web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
   task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
-  task.SetErrorCode(net::ERR_INTERNET_DISCONNECTED);
   web::DownloadTask* task_ptr = &task;
   coordinator_.downloadTask = &task;
   [coordinator_ start];
 
+  // First download is a failure.
   DownloadManagerViewController* viewController =
       base_view_controller_.childViewControllers.firstObject;
   ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+  task.SetErrorCode(net::ERR_INTERNET_DISCONNECTED);
+  task.SetDone(true);
+
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
     [viewController.delegate
@@ -526,8 +833,79 @@ TEST_F(DownloadManagerCoordinatorTest, RetryingDownload) {
     return task_ptr->GetState() == web::DownloadTask::State::kInProgress;
   }));
 
+  histogram_tester_.ExpectUniqueSample("Download.IOSDownloadedFileNetError",
+                                       -net::ERR_INTERNET_DISCONNECTED, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Failure), 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileInBackground",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadFileInBackground::FailedWithoutBackgrounding),
+      1);
   ASSERT_EQ(1,
             user_action_tester_.GetActionCount("MobileDownloadRetryDownload"));
+}
+
+// Tests download failure in background.
+TEST_F(DownloadManagerCoordinatorTest, FailingInBackground) {
+  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = &task;
+  [coordinator_ start];
+
+  // Start and immediately fail the download.
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+  task.SetPerformedBackgroundDownload(true);
+  task.SetErrorCode(net::ERR_INTERNET_DISCONNECTED);
+  task.SetDone(true);
+
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileResult",
+      static_cast<base::HistogramBase::Sample>(DownloadFileResult::Failure), 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileInBackground",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadFileInBackground::FailedWithBackgrounding),
+      1);
+  histogram_tester_.ExpectTotalCount(
+      "Download.IOSDownloadInstallDrivePromoShown", 0);
+}
+
+// Tests successful download in background.
+TEST_F(DownloadManagerCoordinatorTest, SucceedingInBackground) {
+  web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetSuggestedFilename(base::SysNSStringToUTF16(kTestSuggestedFileName));
+  coordinator_.downloadTask = &task;
+  [coordinator_ start];
+
+  EXPECT_EQ(1U, base_view_controller_.childViewControllers.count);
+  DownloadManagerViewController* viewController =
+      base_view_controller_.childViewControllers.firstObject;
+  ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+
+  // Start the download.
+  @autoreleasepool {
+    // This call will retain coordinator, which should outlive thread bundle.
+    [viewController.delegate
+        downloadManagerViewControllerDidStartDownload:viewController];
+  }
+
+  // Complete the download to log UMA.
+  task.SetPerformedBackgroundDownload(true);
+  task.SetDone(true);
+  histogram_tester_.ExpectUniqueSample(
+      "Download.IOSDownloadFileInBackground",
+      static_cast<base::HistogramBase::Sample>(
+          DownloadFileInBackground::SucceededWithBackgrounding),
+      1);
 }
 
 // Tests that viewController returns correct view controller if coordinator is

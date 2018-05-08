@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/blink/web_layer_impl_fixed_bounds.h"
 #include <vector>
 #include "cc/animation/animation_host.h"
-#include "cc/blink/web_layer_impl_fixed_bounds.h"
 #include "cc/layers/picture_image_layer.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/skia/include/core/SkMatrix44.h"
+#include "third_party/blink/public/platform/web_float_point.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "ui/gfx/geometry/point3_f.h"
+#include "ui/gfx/transform.h"
 
 using blink::WebFloatPoint;
 using blink::WebSize;
@@ -26,7 +26,7 @@ TEST(WebLayerImplFixedBoundsTest, IdentityBounds) {
   WebLayerImplFixedBounds layer;
   layer.SetFixedBounds(gfx::Size(100, 100));
   layer.SetBounds(WebSize(100, 100));
-  EXPECT_EQ(WebSize(100, 100), layer.Bounds());
+  EXPECT_EQ(gfx::Size(100, 100), layer.Bounds());
   EXPECT_EQ(gfx::Size(100, 100), layer.layer()->bounds());
   EXPECT_EQ(gfx::Transform(), layer.layer()->transform());
 }
@@ -39,20 +39,20 @@ gfx::Point3F TransformPoint(const gfx::Transform& transform,
 }
 
 void CheckBoundsScaleSimple(WebLayerImplFixedBounds* layer,
-                            const WebSize& bounds,
+                            const gfx::Size& bounds,
                             const gfx::Size& fixed_bounds) {
   layer->SetBounds(bounds);
   layer->SetFixedBounds(fixed_bounds);
 
   EXPECT_EQ(bounds, layer->Bounds());
   EXPECT_EQ(fixed_bounds, layer->layer()->bounds());
-  EXPECT_TRUE(layer->Transform().isIdentity());
+  EXPECT_TRUE(layer->Transform().IsIdentity());
 
   // An arbitrary point to check the scale and transforms.
   gfx::Point3F original_point(10, 20, 1);
   gfx::Point3F scaled_point(
-      original_point.x() * bounds.width / fixed_bounds.width(),
-      original_point.y() * bounds.height / fixed_bounds.height(),
+      original_point.x() * bounds.width() / fixed_bounds.width(),
+      original_point.y() * bounds.height() / fixed_bounds.height(),
       original_point.z());
   // Test if the bounds scale is correctly applied in transform.
   EXPECT_POINT3F_EQ(scaled_point, TransformPoint(layer->layer()->transform(),
@@ -61,11 +61,11 @@ void CheckBoundsScaleSimple(WebLayerImplFixedBounds* layer,
 
 TEST(WebLayerImplFixedBoundsTest, BoundsScaleSimple) {
   WebLayerImplFixedBounds layer;
-  CheckBoundsScaleSimple(&layer, WebSize(100, 200), gfx::Size(150, 250));
+  CheckBoundsScaleSimple(&layer, gfx::Size(100, 200), gfx::Size(150, 250));
   // Change fixed_bounds.
-  CheckBoundsScaleSimple(&layer, WebSize(100, 200), gfx::Size(75, 100));
+  CheckBoundsScaleSimple(&layer, gfx::Size(100, 200), gfx::Size(75, 100));
   // Change bounds.
-  CheckBoundsScaleSimple(&layer, WebSize(300, 100), gfx::Size(75, 100));
+  CheckBoundsScaleSimple(&layer, gfx::Size(300, 100), gfx::Size(75, 100));
 }
 
 void ExpectEqualLayerRectsInTarget(cc::Layer* layer1, cc::Layer* layer2) {
@@ -93,14 +93,14 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
   WebLayerImplFixedBounds fixed_bounds_layer(cc::PictureImageLayer::Create());
   fixed_bounds_layer.SetBounds(bounds);
   fixed_bounds_layer.SetFixedBounds(fixed_bounds);
-  fixed_bounds_layer.SetTransform(transform.matrix());
+  fixed_bounds_layer.SetTransform(transform);
   fixed_bounds_layer.SetPosition(position);
   root_layer.AddChild(&fixed_bounds_layer);
 
   WebLayerImpl normal_layer(cc::PictureImageLayer::Create());
 
   normal_layer.SetBounds(bounds);
-  normal_layer.SetTransform(transform.matrix());
+  normal_layer.SetTransform(transform);
   normal_layer.SetPosition(position);
   root_layer.AddChild(&normal_layer);
 

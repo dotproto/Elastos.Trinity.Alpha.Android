@@ -24,6 +24,12 @@ cr.define('extensions', function() {
     });
   }
 
+  // The minimum width in pixels for the options dialog.
+  const MIN_WIDTH = 400;
+
+  // The maximum height in pixels for the options dialog.
+  const MAX_HEIGHT = 640;
+
   const OptionsDialog = Polymer({
     is: 'extensions-options-dialog',
 
@@ -41,21 +47,27 @@ cr.define('extensions', function() {
     boundResizeListener_: null,
 
     get open() {
-      return this.$$('dialog').open;
+      return /** @type {!CrDialogElement} */ (this.$.dialog).open;
     },
 
     /**
      * Resizes the dialog to the given width/height, taking into account the
      * window width/height.
-     * @param {number} width
-     * @param {number} height
+     * @param {number} width The desired height of the dialog contents.
+     * @param {number} height The desired width of the dialog contents.
      * @private
      */
     updateDialogSize_: function(width, height) {
-      const effectiveHeight = Math.min(window.innerHeight, height);
-      const effectiveWidth = Math.min(window.innerWidth, width);
-      this.$.dialog.style.height = effectiveHeight + 'px';
-      this.$.dialog.style.width = effectiveWidth + 'px';
+      const HEADER_HEIGHT = 64;
+      const maxHeight = Math.min(0.9 * window.innerHeight, MAX_HEIGHT);
+      const effectiveHeight = Math.min(maxHeight, HEADER_HEIGHT + height);
+      const effectiveWidth = Math.max(MIN_WIDTH, width);
+
+      // Get a reference to the inner native <dialog>.
+      const nativeDialog =
+          /** @type {!CrDialogElement} */ (this.$.dialog).getNative();
+      nativeDialog.style.height = `${effectiveHeight}px`;
+      nativeDialog.style.width = `${effectiveWidth}px`;
     },
 
     /** @param {chrome.developerPrivate.ExtensionInfo} data */
@@ -68,20 +80,16 @@ cr.define('extensions', function() {
         this.extensionOptions_.onclose = this.close.bind(this);
 
         let preferredSize = null;
-        const onSizeChanged = e => {
+        this.extensionOptions_.onpreferredsizechanged = e => {
           preferredSize = e;
           this.updateDialogSize_(preferredSize.width, preferredSize.height);
-          this.$$('dialog').showModal();
-          this.extensionOptions_.onpreferredsizechanged = null;
+          if (!this.$.dialog.open)
+            this.$.dialog.showModal();
         };
 
         this.boundResizeListener_ = () => {
           this.updateDialogSize_(preferredSize.width, preferredSize.height);
         };
-
-        // Only handle the 1st instance of 'preferredsizechanged' event, to get
-        // the preferred size.
-        this.extensionOptions_.onpreferredsizechanged = onSizeChanged;
 
         // Add a 'resize' such that the dialog is resized when window size
         // changes.
@@ -91,12 +99,13 @@ cr.define('extensions', function() {
     },
 
     close: function() {
-      this.$$('dialog').close();
-      this.extensionOptions_.onpreferredsizechanged = null;
+      /** @type {!CrDialogElement} */ (this.$.dialog).close();
     },
 
     /** @private */
     onClose_: function() {
+      this.extensionOptions_.onpreferredsizechanged = null;
+
       if (this.boundResizeListener_) {
         window.removeEventListener('resize', this.boundResizeListener_);
         this.boundResizeListener_ = null;
@@ -117,5 +126,9 @@ cr.define('extensions', function() {
     },
   });
 
-  return {OptionsDialog: OptionsDialog};
+  return {
+    OptionsDialog: OptionsDialog,
+    OptionsDialogMinWidth: MIN_WIDTH,
+    OptionsDialogMaxHeight: MAX_HEIGHT,
+  };
 });

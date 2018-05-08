@@ -50,7 +50,7 @@
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_util.h"
-#include "net/net_features.h"
+#include "net/net_buildflags.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/next_proto.h"
 #include "net/ssl/channel_id_service.h"
@@ -175,13 +175,17 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   return job_factory;
 }
 
-// For Android WebView, do not enforce the policies outlined in
+// For Android WebView, do not enforce policies that are not consistent with
+// the underlying OS validator.
+// This means not enforcing the Legacy Symantec PKI policies outlined in
 // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
-// as those will be handled by Android itself on its own schedule. Otherwise,
-// it returns the default SSLConfig.
+// or disabling SHA-1 for locally-installed trust anchors.
 class AwSSLConfigService : public net::SSLConfigService {
  public:
-  AwSSLConfigService() { default_config_.symantec_enforcement_disabled = true; }
+  AwSSLConfigService() {
+    default_config_.symantec_enforcement_disabled = true;
+    default_config_.sha1_local_anchors_enabled = true;
+  }
 
   void GetSSLConfig(net::SSLConfig* config) override {
     *config = default_config_;
@@ -214,13 +218,13 @@ AwURLRequestContextGetter::AwURLRequestContextGetter(
 
   auth_server_whitelist_.Init(
       prefs::kAuthServerWhitelist, user_pref_service,
-      base::Bind(&AwURLRequestContextGetter::UpdateServerWhitelist,
-                 base::Unretained(this)));
+      base::BindRepeating(&AwURLRequestContextGetter::UpdateServerWhitelist,
+                          base::Unretained(this)));
   auth_server_whitelist_.MoveToThread(io_thread_proxy);
 
   auth_android_negotiate_account_type_.Init(
       prefs::kAuthAndroidNegotiateAccountType, user_pref_service,
-      base::Bind(
+      base::BindRepeating(
           &AwURLRequestContextGetter::UpdateAndroidAuthNegotiateAccountType,
           base::Unretained(this)));
   auth_android_negotiate_account_type_.MoveToThread(io_thread_proxy);

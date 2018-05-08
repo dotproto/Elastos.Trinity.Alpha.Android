@@ -4,12 +4,12 @@
 
 #include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
 
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/services/multidevice_setup/multidevice_setup_impl.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace chromeos {
 
-namespace multidevice {
+namespace multidevice_setup {
 
 MultiDeviceSetupService::MultiDeviceSetupService()
     : multidevice_setup_impl_(std::make_unique<MultiDeviceSetupImpl>()) {}
@@ -32,10 +32,10 @@ void MultiDeviceSetupService::OnBindInterface(
 }
 
 void MultiDeviceSetupService::BindRequest(
-    multidevice_setup::mojom::MultiDeviceSetupRequest request) {
+    mojom::MultiDeviceSetupRequest request) {
   multidevice_setup_impl_->BindRequest(std::move(request));
 }
 
-}  // namespace multidevice
+}  // namespace multidevice_setup
 
 }  // namespace chromeos

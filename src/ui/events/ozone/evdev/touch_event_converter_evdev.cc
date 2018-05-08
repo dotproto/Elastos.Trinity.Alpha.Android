@@ -18,7 +18,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -125,6 +124,7 @@ TouchEventConverterEvdev::TouchEventConverterEvdev(
                           id,
                           devinfo.device_type(),
                           devinfo.name(),
+                          devinfo.phys(),
                           devinfo.vendor_id(),
                           devinfo.product_id()),
       input_device_fd_(std::move(fd)),
@@ -337,7 +337,7 @@ void TouchEventConverterEvdev::SetTouchEventLoggingEnabled(bool enabled) {
 }
 
 void TouchEventConverterEvdev::SetPalmSuppressionCallback(
-    const base::Callback<void(bool)>& callback) {
+    const base::RepeatingCallback<void(bool)>& callback) {
   enable_palm_suppression_callback_ = callback;
 }
 

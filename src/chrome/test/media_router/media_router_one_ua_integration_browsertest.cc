@@ -29,7 +29,7 @@ class MediaRouterIntegrationOneUABrowserTest
     // Set up embedded test server to serve offscreen presentation with relative
     // URL "presentation_receiver.html".
     base::FilePath base_dir;
-    CHECK(PathService::Get(base::DIR_MODULE, &base_dir));
+    CHECK(base::PathService::Get(base::DIR_MODULE, &base_dir));
     base::FilePath resource_dir = base_dir.Append(
         FILE_PATH_LITERAL("media_router/browser_test_resources/"));
     embedded_test_server()->ServeFilesFromDirectory(resource_dir);
@@ -61,8 +61,9 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
   ExecuteJavaScriptAPI(web_contents, kInitiateCloseFromReceiverPageScript);
 }
 
+// TODO(crbug.com/824889): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
-                       Fail_SendMessage) {
+                       MANUAL_Fail_SendMessage) {
   RunFailToSendMessageTest();
 }
 
@@ -105,8 +106,10 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
   RunReconnectSessionTest();
 }
 
+// TODO(crbug.com/826016): Crashes on ASAN.
+// TODO(crbug.com/834681): Crashes elsewhere too, flakily.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
-                       ReconnectSessionSameTab) {
+                       MANUAL_ReconnectSessionSameTab) {
   RunReconnectSessionSameTabTest();
 }
 

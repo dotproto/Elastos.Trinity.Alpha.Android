@@ -37,7 +37,8 @@ class HostedAppBrowserController : public SiteEngagementObserver,
   static bool IsForExperimentalHostedAppBrowser(const Browser* browser);
 
   // Functions to set preferences that are unique to app windows.
-  static void SetAppPrefsForWebContents(content::WebContents* web_contents);
+  static void SetAppPrefsForWebContents(HostedAppBrowserController* controller,
+                                        content::WebContents* web_contents);
 
   // Renders |url|'s origin as Unicode.
   static base::string16 FormatUrlOrigin(const GURL& url);
@@ -45,8 +46,8 @@ class HostedAppBrowserController : public SiteEngagementObserver,
   explicit HostedAppBrowserController(Browser* browser);
   ~HostedAppBrowserController() override;
 
-  // Returns whether the associated browser is for an installed PWA window.
-  bool IsForInstalledPwa(content::WebContents* web_contents) const;
+  // Returns true if the associated Hosted App is for a PWA.
+  bool created_for_installed_pwa() const { return created_for_installed_pwa_; }
 
   // Whether the browser being controlled should be currently showing the
   // location bar.
@@ -95,6 +96,7 @@ class HostedAppBrowserController : public SiteEngagementObserver,
  private:
   Browser* const browser_;
   const std::string extension_id_;
+  const bool created_for_installed_pwa_;
 
   DISALLOW_COPY_AND_ASSIGN(HostedAppBrowserController);
 };

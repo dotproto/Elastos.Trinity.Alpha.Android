@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">Dirección 1</translation>
 <translation id="1545749641540134597">Escanea el código QR</translation>
 <translation id="1580783302095112590">Correo enviado</translation>
+<translation id="1582732959743469162">Esta acción detendrá el progreso de la descarga actual.</translation>
 <translation id="1612730193129642006">Mostrar cuadrícula de pestañas</translation>
 <translation id="1644574205037202324">Historial</translation>
 <translation id="1646446875146297738">Al habilitar la opción No realizar seguimiento, se incluirá una solicitud con tu tráfico de navegación. El efecto dependerá de si un sitio web responde a la solicitud y de cómo se interpreta esa solicitud.
@@ -55,7 +56,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="1813414402673211292">Borrar datos de navegación</translation>
 <translation id="1820259098641718022">Añadida a Lista de lectura</translation>
 <translation id="1876721852596493031">Enviar datos de uso</translation>
-<translation id="1886928167269928266">El origen de los tiempos</translation>
+<translation id="1886928167269928266">Desde siempre</translation>
 <translation id="1911619930368729126">Subir a Google Drive</translation>
 <translation id="1941314575388338491">Toca dos veces para copiar.</translation>
 <translation id="1952728750904661634">Inicia sesión con una cuenta gestionada</translation>
@@ -136,6 +137,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="3393920035788932672">Pop-ups permitidos</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min</translation>
 <translation id="3448016392200048164">Vista dividida</translation>
+<translation id="3469166899695866866">¿Detener descarga?</translation>
 <translation id="3474624961160222204">Continuar como <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Se han rellenado formularios.</translation>
 <translation id="3478058380795961209">Mes de caducidad</translation>
@@ -149,6 +151,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3603009562372709545">Copiar URL de enlace</translation>
 <translation id="3607167657931203000">Datos de la función Autocompletar</translation>
+<translation id="3609785682760573515">Sincronizando...</translation>
 <translation id="3628119975092896051">Tu lista de lectura está disponible sin conexión. Para añadir una página a la lista, toca <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Precargar páginas web</translation>
 <translation id="3691593122358196899">Marcador añadido a <ph name="FOLDER_TITLE" /></translation>
@@ -158,6 +161,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="3789841737615482174">Instalar</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3915450441834151894">Información del sitio web</translation>
 <translation id="3928666092801078803">Combinar mis datos</translation>
 <translation id="3950820424414687140">Iniciar sesión</translation>
 <translation id="3963231839620026525">Nueva pestaña de incógnito</translation>
@@ -166,6 +170,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="4002066346123236978">Título</translation>
 <translation id="4038354071007134711">Ninguna aplicación puede abrir el archivo.</translation>
 <translation id="4049507953662678203">Comprueba que tienes una conexión de red y vuelve a intentarlo.</translation>
+<translation id="4084682180776658562">Marcador</translation>
 <translation id="411254640334432676">Error de descarga.</translation>
 <translation id="4121993058175073134">Configura tu correo en Configuración para enviar datos de exportaciones netas.</translation>
 <translation id="4124987746317609294">Intervalo de tiempo</translation>
@@ -221,6 +226,7 @@ Tus datos se han cifrado con tu frase de contraseña de sincronización. Introd�
 <translation id="5197255632782567636">Internet</translation>
 <translation id="5228579091201413441">Habilitar sincronización</translation>
 <translation id="5244474230056479698">Sincronizando con <ph name="EMAIL" /></translation>
+<translation id="527973086555161537">Abre una pestaña para navegar por la Web de forma privada.</translation>
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5327248766486351172">Nombre</translation>
@@ -284,6 +290,7 @@ Handoff también debe estar habilitado en la sección General de Configuración,
 <translation id="633809752005859102">Se ha producido un problema grave. Lo investigaremos para solucionarlo.</translation>
 <translation id="6342069812937806050">Ahora</translation>
 <translation id="6344783595350022745">Borrar texto</translation>
+<translation id="6346549652287021269">¿Quieres iniciar una nueva descarga?</translation>
 <translation id="6362362396625799311">No hay pestañas de incógnito</translation>
 <translation id="6374469231428023295">Volver a intentarlo</translation>
 <translation id="6380866119319257197">Si has olvidado tu frase de contraseña o quieres cambiar esta opción, <ph name="BEGIN_LINK" />restablece la sincronización<ph name="END_LINK" /></translation>
@@ -325,12 +332,14 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="7031882061095297553">Sincronizar con</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7062545763355031412">Aceptar y cambiar de cuenta</translation>
+<translation id="7102005569666697658">Descargando… (<ph name="FILE_SIZE" />)</translation>
 <translation id="7108338896283013870">Ocultar</translation>
 <translation id="7133798577887235672">Nombre completo</translation>
 <translation id="7136892417564438900">La cámara no está disponible</translation>
 <translation id="7159472599653637159">Solicitar sitio web móvil</translation>
 <translation id="7167621057293532233">Tipos de datos</translation>
 <translation id="7175593937868963913">Redactar correo electrónico</translation>
+<translation id="7180611975245234373">Actualizar</translation>
 <translation id="7189598951263744875">Compartir...</translation>
 <translation id="7203585745079012652">Decir las respuestas</translation>
 <translation id="722055596168483966">Personalizar los servicios de Google</translation>
@@ -349,6 +358,7 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="750493650310597496">0 seleccionados</translation>
 <translation id="7514365320538308">Descargar</translation>
 <translation id="7537586195939242955">No se puede instalar tu tarjeta en Passbook en este momento.</translation>
+<translation id="7554791636758816595">Nueva pestaña</translation>
 <translation id="7561196759112975576">Siempre</translation>
 <translation id="7603852183842204213">Pop-ups bloqueados (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronización no funciona</translation>
@@ -360,6 +370,7 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="7769602470925380267">Aceptar y cerrar sesión</translation>
 <translation id="7772032839648071052">Repite la contraseña</translation>
 <translation id="780301667611848630">No, gracias</translation>
+<translation id="7856733331829174190">No se ha podido descargar</translation>
 <translation id="7859704718976024901">Historial de navegación</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Exportar contraseñas...</translation>
@@ -372,8 +383,10 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="8023878949384262191">Amplía la sección.</translation>
 <translation id="8059533439631660104">Oculta la sección.</translation>
 <translation id="806745655614357130">Mantener mis datos separados</translation>
+<translation id="8073670137947914548">Descarga finalizada</translation>
 <translation id="8076014560081431679">No se eliminará la configuración guardada de los sitios web, lo cual puede reflejar tus hábitos de navegación. <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Cerrar todas las pestañas</translation>
+<translation id="8114753159095730575">La descarga de archivos está disponible. Hay opciones disponibles en la parte inferior de la pantalla.</translation>
 <translation id="8205564605687841303">Cancelar</translation>
 <translation id="8225985093977202398">Archivos e imágenes en caché</translation>
 <translation id="8261506727792406068">Eliminar</translation>
@@ -411,7 +424,7 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="8904976895050290827">Sincronización de Chrome</translation>
 <translation id="895541991026785598">Notificar un error</translation>
 <translation id="8971089644512329999">Entendido</translation>
-<translation id="8981454092730389528">Controles de la actividad de tu cuenta de Google</translation>
+<translation id="8981454092730389528">Gestión de tu actividad en Google</translation>
 <translation id="8985320356172329008">Has iniciado sesión en Google como</translation>
 <translation id="902659348151742535">Google puede utilizar tu historial de navegación para personalizar la Búsqueda y otros servicios de Google.</translation>
 <translation id="9034759925968272072">No se cerrará la sesión en tu cuenta de Google. Es posible que tu cuenta de Google tenga otras formas del historial de navegación en la página <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>

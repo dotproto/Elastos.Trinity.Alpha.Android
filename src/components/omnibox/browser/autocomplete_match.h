@@ -63,7 +63,7 @@ struct AutocompleteMatch {
   // This structure holds the classification information for each span.
   struct ACMatchClassification {
     // The values in here are not mutually exclusive -- use them like a
-    // bitfield.  This also means we use "int" instead of this enum type when
+    // bit field.  This also means we use "int" instead of this enum type when
     // passing the values around, so the compiler doesn't complain.
     //
     // A Java counterpart will be generated for this enum.
@@ -117,7 +117,9 @@ struct AutocompleteMatch {
   // Gets the vector icon identifier for the icon to be shown for |type|. If
   // |is_bookmark| is true, returns a bookmark icon rather than what the type
   // would determine.
-  static const gfx::VectorIcon& TypeToVectorIcon(Type type, bool is_bookmark);
+  static const gfx::VectorIcon& TypeToVectorIcon(Type type,
+                                                 bool is_bookmark,
+                                                 bool is_tab_match);
 
   // Comparison function for determining when one match is better than another.
   static bool MoreRelevant(const AutocompleteMatch& elem1,
@@ -292,6 +294,10 @@ struct AutocompleteMatch {
   TemplateURL* GetTemplateURL(TemplateURLService* template_url_service,
                               bool allow_fallback_to_destination_host) const;
 
+  // Gets the URL for the match image (whether it be an answer or entity). If
+  // there isn't an image URL, returns an empty GURL (test with is_empty()).
+  GURL ImageUrl() const;
+
   // Adds optional information to the |additional_info| dictionary.
   void RecordAdditionalInfo(const std::string& property,
                             const std::string& value);
@@ -389,6 +395,11 @@ struct AutocompleteMatch {
   // duplicates.
   GURL stripped_destination_url;
 
+  // Optional image information. Used for entity suggestions. The dominant color
+  // can be used to paint the image placeholder while fetching the image.
+  std::string image_dominant_color;
+  std::string image_url;
+
   // The main text displayed in the address bar dropdown.
   base::string16 contents;
   ACMatchClassifications contents_class;
@@ -415,6 +426,9 @@ struct AutocompleteMatch {
 
   // Type of this match.
   Type type;
+
+  // True if we saw a tab that matched this suggestion.
+  bool has_tab_match;
 
   // Used to identify the specific source / type for suggestions by the
   // suggest server. See |result_subtype_identifier| in omnibox.proto for more
@@ -465,7 +479,7 @@ struct AutocompleteMatch {
   // ensure if a match is deleted, the duplicates are deleted as well.
   std::vector<AutocompleteMatch> duplicate_matches;
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   // Does a data integrity check on this match.
   void Validate() const;
 
@@ -473,7 +487,7 @@ struct AutocompleteMatch {
   void ValidateClassifications(
       const base::string16& text,
       const ACMatchClassifications& classifications) const;
-#endif
+#endif  // DCHECK_IS_ON()
 };
 
 typedef AutocompleteMatch::ACMatchClassification ACMatchClassification;

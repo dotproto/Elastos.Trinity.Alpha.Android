@@ -232,9 +232,6 @@ are declared in build/common.gypi.
       <message name="IDS_PERMISSIONS_BUBBLE_PROMPT" desc="The label that is used to introduce permission request details to the user in a popup.">
         <ph name="SITE_NAME">$1<ex>google.com</ex></ph> wants to
       </message>
-      <message name="IDS_PERMISSIONS_BUBBLE_ACCESSIBLE_TITLE" desc="The sentence read out by screen readers to describe the permission request popup.">
-        <ph name="SITE_NAME">$1<ex>google.com</ex></ph> has a permission request.
-      </message>
       <message name="IDS_PERMISSION_ALLOW" desc="Label on button to allow a permissions request.">
         Allow
       </message>
@@ -868,6 +865,9 @@ are declared in build/common.gypi.
           <message name="IDS_SITE_SETTINGS" desc="The text label of the Site Settings menu item for the Hosted App app menu">
             &amp;Site settings
           </message>
+          <message name="IDS_OPEN_IN_APP_WINDOW" desc="The text label of the menu item for moving the current tab to a standalone app window">
+            Open in <ph name="APP">$1<ex>Gmail App</ex></ph>
+          </message>
         </if>
         <if expr="use_titlecase">
           <message name="IDS_NEW_TAB" desc="In Title Case: The text label of a menu item for opening a new tab">
@@ -938,6 +938,9 @@ are declared in build/common.gypi.
           </message>
           <message name="IDS_SITE_SETTINGS" desc="In Title Case: The text label of the Site Settings menu item for the Hosted App app menu">
             &amp;Site Settings
+          </message>
+          <message name="IDS_OPEN_IN_APP_WINDOW" desc="In Title Case: The text label of the menu item for moving the current tab to a standalone app window">
+            Open in <ph name="APP">$1<ex>Gmail App</ex></ph>
           </message>
         </if>
       </if>
@@ -1635,7 +1638,7 @@ are declared in build/common.gypi.
       </message>
       <message name="IDS_DOWNLOAD_MORE_ACTIONS"
                desc="Tooltip of a button on the downloads page that shows a menu with actions like 'Open downloads folder' or 'Clear all'">
-        More actions...
+        More actions
       </message>
       <message name="IDS_DOWNLOAD_BY_EXTENSION_URL"
                desc="Indicates which extension downloaded this file by name and URL.">
@@ -1911,41 +1914,40 @@ are declared in build/common.gypi.
         <message name="IDS_AMBIENT_BADGE_INSTALL" desc="String for the ambient badge promoting an app installation">
           Add <ph name="APP_NAME">$1<ex>Google Maps</ex></ph> to Home screen
         </message>
-        <message name="IDS_AMBIENT_BADGE_OPEN" desc="String for the ambient badge promoting opening an installed app">
-          Open <ph name="APP_NAME">$1<ex>Google Maps</ex></ph>
-        </message>
       </if>
       <!-- Bookmark app bubble -->
-      <if expr="chromeos">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for adding a bookmark app to the shelf.">
-          Add to shelf
+      <if expr="use_titlecase">
+        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="In Title Case: Title of the bubble for adding a bookmark app shortcut to the operating system.">
+          Create Shortcut?
+        </message>
+        <message name="IDS_CREATE_SHORTCUTS_BUTTON_LABEL" desc="In Title Case: Text for button that adds a bookmark app shortcut to the operating system.">
+          Create
         </message>
       </if>
-      <if expr="is_macosx">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="In Title Case: Title of the bubble adding a bookmark app to the Applications Folder on Mac. Note `Applications` should match the name that appears under Favourites in Finder on macOS.">
-          Add to Applications
+      <if expr="not use_titlecase">
+        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for adding a bookmark app shortcut to the operating system.">
+          Create shortcut?
         </message>
-      </if>
-      <if expr="not chromeos and not is_macosx">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for adding a bookmark app to the desktop.">
-          Add to desktop
+        <message name="IDS_CREATE_SHORTCUTS_BUTTON_LABEL" desc="Text for button that adds a bookmark app shortcut to the operating system.">
+          Create
         </message>
       </if>
 
       <!-- "Install web app" confirmation bubble -->
-      <if expr="chromeos">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for installing a web app to the shelf.">
-          Install to shelf
+      <if expr="use_titlecase">
+        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="In Title Case: Title of the bubble for installing a web app to the operating system.">
+          Install App?
+        </message>
+        <message name="IDS_INSTALL_PWA_BUTTON_LABEL" desc="In Title Case: Text for button that installs a web app to the operating system.">
+          Install
         </message>
       </if>
-      <if expr="is_macosx">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="In Title Case: Title of the bubble for installing a web app to the Applications Folder on Mac. Note `Applications` should match the name that appears under Favourites in Finder on macOS.">
-          Install to Applications
+      <if expr="not use_titlecase">
+        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for installing a web app to the operating system.">
+          Install app?
         </message>
-      </if>
-      <if expr="not chromeos and not is_macosx">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE" desc="Title of the bubble for installing a web app to the desktop.">
-          Install to desktop
+        <message name="IDS_INSTALL_PWA_BUTTON_LABEL" desc="Text for button that installs a web app to the operating system.">
+          Install
         </message>
       </if>
 
@@ -1973,36 +1975,26 @@ are declared in build/common.gypi.
       </if>
 
       <!-- "Create application shortcuts" menu item -->
-      <if expr="chromeos">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE" desc="Button text for adding a bookmark app to the shelf.">
-          Add to shelf...
+      <if expr="use_titlecase">
+        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE" desc="In Title Case: Menu text for adding a bookmark app shortcut to the operating system.">
+          Create Shortcut...
         </message>
       </if>
-      <if expr="is_macosx">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE" desc="In Title Case: Button text for adding a bookmark app to the Applications Folder. Note `Applications` should match the name that appears under Favourites in Finder on macOS">
-          Add to Applications...
-        </message>
-      </if>
-      <if expr="not chromeos and not is_macosx">
-        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE" desc="Button text for adding a bookmark app to the desktop.">
-          Add to desktop...
+      <if expr="not use_titlecase">
+        <message name="IDS_ADD_TO_OS_LAUNCH_SURFACE" desc="Menu text for adding a bookmark app shortcut to the operating system.">
+          Create shortcut...
         </message>
       </if>
 
       <!-- "Install web app" menu item -->
-      <if expr="chromeos">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE" desc="Button text for installing a web app to the shelf.">
-          Install to shelf...
+      <if expr="use_titlecase">
+        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE" desc="In Title Case: Menu text for installing a web app to the operating system.">
+          Install <ph name="APP">$1<ex>Gmail</ex></ph>...
         </message>
       </if>
-      <if expr="is_macosx">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE" desc="In Title Case: Button text for installing a web app to the Applications Folder. Note `Applications` should match the name that appears under Favourites in Finder on macOS">
-          Install to Applications...
-        </message>
-      </if>
-      <if expr="not chromeos and not is_macosx">
-        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE" desc="Button text for installing a web app to the desktop.">
-          Install to desktop...
+      <if expr="not use_titlecase">
+        <message name="IDS_INSTALL_TO_OS_LAUNCH_SURFACE" desc="Menu text for installing a web app to the operating system.">
+          Install <ph name="APP">$1<ex>Gmail</ex></ph>...
         </message>
       </if>
 
@@ -2071,7 +2063,7 @@ are declared in build/common.gypi.
         </if>
         <if expr="not is_macosx">
           <message name="IDS_APPLICATION_INFO_CREATE_SHORTCUTS_BUTTON_TEXT" desc="In Title Case: Text for the button that opens the dialog to create shortcuts for the app.">
-          Create Shortcuts...
+            Create Shortcuts...
           </message>
         </if>
       </if>
@@ -3280,6 +3272,8 @@ are declared in build/common.gypi.
         <message name="IDS_UTILITY_PROCESS_IMAGE_WRITER_NAME" desc="The name of the utility process used for writing Chrome OS system images.">
           Chrome OS System Image Writer
         </message>
+      </if>
+      <if expr="enable_extensions or is_android">
         <message name="IDS_UTILITY_PROCESS_MEDIA_GALLERY_UTILITY_NAME" desc="The name of the utility process used for checking media files.">
           Media File Checker
         </message>
@@ -3329,16 +3323,10 @@ are declared in build/common.gypi.
       <if expr="enable_extensions">
         <!-- Extension blocked action bubble -->
         <message name="IDS_EXTENSION_BLOCKED_ACTION_BUBBLE_HEADING" desc="Heading of the bubble to tell users that in order to run an extension, they'll need to refresh the page.">
-          Refresh required
-        </message>
-        <message name="IDS_EXTENSION_BLOCKED_ACTION_BUBBLE_CONTENT" desc="The content of the bubble to tell users that in order to run an extension, they'll need to refresh the page.">
-          In order to run this extension, you need to refresh the page. You can run this extension automatically on this site by right-clicking on the extension icon.
+          Reload page to use this extension
         </message>
         <message name="IDS_EXTENSION_BLOCKED_ACTION_BUBBLE_OK_BUTTON" desc="The text of the button to proceed with the page refresh for running an extension.">
-          OK, refresh
-        </message>
-        <message name="IDS_EXTENSION_BLOCKED_ACTION_BUBBLE_CANCEL_BUTTON" desc="The text of the button to close the bubble and not refresh the page or run the extension.">
-          Never mind
+          Reload
         </message>
       </if>
 
@@ -3792,15 +3780,6 @@ are declared in build/common.gypi.
       </if>
 
       <!-- Extension/App error messages -->
-      <message name="IDS_EXTENSION_PACK_WARNING_TITLE" desc="Warning title message for pack extension">
-        Pack Extension Warning
-      </message>
-      <message name="IDS_EXTENSION_PACK_ERROR_TITLE" desc="Error title message for pack extension">
-        Pack Extension Error
-      </message>
-      <message name="IDS_EXTENSION_PROCEED_ANYWAY" desc="Button to continue with operation in extension packing">
-        Proceed anyway
-      </message>
       <message name="IDS_EXTENSION_CANT_DOWNGRADE_VERSION" desc="Error message when a user tries to install an extension with a lower version than a version that it already installed.">
         Attempted to downgrade extension.
       </message>
@@ -3940,33 +3919,11 @@ are declared in build/common.gypi.
       </message>
 
       <!-- chrome://settings/extensions page -->
+      <!-- TODO(devlin): Move these strings to -->
+      <!-- chrome/app/md_extensions_strings.grdp. -->
       <if expr="enable_extensions">
-        <message name="IDS_EXTENSIONS_DEVELOPER_MODE_LINK" desc="Text of the link for developer mode.">
-          Developer mode
-        </message>
-        <message name="IDS_EXTENSIONS_LOAD_UNPACKED_BUTTON" desc="Text of the 'Load Extension' button.">
-          Load unpacked extension...
-        </message>
-        <message name="IDS_EXTENSIONS_PACK_BUTTON" desc="Text for the 'Pack Extension' button.">
-          Pack extension...
-        </message>
-        <message name="IDS_EXTENSIONS_UPDATE_BUTTON" desc="Text for the 'Update extensions' button.">
-          Update extensions now
-        </message>
-        <message name="IDS_EXTENSIONS_NONE_INSTALLED" desc="Text that lets the user know that no extensions are installed.">
-          Boo... You have no extensions :-(
-        </message>
-        <message name="IDS_EXTENSIONS_NONE_INSTALLED_SUGGEST_GALLERY" desc="Text on next line after IDS_EXTENSIONS_NONE_INSTALLED that suggests the user look in the Chrome Web Store for extensions to install.">
-          Want to <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>browse the Chrome Web Store<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> instead?
-        </message>
         <message name="IDS_EXTENSIONS_INSTALL_DROP_TARGET" desc="Text on drop target for installing extensions.">
           Drop to install
-        </message>
-        <message name="IDS_EXTENSIONS_CRASHED_EXTENSION" desc="Text that signifies that the extension process was terminated, usually because it has crashed.">
-          (Crashed)
-        </message>
-        <message name="IDS_EXTENSIONS_IN_DEVELOPMENT" desc="Text that signifies that the extension is currently in development.">
-          (Unpacked)
         </message>
         <message name="IDS_EXTENSIONS_VIEW_INCOGNITO" desc="Text that signifies that the extension view is in an incognito process.">
           (Incognito)
@@ -3980,14 +3937,8 @@ are declared in build/common.gypi.
         <message name="IDS_EXTENSIONS_BACKGROUND_PAGE" desc="Display name for an autogenerated background page.">
           background page
         </message>
-        <message name="IDS_EXTENSIONS_ID" desc="The ID label in front of the extension ID.">
-          ID:
-        </message>
         <message name="IDS_EXTENSIONS_PATH" desc="The label in front of the extension load path.">
           Loaded from:
-        </message>
-        <message name="IDS_EXTENSIONS_INSPECT_VIEWS" desc="The text for the label in front of the links to inspect views (some of which may not be loaded yet).">
-          Inspect views:
         </message>
         <message name="IDS_EXTENSIONS_INSTALL_WARNINGS" desc="The text which says that an extension has warnings when it was installed.">
           There were warnings when trying to install this extension:
@@ -3998,59 +3949,8 @@ are declared in build/common.gypi.
         <message name="IDS_EXTENSIONS_LOAD_ERROR_MESSAGE" desc="The message which tells the user that an extension failed to load.">
           Failed to load extension from:
         </message>
-        <message name="IDS_EXTENSIONS_LOAD_ERROR_RETRY" desc="The text of the button to retry loading an extension.">
-          Retry
-        </message>
-        <message name="IDS_EXTENSIONS_LOAD_ERROR_GIVE_UP" desc="The text of the button to give up on trying to load an extension.">
-          I give up
-        </message>
-        <message name="IDS_EXTENSIONS_LOAD_COULD_NOT_LOAD_MANIFEST" desc="The text to indicate that the source of the extension's manifest failed to load.">
-          Could not load manifest.
-        </message>
-        <message name="IDS_EXTENSIONS_LOAD_ADDITIONAL_FAILURES" desc="The text displayed above additional extension load failures.">
-          Other extensions that failed to load:
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_HEADING" desc="The heading of the list of errors for an extension.">
-          Errors
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_CLEAR_ALL" desc="The text for the button to delete all extension errors.">
-          Clear all
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_NO_ERRORS" desc="The text displayed when an extension has no errors.">
-          Awesome, no errors!
-        </message>
         <message name="IDS_EXTENSIONS_ERROR_NO_ERRORS_CODE_MESSAGE" desc="The text displayed in the 'code' section when an extension has no errors.">
           Nothing to see here, move along.
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_CONTEXT" desc="The label for the context of an extension's error.">
-          Context:
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_STACK_TRACE" desc="The label for the stack trace of an extension's error.">
-          Stack Trace
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_ANONYMOUS_FUNCTION" desc="The label indicating that an error was caused within an anonymous function in the code.">
-          anonymous function
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_LAUNCH_DEVTOOLS" desc="The text for the button to view an extension error in the developer tools.">
-          View in Developer Tools
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_CONTEXT_UNKNOWN" desc="Text indicating that the context URL for an error is unknown.">
-          Unknown
-        </message>
-        <message name="IDS_EXTENSIONS_ERROR_NO_CODE_TO_DISPLAY" desc="Text indicating that there is no code to be displayed for a given error.">
-          Sorry, we can't show the code for this error.
-        </message>
-        <message name="IDS_EXTENSIONS_ENABLE" desc="The link for enabling extensions.">
-          Enable
-        </message>
-        <message name="IDS_EXTENSIONS_ENABLED" desc="The label for an enabled extension.">
-          Enabled
-        </message>
-        <message name="IDS_EXTENSIONS_REMOVE" desc="The label for uninstalling an extension.">
-          Remove
-        </message>
-        <message name="IDS_EXTENSIONS_ENABLE_INCOGNITO" desc="The checkbox for enabling an extension in incognito.">
-          Allow in incognito
         </message>
         <message name="IDS_EXTENSIONS_ENABLE_ERROR_COLLECTION" desc="The checkbox for enabling error collection for an extension.">
           Collect errors
@@ -4061,39 +3961,14 @@ are declared in build/common.gypi.
         <message name="IDS_EXTENSIONS_ALLOW_FILE_ACCESS" desc="The checkbox for allowing an extension access to run scripts on file URLs.">
           Allow access to file URLs
         </message>
-        <message name="IDS_EXTENSIONS_VISIT_WEBSITE" desc="The link for visiting the extension's homepage.">
-          Developer website
-        </message>
-        <message name="IDS_EXTENSIONS_VISIT_WEBSTORE" desc="The link for visiting the extension's gallery page.">
-          Details
-        </message>
         <message name="IDS_EXTENSIONS_RELOAD_TERMINATED" desc="The link for reloading extensions.">
           Reload
         </message>
         <message name="IDS_EXTENSIONS_REPAIR_CORRUPTED" desc="The link for repairing corrupted extensions.">
           Repair
         </message>
-        <message name="IDS_EXTENSIONS_LAUNCH" desc="The link for launching apps.">
-          Launch
-        </message>
-        <if expr="is_macosx">
-          <message name="IDS_EXTENSIONS_RELOAD_UNPACKED" desc="The link for reloading unpacked extensions.">
-            Reload (⌘R)
-          </message>
-        </if>
-        <if expr="not is_macosx">
-          <message name="IDS_EXTENSIONS_RELOAD_UNPACKED" desc="The link for reloading unpacked extensions.">
-            Reload (Ctrl+R)
-          </message>
-        </if>
         <message name="IDS_EXTENSIONS_OPTIONS_LINK" desc="The link text for the Options link.">
           Options
-        </message>
-        <message name="IDS_EXTENSIONS_PERMISSIONS_LINK" desc="The link text for the Permissions link.">
-          Permissions
-        </message>
-        <message name="IDS_EXTENSIONS_INFO_LINK" desc="The text for the link that opens the App Info dialog for the extension, displaying permissions and other useful information about the app.">
-          Details
         </message>
         <message name="IDS_EXTENSIONS_LOG_LEVEL_INFO" desc="Alt-text indicating a low severity level for the error icon in the chrome://extensions page.">
           Log
@@ -4106,16 +3981,16 @@ are declared in build/common.gypi.
         </message>
         <if expr="not use_titlecase">
           <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS" desc="The label in an extension's context menu for the submenu specifying whether or not the extension can run on the current page (sentence case).">
-            Page access
+            Allow access
           </message>
           <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK" desc="The label in an extension's context menu to allow the extension access to the page only when the user clicks on the extension action (sentence case).">
-            Run on click
+            On click
           </message>
           <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE" desc="The label in an extension's context menu to always allow the extension access to the current origin (sentence case).">
-            Always run on <ph name="ORIGIN">$1<ex>google.com</ex></ph>
+            On <ph name="ORIGIN">$1<ex>google.com</ex></ph>
           </message>
           <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES" desc="The label in an extension's context menu to always allow the extension access on all sites (sentence case).">
-            Always run on all sites
+            On all sites
           </message>
           <message name="IDS_EXTENSIONS_OPTIONS_MENU_ITEM" desc="The text for the options menu item in context menus (sentence case).">
             Options
@@ -4143,17 +4018,17 @@ are declared in build/common.gypi.
           </message>
         </if>
         <if expr="use_titlecase">
-          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS" desc="The label in an extension's context menu for the submenu specifying whether or not the extension can run on the current page (sentence case).">
-            Page Access
+          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS" desc="The label in an extension's context menu for the submenu specifying whether or not the extension can run on the current page (title case).">
+            Allow Access
           </message>
-          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK" desc="The label in an extension's context menu to allow the extension access to the page only when the user clicks on the extension action (sentence case).">
-            Run on Click
+          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK" desc="The label in an extension's context menu to allow the extension access to the page only when the user clicks on the extension action (title case).">
+            On Click
           </message>
-          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE" desc="The label in an extension's context menu to always allow the extension access to the current origin (sentence case).">
-            Always Run on <ph name="ORIGIN">$1<ex>google.com</ex></ph>
+          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE" desc="The label in an extension's context menu to always allow the extension access to the current origin (title case).">
+            On <ph name="ORIGIN">$1<ex>google.com</ex></ph>
           </message>
-          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES" desc="The label in an extension's context menu to always allow the extension access on all sites (sentence case).">
-            Always Run on All Sites
+          <message name="IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES" desc="The label in an extension's context menu to always allow the extension access on all sites (title case).">
+            On All Sites
           </message>
           <message name="IDS_EXTENSIONS_OPTIONS_MENU_ITEM" desc="The text for the options menu item in context menus (title case).">
             Options
@@ -4182,20 +4057,8 @@ are declared in build/common.gypi.
         </if>
       </if>
 
-      <message name="IDS_EXTENSIONS_POLICY_CONTROLLED" desc="The text in the extensions UI informing the user that an extension is policy controlled">
-        (This extension is managed and cannot be removed or disabled.)
-      </message>
-      <message name="IDS_EXTENSIONS_POLICY_RECOMMENDED" desc="The text in the extensions UI informing the user that an extension is recommended installed by policy">
-        (This extension is managed and cannot be removed.)
-      </message>
-      <message name="IDS_EXTENSIONS_DEPENDENT_EXTENSIONS" desc="The text in the extensions UI informing the user that an extension is depended on by on other installed extensions">
-        The following extensions depend on this extension:
-      </message>
       <message name="IDS_EXTENSIONS_LOCKED_SUPERVISED_USER" desc="The error message (either shown in the extensions UI or logged) informing a supervised user that extensions cannot be changed.">
         Apps and extensions can only be modified by the manager (<ph name="CUSTODIAN_NAME">$1<ex>Jane Doe</ex></ph>).
-      </message>
-      <message name="IDS_EXTENSIONS_LOADING" desc="Placeholder text shown when loading the list of extensions.">
-        Loading...
       </message>
       <message name="IDS_EXTENSIONS_INSTALLED_BY_CHILD_CUSTODIAN" desc="The text in the extensions UI informing a child user that an extension was installed by their parent and cannot be changed.">
         Installed by your parent.
@@ -4203,57 +4066,15 @@ are declared in build/common.gypi.
       <message name="IDS_EXTENSIONS_INSTALLED_BY_SUPERVISED_USER_CUSTODIAN" desc="The text in the extensions UI informing a supervised user that an extension was installed by their custodian and cannot be changed">
         Installed by your custodian.
       </message>
-      <message name="IDS_GET_MORE_EXTENSIONS" desc="The text for getting more extensions. Displayed at bottom of extension management page when there is at least one extension installed.">
-        Get more extensions
-      </message>
       <message name="IDS_EXTENSION_LOAD_FROM_DIRECTORY" desc="Title of directory browse dialog when user wants to load an extension from a directory.">
         Select the extension directory.
-      </message>
-      <message name="IDS_EXTENSIONS_COMMANDS_CONFIGURE" desc="Text for the 'Keyboard shortcuts' link to configure extension keyboard shortcuts.">
-        Keyboard shortcuts
-      </message>
-      <message name="IDS_EXTENSION_COMMANDS_DIALOG_TITLE" desc="Title of extension commands dialog">
-        Keyboard Shortcuts for Extensions and Apps
-      </message>
-      <message name="IDS_EXTENSION_COMMANDS_EMPTY" desc="The heading of the extension commands dialog when there are no commands to show.">
-        No extensions have keyboard shortcuts assigned.
-      </message>
-      <message name="IDS_EXTENSION_COMMANDS_INACTIVE" desc="The text shown instead of the shortcut text (Ctrl+F) if the shortcut is inactive.">
-        Not set
-      </message>
-      <message name="IDS_EXTENSION_TYPE_SHORTCUT" desc="The text shown in a text box to instruct the user to start typing (to capture which shortcut to use for the extension command).">
-        Type a shortcut
-      </message>
-      <message name="IDS_EXTENSION_DELETE_SHORTCUT" desc="The text shown when you hover over the X inside the input text field.">
-        Delete shortcut
       </message>
       <message name="IDS_EXTENSION_COMMANDS_GENERIC_ACTIVATE" desc="The generic 'activate extension' text used as description for some commands.">
         Activate the extension
       </message>
-      <message name="IDS_EXTENSION_COMMANDS_GLOBAL" desc="The text in the select box for commands that are global in nature (the shortcut works when Chrome does not have focus).">
-        Global
-      </message>
-      <message name="IDS_EXTENSION_COMMANDS_NOT_GLOBAL" desc="The text in the select box for commands that are not global in nature (the shortcut works only when Chrome has focus).">
-        In Chrome
-      </message>
 
-      <message name="IDS_EXTENSION_PACK_DIALOG_TITLE" desc="Title of pack extension dialog">
-        Pack Extension
-      </message>
-      <message name="IDS_EXTENSION_PACK_BUTTON" desc="Text of the pack extension button">
-        Pack Extension
-      </message>
       <message name="IDS_EXTENSION_PACK_DIALOG_HEADING" desc="The heading of the pack extension dialog.">
         Select the root directory of the extension to pack. To update an extension, also select the private key file to reuse.
-      </message>
-      <message name="IDS_EXTENSION_PACK_DIALOG_ROOT_DIRECTORY_LABEL" desc="Label in the pack extension dialog for the control that lets the user select the extension to pack.">
-        Extension root directory:
-      </message>
-      <message name="IDS_EXTENSION_PACK_DIALOG_PRIVATE_KEY_LABEL" desc="Label in the pack extension dialog for the control that lets the user select the private key to use to pack the extension. The label should indicate that the input is not required to be filled in.">
-        Private key file (optional):
-      </message>
-      <message name="IDS_EXTENSION_PACK_DIALOG_BROWSE" desc="Text on buttons in the pack extension dialog that open up file browsing UI to pick the extension to pack.">
-        Browse...
       </message>
       <message name="IDS_EXTENSION_PACK_DIALOG_SELECT_KEY" desc="Heading in file browse dialog instructing user to select a private key.">
         Select private key file.
@@ -4369,9 +4190,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_EXTENSION_WARNINGS_WRENCH_MENU_ITEM" desc="The wrench menu item indicating that extensions caused problems.">
         Extension error
       </message>
-      <message name="IDS_EXTENSION_WARNINGS_TITLE" desc="The title of a section in chrome://extensions which contains the warning(s) that relates to one particular extension">
-        Warning:
-      </message>
 
       <!-- External extension install alerts -->
       <!-- TODO(mpcomplete): We may need to change Chrome to
@@ -4419,9 +4237,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_EXTENSIONS_CORRUPTED_EXTENSION" desc="The warning for the user that an extension may have been tampered with on disk.">
         This extension may have been corrupted.
-      </message>
-      <message name="IDS_EXTENSIONS_DISABLED_UPDATE_REQUIRED_BY_POLICY" desc="Text shown in the extensions settings for extensions disabled due to minimum version requirement from enterprise policy">
-        This extension is outdated and disabled by enterprise policy. It might become enabled automatically when a newer version is available.
       </message>
 
       <!-- Settings API bubble -->
@@ -4712,6 +4527,20 @@ Keep your key file in a safe place. You will need it to create new versions of y
          Updated just now
       </message>
 
+      <!-- Page Capping InfoBar -->
+      <message name="IDS_PAGE_CAPPING_TITLE" desc="The text of the infobar notifying the user that data usage on the page is beyond a certain threshold.">
+         This page uses more than <ph name="megabytes">$1<ex>5</ex></ph>MB
+      </message>
+      <message name="IDS_PAGE_CAPPING_STOPPED_TITLE" desc="The text of the infobar indicating that the user has chosen to pause resource loading on the page. This infobar is shown in response to clicking on a link in a different infobar that informed the user the page used a lot of data.">
+         Stopped loading
+      </message>
+      <message name="IDS_PAGE_CAPPING_CONTINUE_MESSAGE" desc="A link on an infobar that allows the resource loading to continue on the page. Clicking the link resumes resource loading on the page. This infobar is shown in response to clicking on a link in a different infobar that informed the user the page used a lot of data.">
+         Continue
+      </message>
+      <message name="IDS_PAGE_CAPPING_STOP_MESSAGE" desc="A link on the of infobar notifying the user that data usage on the page is beyond a certain threshold. Clicking the link pauses the resource loading on the page.">
+         Stop loading
+      </message>
+
       <!-- WebRTC logs -->
       <message name="IDS_WEBRTC_LOGS_TITLE" desc="Title for the chrome://webrtc-logs page.">
         WebRTC logs
@@ -4876,11 +4705,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_SESSION_CRASHED_BUBBLE_UMA_LINK_TEXT" desc="The text attached to the link that explains UMA optin option">
         usage statistics
-      </message>
-
-      <!-- Unimplemented Flags Infobar-->
-      <message name="IDS_UNIMPLEMENTED_FLAGS_WARNING_MESSAGE" desc="Message shown when a command-line flag is used that is not implemented by this build. [Keep it short so it fits in the infobar.]">
-        <ph name="BAD_FLAG">$1<ex>--enable-heap-profiling</ex></ph> is not implemented in this build
       </message>
 
       <!-- Bad Flags Infobar-->
@@ -5151,6 +4975,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_TOOLTIP_FIND" desc="The tooltip for the find button">
         Find
       </message>
+      <if expr="chromeos">
+        <message name="IDS_TOOLTIP_INTENT_PICKER_ICON" desc="The tooltip for the intent picker bubble icon">
+          To open this link, choose an app
+        </message>
+      </if>
 
       <!--Accessible name/action strings-->
       <message name="IDS_ACCESSIBLE_INCOGNITO_WINDOW_TITLE_FORMAT" desc="The format for the accessible title of an incognito window">
@@ -5170,9 +4999,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_ACCNAME_RELOAD" desc="The accessible name for the reload/stop button.">
         Reload
-      </message>
-      <message name="IDS_ACCNAME_ZOOM" desc="The accessible name for the zoom button.">
-        Zoom
       </message>
       <message name="IDS_ACCNAME_FIND" desc="The accessible name for the find button.">
         Find
@@ -5648,6 +5474,9 @@ the Bookmarks menu.">
       </message>
       <message name="IDS_GENERIC_USER_AVATAR_LABEL" desc="Label shown for the user that is currently active, when there are multiple user accounts.">
         Current user
+      </message>
+      <message name="IDS_INCOGNITO_AVATAR_BUTTON_TOOLTIP" desc="Tooltip for the inactive avatar button when the user is in incognito mode.">
+        You're incognito
       </message>
       <message name="IDS_LEGACY_SUPERVISED_USER_NEW_AVATAR_LABEL" desc="Label shown in the new avatar menu for a supervised user.">
         <ph name="PROFILE_DISPLAY_NAME">$1<ex>Markus</ex></ph> (Supervised)
@@ -6254,9 +6083,6 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_LOAD_STATE_WAITING_FOR_RESPONSE">
         Waiting for <ph name="HOST_NAME">$1<ex>www.google.com</ex></ph>...
-      </message>
-      <message name="IDS_LOAD_STATE_THROTTLED" desc="Tab status shown when tab loading is blocked on other in process network operations">
-        Waiting for other requests to complete...
       </message>
 
       <!-- Tab Context Menu -->
@@ -7333,9 +7159,6 @@ I don't think this site should be blocked!
         <message name="IDS_PROFILES_BUBBLE_ACCESSIBLE_DESCRIPTION" desc="The help text for the avatar bubble.">
           Switch to a different user.
         </message>
-        <message name="IDS_PROFILES_NEW_AVATAR_MENU_ACCESSIBLE_NAME" desc="Title of the new avatar bubble menu for accessibility">
-          Switch Person
-        </message>
         <message name="IDS_PROFILES_CREATE_NEW_PROFILE_OPTION" desc="In Title Case. Create new profile menu item and button title.">
           Add Person...
         </message>
@@ -7358,8 +7181,8 @@ I don't think this site should be blocked!
       <message name="IDS_PROFILES_PROFILE_SIGNOUT_BUTTON" desc="Button in the avatar menu bubble view to sign-out the current profile.">
         Exit and childlock
       </message>
-      <message name="IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON" desc="Button in the avatar menu bubble view to close all windows of the current profile.">
-        Close all your windows
+      <message name="IDS_PROFILES_EXIT_PROFILE_BUTTON" desc="Button in the avatar menu bubble view to close all windows of the current profile when there is more than one profile.">
+        Exit <ph name="PROFILE_NAME">$1<ex>User</ex></ph>
       </message>
       <message name="IDS_PROFILES_GAIA_SIGNIN_TITLE" desc="Title of the account removal view in the avatar menu bubble.">
         Sign in
@@ -7376,8 +7199,8 @@ I don't think this site should be blocked!
       <message name="IDS_PROFILES_SETTINGS_LINK" desc="The link text to the Chrome settings page in the account removal view.">
         settings
       </message>
-      <message name="IDS_PROFILES_SYNCED_TO_TITLE" desc="Title of the profile card when sync is complete.">
-        Synced to
+      <message name="IDS_PROFILES_SYNC_COMPLETE_TITLE" desc="Title of the profile card when sync is complete.">
+        Syncing to
       </message>
       <message name="IDS_PROFILES_SYNC_SETTINGS_LINK" desc="The link text to the Chrome sync settings page in the avatar menu tutorial card.">
         Settings
@@ -7393,6 +7216,9 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_PROFILES_DICE_SIGNIN_WITH_ANOTHER_ACCOUNT_BUTTON" desc="Button to sign in and turn on Sync with another web account.">
         Sync to another account
+      </message>
+      <message name="IDS_PROFILES_DICE_SYNC_PAUSED_TITLE" desc="Title of the profile user menu when sync is paused.">
+        Sync is paused
       </message>
       <message name="IDS_PROFILES_DICE_USE_ANOTHER_ACCOUNT_BUTTON" desc="Button to use another account to sign in and turn on Sync.">
         Use another account
@@ -7437,6 +7263,12 @@ I don't think this site should be blocked!
         <message name="IDS_PROFILES_MANAGE_USERS_BUTTON" desc="Button in the avatar menu bubble view for launching the user manager.">
           Manage people
         </message>
+        <message name="IDS_PROFILES_OPEN_GUEST_PROFILE_BUTTON" desc="Button in the avatar menu bubble view to open a guest window.">
+          Open Guest window
+        </message>
+        <message name="IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON" desc="Button in the avatar menu bubble view to close all windows of the current profile.">
+          Close all your windows
+        </message>
       </if>
       <if expr="use_titlecase">
         <message name="IDS_PROFILES_PROFILE_ADD_ACCOUNT_BUTTON" desc="Button in the avatar menu bubble view used to add an account to a profile.">
@@ -7459,6 +7291,12 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_PROFILES_MANAGE_USERS_BUTTON" desc="Button in the avatar menu bubble view for launching the user manager.">
           Manage People
+        </message>
+        <message name="IDS_PROFILES_OPEN_GUEST_PROFILE_BUTTON" desc="Button in the avatar menu bubble view to open a guest window.">
+          Open Guest Window
+        </message>
+        <message name="IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON" desc="Button in the avatar menu bubble view to close all windows of the current profile.">
+          Close all your Windows
         </message>
       </if>
       <message name="IDS_PROFILES_EDIT_PROFILE_ACCESSIBLE_NAME" desc="Description of the Edit Profile button. This is used for accessibility.">
@@ -7707,6 +7545,36 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_SYNC_CONFIRMATION_UNITY_TITLE" desc="Title of the sync confirmation dialog in the tab modal signin flow when Unity is enabled">
         Get even more from Chrome
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_MORE_OPTIONS_BUTTON_LABEL" desc="Label of the sync confirmation button to show more options">
+        More options
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_MORE_OPTIONS_TITLE" desc="Title of the sync confirmation more options dialog">
+        Sync and personalization options
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_MORE_OPTIONS_SUBTITLE" desc="Subitle of the sync confirmation more options dialog">
+        Features related to sync and personalization are now under a single control. Turning this on may change your current settings.
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_REVIEW_SETTINGS_TITLE" desc="Title of the sync confirmation option to review settings">
+        Review your settings on the next screen
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_MAKE_NO_CHANGES_TITLE" desc="Title of the sync confirmation option to make no changes">
+        Make no changes
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_MAKE_NO_CHANGES_SUBTITLE" desc="Subtitle of the sync confirmation option to make no changes">
+        The data you sync to Google and the features you use will not change
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_USE_DEFAULT_TITLE" desc="Title of the sync confirmation option to use the default settings">
+        Yes, turn on sync and personalization
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_USE_DEFAULT_SUBTITLE" desc="Subtitle of the sync confirmation option to use the default settings">
+        You can customize this anytime in Chrome Settings
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_CONFIRM_BUTTON_LABEL" desc="Label of the sync confirmation options confirm button">
+        Ok
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_UNITY_OPTIONS_BACK_BUTTON_LABEL" desc="Label of the sync confirmation options button to go to the previous screen">
+        Back
       </message>
 
       <!-- "Chrome sync" is the Google Cloud Based service used for sync. Thus this string resource is set to "Chrome sync" even for Chromium builds. -->
@@ -8194,7 +8062,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
         </message>
         <if expr="not chromeos">
           <message name="IDS_SYNC_RELOGIN_ERROR" desc="The text to display on in the hyperlink when the user needs to sign in again to use sync.">
-            Sign in again to start sync
+            Sign in again to resume sync
           </message>
         </if>
         <if expr="chromeos">
@@ -8553,7 +8421,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
 
       <!-- Web and message center notifications -->
       <message name="IDS_NOTIFICATIONS_INFOBAR_TEXT" desc="Text requesting permission for Web Notifications.">
-        <ph name="site">$1<ex>mail.google.com</ex></ph> wants to send you notifications.
+        <ph name="site">$1<ex>mail.google.com</ex></ph> wants to send you notifications
       </message>
       <message name="IDS_NOTIFICATION_PERMISSIONS_FRAGMENT" desc="Permission sentence fragment to show following the prompt 'This site wants to:' in a permissions request">
         Show notifications
@@ -8607,7 +8475,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
                 Wrong index.
         </message>
         <message name="IDS_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC" desc="Error dialog title to be displayed when the user attempts to execute JavaScript via AppleScript. Mac-only.">
-          Executing JavaScript through AppleScript is turned off. To turn it on, visit Chrome Settings > Advanced > System. For more information: https://support.google.com/chrome/?p=applescript
+          Executing JavaScript through AppleScript is turned off. To turn it on, from the menu bar, go to View > Developer > Allow JavaScript from Apple Events. For more information: https://support.google.com/chrome/?p=applescript
         </message>
       </if> <!-- is_macosx -->
 
@@ -9102,7 +8970,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
           Know your unique device identifier
         </message>
         <message name="IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_TEXT" desc="Text requesting permission for a site to access protected media identifier. It shows the origin of the URL.">
-          <ph name="URL">$1<ex>https://www.youtube.com</ex></ph> wants to uniquely identify your device to play protected content
+          <ph name="URL">$1<ex>https://www.youtube.com</ex></ph> wants to play protected content. Your device’s identity will be verified by Google.
         </message>
       </if>
       <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT" desc="A message that the browser shows after saving a password it has autogenerated for the user. This message appears in a bubble and contains a link to all the user's saved autogenerated passwords. The link text is a separate string in the translation console and appears here as placeholder text.">
@@ -9871,7 +9739,7 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
           </message>
           <message name="IDS_APP_LIST_UNINSTALL_ITEM"
                    desc="Title text for the 'uninstall' context menu item of an app list item.">
-            Uninstall...
+            Uninstall
           </message>
           <message name="IDS_APP_LIST_REMOVE_SHORTCUT"
                    desc="Title text for the 'remove' context menu item of an app list shortcut item.">
@@ -9905,7 +9773,7 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
           </message>
           <message name="IDS_APP_LIST_UNINSTALL_ITEM"
                    desc="Title text for the 'uninstall' context menu item of an app list item.">
-            Uninstall...
+            Uninstall
           </message>
           <message name="IDS_APP_LIST_REMOVE_SHORTCUT"
                    desc="Title text for the 'remove' context menu item of an app list shortcut item.">
@@ -9922,23 +9790,6 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
           </message>
         </if>
       </if>
-
-      <!-- Pepper 3D and WebGL (client 3D APIs) infobar strings -->
-      <message name="IDS_3D_APIS_BLOCKED_TEXT" desc="Infobar message when 3D graphics APIs are blocked because the graphics processor was reset recently. NOTE that 'rats' here is being used like 'darn'.">
-        Rats! <ph name="API_NAME">$1<ex>WebGL</ex></ph> hit a snag.
-      </message>
-      <message name="IDS_3D_APIS_WEBGL_NAME" desc="Name of the WebGL API.">
-        WebGL
-      </message>
-      <message name="IDS_3D_APIS_PEPPER_3D_NAME" desc="Name of the Pepper 3D API.">
-        Pepper 3D
-      </message>
-      <message name="IDS_3D_APIS_BLOCKED_OK_BUTTON_LABEL" desc="Label for the 'ok' button on the infobar indicating that 3D APIs were blocked. Clicking this button dismisses the infobar with no other action.">
-        Ignore
-      </message>
-      <message name="IDS_3D_APIS_BLOCKED_TRY_AGAIN_BUTTON_LABEL" desc="Label for the 'cancel' button on the infobar indicating that 3D APIs were blocked. Clicking this button unblocks the APIs and reloads the page.">
-        Reload
-      </message>
 
       <!-- Identity internals strings -->
       <message name="IDS_IDENTITY_INTERNALS_TOKEN_CACHE_TEXT" desc="The title of the token cache of the Identity API.">
@@ -10052,9 +9903,6 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
         <message name="IDS_LOCAL_DISCOVERY_DEVICES_PAGE_TITLE" desc="Title for devices page">
           Devices
         </message>
-        <message name="IDS_LOCAL_DISCOVERY_REGISTER_PRINTER_CONFIRMATION" desc="Confirmation for registering a printer to Google Cloud Print">
-          Do you wish to register the printer <ph name="PRINTER_NAME">$1</ph> to Google Cloud Print?
-        </message>
         <message name="IDS_LOCAL_DISCOVERY_REGISTER_DEVICE_CONFIRMATION" desc="Confirmation for registering a device to Google Cloud Devices">
           Do you wish to register <ph name="DEVICE_NAME">$1</ph> to Google Cloud Devices?
         </message>
@@ -10153,6 +10001,11 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       </message>
       <message name="IDS_LOCAL_DISCOVERY_REGISTER_TIMEOUT_ON_PRINTER" desc="Label for when registration has timed out on the printer side">
         Printer registration has timed out. In order to register a printer, you must confirm registration on the printer.
+      </message>
+
+      <!--Printer registration message for local discovery and Print Preview-->
+      <message name="IDS_CLOUD_PRINT_REGISTER_PRINTER_INFORMATION" desc="Information about registering printers with Google Cloud Print shown to the user before they confirm registration.">
+        Documents are <ph name="BEGIN_LINK_HELP">&lt;a is="action-link" href="https://support.google.com/cloudprint/answer/2541843" target="_blank"&gt;</ph>sent to Google<ph name="END_LINK_HELP">&lt;/a&gt;</ph> to prepare them for printing. View, edit and manage your printers and printer history on the <ph name="BEGIN_LINK_DASHBOARD">&lt;a is="action-link" href="https://www.google.com/cloudprint#jobs" target="_blank"&gt;</ph>Google Cloud Print dashboard<ph name="END_LINK_DASHBOARD">&lt;/a&gt;</ph>.
       </message>
 
       <!--Tab alert tooltip strings-->
@@ -10512,6 +10365,9 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       <message name="IDS_DEVICE_LOG_TYPE_HID" desc="Checkbox to enable showing events of type HID (Human Interface Device)">
         HID
       </message>
+      <message name="IDS_DEVICE_LOG_TYPE_PRINTER" desc="Checkbox to enable showing events of type Printer">
+        Printer
+      </message>
       <message name="IDS_DEVICE_LOG_FILEINFO" desc="File info checkbox in device event log">
         File Info
       </message>
@@ -10613,18 +10469,6 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce Bluetooth chooser details to the user in a popup when it is from a Chrome extension.">
         "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome Extension Name</ex></ph>" wants to pair
       </message>
-      <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a website.">
-        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to connect
-      </message>
-      <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a Chrome extension.">
-        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome Extension Name</ex></ph>" wants to connect
-      </message>
-      <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label shown to the user to inform them that no USB devices were found matching the requirements that the application provided.">
-        No compatible devices found.
-      </message>
-      <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
-        <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
-      </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label shown to the user to inform them that no Bluetooth devices were found matching the requirements that the application provided.">
         No compatible devices found.
       </message>
@@ -10652,9 +10496,6 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT" desc="Label on the button that closes the Bluetooth chooser popup and pairs the selected device.">
         Pair
       </message>
-      <message name="IDS_USB_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT" desc="Label on the button that closes the USB chooser popup and connects the selected device.">
-        Connect
-      </message>
       <message name="IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT" desc="Label on the button that closes the chooser popup without selecting an option.">
         Cancel
       </message>
@@ -10671,6 +10512,21 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> - Paired
       </message>
     </if>
+    <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a website.">
+      <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to connect
+    </message>
+    <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a Chrome extension.">
+      "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome Extension Name</ex></ph>" wants to connect
+    </message>
+    <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
+      <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
+    </message>
+    <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label shown to the user to inform them that no USB devices were found matching the requirements that the application provided.">
+      No compatible devices found.
+    </message>
+    <message name="IDS_USB_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT" desc="Label on the button that closes the USB chooser popup and connects the selected device.">
+      Connect
+    </message>
 
     <!-- Device Chooser Device Name Unknown -->
     <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_UNKNOWN_DEVICE_WITH_VENDOR_NAME" desc="String describing an unknown device by its vendor name.">
@@ -10838,14 +10694,14 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
     </message>
 
     <!-- Security Key permission -->
-    <message name="IDS_SECURITY_KEY_ATTESTATION_PERMISSION_FRAGMENT" desc="A permission prompt shown to a user when a website wants to see information that uniquely identifies the user's Security Key, such as make and model number. The text '[website URL] wants to:' precedes this string. The word 'identifying' modifies 'information'.">
-      See identifying information about your Security Key
+    <message name="IDS_SECURITY_KEY_ATTESTATION_PERMISSION_FRAGMENT" desc="A permission prompt shown to a user when a website wants to see information that identifies the user's Security Key, such as make and model number. The text '[website URL] wants to:' precedes this string. The 'make' of a device is the brand name of the manufacturer, e.g. Yubikey is a make of Security Key. The 'model' of a device is the specific product, e.g. Yubikey Neo is a model of Security Key.">
+      See the make and model of your Security Key
     </message>
     <if expr="is_android">
-      <message name="IDS_SECURITY_KEY_ATTESTATION_INFOBAR_QUESTION" desc="An infobar prompt shown to a user when a website wants to see information that uniquely identifies the user's Security Key, such as make and model number. The word 'identifying' modifies 'information'.">
+      <message name="IDS_SECURITY_KEY_ATTESTATION_INFOBAR_QUESTION" desc="An infobar prompt shown to a user when a website wants to see information that identifies the user's Security Key, such as make and model number. The 'make' of a device is the brand name of the manufacturer, e.g. Yubikey is a make of Security Key. The 'model' of a device is the specific product, e.g. Yubikey Neo is a model of Security Key.">
         <ph name="URL">
           $1<ex>maps.google.com</ex>
-        </ph> wants to see identifying information about your Security Key
+        </ph> wants to see the make and model of your Security Key
       </message>
     </if>
 
@@ -10866,10 +10722,52 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
     </if>
 
     <!-- Strings that are only used when VR devices are supported -->
-      <!-- TODO(ddorwin): Use consistent naming schemes for VR strings. -->
+    <!-- TODO(ddorwin): Use consistent naming schemes for VR strings. -->
     <if expr="enable_vr">
-      <message name="IDS_PRESS_APP_TO_EXIT" desc="Text displayed in a transient bubble to tell users how to return from cinema mode (where the page displayed in a cinema like environment) or presentation mode (where the WebVR page occupies the entire screen) to normal mode.">
+      <message name="IDS_PRESS_APP_TO_EXIT" desc="Text displayed in a transient bubble to tell users how to return from presentation mode (where the WebVR page occupies the entire screen) to normal mode.">
         Press App button to exit
+      </message>
+      <message name="IDS_VR_SHELL_SITE_IS_TRACKING_LOCATION" desc="Text displayed in a transient bubble to inform the user that the page is tracking location.">
+        Site is tracking your location
+      </message>
+      <message name="IDS_VR_SHELL_SITE_IS_USING_MICROPHONE" desc="Text displayed in a transient bubble to inform the user that the page is using the microphone.">
+        Site is using your microphone
+      </message>
+      <message name="IDS_VR_SHELL_SITE_IS_USING_BLUETOOTH" desc="Text displayed in a transient bubble to inform the user that the page is using bluetooth.">
+        Site is using bluetooth
+      </message>
+      <message name="IDS_VR_SHELL_SITE_IS_USING_CAMERA" desc="Text displayed in a transient bubble to inform the user that the page is using the camera.">
+        Site is using your camera
+      </message>
+      <message name="IDS_VR_SHELL_SITE_IS_SHARING_SCREEN" desc="Text displayed in a transient bubble to inform the user that the page is sharing the screen.">
+        Site is sharing your screen
+      </message>
+      <message name="IDS_VR_SHELL_BG_IS_USING_MICROPHONE" desc="Text displayed in a transient bubble to inform the user that a background tab is using the microphone.">
+        Background tab is using your microphone
+      </message>
+      <message name="IDS_VR_SHELL_BG_IS_USING_BLUETOOTH" desc="Text displayed in a transient bubble to inform the user that a background tab is using bluetooth.">
+        Background tab is using bluetooth
+      </message>
+      <message name="IDS_VR_SHELL_BG_IS_USING_CAMERA" desc="Text displayed in a transient bubble to inform the user that a background tab is using the camera.">
+        Background tab is using your camera
+      </message>
+      <message name="IDS_VR_SHELL_BG_IS_SHARING_SCREEN" desc="Text displayed in a transient bubble to inform the user that a background tab is sharing the screen.">
+        Background tab is sharing your screen
+      </message>
+      <message name="IDS_VR_SHELL_SITE_CAN_TRACK_LOCATION" desc="Text displayed in a transient bubble to inform the user that the page may track location, but isn't doing so yet.">
+        Site can track your location
+      </message>
+      <message name="IDS_VR_SHELL_SITE_CAN_USE_MICROPHONE" desc="Text displayed in a transient bubble to inform the user that the page may use the microphone, but isn't doing so yet.">
+        Site can use your microphone
+      </message>
+      <message name="IDS_VR_SHELL_SITE_CAN_USE_BLUETOOTH" desc="Text displayed in a transient bubble to inform the user that the page may use bluetooth, but isn't doing so yet.">
+        Site can use bluetooth
+      </message>
+      <message name="IDS_VR_SHELL_SITE_CAN_USE_CAMERA" desc="Text displayed in a transient bubble to inform the user that the page may use the camera, but isn't doing so yet.">
+        Site can use your camera
+      </message>
+      <message name="IDS_VR_SHELL_SITE_CAN_SHARE_SCREEN" desc="Text displayed in a transient bubble to inform the user that the page may share your screen, but isn't doing so yet.">
+        Site can share your screen
       </message>
 
       <!-- VR browser -->
@@ -10927,18 +10825,45 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       <message name="IDS_VR_BUTTON_BACK" desc="The label for the back button on the VR controller -- shown when the keyboard is visible, we are in voice search, or we are repositioning.">
         Back
       </message>
-      <message name="IDS_VR_BUTTON_TRACKPAD_REPOSITION" desc="The label for the trackpad while in window repositioning mode.">
-        Finish repositioning
+      <message name="IDS_VR_BUTTON_TRACKPAD_REPOSITION" desc="The label for the trackpad while in window repositioning/resizing mode.">
+        Touch to resize
       </message>
-      <message name="IDS_VR_REPOSITION_LABEL" desc="This text appears over a window to explain to the user how to manipulate the window.">
-        Move the controller to reposition. Click to finish.
+      <message name="IDS_VR_BUTTON_APP_REPOSITION" desc="This is the label for the app button while in reposition mode">
+        Finish
+      </message>
+      <message name="IDS_VR_MENU_NEW_TAB" desc="Menu item for opening a new tab. [CHAR-LIMIT=27]">
+        New tab
       </message>
       <message name="IDS_VR_MENU_NEW_INCOGNITO_TAB" desc="Menu item for opening a new incognito tab that facilitates pseudononymous browsing. [CHAR-LIMIT=27]">
         New incognito tab
       </message>
+      <message name="IDS_VR_MENU_BOOKMARKS" desc="Menu item for opening the bookmarks page that contains all the user's bookmarks. [CHAR-LIMIT=27]">
+        Bookmarks
+      </message>
+      <message name="IDS_VR_MENU_RECENT_TABS" desc="Menu item for opening the 'Recent tabs' page that shows recently closed tabs and pages the user has opened on his/her other devices. [CHAR-LIMIT=27]">
+        Recent tabs
+      </message>
+      <message name="IDS_VR_MENU_HISTORY" desc="Menu item for opening the history page. [CHAR-LIMIT=27]">
+        History
+      </message>
+      <message name="IDS_VR_MENU_DOWNLOADS" desc="Menu item for opening the downloads page. [CHAR-LIMIT=27]">
+        Downloads
+      </message>
+      <message name="IDS_VR_MENU_SHARE" desc="Menu item for sharing the current URL. [CHAR-LIMIT=27]">
+        Share...
+      </message>
+      <message name="IDS_VR_MENU_PREFERENCES" desc="Menu item for opening browser preferences. [CHAR-LIMIT=27]">
+        Settings
+      </message>
+      <message name="IDS_VR_MENU_CLOSE_ALL_TABS" desc="Menu item for closing all open tabs. [CHAR-LIMIT=27]">
+        Close all tabs
+      </message>
       <message name="IDS_VR_MENU_CLOSE_INCOGNITO_TABS" desc="Menu item for closing all open incognito tabs. [CHAR-LIMIT=27]">
         Close incognito tabs
-     </message>
+      </message>
+      <message name="IDS_VR_MENU_SEND_FEEDBACK" desc="Menu item for sending feedback. [CHAR-LIMIT=27]">
+        Send feedback
+      </message>
     </if>
 
     <message name="IDS_CONFIRM_FILE_UPLOAD_TITLE" desc="Title of dialog for confirming that many files are about to be uploaded / given to the site. [ICU Syntax]">

@@ -82,7 +82,12 @@ class OutOfProcessInstance : public pp::Instance,
   void SetSelectionBounds(const pp::FloatPoint& base,
                           const pp::FloatPoint& extent);
   bool CanEditText();
+  bool HasEditableText();
   void ReplaceSelection(const std::string& text);
+  bool CanUndo();
+  bool CanRedo();
+  void Undo();
+  void Redo();
 
   void FlushCallback(int32_t result);
   void DidOpen(int32_t result);
@@ -98,9 +103,10 @@ class OutOfProcessInstance : public pp::Instance,
   // PDFEngine::Client implementation.
   void DocumentSizeUpdated(const pp::Size& size) override;
   void Invalidate(const pp::Rect& rect) override;
-  void Scroll(const pp::Point& point) override;
+  void DidScroll(const pp::Point& point) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
+  void ScrollBy(const pp::Point& point) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
@@ -134,7 +140,8 @@ class OutOfProcessInstance : public pp::Instance,
                                                bool case_sensitive) override;
   void DocumentPaintOccurred() override;
   void DocumentLoadComplete(
-      const PDFEngine::DocumentFeatures& document_features) override;
+      const PDFEngine::DocumentFeatures& document_features,
+      uint32_t file_size) override;
   void DocumentLoadFailed() override;
   void FontSubstituted() override;
   pp::Instance* GetPluginInstance() override;

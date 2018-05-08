@@ -156,7 +156,8 @@ class TabStripModel : public WebContentsCloseDelegate {
 
   // Adds the specified WebContents in the default location. Tabs opened
   // in the foreground inherit the group of the previously active tab.
-  void AppendWebContents(content::WebContents* contents, bool foreground);
+  void AppendWebContents(std::unique_ptr<content::WebContents> contents,
+                         bool foreground);
 
   // Adds the specified WebContents at the specified location.
   // |add_types| is a bitmask of AddTabTypes; see it for details.
@@ -169,7 +170,7 @@ class TabStripModel : public WebContentsCloseDelegate {
   // constraint that all pinned tabs occur before non-pinned tabs.
   // See also AddWebContents.
   void InsertWebContentsAt(int index,
-                           content::WebContents* contents,
+                           std::unique_ptr<content::WebContents> contents,
                            int add_types);
 
   // Closes the WebContents at the specified index. This causes the
@@ -183,15 +184,15 @@ class TabStripModel : public WebContentsCloseDelegate {
   // Replaces the WebContents at |index| with |new_contents|. The
   // WebContents that was at |index| is returned and its ownership returns
   // to the caller.
-  content::WebContents* ReplaceWebContentsAt(
+  std::unique_ptr<content::WebContents> ReplaceWebContentsAt(
       int index,
-      content::WebContents* new_contents);
+      std::unique_ptr<content::WebContents> new_contents);
 
   // Detaches the WebContents at the specified index from this strip. The
   // WebContents is not destroyed, just removed from display. The caller
   // is responsible for doing something with it (e.g. stuffing it into another
   // strip). Returns the detached WebContents.
-  content::WebContents* DetachWebContentsAt(int index);
+  std::unique_ptr<content::WebContents> DetachWebContentsAt(int index);
 
   // Makes the tab at the specified index the active tab. |user_gesture| is true
   // if the user actually clicked on the tab or navigated to it using a keyboard
@@ -321,7 +322,7 @@ class TabStripModel : public WebContentsCloseDelegate {
   // AddTabTypes; see it for details. This method ends up calling into
   // InsertWebContentsAt to do the actual insertion. Pass kNoTab for |index| to
   // append the contents to the end of the tab strip.
-  void AddWebContents(content::WebContents* contents,
+  void AddWebContents(std::unique_ptr<content::WebContents> contents,
                       int index,
                       ui::PageTransition transition,
                       int add_types);

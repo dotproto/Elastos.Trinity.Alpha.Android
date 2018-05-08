@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_POPUP_MENU_CELLS_POPUP_MENU_ITEM_H_
 #define IOS_CHROME_BROWSER_UI_POPUP_MENU_CELLS_POPUP_MENU_ITEM_H_
 
-#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 // Identifier for the action associated with a popup menu item.
 typedef NS_ENUM(NSInteger, PopupMenuAction) {
@@ -14,6 +14,8 @@ typedef NS_ENUM(NSInteger, PopupMenuAction) {
   PopupMenuActionOpenNewTab,
   PopupMenuActionOpenNewIncognitoTab,
   PopupMenuActionReadLater,
+  PopupMenuActionPageBookmark,
+  PopupMenuActionFindInPage,
   PopupMenuActionRequestDesktop,
   PopupMenuActionRequestMobile,
   PopupMenuActionSiteInformation,
@@ -24,6 +26,9 @@ typedef NS_ENUM(NSInteger, PopupMenuAction) {
   PopupMenuActionRecentTabs,
   PopupMenuActionHistory,
   PopupMenuActionSettings,
+  PopupMenuActionCloseTab,
+  PopupMenuActionCloseAllIncognitoTabs,
+  PopupMenuActionNavigate,
 };
 
 // Protocol defining a popup item.
@@ -31,6 +36,9 @@ typedef NS_ENUM(NSInteger, PopupMenuAction) {
 
 // Action identifier for the popup item.
 @property(nonatomic, assign) PopupMenuAction actionIdentifier;
+
+// Returns the size needed to display the cell associated with this item.
+- (CGSize)cellSizeForWidth:(CGFloat)width;
 
 @end
 

@@ -32,6 +32,8 @@ class FakeSyncEngine : public SyncEngine {
 
   void UpdateCredentials(const SyncCredentials& credentials) override;
 
+  void InvalidateCredentials() override;
+
   void StartConfiguration() override;
 
   void StartSyncingWithServer() override;
@@ -66,7 +68,8 @@ class FakeSyncEngine : public SyncEngine {
 
   Status GetDetailedStatus() override;
 
-  bool HasUnsyncedItems() const override;
+  void HasUnsyncedItemsForTest(
+      base::OnceCallback<void(bool)> cb) const override;
 
   bool IsCryptographerReady(const BaseTransaction* trans) const override;
 

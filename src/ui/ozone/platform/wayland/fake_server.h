@@ -8,6 +8,7 @@
 #include <wayland-server-core.h>
 
 #include "base/bind.h"
+#include "base/files/scoped_file.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -21,6 +22,9 @@ struct wl_global;
 struct wl_resource;
 
 namespace wl {
+
+constexpr char kTextMimeTypeUtf8[] = "text/plain;charset=utf-8";
+constexpr char kSampleClipboardText[] = "This is a sample text for clipboard.";
 
 // Base class for managing the life cycle of server objects.
 class ServerObject {
@@ -54,17 +58,22 @@ class MockXdgSurface : public ServerObject {
   MOCK_METHOD1(SetAppId, void(const char* app_id));
   MOCK_METHOD1(AckConfigure, void(uint32_t serial));
   MOCK_METHOD4(SetWindowGeometry,
-               void(int32_t x, int32_t y, int32_t widht, int32_t height));
+               void(int32_t x, int32_t y, int32_t width, int32_t height));
   MOCK_METHOD0(SetMaximized, void());
   MOCK_METHOD0(UnsetMaximized, void());
   MOCK_METHOD0(SetFullscreen, void());
   MOCK_METHOD0(UnsetFullscreen, void());
   MOCK_METHOD0(SetMinimized, void());
 
-  // Used when xdg v6 is used.
-  std::unique_ptr<MockXdgTopLevel> xdg_toplevel;
+  void set_xdg_toplevel(std::unique_ptr<MockXdgTopLevel> xdg_toplevel) {
+    xdg_toplevel_ = std::move(xdg_toplevel);
+  }
+  MockXdgTopLevel* xdg_toplevel() { return xdg_toplevel_.get(); }
 
  private:
+  // Used when xdg v6 is used.
+  std::unique_ptr<MockXdgTopLevel> xdg_toplevel_;
+
   DISALLOW_COPY_AND_ASSIGN(MockXdgSurface);
 };
 
@@ -95,9 +104,14 @@ class MockSurface : public ServerObject {
                void(int32_t x, int32_t y, int32_t width, int32_t height));
   MOCK_METHOD0(Commit, void());
 
-  std::unique_ptr<MockXdgSurface> xdg_surface;
+  void set_xdg_surface(std::unique_ptr<MockXdgSurface> xdg_surface) {
+    xdg_surface_ = std::move(xdg_surface);
+  }
+  MockXdgSurface* xdg_surface() { return xdg_surface_.get(); }
 
  private:
+  std::unique_ptr<MockXdgSurface> xdg_surface_;
+
   DISALLOW_COPY_AND_ASSIGN(MockSurface);
 };
 
@@ -126,6 +140,58 @@ class MockTouch : public ServerObject {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockTouch);
+};
+
+class MockDataOffer : public ServerObject {
+ public:
+  explicit MockDataOffer(wl_resource* resource);
+  ~MockDataOffer() override;
+
+  void Receive(const std::string& mime_type, base::ScopedFD fd);
+  void OnOffer(const std::string& mime_type);
+
+ private:
+  base::Thread io_thread_;
+  base::WeakPtrFactory<MockDataOffer> write_data_weak_ptr_factory_;
+};
+
+class MockDataSource : public ServerObject {
+ public:
+  explicit MockDataSource(wl_resource* resource);
+  ~MockDataSource() override;
+
+  void Offer(const std::string& mime_type);
+
+  using ReadDataCallback =
+      base::OnceCallback<void(const std::vector<uint8_t>&)>;
+  void ReadData(ReadDataCallback);
+
+  void OnCancelled();
+
+ private:
+  void DataReadCb(ReadDataCallback callback, const std::vector<uint8_t>& data);
+
+  base::Thread io_thread_;
+  base::WeakPtrFactory<MockDataSource> read_data_weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockDataSource);
+};
+
+class MockDataDevice : public ServerObject {
+ public:
+  MockDataDevice(wl_client* client, wl_resource* resource);
+  ~MockDataDevice() override;
+
+  void SetSelection(MockDataSource* data_source, uint32_t serial);
+
+  MockDataOffer* OnDataOffer();
+  void OnSelection(MockDataOffer& data_offer);
+
+ private:
+  std::unique_ptr<MockDataOffer> data_offer_;
+  wl_client* client_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(MockDataDevice);
 };
 
 struct GlobalDeleter {
@@ -182,6 +248,29 @@ class MockCompositor : public Global {
   DISALLOW_COPY_AND_ASSIGN(MockCompositor);
 };
 
+// Manage wl_data_device_manager object.
+class MockDataDeviceManager : public Global {
+ public:
+  MockDataDeviceManager();
+  ~MockDataDeviceManager() override;
+
+  MockDataDevice* data_device() { return data_device_.get(); }
+  void set_data_device(std::unique_ptr<MockDataDevice> data_device) {
+    data_device_ = std::move(data_device);
+  }
+
+  MockDataSource* data_source() { return data_source_.get(); }
+  void set_data_source(std::unique_ptr<MockDataSource> data_source) {
+    data_source_ = std::move(data_source);
+  }
+
+ private:
+  std::unique_ptr<MockDataDevice> data_device_;
+  std::unique_ptr<MockDataSource> data_source_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockDataDeviceManager);
+};
+
 // Handle wl_output object.
 class MockOutput : public Global {
  public:
@@ -207,11 +296,26 @@ class MockSeat : public Global {
   MockSeat();
   ~MockSeat() override;
 
+  void set_pointer(std::unique_ptr<MockPointer> pointer) {
+    pointer_ = std::move(pointer);
+  }
+  MockPointer* pointer() { return pointer_.get(); }
+
+  void set_keyboard(std::unique_ptr<MockKeyboard> keyboard) {
+    keyboard_ = std::move(keyboard);
+  }
+  MockKeyboard* keyboard() { return keyboard_.get(); }
+
+  void set_touch(std::unique_ptr<MockTouch> touch) {
+    touch_ = std::move(touch);
+  }
+  MockTouch* touch() { return touch_.get(); }
+
+ private:
   std::unique_ptr<MockPointer> pointer_;
   std::unique_ptr<MockKeyboard> keyboard_;
   std::unique_ptr<MockTouch> touch_;
 
- private:
   DISALLOW_COPY_AND_ASSIGN(MockSeat);
 };
 
@@ -244,7 +348,7 @@ struct DisplayDeleter {
   void operator()(wl_display* display);
 };
 
-class FakeServer : public base::Thread, base::MessagePumpLibevent::Watcher {
+class FakeServer : public base::Thread, base::MessagePumpLibevent::FdWatcher {
  public:
   FakeServer();
   ~FakeServer() override;
@@ -269,6 +373,7 @@ class FakeServer : public base::Thread, base::MessagePumpLibevent::Watcher {
     return resource ? T::FromResource(resource) : nullptr;
   }
 
+  MockDataDeviceManager* data_device_manager() { return &data_device_manager_; }
   MockSeat* seat() { return &seat_; }
   MockXdgShell* xdg_shell() { return &xdg_shell_; }
   MockOutput* output() { return &output_; }
@@ -278,7 +383,7 @@ class FakeServer : public base::Thread, base::MessagePumpLibevent::Watcher {
 
   std::unique_ptr<base::MessagePump> CreateMessagePump();
 
-  // base::MessagePumpLibevent::Watcher
+  // base::MessagePumpLibevent::FdWatcher
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
@@ -291,12 +396,13 @@ class FakeServer : public base::Thread, base::MessagePumpLibevent::Watcher {
 
   // Represent Wayland global objects
   MockCompositor compositor_;
+  MockDataDeviceManager data_device_manager_;
   MockOutput output_;
   MockSeat seat_;
   MockXdgShell xdg_shell_;
   MockXdgShellV6 zxdg_shell_v6_;
 
-  base::MessagePumpLibevent::FileDescriptorWatcher controller_;
+  base::MessagePumpLibevent::FdWatchController controller_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeServer);
 };

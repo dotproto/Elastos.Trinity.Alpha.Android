@@ -9,7 +9,7 @@ import("//build/config/ui.gni")
 import("//ipc/features.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//ppapi/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
 import("//sandbox/features.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 if (is_mac) {
@@ -65,7 +65,6 @@ source_set("common") {
     "browser_plugin/browser_plugin_constants.cc",
     "browser_plugin/browser_plugin_constants.h",
     "browser_plugin/browser_plugin_messages.h",
-    "cache_storage/cache_storage_messages.h",
     "cache_storage/cache_storage_types.cc",
     "cache_storage/cache_storage_types.h",
     "child_process_host_impl.cc",
@@ -139,6 +138,8 @@ source_set("common") {
     "frame_owner_properties.h",
     "frame_replication_state.cc",
     "frame_replication_state.h",
+    "frame_visual_properties.cc",
+    "frame_visual_properties.h",
     "gin_java_bridge_messages.h",
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
@@ -204,7 +205,6 @@ source_set("common") {
     "mac/font_loader.h",
     "mac/font_loader.mm",
     "media/aec_dump_messages.h",
-    "media/audio_messages.h",
     "media/cdm_info.cc",
     "media/media_devices.cc",
     "media/media_devices.h",
@@ -230,8 +230,6 @@ source_set("common") {
     "net/url_request_user_data.h",
     "notifications/notification_struct_traits.cc",
     "notifications/notification_struct_traits.h",
-    "origin_trials/trial_policy_impl.cc",
-    "origin_trials/trial_policy_impl.h",
     "origin_util.cc",
     "page_message_enums.h",
     "page_messages.h",
@@ -254,8 +252,6 @@ source_set("common") {
     "process_type.cc",
     "render_widget_surface_properties.cc",
     "render_widget_surface_properties.h",
-    "resize_params.cc",
-    "resize_params.h",
     "resource_messages.h",
     "resource_timing_info.cc",
     "resource_timing_info.h",
@@ -298,8 +294,8 @@ source_set("common") {
     "user_agent.cc",
     "view_message_enums.h",
     "view_messages.h",
-    "weak_wrapper_shared_url_loader_factory.cc",
-    "weak_wrapper_shared_url_loader_factory.h",
+    "visual_properties.cc",
+    "visual_properties.h",
     "wrapper_shared_url_loader_factory.cc",
     "wrapper_shared_url_loader_factory.h",
     "zygote_commands_linux.h",
@@ -318,8 +314,8 @@ source_set("common") {
     "//ipc",
     "//services/network:network_service",
     "//services/service_manager/sandbox",
-    "//third_party/WebKit/public:blink_headers",
-    "//third_party/WebKit/public/common",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public/common",
     "//ui/accessibility",
   ]
   deps = [
@@ -327,8 +323,8 @@ source_set("common") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build/util:webkit_version",
-    "//cc/ipc",
     "//components/discardable_memory/common",
+    "//components/services/filesystem/public/interfaces",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/viz/service",
@@ -353,17 +349,17 @@ source_set("common") {
     "//media/base/ipc",
     "//media/capture",
     "//media/capture/ipc",
-    "//media/gpu:features",
+    "//media/gpu:buildflags",
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
     "//media/midi:mojo",
-    "//mojo/common:common_base",
     "//mojo/edk",
+    "//mojo/public/cpp/system",
     "//net",
-    "//ppapi/features",
+    "//ppapi/buildflags",
     "//sandbox",
-    "//sandbox:sandbox_features",
+    "//sandbox:sandbox_buildflags",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
@@ -510,6 +506,8 @@ source_set("common") {
       "sandbox_policy_fuchsia.cc",
       "sandbox_policy_fuchsia.h",
     ]
+
+    deps += [ "//third_party/fuchsia-sdk:launchpad" ]
   }
 }
 
@@ -542,7 +540,6 @@ mojom("mojo_bindings") {
     "child_control.mojom",
     "child_memory_coordinator.mojom",
     "field_trial_recorder.mojom",
-    "file_utilities.mojom",
     "frame.mojom",
     "frame_sink_provider.mojom",
     "histogram_fetcher.mojom",
@@ -583,6 +580,7 @@ mojom("mojo_bindings") {
     "shared_worker/shared_worker_factory.mojom",
     "shared_worker/shared_worker_host.mojom",
     "shared_worker/shared_worker_info.mojom",
+    "speech_recognizer.mojom",
     "storage_partition_service.mojom",
     "url_loader_factory_bundle.mojom",
     "widget.mojom",
@@ -612,7 +610,6 @@ mojom("mojo_bindings") {
     "//content/public/common:resource_type_bindings",
     "//ipc:mojom_constants",
     "//media/mojo/interfaces",
-    "//mojo/common:common_custom_types",
     "//mojo/public/mojom/base",
     "//services/network/public/mojom",
     "//services/service_manager/public/mojom",
@@ -621,9 +618,9 @@ mojom("mojo_bindings") {
     "//services/video_capture/public/mojom",
     "//services/viz/public/interfaces",
     "//skia/public/interfaces",
-    "//third_party/WebKit/public:mojo_bindings",
-    "//third_party/WebKit/public:web_feature_mojo_bindings",
-    "//third_party/WebKit/public/mojom:mojom_core",
+    "//third_party/blink/public:mojo_bindings",
+    "//third_party/blink/public:web_feature_mojo_bindings",
+    "//third_party/blink/public/mojom:mojom_core",
     "//ui/base/mojo:mojo_bindings",
     "//ui/events/mojo:interfaces",
     "//ui/gfx/geometry/mojo",
@@ -634,8 +631,8 @@ mojom("mojo_bindings") {
     "//url/mojom:url_mojom_origin",
   ]
 
-  overridden_deps = [ "//third_party/WebKit/public/mojom:mojom_core" ]
-  component_deps = [ "//third_party/WebKit/public/common" ]
+  overridden_deps = [ "//third_party/blink/public/mojom:mojom_core" ]
+  component_deps = [ "//third_party/blink/public/common" ]
 
   component_output_prefix = "content_common_mojo_bindings"
   export_class_attribute = "CONTENT_EXPORT"

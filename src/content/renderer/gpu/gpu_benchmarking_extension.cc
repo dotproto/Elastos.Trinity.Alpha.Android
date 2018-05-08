@@ -16,7 +16,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/skia_paint_canvas.h"
@@ -43,13 +42,13 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/web/WebImageCache.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_image_cache.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_print_params.h"
+#include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "third_party/skia/include/core/SkPicture.h"
@@ -301,9 +300,9 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
     context->web_view()->SetIsActive(true);
     blink::WebRect content_rect =
         context->render_view_impl()->GetWidget()->ViewRect();
-    blink::WebMouseEvent mouseMove(
-        blink::WebInputEvent::kMouseMove, blink::WebInputEvent::kNoModifiers,
-        ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+    blink::WebMouseEvent mouseMove(blink::WebInputEvent::kMouseMove,
+                                   blink::WebInputEvent::kNoModifiers,
+                                   ui::EventTimeForNow());
     mouseMove.SetPositionInWidget((content_rect.x + content_rect.width / 2.0),
                                   (content_rect.y + content_rect.height / 2.0));
     context->web_view()->HandleInputEvent(
@@ -970,8 +969,12 @@ bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
   // Get all the pointer actions from the user input and wrap them into a
   // SyntheticPointerActionListParams object.
   ActionsParser actions_parser(value.get());
-  if (!actions_parser.ParsePointerActionSequence())
+  if (!actions_parser.ParsePointerActionSequence()) {
+    // TODO(dtapuska): Throw an error here, some layout tests start
+    // failing when this is done though.
+    // args->ThrowTypeError(actions_parser.error_message());
     return false;
+  }
 
   if (!GetOptionalArg(args, &callback)) {
     args->ThrowError();

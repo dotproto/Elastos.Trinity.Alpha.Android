@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_interstitial.h"
@@ -153,14 +152,18 @@ void SupervisedUserNavigationObserver::URLFilterCheckCallback(
     return;
 
   if (!is_showing_interstitial_ &&
-      behavior == SupervisedUserURLFilter::FilteringBehavior::BLOCK &&
-      !base::FeatureList::IsEnabled(
-          features::kSupervisedUserCommittedInterstitials)) {
-    // TODO(carlosil): Handle this case for committed interstitials. For now, we
-    // pass a 0 as the navigation id causing the interstitial for this case
-    // since we don't have the real id here, this doesn't cause issues since the
-    // navigation id is not used when committed interstitials are not enabled.
-    // This will be removed once committed interstitials are the only code path.
+      behavior == SupervisedUserURLFilter::FilteringBehavior::BLOCK) {
+    if (base::FeatureList::IsEnabled(
+            features::kSupervisedUserCommittedInterstitials)) {
+      web_contents()->GetController().Reload(content::ReloadType::NORMAL,
+                                             false);
+      return;
+    }
+    // TODO(carlosil): For now, we pass a 0 as the navigation id causing the
+    // interstitial for the non-committed interstitials case since we don't have
+    // the real id here, this doesn't cause issues since the navigation id is
+    // not used when committed interstitials are not enabled. This will be
+    // removed once committed interstitials are the only code path.
     const bool initial_page_load = false;
     MaybeShowInterstitial(
         url, reason, initial_page_load, 0,
@@ -215,11 +218,12 @@ void SupervisedUserNavigationObserver::GoBack() {
     interstitial_->CommandReceived("\"back\"");
 }
 
-void SupervisedUserNavigationObserver::RequestPermission() {
+void SupervisedUserNavigationObserver::RequestPermission(
+    RequestPermissionCallback callback) {
   DCHECK(base::FeatureList::IsEnabled(
       features::kSupervisedUserCommittedInterstitials));
   if (interstitial_ && is_showing_interstitial_)
-    interstitial_->CommandReceived("\"request\"");
+    interstitial_->RequestPermission(std::move(callback));
 }
 
 void SupervisedUserNavigationObserver::Feedback() {

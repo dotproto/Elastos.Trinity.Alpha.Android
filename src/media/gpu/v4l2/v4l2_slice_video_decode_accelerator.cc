@@ -64,15 +64,6 @@
   } while (0)
 
 namespace media {
-namespace {
-void DropGLImage(scoped_refptr<gl::GLImage> gl_image,
-                 BindGLImageCallback bind_image_cb,
-                 GLuint client_texture_id,
-                 GLuint texture_target) {
-  bind_image_cb.Run(client_texture_id, texture_target, nullptr, false);
-}
-
-}  // namespace
 
 // static
 const uint32_t V4L2SliceVideoDecodeAccelerator::supported_input_fourccs_[] = {
@@ -195,6 +186,11 @@ V4L2SliceVideoDecodeAccelerator::OutputRecord::OutputRecord()
       texture_id(0),
       egl_sync(EGL_NO_SYNC_KHR),
       cleared(false) {}
+
+V4L2SliceVideoDecodeAccelerator::OutputRecord::OutputRecord(OutputRecord&&) =
+    default;
+
+V4L2SliceVideoDecodeAccelerator::OutputRecord::~OutputRecord() = default;
 
 struct V4L2SliceVideoDecodeAccelerator::BitstreamBufferRef {
   BitstreamBufferRef(
@@ -1359,8 +1355,7 @@ void V4L2SliceVideoDecodeAccelerator::DecodeTask(
   }
   DVLOGF(4) << "mapped at=" << bitstream_record->shm->memory();
 
-  decoder_input_queue_.push(
-      linked_ptr<BitstreamBufferRef>(bitstream_record.release()));
+  decoder_input_queue_.push(std::move(bitstream_record));
 
   ScheduleDecodeBufferTaskIfNeeded();
 }
@@ -1372,8 +1367,7 @@ bool V4L2SliceVideoDecodeAccelerator::TrySetNewBistreamBuffer() {
   if (decoder_input_queue_.empty())
     return false;
 
-  decoder_current_bitstream_buffer_.reset(
-      decoder_input_queue_.front().release());
+  decoder_current_bitstream_buffer_ = std::move(decoder_input_queue_.front());
   decoder_input_queue_.pop();
 
   if (decoder_current_bitstream_buffer_->input_id == kFlushBufferId) {
@@ -1437,6 +1431,13 @@ void V4L2SliceVideoDecodeAccelerator::DecodeBufferTask() {
 
       case AcceleratedVideoDecoder::kDecodeError:
         VLOGF(1) << "Error decoding stream";
+        NOTIFY_ERROR(PLATFORM_FAILURE);
+        return;
+
+      case AcceleratedVideoDecoder::kNoKey:
+        NOTREACHED() << "Should not reach here unless this class accepts "
+                        "encrypted streams.";
+        DVLOGF(4) << "No key for decoding stream.";
         NOTIFY_ERROR(PLATFORM_FAILURE);
         return;
     }
@@ -1516,13 +1517,6 @@ bool V4L2SliceVideoDecodeAccelerator::DestroyOutputs(bool dismiss) {
     if (output_record.egl_sync != EGL_NO_SYNC_KHR) {
       if (eglDestroySyncKHR(egl_display_, output_record.egl_sync) != EGL_TRUE)
         VLOGF(1) << "eglDestroySyncKHR failed.";
-    }
-
-    if (output_record.gl_image) {
-      child_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&DropGLImage, std::move(output_record.gl_image),
-                                bind_image_cb_, output_record.client_texture_id,
-                                device_->GetTextureTarget()));
     }
 
     picture_buffers_to_dismiss.push_back(output_record.picture_id);
@@ -1636,7 +1630,6 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
     OutputRecord& output_record = output_buffer_map_[i];
     DCHECK(!output_record.at_device);
     DCHECK(!output_record.at_client);
-    DCHECK(!output_record.gl_image);
     DCHECK_EQ(output_record.egl_sync, EGL_NO_SYNC_KHR);
     DCHECK_EQ(output_record.picture_id, -1);
     DCHECK(output_record.dmabuf_fds.empty());
@@ -1720,15 +1713,14 @@ void V4L2SliceVideoDecodeAccelerator::CreateGLImageFor(
                      true);
   decoder_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&V4L2SliceVideoDecodeAccelerator::AssignGLImage,
-                 base::Unretained(this), buffer_index, picture_buffer_id,
-                 gl_image, base::Passed(&passed_dmabuf_fds)));
+      base::BindOnce(&V4L2SliceVideoDecodeAccelerator::AssignDmaBufs,
+                     base::Unretained(this), buffer_index, picture_buffer_id,
+                     base::Passed(&passed_dmabuf_fds)));
 }
 
-void V4L2SliceVideoDecodeAccelerator::AssignGLImage(
+void V4L2SliceVideoDecodeAccelerator::AssignDmaBufs(
     size_t buffer_index,
     int32_t picture_buffer_id,
-    scoped_refptr<gl::GLImage> gl_image,
     std::unique_ptr<std::vector<base::ScopedFD>> passed_dmabuf_fds) {
   DVLOGF(3) << "index=" << buffer_index;
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
@@ -1747,12 +1739,10 @@ void V4L2SliceVideoDecodeAccelerator::AssignGLImage(
   }
 
   OutputRecord& output_record = output_buffer_map_[buffer_index];
-  DCHECK(!output_record.gl_image);
   DCHECK_EQ(output_record.egl_sync, EGL_NO_SYNC_KHR);
   DCHECK(!output_record.at_client);
   DCHECK(!output_record.at_device);
 
-  output_record.gl_image = gl_image;
   if (output_mode_ == Config::OutputMode::IMPORT) {
     DCHECK(output_record.dmabuf_fds.empty());
     output_record.dmabuf_fds = std::move(*passed_dmabuf_fds);
@@ -1836,7 +1826,6 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask(
   DCHECK(!iter->at_device);
   iter->at_client = false;
   if (iter->texture_id != 0) {
-    iter->gl_image = nullptr;
     child_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&V4L2SliceVideoDecodeAccelerator::CreateGLImageFor,
@@ -1936,9 +1925,8 @@ void V4L2SliceVideoDecodeAccelerator::FlushTask() {
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
 
   // Queue an empty buffer which - when reached - will trigger flush sequence.
-  decoder_input_queue_.push(
-      linked_ptr<BitstreamBufferRef>(new BitstreamBufferRef(
-          decode_client_, decode_task_runner_, nullptr, kFlushBufferId)));
+  decoder_input_queue_.push(std::make_unique<BitstreamBufferRef>(
+      decode_client_, decode_task_runner_, nullptr, kFlushBufferId));
 
   ScheduleDecodeBufferTaskIfNeeded();
 }

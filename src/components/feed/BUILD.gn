@@ -23,3 +23,10 @@ static_library("feature_list") {
     "//base",
   ]
 }
+
+source_set("unit_tests") {
+  testonly = true
+  deps = [
+    "core:core_unit_tests",
+  ]
+}

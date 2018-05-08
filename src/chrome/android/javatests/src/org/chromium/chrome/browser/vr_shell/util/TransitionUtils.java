@@ -10,8 +10,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 
-import com.google.vr.ndk.base.DaydreamApi;
-
 import org.junit.Assert;
 
 import org.chromium.base.ContextUtils;
@@ -19,15 +17,13 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.vr.VrMainActivity;
 import org.chromium.chrome.browser.vr_shell.TestFramework;
 import org.chromium.chrome.browser.vr_shell.TestVrShellDelegate;
-import org.chromium.chrome.browser.vr_shell.VrClassesWrapperImpl;
-import org.chromium.chrome.browser.vr_shell.VrDaydreamApi;
 import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
+import org.chromium.chrome.browser.vr_shell.VrShellImpl;
 import org.chromium.chrome.browser.vr_shell.VrTestFramework;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content_public.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.concurrent.Callable;
@@ -102,9 +98,9 @@ public class TransitionUtils {
      * Only meant to be used alongside the test framework from VrTestFramework.
      * @param cvc The ContentViewCore for the tab the canvas is in.
      */
-    public static void enterPresentation(ContentViewCore cvc) {
+    public static void enterPresentation(WebContents webContents) {
         try {
-            DOMUtils.clickNode(cvc, "webgl-canvas", false /* goThroughRootAndroidView */);
+            DOMUtils.clickNode(webContents, "webgl-canvas", false /* goThroughRootAndroidView */);
         } catch (InterruptedException | TimeoutException e) {
             Assert.fail("Failed to click canvas to enter presentation: " + e.toString());
         }
@@ -118,8 +114,8 @@ public class TransitionUtils {
      * @param cvc The ContentViewCore for the tab the canvas is in.
      * @param webContents The WebContents for the tab the JavaScript step is in.
      */
-    public static void enterPresentationAndWait(ContentViewCore cvc, WebContents webContents) {
-        enterPresentation(cvc);
+    public static void enterPresentationAndWait(WebContents webContents) {
+        enterPresentation(webContents);
         TestFramework.waitOnJavaScriptStep(webContents);
     }
 
@@ -129,9 +125,9 @@ public class TransitionUtils {
      */
     public static void enterPresentationOrFail(TestFramework framework) {
         if (framework instanceof VrTestFramework) {
-            VrTransitionUtils.enterPresentationOrFail(framework.getFirstTabCvc());
+            VrTransitionUtils.enterPresentationOrFail(framework.getFirstTabWebContents());
         } else {
-            XrTransitionUtils.enterPresentationOrFail(framework.getFirstTabCvc());
+            XrTransitionUtils.enterPresentationOrFail(framework.getFirstTabWebContents());
         }
     }
 
@@ -199,27 +195,40 @@ public class TransitionUtils {
      * @param autopresent If this intent is expected to auto-present WebVR
      */
     public static void sendVrLaunchIntent(
-            String url, final Activity activity, boolean autopresent) {
+            String url, final Activity activity, boolean autopresent, boolean avoidRelaunch) {
         // Create an intent that will launch Chrome at the specified URL.
         final Intent intent =
                 new Intent(ContextUtils.getApplicationContext(), VrMainActivity.class);
         intent.setData(Uri.parse(url));
-        intent.putExtra(VrIntentUtils.DAYDREAM_VR_EXTRA, true);
-        DaydreamApi.setupVrIntent(intent);
+        intent.addCategory(VrIntentUtils.DAYDREAM_CATEGORY);
+        VrShellDelegate.getVrClassesWrapper().setupVrIntent(intent);
+
         if (autopresent) {
             // Daydream removes this category for deep-linked URLs for legacy reasons.
             intent.removeCategory(VrIntentUtils.DAYDREAM_CATEGORY);
             intent.putExtra(VrIntentUtils.AUTOPRESENT_WEVBVR_EXTRA, true);
         }
+        if (avoidRelaunch) intent.putExtra(VrIntentUtils.AVOID_RELAUNCH_EXTRA, true);
 
-        final VrClassesWrapperImpl wrapper = new VrClassesWrapperImpl();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                VrDaydreamApi api = wrapper.createVrDaydreamApi(activity);
-                api.launchInVr(intent);
-                api.close();
+                VrShellDelegate.getVrDaydreamApi().launchInVr(intent);
             }
         });
+    }
+
+    /**
+     * Waits until either a JavaScript dialog or permission prompt is being displayed using the
+     * Android native UI in the VR browser.
+     */
+    public static void waitForNativeUiPrompt(final int timeout) {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                VrShellImpl vrShell = (VrShellImpl) TestVrShellDelegate.getVrShellForTesting();
+                return vrShell.isDisplayingDialogView();
+            }
+        }, timeout, POLL_CHECK_INTERVAL_SHORT_MS);
     }
 }

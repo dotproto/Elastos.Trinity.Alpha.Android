@@ -329,7 +329,7 @@ class AutofillManagerTest : public testing::Test {
                             "04", "2999", "1");
     masked_server_card.set_guid("00000000-0000-0000-0000-000000000007");
     masked_server_card.set_record_type(CreditCard::MASKED_SERVER_CARD);
-    personal_data_.AddCreditCard(masked_server_card);
+    personal_data_.AddServerCreditCard(masked_server_card);
 
     CreditCard full_server_card;
     test::SetCreditCardInfo(&full_server_card, "Buddy Holly",
@@ -337,7 +337,7 @@ class AutofillManagerTest : public testing::Test {
                             "10", "2998", "1");
     full_server_card.set_guid("00000000-0000-0000-0000-000000000008");
     full_server_card.set_record_type(CreditCard::FULL_SERVER_CARD);
-    personal_data_.AddCreditCard(full_server_card);
+    personal_data_.AddServerCreditCard(full_server_card);
   }
 
   void CreateTestServerAndLocalCreditCards() {
@@ -349,7 +349,7 @@ class AutofillManagerTest : public testing::Test {
                             "04", "2999", "1");
     masked_server_card.set_guid("00000000-0000-0000-0000-000000000007");
     masked_server_card.set_record_type(CreditCard::MASKED_SERVER_CARD);
-    personal_data_.AddCreditCard(masked_server_card);
+    personal_data_.AddServerCreditCard(masked_server_card);
 
     CreditCard full_server_card;
     test::SetCreditCardInfo(&full_server_card, "Buddy Holly",
@@ -357,7 +357,7 @@ class AutofillManagerTest : public testing::Test {
                             "10", "2998", "1");
     full_server_card.set_guid("00000000-0000-0000-0000-000000000008");
     full_server_card.set_record_type(CreditCard::FULL_SERVER_CARD);
-    personal_data_.AddCreditCard(full_server_card);
+    personal_data_.AddServerCreditCard(full_server_card);
 
     CreditCard local_card;
     test::SetCreditCardInfo(&local_card, "Elvis Presley",
@@ -405,12 +405,8 @@ class AutofillManagerTest : public testing::Test {
   }
 
   void FormSubmitted(const FormData& form) {
-    autofill_manager_->ResetRunLoop();
-    if (autofill_manager_->OnFormSubmitted(form, false,
-                                           SubmissionSource::FORM_SUBMISSION,
-                                           base::TimeTicks::Now())) {
-      autofill_manager_->WaitForAsyncUploadProcess();
-    }
+    autofill_manager_->OnFormSubmitted(
+        form, false, SubmissionSource::FORM_SUBMISSION, base::TimeTicks::Now());
   }
 
   void FillAutofillFormData(int query_id,
@@ -1277,8 +1273,10 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonCCNumber) {
   static const std::string kMcSuggestion =
       std::string("Mastercard") + kUTF8MidlineEllipsis + "8765";
 #else
-  static const std::string kVisaSuggestion = "*3456";
-  static const std::string kMcSuggestion = "*8765";
+  static const std::string kVisaSuggestion =
+      std::string(kUTF8MidlineEllipsis) + "3456";
+  static const std::string kMcSuggestion =
+      std::string(kUTF8MidlineEllipsis) + "8765";
 #endif
 
   // Test that we sent the right values to the external delegate.
@@ -3615,6 +3613,77 @@ TEST_F(AutofillManagerTest, FillFirstPhoneNumber_HiddenFieldShouldNotCount) {
   }
 }
 
+// The hidden and the presentational fields should be filled, only if their
+// control type is 'select-one'. This exception is made to support synthetic
+// fields.
+TEST_F(AutofillManagerTest, FormWithHiddenOrPresentationalSelects) {
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.origin = GURL("http://myform.com/form.html");
+  form.action = GURL("http://myform.com/submit.html");
+
+  FormFieldData field;
+
+  test::CreateTestFormField("First name", "firstname", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Last name", "lastname", "", "text", &field);
+  form.fields.push_back(field);
+
+  {
+    const std::vector<const char*> values{"CA", "US", "BR"};
+    const std::vector<const char*> contents{"Canada", "United States",
+                                            "Banana Republic"};
+    test::CreateTestSelectField("Country", "country", "", values, contents,
+                                values.size(), &field);
+    field.is_focusable = false;
+    form.fields.push_back(field);
+  }
+  {
+    const std::vector<const char*> values{"NY", "CA", "TN"};
+    const std::vector<const char*> contents{"New York", "California",
+                                            "Tennessee"};
+    test::CreateTestSelectField("State", "state", "", values, contents,
+                                values.size(), &field);
+    field.role = FormFieldData::ROLE_ATTRIBUTE_PRESENTATION;
+    form.fields.push_back(field);
+  }
+
+  test::CreateTestFormField("City", "city", "", "text", &field);
+  field.is_focusable = false;
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Street Address", "address", "", "text", &field);
+  field.role = FormFieldData::ROLE_ATTRIBUTE_PRESENTATION;
+  form.fields.push_back(field);
+
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  const char guid[] = "00000000-0000-0000-0000-000000000001";
+  int response_page_id = 0;
+  FormData response_data;
+  base::HistogramTester histogram_tester;
+
+  FillAutofillFormDataAndSaveResults(kDefaultPageID, form, form.fields[0],
+                                     MakeFrontendID(std::string(), guid),
+                                     &response_page_id, &response_data);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.HiddenOrPresentationalSelectFieldsFilled", 2);
+
+  ExpectFilledField("First name", "firstname", "Elvis", "text",
+                    response_data.fields[0]);
+  ExpectFilledField("Last name", "lastname", "Presley", "text",
+                    response_data.fields[1]);
+  ExpectFilledField("Country", "country", "US", "select-one",
+                    response_data.fields[2]);
+  ExpectFilledField("State", "state", "TN", "select-one",
+                    response_data.fields[3]);
+  ExpectFilledField("City", "city", "", "text", response_data.fields[4]);
+  ExpectFilledField("Street Address", "address", "", "text",
+                    response_data.fields[5]);
+}
+
 TEST_F(AutofillManagerTest,
        FillFirstPhoneNumber_MultipleSectionFilledCorrectly) {
   AutofillProfile* work_profile =
@@ -3936,11 +4005,9 @@ TEST_F(AutofillManagerTest, FormSubmittedSaveData) {
   ExpectFilledAddressFormElvis(response_page_id, response_data, kDefaultPageID,
                                false);
 
-  autofill_manager_->ResetRunLoop();
   autofill_manager_->OnFormSubmitted(response_data, false,
                                      SubmissionSource::FORM_SUBMISSION,
                                      base::TimeTicks::Now());
-  autofill_manager_->WaitForAsyncUploadProcess();
   EXPECT_EQ(1, personal_data_.num_times_save_imported_profile_called());
 }
 
@@ -4259,6 +4326,87 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
 
   // Verify that FormStructure::ParseQueryResponse was NOT called.
   histogram_tester.ExpectTotalCount("Autofill.ServerQueryResponse", 0);
+}
+
+// Test that when server predictions disagree with the heuristic ones, the
+// overall types and sections would be set based on the server one.
+TEST_F(AutofillManagerTest, DetermineHeuristicsWithOverallPrediction) {
+  // Set up our form data.
+  FormData form;
+  FormFieldData field;
+  test::CreateTestFormField("First Name", "firstname", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Card Number", "cardnumber", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Expiration Year", "exp_year", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Expiration Month", "exp_month", "", "text",
+                            &field);
+  form.fields.push_back(field);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  TestFormStructure* form_structure = new TestFormStructure(form);
+  form_structure->DetermineHeuristicTypes(nullptr /* ukm_recorder */);
+  autofill_manager_->AddSeenFormStructure(base::WrapUnique(form_structure));
+
+  AutofillQueryResponseContents response;
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_FIRST);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_LAST);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NUMBER);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_EXP_MONTH);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_4_DIGIT_YEAR);
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
+
+  std::vector<std::string> signatures;
+  signatures.push_back(form_structure->FormSignatureAsStr());
+
+  base::HistogramTester histogram_tester;
+  autofill_manager_->OnLoadedServerPredictions(response_string, signatures);
+  // Verify that FormStructure::ParseQueryResponse was called (here and below).
+  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
+                                     AutofillMetrics::QUERY_RESPONSE_RECEIVED,
+                                     1);
+  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
+                                     AutofillMetrics::QUERY_RESPONSE_PARSED, 1);
+
+  // Since the card holder name appears as the first name + last name (rather
+  // than the full name), and since they appears as the first fields of the
+  // section, the heuristics detect them as the address first/last name.
+  EXPECT_EQ(NAME_FIRST, form_structure->field(0)->heuristic_type());
+  EXPECT_EQ(NAME_LAST, form_structure->field(1)->heuristic_type());
+  EXPECT_EQ(CREDIT_CARD_NUMBER, form_structure->field(2)->heuristic_type());
+  EXPECT_EQ(CREDIT_CARD_EXP_MONTH, form_structure->field(3)->heuristic_type());
+  EXPECT_EQ(CREDIT_CARD_EXP_4_DIGIT_YEAR,
+            form_structure->field(4)->heuristic_type());
+
+  // We expect to see the server type as the overall type.
+  EXPECT_EQ(CREDIT_CARD_NAME_FIRST,
+            form_structure->field(0)->Type().GetStorableType());
+  EXPECT_EQ(CREDIT_CARD_NAME_LAST,
+            form_structure->field(1)->Type().GetStorableType());
+  EXPECT_EQ(CREDIT_CARD_NUMBER, form_structure->field(2)->heuristic_type());
+  EXPECT_EQ(CREDIT_CARD_EXP_MONTH, form_structure->field(3)->heuristic_type());
+  EXPECT_EQ(CREDIT_CARD_EXP_4_DIGIT_YEAR,
+            form_structure->field(4)->heuristic_type());
+
+  // Although the heuristic types of the first two fields belongs to the address
+  // section, the final fields' section should be based on the overall
+  // prediction, therefore they should be grouped in one section.
+  const auto section = form_structure->field(0)->section();
+  EXPECT_EQ(section, form_structure->field(1)->section());
+  EXPECT_EQ(section, form_structure->field(2)->section());
+  EXPECT_EQ(section, form_structure->field(3)->section());
+  EXPECT_EQ(section, form_structure->field(4)->section());
 }
 
 // Test that we are able to save form data when forms are submitted and we only
@@ -4764,8 +4912,7 @@ TEST_F(AutofillManagerTest, DisambiguateUploadTypes) {
     // Assign the specified predicted type for each field in the test case.
     FormStructure form_structure(form);
     for (size_t i = 0; i < test_fields.size(); ++i) {
-      form_structure.field(i)->set_overall_server_type(
-          test_fields[i].predicted_type);
+      form_structure.field(i)->set_server_type(test_fields[i].predicted_type);
     }
 
     AutofillManager::DeterminePossibleFieldTypesForUpload(
@@ -4873,11 +5020,8 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndUnfocus_Upload) {
   autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
                                           gfx::RectF(), base::TimeTicks::Now());
 
-  autofill_manager_->ResetRunLoop();
   // Simulate lost of focus on the form.
   autofill_manager_->OnFocusNoLongerOnForm();
-  // Wait for upload to complete (will check expected types as well).
-  autofill_manager_->WaitForAsyncUploadProcess();
 }
 
 // Test that navigating with a filled form sends an upload with types matching
@@ -4926,11 +5070,8 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndNavigation_Upload) {
   autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
                                           gfx::RectF(), base::TimeTicks::Now());
 
-  autofill_manager_->ResetRunLoop();
   // Simulate a navigation so that the pending form is uploaded.
   autofill_manager_->Reset();
-  // Wait for upload to complete (will check expected types as well).
-  autofill_manager_->WaitForAsyncUploadProcess();
 }
 
 // Test that unfocusing a filled form sends an upload with types matching the
@@ -4977,11 +5118,8 @@ TEST_F(AutofillManagerTest, OnDidFillAutofillFormDataAndUnfocus_Upload) {
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
   autofill_manager_->OnDidFillAutofillFormData(form, base::TimeTicks::Now());
 
-  autofill_manager_->ResetRunLoop();
   // Simulate lost of focus on the form.
   autofill_manager_->OnFocusNoLongerOnForm();
-  // Wait for upload to complete.
-  autofill_manager_->WaitForAsyncUploadProcess();
 }
 
 // Test that suggestions are returned for credit card fields with an
@@ -5284,7 +5422,8 @@ TEST_F(AutofillManagerTest, DisplayCreditCardSuggestionsWithMatchingTokens) {
   static const std::string kVisaSuggestion =
       std::string("Visa") + kUTF8MidlineEllipsis + "3456";
 #else
-  static const std::string kVisaSuggestion = "*3456";
+  static const std::string kVisaSuggestion =
+      std::string(kUTF8MidlineEllipsis) + "3456";
 #endif
 
   CheckSuggestions(kDefaultPageID,
@@ -5883,7 +6022,6 @@ TEST_F(AutofillManagerTest, SignInFormSubmission_Upload) {
   autofill_manager_->SetExpectedSubmittedFieldTypes(expected_types);
   autofill_manager_->SetExpectedObservedSubmission(true);
   autofill_manager_->SetCallParentUploadFormData(true);
-  autofill_manager_->ResetRunLoop();
 
   std::unique_ptr<FormStructure> form_structure(new FormStructure(form));
   form_structure->set_is_signin_upload(true);
@@ -5896,11 +6034,8 @@ TEST_F(AutofillManagerTest, SignInFormSubmission_Upload) {
   EXPECT_CALL(*download_manager_,
               StartUploadRequest(_, false, _, std::string(), true))
       .WillOnce(DoAll(SaveArg<2>(&uploaded_available_types), Return(true)));
-  autofill_manager_->StartUploadProcess(std::move(form_structure),
-                                        base::TimeTicks::Now(), true);
-
-  // Wait for upload to complete (will check expected types as well).
-  autofill_manager_->WaitForAsyncUploadProcess();
+  autofill_manager_->MaybeStartVoteUploadProcess(std::move(form_structure),
+                                                 base::TimeTicks::Now(), true);
 
   EXPECT_EQ(signature, autofill_manager_->GetSubmittedFormSignature());
   EXPECT_NE(uploaded_available_types.end(),

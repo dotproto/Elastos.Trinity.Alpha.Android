@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/debug/activity_tracker.h"
-#include "base/debug/profiler.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -775,11 +774,7 @@ bool SandboxWin::InitBrokerServices(sandbox::BrokerServices* broker_services) {
 #if !defined(OFFICIAL_BUILD) && !defined(COMPONENT_BUILD)
   BOOL is_in_job = FALSE;
   CHECK(::IsProcessInJob(::GetCurrentProcess(), NULL, &is_in_job));
-  // In a Syzygy-profiled binary, instrumented for import profiling, this
-  // patch will end in infinite recursion on the attempted delegation to the
-  // original function.
-  if (!base::debug::IsBinaryInstrumented() && !is_in_job &&
-      !g_iat_patch_duplicate_handle.is_patched()) {
+  if (!is_in_job && !g_iat_patch_duplicate_handle.is_patched()) {
     HMODULE module = NULL;
     wchar_t module_name[MAX_PATH];
     CHECK(::GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
@@ -872,11 +867,9 @@ sandbox::ResultCode SandboxWin::StartSandboxedProcess(
   // Post-startup mitigations.
   mitigations = sandbox::MITIGATION_STRICT_HANDLE_CHECKS |
                 sandbox::MITIGATION_DLL_SEARCH_ORDER;
-  if (base::FeatureList::IsEnabled(
-          service_manager::features::kWinSboxForceMsSigned) &&
-      !cmd_line->HasSwitch(switches::kAllowThirdPartyModules)) {
+  if (!cmd_line->HasSwitch(switches::kAllowThirdPartyModules))
     mitigations |= sandbox::MITIGATION_FORCE_MS_SIGNED_BINS;
-  }
+
   result = policy->SetDelayedProcessMitigations(mitigations);
   if (result != sandbox::SBOX_ALL_OK)
     return result;

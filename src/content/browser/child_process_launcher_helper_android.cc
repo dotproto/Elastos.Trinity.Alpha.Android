@@ -20,6 +20,7 @@
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
 #include "jni/ChildProcessLauncherHelper_jni.h"
+#include "services/service_manager/sandbox/switches.h"
 
 using base::android::AttachCurrentThread;
 using base::android::JavaParamRef;
@@ -55,7 +56,7 @@ void ChildProcessLauncherHelper::BeforeLaunchOnClientThread() {
 
   // Non-sandboxed utility or renderer process are currently not supported.
   DCHECK(process_type == switches::kGpuProcess ||
-         !command_line()->HasSwitch(switches::kNoSandbox));
+         !command_line()->HasSwitch(service_manager::switches::kNoSandbox));
 }
 
 mojo::edk::ScopedPlatformHandle
@@ -148,16 +149,30 @@ void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
     const base::LaunchOptions& options) {
 }
 
-base::TerminationStatus ChildProcessLauncherHelper::GetTerminationStatus(
+ChildProcessTerminationInfo ChildProcessLauncherHelper::GetTerminationInfo(
     const ChildProcessLauncherHelper::Process& process,
-    bool known_dead,
-    int* exit_code) {
-  if (java_peer_avaiable_on_client_thread_ &&
-      Java_ChildProcessLauncherHelper_isOomProtected(AttachCurrentThread(),
-                                                     java_peer_)) {
-    return base::TERMINATION_STATUS_OOM_PROTECTED;
+    bool known_dead) {
+  ChildProcessTerminationInfo info;
+  info.has_oom_protection_bindings =
+      java_peer_avaiable_on_client_thread_ &&
+      Java_ChildProcessLauncherHelper_hasOomProtectionBindings(
+          AttachCurrentThread(), java_peer_);
+  info.was_killed_intentionally_by_browser =
+      java_peer_avaiable_on_client_thread_ &&
+      Java_ChildProcessLauncherHelper_isKilledByUs(AttachCurrentThread(),
+                                                   java_peer_);
+  bool app_foreground =
+      java_peer_avaiable_on_client_thread_ &&
+      Java_ChildProcessLauncherHelper_isApplicationInForeground(
+          AttachCurrentThread(), java_peer_);
+  if (app_foreground && info.has_oom_protection_bindings) {
+    info.status = base::TERMINATION_STATUS_OOM_PROTECTED;
+  } else {
+    // Note waitpid does not work on Android since these are not actually child
+    // processes. So there is no need for base::GetTerminationInfo.
+    info.status = base::TERMINATION_STATUS_NORMAL_TERMINATION;
   }
-  return base::GetTerminationStatus(process.process.Handle(), exit_code);
+  return info;
 }
 
 // static
@@ -184,7 +199,8 @@ void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
   DCHECK(env);
   return Java_ChildProcessLauncherHelper_setPriority(
       env, java_peer_, process.Handle(), !priority.background,
-      priority.boost_for_pending_views, static_cast<jint>(priority.importance));
+      priority.frame_depth, priority.boost_for_pending_views,
+      static_cast<jint>(priority.importance));
 }
 
 // static

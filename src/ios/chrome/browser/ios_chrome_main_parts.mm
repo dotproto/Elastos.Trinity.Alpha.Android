@@ -47,7 +47,7 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_stream_factory.h"
 #include "net/url_request/url_request.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -79,7 +79,7 @@ void IOSChromeMainParts::PreMainMessageLoopStart() {
   CHECK(!loaded_locale.empty());
 
   base::FilePath resources_pack_path;
-  PathService::Get(ios::FILE_RESOURCES_PACK, &resources_pack_path);
+  base::PathService::Get(ios::FILE_RESOURCES_PACK, &resources_pack_path);
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       resources_pack_path, ui::SCALE_FACTOR_100P);
 }
@@ -100,7 +100,7 @@ void IOSChromeMainParts::PreCreateThreads() {
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   base::FilePath local_state_path;
-  CHECK(PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
+  CHECK(base::PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
   application_context_.reset(new ApplicationContextImpl(
       local_state_task_runner.get(), parsed_command_line_,
       l10n_util::GetLocaleOverride()));

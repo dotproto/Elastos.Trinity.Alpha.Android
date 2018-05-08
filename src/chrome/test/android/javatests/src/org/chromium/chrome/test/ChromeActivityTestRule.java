@@ -54,6 +54,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content.browser.test.util.RenderProcessLimit;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 
 import java.lang.reflect.AnnotatedElement;
@@ -156,6 +157,29 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
             return 2;
         }
         return 0;
+    }
+
+    /**
+     * Waits for the activity to fully finish its native initialization.
+     * @param The {@link ChromeActivity} to wait for.
+     */
+    public static void waitForActivityNativeInitializationComplete(ChromeActivity activity) {
+        CriteriaHelper.pollUiThread(()
+                                            -> ChromeBrowserInitializer.getInstance(activity)
+                                                       .hasNativeInitializationCompleted(),
+                "Native initialization never finished",
+                20 * CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
+                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        CriteriaHelper.pollUiThread(() -> activity.didFinishNativeInitialization(),
+                "Native initialization (of Activity) never finished");
+    }
+
+    /**
+     * Waits for the activity to fully finish its native initialization.
+     */
+    public void waitForActivityNativeInitializationComplete() {
+        waitForActivityNativeInitializationComplete(getActivity());
     }
 
     /**
@@ -407,21 +431,6 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     }
 
     /**
-     * Waits for the activity to fully finish it's native initialization.
-     */
-    public void waitForActivityNativeInitializationComplete() {
-        CriteriaHelper.pollUiThread(()
-                                            -> ChromeBrowserInitializer.getInstance(getActivity())
-                                                       .hasNativeInitializationCompleted(),
-                "Native initialization never finished",
-                20 * CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
-                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-
-        CriteriaHelper.pollUiThread(() -> getActivity().didFinishNativeInitialization(),
-                "Native initialization (of Activity) never finished");
-    }
-
-    /**
      * Prepares a URL intent to start the activity.
      * @param intent the intent to be modified
      * @param url the URL to be used (may be null)
@@ -592,11 +601,11 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     public String runJavaScriptCodeInCurrentTab(String code)
             throws InterruptedException, TimeoutException {
         return JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                getActivity().getCurrentContentViewCore().getWebContents(), code);
+                getActivity().getCurrentWebContents(), code);
     }
 
     /**
-     * Waits till the ContentViewCore receives the expected page scale factor
+     * Waits till the WebContents receives the expected page scale factor
      * from the compositor and asserts that this happens.
      */
     public void assertWaitForPageScaleFactorMatch(float expectedScale) {
@@ -609,6 +618,13 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
 
     public String getTestName() {
         return mCurrentTestName;
+    }
+
+    /**
+     * @return {@link WebContents} of the active tab of the activity.
+     */
+    public WebContents getWebContents() {
+        return getActivity().getActivityTab().getWebContents();
     }
 
     public void setActivity(T chromeActivity) {

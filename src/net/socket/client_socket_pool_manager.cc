@@ -4,6 +4,8 @@
 
 #include "net/socket/client_socket_pool_manager.h"
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/load_flags.h"
@@ -41,8 +43,8 @@ static_assert(arraysize(g_max_sockets_per_pool) ==
 // be the same as the limit for ws. Also note that Firefox uses a limit of 200.
 // See http://crbug.com/486800
 int g_max_sockets_per_group[] = {
-  6,  // NORMAL_SOCKET_POOL
-  255 // WEBSOCKET_SOCKET_POOL
+    6,   // NORMAL_SOCKET_POOL
+    255  // WEBSOCKET_SOCKET_POOL
 };
 
 static_assert(arraysize(g_max_sockets_per_group) ==
@@ -87,7 +89,7 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
   scoped_refptr<SOCKSSocketParams> socks_params;
   std::unique_ptr<HostPortPair> proxy_host_port;
 
-  bool using_ssl = group_type == ClientSocketPoolManager::SSL_GROUP;
+  const bool using_ssl = group_type == ClientSocketPoolManager::SSL_GROUP;
   HostPortPair origin_host_port = endpoint;
 
   if (!using_ssl && session->params().testing_fixed_http_port != 0) {
@@ -96,10 +98,9 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
     origin_host_port.set_port(session->params().testing_fixed_https_port);
   }
 
-  bool disable_resolver_cache =
-      request_load_flags & LOAD_BYPASS_CACHE ||
-      request_load_flags & LOAD_VALIDATE_CACHE ||
-      request_load_flags & LOAD_DISABLE_CACHE;
+  // LOAD_BYPASS_CACHE should bypass the host cache as well as the HTTP cache.
+  // Other cache-related load flags should not have this effect.
+  bool disable_resolver_cache = request_load_flags & LOAD_BYPASS_CACHE;
 
   int load_flags = request_load_flags;
   if (session->params().ignore_certificate_errors)
@@ -116,7 +117,11 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
     connection_group = "ftp/" + connection_group;
   }
   if (using_ssl) {
-    connection_group = "ssl/" + connection_group;
+    std::string prefix = "ssl/";
+    if (ssl_config_for_origin.version_interference_probe) {
+      prefix += "version-interference-probe/";
+    }
+    connection_group = prefix + connection_group;
   }
 
   ClientSocketPool::RespectLimits respect_limits =

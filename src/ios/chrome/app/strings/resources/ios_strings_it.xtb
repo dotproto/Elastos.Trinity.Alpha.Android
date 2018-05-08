@@ -38,6 +38,7 @@
 <translation id="1540800554400757039">Indirizzo 1</translation>
 <translation id="1545749641540134597">Leggi il codice QR</translation>
 <translation id="1580783302095112590">Messaggio inviato.</translation>
+<translation id="1582732959743469162">Verrà interrotto l'avanzamento del tuo download attuale.</translation>
 <translation id="1612730193129642006">Mostra griglia schede</translation>
 <translation id="1644574205037202324">Cronologia</translation>
 <translation id="1646446875146297738">Se attivi "Non tenere traccia", viene inclusa una richiesta con il tuo traffico di navigazione. Gli eventuali effetti dipendono dalla risposta o meno di un sito web alla richiesta e dalla modalità di interpretazione della richiesta.
@@ -136,6 +137,7 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="3393920035788932672">Popup consentiti</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min</translation>
 <translation id="3448016392200048164">Visualizzazione divisa</translation>
+<translation id="3469166899695866866">Interrompere il download?</translation>
 <translation id="3474624961160222204">Continua come <ph name="NAME" /></translation>
 <translation id="3474649192738347024">Moduli compilati.</translation>
 <translation id="3478058380795961209">Mese di scadenza</translation>
@@ -149,6 +151,7 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="3588820906588687999">Apri immagine in un'altra scheda</translation>
 <translation id="3603009562372709545">Copia URL link</translation>
 <translation id="3607167657931203000">Dati della Compilazione automatica</translation>
+<translation id="3609785682760573515">Sincronizzazione in corso...</translation>
 <translation id="3628119975092896051">Il tuo elenco di lettura è disponibile offline. Per aggiungere una pagina all'elenco di lettura, tocca <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Precarica pagine web</translation>
 <translation id="3691593122358196899">Preferito aggiunto in: <ph name="FOLDER_TITLE" /></translation>
@@ -158,6 +161,7 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="3789841737615482174">Installa</translation>
 <translation id="385051799172605136">Indietro</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3915450441834151894">Informazioni sito</translation>
 <translation id="3928666092801078803">Unisci i miei dati</translation>
 <translation id="3950820424414687140">Accedi</translation>
 <translation id="3963231839620026525">Nuova scheda in incognito</translation>
@@ -166,6 +170,7 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="4002066346123236978">Titolo</translation>
 <translation id="4038354071007134711">Impossibile aprire il file con le app sul dispositivo.</translation>
 <translation id="4049507953662678203">Controlla la connessione di rete e riprova.</translation>
+<translation id="4084682180776658562">Aggiungi ai Preferiti</translation>
 <translation id="411254640334432676">Download non riuscito.</translation>
 <translation id="4121993058175073134">Per inviare dati net-export, configura il tuo account email nell'app Impostazioni.</translation>
 <translation id="4124987746317609294">Intervallo di tempo</translation>
@@ -221,6 +226,7 @@ I tuoi dati vengono criptati con la tua passphrase di sincronizzazione. Inserisc
 <translation id="5197255632782567636">Internet</translation>
 <translation id="5228579091201413441">Abilita sincronizzazione</translation>
 <translation id="5244474230056479698">Sincronizzazione con <ph name="EMAIL" /></translation>
+<translation id="527973086555161537">Apri una scheda per navigare sul Web in privato.</translation>
 <translation id="5300589172476337783">Mostra</translation>
 <translation id="5317780077021120954">Salva</translation>
 <translation id="5327248766486351172">Nome</translation>
@@ -284,6 +290,7 @@ La funzione Handoff deve anche essere attivata nella sezione Generali di Imposta
 <translation id="633809752005859102">Si è verificato un problema. Stiamo cercando una soluzione.</translation>
 <translation id="6342069812937806050">In questo momento</translation>
 <translation id="6344783595350022745">Cancella testo</translation>
+<translation id="6346549652287021269">Iniziare un nuovo download?</translation>
 <translation id="6362362396625799311">Nessuna scheda in incognito</translation>
 <translation id="6374469231428023295">Riprova</translation>
 <translation id="6380866119319257197">Se non ricordi la passphrase o vuoi modificare questa impostazione, <ph name="BEGIN_LINK" />reimposta la sincronizzazione<ph name="END_LINK" /></translation>
@@ -325,12 +332,14 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="7031882061095297553">Sincronizza con</translation>
 <translation id="7053983685419859001">Blocca</translation>
 <translation id="7062545763355031412">Accetta e cambia account</translation>
+<translation id="7102005569666697658">Download in corso… <ph name="FILE_SIZE" /></translation>
 <translation id="7108338896283013870">Nascondi</translation>
 <translation id="7133798577887235672">Nome e cognome</translation>
 <translation id="7136892417564438900">La videocamera non è disponibile</translation>
 <translation id="7159472599653637159">Richiedi sito per dispositivi mobili</translation>
 <translation id="7167621057293532233">Tipi di dati</translation>
 <translation id="7175593937868963913">Scrivi email</translation>
+<translation id="7180611975245234373">Aggiorna</translation>
 <translation id="7189598951263744875">Condividi...</translation>
 <translation id="7203585745079012652">Pronuncia le risposte</translation>
 <translation id="722055596168483966">Personalizza i servizi Google</translation>
@@ -349,6 +358,7 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="750493650310597496">0 selezionati</translation>
 <translation id="7514365320538308">Scarica</translation>
 <translation id="7537586195939242955">Spiacenti, il tuo pass non può essere installato in Passbook in questo momento.</translation>
+<translation id="7554791636758816595">Nuova scheda</translation>
 <translation id="7561196759112975576">Sempre</translation>
 <translation id="7603852183842204213">Popup bloccati (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronizzazione non funziona</translation>
@@ -360,6 +370,7 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="7769602470925380267">Accetta ed esci</translation>
 <translation id="7772032839648071052">Conferma passphrase</translation>
 <translation id="780301667611848630">No grazie</translation>
+<translation id="7856733331829174190">Download non riuscito</translation>
 <translation id="7859704718976024901">Cronologia di navigazione</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Esporta password...</translation>
@@ -372,6 +383,7 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="8023878949384262191">Viene espansa la sezione.</translation>
 <translation id="8059533439631660104">Viene compressa la sezione.</translation>
 <translation id="806745655614357130">Mantieni separati i miei dati</translation>
+<translation id="8073670137947914548">Download terminato</translation>
 <translation id="8076014560081431679">Le impostazioni del sito salvate non verranno eliminate e potrebbero rispecchiare le tue abitudini di navigazione. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Chiudi tutte le schede</translation>
 <translation id="8205564605687841303">Annulla</translation>

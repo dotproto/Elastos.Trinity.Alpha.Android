@@ -1279,7 +1279,7 @@ GLuint GLES2Implementation::GetLastFlushIdCHROMIUM() {
   return flush_id_;
 }
 
-void GLES2Implementation::SwapBuffers() {
+void GLES2Implementation::SwapBuffers(GLbitfield flags) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSwapBuffers()");
   // TODO(piman): Strictly speaking we'd want to insert the token after the
@@ -1290,7 +1290,7 @@ void GLES2Implementation::SwapBuffers() {
   // semantics if the client doesn't use the callback mechanism, and by chance
   // the scheduler yields between the InsertToken and the SwapBuffers.
   swap_buffers_tokens_.push(helper_->InsertToken());
-  helper_->SwapBuffers();
+  helper_->SwapBuffers(flags);
   helper_->CommandBufferHelper::Flush();
   // Wait if we added too many swap buffers. Add 1 to kMaxSwapBuffers to
   // compensate for TODO above.
@@ -1301,7 +1301,8 @@ void GLES2Implementation::SwapBuffers() {
 }
 
 void GLES2Implementation::SwapBuffersWithBoundsCHROMIUM(GLsizei count,
-                                                        const GLint* rects) {
+                                                        const GLint* rects,
+                                                        GLbitfield flags) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSwapBuffersWithBoundsCHROMIUM("
                      << count << ", " << static_cast<const void*>(rects)
@@ -1321,7 +1322,7 @@ void GLES2Implementation::SwapBuffersWithBoundsCHROMIUM(GLsizei count,
 
   // Same flow control as GLES2Implementation::SwapBuffers (see comments there).
   swap_buffers_tokens_.push(helper_->InsertToken());
-  helper_->SwapBuffersWithBoundsCHROMIUMImmediate(count, rects);
+  helper_->SwapBuffersWithBoundsCHROMIUMImmediate(count, rects, flags);
   helper_->CommandBufferHelper::Flush();
   if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
     helper_->WaitForToken(swap_buffers_tokens_.front());
@@ -4676,11 +4677,12 @@ GLenum GLES2Implementation::GetGraphicsResetStatusKHR() {
   return GL_NO_ERROR;
 }
 
-void GLES2Implementation::Swap() {
-  SwapBuffers();
+void GLES2Implementation::Swap(uint32_t flags) {
+  SwapBuffers(flags);
 }
 
-void GLES2Implementation::SwapWithBounds(const std::vector<gfx::Rect>& rects) {
+void GLES2Implementation::SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                                         uint32_t flags) {
   std::vector<int> rects_data(rects.size() * 4);
   for (size_t i = 0; i < rects.size(); ++i) {
     rects_data[i * 4 + 0] = rects[i].x();
@@ -4688,16 +4690,17 @@ void GLES2Implementation::SwapWithBounds(const std::vector<gfx::Rect>& rects) {
     rects_data[i * 4 + 2] = rects[i].width();
     rects_data[i * 4 + 3] = rects[i].height();
   }
-  SwapBuffersWithBoundsCHROMIUM(rects.size(), rects_data.data());
+  SwapBuffersWithBoundsCHROMIUM(rects.size(), rects_data.data(), flags);
 }
 
-void GLES2Implementation::PartialSwapBuffers(const gfx::Rect& sub_buffer) {
-  PostSubBufferCHROMIUM(
-      sub_buffer.x(), sub_buffer.y(), sub_buffer.width(), sub_buffer.height());
+void GLES2Implementation::PartialSwapBuffers(const gfx::Rect& sub_buffer,
+                                             uint32_t flags) {
+  PostSubBufferCHROMIUM(sub_buffer.x(), sub_buffer.y(), sub_buffer.width(),
+                        sub_buffer.height(), flags);
 }
 
-void GLES2Implementation::CommitOverlayPlanes() {
-  CommitOverlayPlanesCHROMIUM();
+void GLES2Implementation::CommitOverlayPlanes(uint32_t flags) {
+  CommitOverlayPlanesCHROMIUM(flags);
 }
 
 static GLenum GetGLESOverlayTransform(gfx::OverlayTransform plane_transform) {
@@ -4726,18 +4729,13 @@ void GLES2Implementation::ScheduleOverlayPlane(
     gfx::OverlayTransform plane_transform,
     unsigned overlay_texture_id,
     const gfx::Rect& display_bounds,
-    const gfx::RectF& uv_rect) {
-  ScheduleOverlayPlaneCHROMIUM(plane_z_order,
-                               GetGLESOverlayTransform(plane_transform),
-                               overlay_texture_id,
-                               display_bounds.x(),
-                               display_bounds.y(),
-                               display_bounds.width(),
-                               display_bounds.height(),
-                               uv_rect.x(),
-                               uv_rect.y(),
-                               uv_rect.width(),
-                               uv_rect.height());
+    const gfx::RectF& uv_rect,
+    bool enable_blend) {
+  ScheduleOverlayPlaneCHROMIUM(
+      plane_z_order, GetGLESOverlayTransform(plane_transform),
+      overlay_texture_id, display_bounds.x(), display_bounds.y(),
+      display_bounds.width(), display_bounds.height(), uv_rect.x(), uv_rect.y(),
+      uv_rect.width(), uv_rect.height(), enable_blend);
 }
 
 void GLES2Implementation::ScheduleCALayerSharedStateCHROMIUM(
@@ -4855,14 +4853,14 @@ void GLES2Implementation::ScheduleDCLayerCHROMIUM(
                                    filter, buffer.shm_id(), buffer.offset());
 }
 
-void GLES2Implementation::CommitOverlayPlanesCHROMIUM() {
+void GLES2Implementation::CommitOverlayPlanesCHROMIUM(GLbitfield flags) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] CommitOverlayPlanesCHROMIUM()");
   TRACE_EVENT0("gpu", "GLES2::CommitOverlayPlanesCHROMIUM");
 
   // Same flow control as GLES2Implementation::SwapBuffers (see comments there).
   swap_buffers_tokens_.push(helper_->InsertToken());
-  helper_->CommitOverlayPlanesCHROMIUM();
+  helper_->CommitOverlayPlanesCHROMIUM(flags);
   helper_->CommandBufferHelper::Flush();
   if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
     helper_->WaitForToken(swap_buffers_tokens_.front());
@@ -5383,8 +5381,11 @@ void GLES2Implementation::GetTransformFeedbackVaryingsCHROMIUM(
   memcpy(info, &result[0], result.size());
 }
 
-void GLES2Implementation::PostSubBufferCHROMIUM(
-    GLint x, GLint y, GLint width, GLint height) {
+void GLES2Implementation::PostSubBufferCHROMIUM(GLint x,
+                                                GLint y,
+                                                GLint width,
+                                                GLint height,
+                                                GLbitfield flags) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] PostSubBufferCHROMIUM("
       << x << ", " << y << ", " << width << ", " << height << ")");
@@ -5393,7 +5394,7 @@ void GLES2Implementation::PostSubBufferCHROMIUM(
 
   // Same flow control as GLES2Implementation::SwapBuffers (see comments there).
   swap_buffers_tokens_.push(helper_->InsertToken());
-  helper_->PostSubBufferCHROMIUM(x, y, width, height);
+  helper_->PostSubBufferCHROMIUM(x, y, width, height, flags);
   helper_->CommandBufferHelper::Flush();
   if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
     helper_->WaitForToken(swap_buffers_tokens_.front());

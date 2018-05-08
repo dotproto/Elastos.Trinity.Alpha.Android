@@ -4,6 +4,9 @@
 
 #include <stddef.h>
 
+#include <utility>
+#include <vector>
+
 #include "base/containers/circular_deque.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -17,11 +20,11 @@
 #include "media/base/video_frame.h"
 #include "media/video/mock_gpu_memory_buffer_video_frame_pool.h"
 #include "media/video/mock_gpu_video_accelerator_factories.h"
-#include "third_party/WebKit/public/platform/WebFullscreenVideoStatus.h"
-#include "third_party/WebKit/public/platform/WebLayer.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
+#include "third_party/blink/public/platform/web_fullscreen_video_status.h"
+#include "third_party/blink/public/platform/web_layer.h"
+#include "third_party/blink/public/platform/web_media_player.h"
+#include "third_party/blink/public/platform/web_media_player_client.h"
+#include "third_party/blink/public/platform/web_media_player_source.h"
 
 namespace content {
 
@@ -70,6 +73,14 @@ class FakeWebMediaPlayerDelegate
   }
 
   void DidPlayerMutedStatusChange(int delegate_id, bool muted) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
+  void DidPictureInPictureSourceChange(int delegate_id) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
+  void DidPictureInPictureModeEnd(int delegate_id) override {
     EXPECT_EQ(delegate_id_, delegate_id);
   }
 
@@ -164,6 +175,7 @@ class MockMediaStreamVideoRenderer : public MediaStreamVideoRenderer {
       const base::Closure& error_cb,
       const MediaStreamVideoRenderer::RepaintCB& repaint_cb)
       : started_(false),
+        standard_size_(kStandardWidth, kStandardHeight),
         task_runner_(task_runner),
         message_loop_controller_(message_loop_controller),
         error_cb_(error_cb),
@@ -186,6 +198,9 @@ class MockMediaStreamVideoRenderer : public MediaStreamVideoRenderer {
   bool Started() { return started_; }
   bool Paused() { return paused_; }
 
+  void set_standard_size(const gfx::Size& size) { standard_size_ = size; }
+  const gfx::Size& get_standard_size() { return standard_size_; }
+
  private:
   ~MockMediaStreamVideoRenderer() override {}
 
@@ -198,6 +213,7 @@ class MockMediaStreamVideoRenderer : public MediaStreamVideoRenderer {
 
   bool started_;
   bool paused_;
+  gfx::Size standard_size_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   ReusableMessageLoopEvent* const message_loop_controller_;
@@ -223,7 +239,6 @@ class MockMediaStreamAudioRenderer : public MediaStreamAudioRenderer {
 
   void SwitchOutputDevice(
       const std::string& device_id,
-      const url::Origin& security_origin,
       const media::OutputDeviceStatusCB& callback) override {}
   base::TimeDelta GetCurrentRenderTime() const override {
     return base::TimeDelta();
@@ -239,8 +254,8 @@ void MockMediaStreamVideoRenderer::Start() {
   started_ = true;
   paused_ = false;
   task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame,
-                                base::Unretained(this)));
+      FROM_HERE,
+      base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame, this));
 }
 
 void MockMediaStreamVideoRenderer::Stop() {
@@ -270,11 +285,12 @@ void MockMediaStreamVideoRenderer::QueueFrames(
     bool odd_size_frame,
     int double_size_index,
     media::VideoRotation rotation) {
-  gfx::Size standard_size = gfx::Size(kStandardWidth, kStandardHeight);
+  gfx::Size standard_size = standard_size_;
   for (size_t i = 0; i < timestamp_or_frame_type.size(); i++) {
     const int token = timestamp_or_frame_type[i];
     if (static_cast<int>(i) == double_size_index) {
-      standard_size = gfx::Size(kStandardWidth * 2, kStandardHeight * 2);
+      standard_size =
+          gfx::Size(standard_size_.width() * 2, standard_size_.height() * 2);
     }
     if (token < static_cast<int>(FrameType::MIN_TYPE)) {
       CHECK(false) << "Unrecognized frame type: " << token;
@@ -348,8 +364,7 @@ void MockMediaStreamVideoRenderer::InjectFrame() {
 
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame,
-                     base::Unretained(this)),
+      base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame, this),
       delay_till_next_generated_frame_);
 
   // This will pause the |message_loop_|, and the purpose is to allow the main
@@ -384,8 +399,7 @@ class MockRenderFactory : public MediaStreamRendererFactory {
   scoped_refptr<MediaStreamAudioRenderer> GetAudioRenderer(
       const blink::WebMediaStream& web_stream,
       int render_frame_id,
-      const std::string& device_id,
-      const url::Origin& security_origin) override {
+      const std::string& device_id) override {
     return audio_renderer_;
   }
 
@@ -463,8 +477,7 @@ class WebMediaPlayerMSTest
             message_loop_.task_runner(),
             message_loop_.task_runner(),
             gpu_factories_.get(),
-            blink::WebString(),
-            blink::WebSecurityOrigin())),
+            blink::WebString())),
         web_layer_set_(false),
         rendering_(false),
         background_rendering_(false) {}
@@ -536,7 +549,7 @@ class WebMediaPlayerMSTest
   void StopUsingProvider() override;
   void StartRendering() override;
   void StopRendering() override;
-  void DidReceiveFrame() override {}
+  void DidReceiveFrame() override;
 
   // For test use
   void SetBackgroundRendering(bool background_rendering) {
@@ -544,6 +557,11 @@ class WebMediaPlayerMSTest
   }
 
   void SetGpuMemoryBufferVideoForTesting() {
+#if defined(OS_WIN)
+    render_factory_->provider()->set_standard_size(
+        WebMediaPlayerMS::kUseGpuMemoryBufferVideoFramesMinResolution);
+#endif  // defined(OS_WIN)
+
     player_->SetGpuMemoryBufferVideoForTesting(
         new media::MockGpuMemoryBufferVideoFramePool(&frame_ready_cbs_));
   }
@@ -551,12 +569,14 @@ class WebMediaPlayerMSTest
  protected:
   MOCK_METHOD0(DoStartRendering, void());
   MOCK_METHOD0(DoStopRendering, void());
+  MOCK_METHOD0(DoDidReceiveFrame, void());
 
   MOCK_METHOD1(DoSetWebLayer, void(bool));
   MOCK_METHOD1(DoNetworkStateChanged,
                void(blink::WebMediaPlayer::NetworkState));
   MOCK_METHOD1(DoReadyStateChanged, void(blink::WebMediaPlayer::ReadyState));
   MOCK_METHOD1(CheckSizeChanged, void(gfx::Size));
+  MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
 
   base::MessageLoop message_loop_;
   MockRenderFactory* render_factory_;
@@ -654,6 +674,11 @@ void WebMediaPlayerMSTest::StartRendering() {
 void WebMediaPlayerMSTest::StopRendering() {
   rendering_ = false;
   DoStopRendering();
+}
+
+void WebMediaPlayerMSTest::DidReceiveFrame() {
+  if (background_rendering_)
+    DoDidReceiveFrame();
 }
 
 void WebMediaPlayerMSTest::RenderFrame() {
@@ -1009,7 +1034,9 @@ TEST_F(WebMediaPlayerMSTest, BackgroundRendering) {
       media::PipelineStatus::PIPELINE_OK);
   testing::Mock::VerifyAndClearExpectations(this);
 
-  // Switch to background rendering, expect rendering to continue.
+  // Switch to background rendering, expect rendering to continue for all the
+  // frames between kTestBrake frames.
+  EXPECT_CALL(*this, DoDidReceiveFrame()).Times(testing::AtLeast(1));
   SetBackgroundRendering(true);
   auto prev_frame = compositor_->GetCurrentFrameWithoutUpdatingStatistics();
   message_loop_controller_.RunAndWaitForStatus(
@@ -1078,8 +1105,7 @@ TEST_F(WebMediaPlayerMSTest, CreateHardwareFrames) {
                          blink::WebMediaPlayer::kReadyStateHaveMetadata));
   EXPECT_CALL(*this, DoReadyStateChanged(
                          blink::WebMediaPlayer::kReadyStateHaveEnoughData));
-  EXPECT_CALL(*this,
-              CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
+  EXPECT_CALL(*this, CheckSizeChanged(provider->get_standard_size()));
   std::move(frame_ready_cbs_[0]).Run();
   message_loop_controller_.RunAndWaitForStatus(
       media::PipelineStatus::PIPELINE_OK);
@@ -1094,7 +1120,7 @@ TEST_F(WebMediaPlayerMSTest, CreateHardwareFrames) {
 
 // Hidden and closed trigger different events on Android and this test doesn't
 // cover that, see HiddenPlayerTests for specifics.
-#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#if !defined(OS_ANDROID)
 // Tests that GpuMemoryBufferVideoFramePool is not called when page is hidden.
 TEST_F(WebMediaPlayerMSTest, StopsCreatingHardwareFramesWhenHiddenOrClosed) {
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
@@ -1110,8 +1136,7 @@ TEST_F(WebMediaPlayerMSTest, StopsCreatingHardwareFramesWhenHiddenOrClosed) {
                          blink::WebMediaPlayer::kReadyStateHaveMetadata));
   EXPECT_CALL(*this, DoReadyStateChanged(
                          blink::WebMediaPlayer::kReadyStateHaveEnoughData));
-  EXPECT_CALL(*this,
-              CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
+  EXPECT_CALL(*this, CheckSizeChanged(provider->get_standard_size()));
   message_loop_controller_.RunAndWaitForStatus(
       media::PipelineStatus::PIPELINE_OK);
   ASSERT_EQ(1u, frame_ready_cbs_.size());

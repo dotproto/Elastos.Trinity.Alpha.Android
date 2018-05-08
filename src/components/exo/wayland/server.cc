@@ -36,6 +36,8 @@
 #include <utility>
 #include <vector>
 
+#include "ash/display/screen_orientation_controller.h"
+#include "ash/frame/caption_buttons/caption_button_types.h"
 #include "ash/ime/ime_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
@@ -51,7 +53,6 @@
 #include "base/memory/free_deleter.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -93,7 +94,8 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_features.h"
 #include "ui/compositor/compositor_vsync_manager.h"
-#include "ui/display/display_observer.h"
+#include "ui/display/display_switches.h"
+#include "ui/display/manager/display_util.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -333,6 +335,23 @@ int Component(uint32_t direction) {
       break;
   }
   return HTNOWHERE;
+}
+
+uint32_t CaptionButtonMask(uint32_t mask) {
+  uint32_t caption_button_icon_mask = 0;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_BACK)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_BACK;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_MENU)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_MENU;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_MINIMIZE)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_MINIMIZE;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_MAXIMIZE_RESTORE)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_MAXIMIZE_RESTORE;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_CLOSE)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_CLOSE;
+  if (mask & ZCR_REMOTE_SURFACE_V1_FRAME_BUTTON_TYPE_ZOOM)
+    caption_button_icon_mask |= 1 << ash::CAPTION_BUTTON_ICON_ZOOM;
+  return caption_button_icon_mask;
 }
 
 // A property key containing the surface resource that is associated with
@@ -1234,7 +1253,7 @@ wl_output_transform OutputTransform(display::Display::Rotation rotation) {
   return WL_OUTPUT_TRANSFORM_NORMAL;
 }
 
-class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
+class WaylandDisplayObserver : public display::DisplayObserver {
  public:
   class ScaleObserver : public base::SupportsWeakPtr<ScaleObserver> {
    public:
@@ -1246,12 +1265,12 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
     virtual ~ScaleObserver() {}
   };
 
-  explicit WaylandPrimaryDisplayObserver(wl_resource* output_resource)
-      : output_resource_(output_resource) {
+  WaylandDisplayObserver(int64_t id, wl_resource* output_resource)
+      : id_(id), output_resource_(output_resource) {
     display::Screen::GetScreen()->AddObserver(this);
     SendDisplayMetrics();
   }
-  ~WaylandPrimaryDisplayObserver() override {
+  ~WaylandDisplayObserver() override {
     display::Screen::GetScreen()->RemoveObserver(this);
   }
 
@@ -1265,7 +1284,7 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
   // Overridden from display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
-    if (display::Screen::GetScreen()->GetPrimaryDisplay().id() != display.id())
+    if (id_ != display.id())
       return;
 
     // There is no need to check DISPLAY_METRIC_PRIMARY because when primary
@@ -1285,22 +1304,27 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
 
  private:
   void SendDisplayMetrics() {
-    display::Display display =
-        display::Screen::GetScreen()->GetPrimaryDisplay();
+    display::Display display;
+    bool rv =
+        display::Screen::GetScreen()->GetDisplayWithDisplayId(id_, &display);
+    DCHECK(rv);
 
     const display::ManagedDisplayInfo& info =
         WMHelper::GetInstance()->GetDisplayInfo(display.id());
 
     const float kInchInMm = 25.4f;
-    const char* kUnknownMake = "unknown";
-    const char* kUnknownModel = "unknown";
+    const char* kUnknown = "unknown";
+
+    const std::string& make = info.manufacturer_id();
+    const std::string& model = info.product_id();
 
     gfx::Rect bounds = info.bounds_in_native();
     wl_output_send_geometry(
         output_resource_, bounds.x(), bounds.y(),
         static_cast<int>(kInchInMm * bounds.width() / info.device_dpi()),
         static_cast<int>(kInchInMm * bounds.height() / info.device_dpi()),
-        WL_OUTPUT_SUBPIXEL_UNKNOWN, kUnknownMake, kUnknownModel,
+        WL_OUTPUT_SUBPIXEL_UNKNOWN, make.empty() ? kUnknown : make.c_str(),
+        model.empty() ? kUnknown : model.c_str(),
         OutputTransform(display.rotation()));
 
     if (wl_resource_get_version(output_resource_) >=
@@ -1320,24 +1344,32 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
         WL_OUTPUT_DONE_SINCE_VERSION) {
       wl_output_send_done(output_resource_);
     }
+
+    wl_client_flush(wl_resource_get_client(output_resource_));
   }
+
+  // The ID of the display being observed.
+  const int64_t id_;
 
   // The output resource associated with the display.
   wl_resource* const output_resource_;
 
   base::WeakPtr<ScaleObserver> scale_observer_;
 
-  DISALLOW_COPY_AND_ASSIGN(WaylandPrimaryDisplayObserver);
+  DISALLOW_COPY_AND_ASSIGN(WaylandDisplayObserver);
 };
 
 const uint32_t output_version = 2;
 
 void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
+  Server::Output* output = static_cast<Server::Output*>(data);
+
   wl_resource* resource = wl_resource_create(
       client, &wl_output_interface, std::min(version, output_version), id);
 
-  SetImplementation(resource, nullptr,
-                    std::make_unique<WaylandPrimaryDisplayObserver>(resource));
+  SetImplementation(
+      resource, nullptr,
+      std::make_unique<WaylandDisplayObserver>(output->id(), resource));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1678,7 +1710,7 @@ void xdg_toplevel_v6_set_title(wl_client* client,
 void xdg_toplevel_v6_set_app_id(wl_client* client,
                                 wl_resource* resource,
                                 const char* app_id) {
-  GetUserDataAs<WaylandToplevel>(resource)->SetApplicationId(app_id);
+  NOTIMPLEMENTED();
 }
 
 void xdg_toplevel_v6_show_window_menu(wl_client* client,
@@ -1822,6 +1854,7 @@ void xdg_surface_v6_get_toplevel(wl_client* client,
     return;
   }
 
+  shell_surface->SetCanMinimize(true);
   shell_surface->SetEnabled(true);
 
   wl_resource* xdg_toplevel_resource =
@@ -1958,6 +1991,24 @@ void bind_xdg_shell_v6(wl_client* client,
 
 ////////////////////////////////////////////////////////////////////////////////
 // remote_surface_interface:
+
+SurfaceFrameType RemoteShellSurfaceFrameType(uint32_t frame_type) {
+  switch (frame_type) {
+    case ZCR_REMOTE_SURFACE_V1_FRAME_TYPE_NONE:
+      return SurfaceFrameType::NONE;
+    case ZCR_REMOTE_SURFACE_V1_FRAME_TYPE_NORMAL:
+      return SurfaceFrameType::NORMAL;
+    case ZCR_REMOTE_SURFACE_V1_FRAME_TYPE_SHADOW:
+      return SurfaceFrameType::SHADOW;
+    case ZCR_REMOTE_SURFACE_V1_FRAME_TYPE_AUTOHIDE:
+      return SurfaceFrameType::AUTOHIDE;
+    case ZCR_REMOTE_SURFACE_V1_FRAME_TYPE_OVERLAY:
+      return SurfaceFrameType::OVERLAY;
+    default:
+      VLOG(2) << "Unknown remote-shell frame type: " << frame_type;
+      return SurfaceFrameType::NONE;
+  }
+}
 
 void remote_surface_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -2188,6 +2239,64 @@ void remote_surface_start_resize(wl_client* client,
       Component(direction), gfx::Point(x, y));
 }
 
+void remote_surface_set_frame(wl_client* client,
+                              wl_resource* resource,
+                              uint32_t type) {
+  ClientControlledShellSurface* shell_surface =
+      GetUserDataAs<ClientControlledShellSurface>(resource);
+  shell_surface->root_surface()->SetFrame(RemoteShellSurfaceFrameType(type));
+}
+
+void remote_surface_set_frame_buttons(wl_client* client,
+                                      wl_resource* resource,
+                                      uint32_t visible_button_mask,
+                                      uint32_t enabled_button_mask) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetFrameButtons(
+      CaptionButtonMask(visible_button_mask),
+      CaptionButtonMask(enabled_button_mask));
+}
+
+void remote_surface_set_extra_title(wl_client* client,
+                                    wl_resource* resource,
+                                    const char* extra_title) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetExtraTitle(
+      base::string16(base::UTF8ToUTF16(extra_title)));
+}
+
+ash::OrientationLockType OrientationLock(uint32_t orientation_lock) {
+  switch (orientation_lock) {
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_NONE:
+      return ash::OrientationLockType::kAny;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_CURRENT:
+      return ash::OrientationLockType::kCurrent;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_PORTRAIT:
+      return ash::OrientationLockType::kPortrait;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_LANDSCAPE:
+      return ash::OrientationLockType::kLandscape;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_PORTRAIT_PRIMARY:
+      return ash::OrientationLockType::kPortraitPrimary;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_PORTRAIT_SECONDARY:
+      return ash::OrientationLockType::kPortraitSecondary;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_LANDSCAPE_PRIMARY:
+      return ash::OrientationLockType::kLandscapePrimary;
+    case ZCR_REMOTE_SURFACE_V1_ORIENTATION_LOCK_LANDSCAPE_SECONDARY:
+      return ash::OrientationLockType::kLandscapeSecondary;
+  }
+  VLOG(2) << "Unexpected value of orientation_lock: " << orientation_lock;
+  return ash::OrientationLockType::kAny;
+}
+
+void remote_surface_set_orientation_lock(wl_client* client,
+                                         wl_resource* resource,
+                                         uint32_t orientation_lock) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetOrientationLock(
+      OrientationLock(orientation_lock));
+}
+
+void remote_surface_pip(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetPip();
+}
+
 const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
@@ -2224,7 +2333,12 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_set_max_size,
     remote_surface_set_snapped_to_left,
     remote_surface_set_snapped_to_right,
-    remote_surface_start_resize};
+    remote_surface_start_resize,
+    remote_surface_set_frame,
+    remote_surface_set_frame_buttons,
+    remote_surface_set_extra_title,
+    remote_surface_set_orientation_lock,
+    remote_surface_pip};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -2308,7 +2422,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
     // No need to update when a primary display has changed without bounds
-    // change. See WaylandPrimaryDisplayObserver::OnDisplayMetricsChanged
+    // change. See WaylandDisplayObserver::OnDisplayMetricsChanged
     // for more details.
     if (changed_metrics &
         (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
@@ -2485,6 +2599,9 @@ void HandleRemoteSurfaceStateChangedCallback(
     case ash::mojom::WindowStateType::RIGHT_SNAPPED:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_RIGHT_SNAPPED;
       break;
+    case ash::mojom::WindowStateType::PIP:
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_PIP;
+      break;
     default:
       break;
   }
@@ -2651,7 +2768,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 12;
+const uint32_t remote_shell_version = 15;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -2698,6 +2815,16 @@ class AuraSurface : public SurfaceObserver {
       surface_->SetParent(parent ? parent->surface_ : nullptr, position);
   }
 
+  void SetStartupId(const char* startup_id) {
+    if (surface_)
+      surface_->SetStartupId(startup_id);
+  }
+
+  void SetApplicationId(const char* application_id) {
+    if (surface_)
+      surface_->SetApplicationId(application_id);
+  }
+
   // Overridden from SurfaceObserver:
   void OnSurfaceDestroying(Surface* surface) override {
     surface->RemoveSurfaceObserver(this);
@@ -2710,7 +2837,7 @@ class AuraSurface : public SurfaceObserver {
   DISALLOW_COPY_AND_ASSIGN(AuraSurface);
 };
 
-SurfaceFrameType ToSurfaceFrameType(uint32_t frame_type) {
+SurfaceFrameType AuraSurfaceFrameType(uint32_t frame_type) {
   switch (frame_type) {
     case ZAURA_SURFACE_FRAME_TYPE_NONE:
       return SurfaceFrameType::NONE;
@@ -2719,14 +2846,14 @@ SurfaceFrameType ToSurfaceFrameType(uint32_t frame_type) {
     case ZAURA_SURFACE_FRAME_TYPE_SHADOW:
       return SurfaceFrameType::SHADOW;
     default:
-      DLOG(WARNING) << "Unsupported frame type: " << frame_type;
+      VLOG(2) << "Unkonwn aura-shell frame type: " << frame_type;
       return SurfaceFrameType::NONE;
   }
 }
 
 void aura_surface_set_frame(wl_client* client, wl_resource* resource,
                             uint32_t type) {
-  GetUserDataAs<AuraSurface>(resource)->SetFrame(ToSurfaceFrameType(type));
+  GetUserDataAs<AuraSurface>(resource)->SetFrame(AuraSurfaceFrameType(type));
 }
 
 void aura_surface_set_parent(wl_client* client,
@@ -2747,42 +2874,90 @@ void aura_surface_set_frame_colors(wl_client* client,
                                                        inactive_color);
 }
 
+void aura_surface_set_startup_id(wl_client* client,
+                                 wl_resource* resource,
+                                 const char* startup_id) {
+  GetUserDataAs<AuraSurface>(resource)->SetStartupId(startup_id);
+}
+
+void aura_surface_set_application_id(wl_client* client,
+                                     wl_resource* resource,
+                                     const char* application_id) {
+  GetUserDataAs<AuraSurface>(resource)->SetApplicationId(application_id);
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame, aura_surface_set_parent,
-    aura_surface_set_frame_colors};
+    aura_surface_set_frame_colors, aura_surface_set_startup_id,
+    aura_surface_set_application_id};
 
 ////////////////////////////////////////////////////////////////////////////////
 // aura_output_interface:
 
-class AuraOutput : public WaylandPrimaryDisplayObserver::ScaleObserver {
+class AuraOutput : public WaylandDisplayObserver::ScaleObserver {
  public:
   explicit AuraOutput(wl_resource* resource) : resource_(resource) {}
 
-  // Overridden from WaylandPrimaryDisplayObserver::ScaleObserver:
+  // Overridden from WaylandDisplayObserver::ScaleObserver:
   void OnDisplayScalesChanged(const display::Display& display) override {
     display::DisplayManager* display_manager =
-        ash::Shell::Get()->display_manager();
-    if (display_manager->GetDisplayIdForUIScaling() == display.id()) {
-      display::ManagedDisplayMode active_mode;
-      bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
-                                                           &active_mode);
-      DCHECK(rv);
-      const display::ManagedDisplayInfo& display_info =
+          ash::Shell::Get()->display_manager();
+    const display::ManagedDisplayInfo& display_info =
           display_manager->GetDisplayInfo(display.id());
-      for (auto& mode : display_info.display_modes()) {
-        uint32_t flags = 0;
-        if (mode.is_default())
-          flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
-        if (active_mode.IsEquivalent(mode))
-          flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
 
-        zaura_output_send_scale(resource_, flags, mode.ui_scale() * 1000);
+    if (wl_resource_get_version(resource_) >=
+        ZAURA_OUTPUT_SCALE_SINCE_VERSION) {
+      if (features::IsDisplayZoomSettingEnabled()) {
+        display::ManagedDisplayMode active_mode;
+        bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
+                                                             &active_mode);
+        DCHECK(rv);
+        const int32_t current_output_scale =
+            std::round(display_info.zoom_factor() * 1000.f);
+        for (double zoom_factor : display::GetDisplayZoomFactors(active_mode)) {
+          const int32_t output_scale = std::round(zoom_factor * 1000.0);
+          uint32_t flags = 0;
+          if (output_scale == 1000)
+            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
+          if (current_output_scale == output_scale)
+            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
+          zaura_output_send_scale(resource_, flags, output_scale);
+        }
+      } else if (display_manager->GetDisplayIdForUIScaling() == display.id()) {
+        display::ManagedDisplayMode active_mode;
+        bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
+                                                             &active_mode);
+        DCHECK(rv);
+        for (auto& mode : display_info.display_modes()) {
+          uint32_t flags = 0;
+          if (mode.is_default())
+            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
+          if (active_mode.IsEquivalent(mode))
+            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
+
+          zaura_output_send_scale(resource_, flags, mode.ui_scale() * 1000);
+        }
+      } else {
+        zaura_output_send_scale(resource_,
+                                ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT |
+                                    ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED,
+                                ZAURA_OUTPUT_SCALE_FACTOR_1000);
       }
-    } else {
-      zaura_output_send_scale(resource_,
-                              ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT |
-                                  ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED,
-                              ZAURA_OUTPUT_SCALE_FACTOR_1000);
+    }
+
+    if (wl_resource_get_version(resource_) >=
+        ZAURA_OUTPUT_CONNECTION_SINCE_VERSION) {
+      zaura_output_send_connection(resource_,
+                                   display.IsInternal()
+                                       ? ZAURA_OUTPUT_CONNECTION_TYPE_INTERNAL
+                                       : ZAURA_OUTPUT_CONNECTION_TYPE_UNKNOWN);
+    }
+
+    if (wl_resource_get_version(resource_) >=
+        ZAURA_OUTPUT_DEVICE_SCALE_FACTOR_SINCE_VERSION) {
+      zaura_output_send_device_scale_factor(resource_,
+                                            display_info.device_scale_factor() *
+                                            1000);
     }
   }
 
@@ -2819,8 +2994,8 @@ void aura_shell_get_aura_output(wl_client* client,
                                 wl_resource* resource,
                                 uint32_t id,
                                 wl_resource* output_resource) {
-  WaylandPrimaryDisplayObserver* display_observer =
-      GetUserDataAs<WaylandPrimaryDisplayObserver>(output_resource);
+  WaylandDisplayObserver* display_observer =
+      GetUserDataAs<WaylandDisplayObserver>(output_resource);
   if (display_observer->HasScaleObserver()) {
     wl_resource_post_error(
         resource, ZAURA_SHELL_ERROR_AURA_OUTPUT_EXISTS,
@@ -2840,7 +3015,7 @@ void aura_shell_get_aura_output(wl_client* client,
 const struct zaura_shell_interface aura_shell_implementation = {
     aura_shell_get_aura_surface, aura_shell_get_aura_output};
 
-const uint32_t aura_shell_version = 3;
+const uint32_t aura_shell_version = 5;
 
 void bind_aura_shell(wl_client* client,
                      void* data,
@@ -2968,24 +3143,29 @@ class WaylandDataSourceDelegate : public DataSourceDelegate {
   void OnDataSourceDestroying(DataSource* device) override { delete this; }
   void OnTarget(const std::string& mime_type) override {
     wl_data_source_send_target(data_source_resource_, mime_type.c_str());
+    wl_client_flush(wl_resource_get_client(data_source_resource_));
   }
   void OnSend(const std::string& mime_type, base::ScopedFD fd) override {
     wl_data_source_send_send(data_source_resource_, mime_type.c_str(),
                              fd.get());
+    wl_client_flush(wl_resource_get_client(data_source_resource_));
   }
   void OnCancelled() override {
     wl_data_source_send_cancelled(data_source_resource_);
+    wl_client_flush(wl_resource_get_client(data_source_resource_));
   }
   void OnDndDropPerformed() override {
     if (wl_resource_get_version(data_source_resource_) >=
         WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
       wl_data_source_send_dnd_drop_performed(data_source_resource_);
+      wl_client_flush(wl_resource_get_client(data_source_resource_));
     }
   }
   void OnDndFinished() override {
     if (wl_resource_get_version(data_source_resource_) >=
         WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
       wl_data_source_send_dnd_finished(data_source_resource_);
+      wl_client_flush(wl_resource_get_client(data_source_resource_));
     }
   }
   void OnAction(DndAction dnd_action) override {
@@ -2993,6 +3173,7 @@ class WaylandDataSourceDelegate : public DataSourceDelegate {
         WL_DATA_SOURCE_ACTION_SINCE_VERSION) {
       wl_data_source_send_action(data_source_resource_,
                                  WaylandDataDeviceManagerDndAction(dnd_action));
+      wl_client_flush(wl_resource_get_client(data_source_resource_));
     }
   }
 
@@ -3034,6 +3215,7 @@ class WaylandDataOfferDelegate : public DataOfferDelegate {
   void OnDataOfferDestroying(DataOffer* device) override { delete this; }
   void OnOffer(const std::string& mime_type) override {
     wl_data_offer_send_offer(data_offer_resource_, mime_type.c_str());
+    wl_client_flush(wl_resource_get_client(data_offer_resource_));
   }
   void OnSourceActions(
       const base::flat_set<DndAction>& source_actions) override {
@@ -3042,6 +3224,7 @@ class WaylandDataOfferDelegate : public DataOfferDelegate {
       wl_data_offer_send_source_actions(
           data_offer_resource_,
           WaylandDataDeviceManagerDndActions(source_actions));
+      wl_client_flush(wl_resource_get_client(data_offer_resource_));
     }
   }
   void OnAction(DndAction action) override {
@@ -3049,6 +3232,7 @@ class WaylandDataOfferDelegate : public DataOfferDelegate {
         WL_DATA_OFFER_ACTION_SINCE_VERSION) {
       wl_data_offer_send_action(data_offer_resource_,
                                 WaylandDataDeviceManagerDndAction(action));
+      wl_client_flush(wl_resource_get_client(data_offer_resource_));
     }
   }
 
@@ -3118,6 +3302,7 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
                       std::move(data_offer));
 
     wl_data_device_send_data_offer(data_device_resource_, data_offer_resource);
+    wl_client_flush(client_);
 
     return GetUserDataAs<DataOffer>(data_offer_resource);
   }
@@ -3129,17 +3314,26 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
         wl_display_next_serial(wl_client_get_display(client_)),
         GetSurfaceResource(surface), wl_fixed_from_double(point.x()),
         wl_fixed_from_double(point.y()), GetDataOfferResource(&data_offer));
+    wl_client_flush(client_);
   }
-  void OnLeave() override { wl_data_device_send_leave(data_device_resource_); }
+  void OnLeave() override {
+    wl_data_device_send_leave(data_device_resource_);
+    wl_client_flush(client_);
+  }
   void OnMotion(base::TimeTicks time_stamp, const gfx::PointF& point) override {
     wl_data_device_send_motion(
         data_device_resource_, TimeTicksToMilliseconds(time_stamp),
         wl_fixed_from_double(point.x()), wl_fixed_from_double(point.y()));
+    wl_client_flush(client_);
   }
-  void OnDrop() override { wl_data_device_send_drop(data_device_resource_); }
+  void OnDrop() override {
+    wl_data_device_send_drop(data_device_resource_);
+    wl_client_flush(client_);
+  }
   void OnSelection(const DataOffer& data_offer) override {
     wl_data_device_send_selection(data_device_resource_,
                                   GetDataOfferResource(&data_offer));
+    wl_client_flush(client_);
   }
 
  private:
@@ -3535,6 +3729,7 @@ class WaylandKeyboardDelegate : public WaylandInputDelegate,
     wl_keyboard_send_keymap(keyboard_resource_,
                             WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
                             shared_keymap.handle().GetHandle(), keymap_size);
+    wl_client_flush(client());
   }
 
   // The client who own this keyboard instance.
@@ -4249,6 +4444,7 @@ class WaylandGamingSeatDelegate : public GamingSeatDelegate {
 
     zcr_gaming_seat_v2_send_gamepad_added(gaming_seat_resource_,
                                           gamepad_resource);
+    wl_client_flush(wl_resource_get_client(gaming_seat_resource_));
 
     return gamepad_delegate;
   }
@@ -4830,6 +5026,16 @@ void bind_input_timestamps_manager(wl_client* client,
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+// Server::Output, public:
+
+Server::Output::Output(int64_t id) : id_(id) {}
+
+Server::Output::~Output() {
+  if (global_)
+    wl_global_destroy(global_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Server, public:
 
 Server::Server(Display* display)
@@ -4845,8 +5051,9 @@ Server::Server(Display* display)
                    bind_subcompositor);
   wl_global_create(wl_display_.get(), &wl_shell_interface, 1, display_,
                    bind_shell);
-  wl_global_create(wl_display_.get(), &wl_output_interface, output_version,
-                   display_, bind_output);
+  display::Screen::GetScreen()->AddObserver(this);
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays())
+    OnDisplayAdded(display);
   wl_global_create(wl_display_.get(), &zxdg_shell_v6_interface, 1, display_,
                    bind_xdg_shell_v6);
   wl_global_create(wl_display_.get(), &zcr_vsync_feedback_v1_interface, 1,
@@ -4886,7 +5093,9 @@ Server::Server(Display* display)
                    bind_input_timestamps_manager);
 }
 
-Server::~Server() {}
+Server::~Server() {
+  display::Screen::GetScreen()->RemoveObserver(this);
+}
 
 // static
 std::unique_ptr<Server> Server::Create(Display* display) {
@@ -4958,6 +5167,20 @@ void Server::Dispatch(base::TimeDelta timeout) {
 
 void Server::Flush() {
   wl_display_flush_clients(wl_display_.get());
+}
+
+void Server::OnDisplayAdded(const display::Display& new_display) {
+  auto output = std::make_unique<Output>(new_display.id());
+  output->set_global(wl_global_create(wl_display_.get(), &wl_output_interface,
+                                      output_version, output.get(),
+                                      bind_output));
+  DCHECK_EQ(outputs_.count(new_display.id()), 0u);
+  outputs_.insert(std::make_pair(new_display.id(), std::move(output)));
+}
+
+void Server::OnDisplayRemoved(const display::Display& old_display) {
+  DCHECK_EQ(outputs_.count(old_display.id()), 1u);
+  outputs_.erase(old_display.id());
 }
 
 }  // namespace wayland

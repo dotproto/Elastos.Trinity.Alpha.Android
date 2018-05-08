@@ -11,7 +11,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -912,6 +911,21 @@ TEST_F(FocusManagerTest, AdvanceFocusStaysInWidget) {
   delegate->set_should_advance_focus_to_parent(true);
   GetFocusManager()->AdvanceFocus(true);
   EXPECT_EQ(widget_view, GetFocusManager()->GetFocusedView());
+}
+
+// Verifies if a key event is a tab traversal key event or not.
+TEST_F(FocusManagerTest, IsTabTraversalKeyEvent) {
+  ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_NONE);
+  EXPECT_TRUE(FocusManager::IsTabTraversalKeyEvent(event));
+
+  event = ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
+  EXPECT_TRUE(FocusManager::IsTabTraversalKeyEvent(event));
+
+  event = ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
+  EXPECT_FALSE(FocusManager::IsTabTraversalKeyEvent(event));
+
+  event = ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_ALT_DOWN);
+  EXPECT_FALSE(FocusManager::IsTabTraversalKeyEvent(event));
 }
 
 }  // namespace views

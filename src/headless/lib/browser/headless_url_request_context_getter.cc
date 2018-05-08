@@ -18,6 +18,7 @@
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_network_delegate.h"
+#include "headless/lib/browser/headless_network_transaction_factory.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -43,7 +44,7 @@ namespace headless {
 HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     content::ProtocolHandlerMap* protocol_handlers,
-    ProtocolHandlerMap context_protocol_handlers,
+    content::ProtocolHandlerMap context_protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors,
     HeadlessBrowserContextOptions* options,
     net::NetLog* net_log,
@@ -55,18 +56,15 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
       proxy_config_(options->proxy_config()),
       request_interceptors_(std::move(request_interceptors)),
       net_log_(net_log),
+      capture_resource_metadata_(options->capture_resource_metadata()),
       headless_browser_context_(headless_browser_context) {
   // Must first be created on the UI thread.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   std::swap(protocol_handlers_, *protocol_handlers);
-
   for (auto& pair : context_protocol_handlers) {
-    protocol_handlers_[pair.first] =
-        linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-            pair.second.release());
+    protocol_handlers_[pair.first] = std::move(pair.second);
   }
-  context_protocol_handlers.clear();
 
   // We must create the proxy config service on the UI loop on Linux because it
   // must synchronously run on the glib message loop. This will be passed to
@@ -212,8 +210,7 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
     // In that case, the headers should be removed in HeadlessNetworkDelegate.
     bool has_http_handler = false;
     for (auto& pair : protocol_handlers_) {
-      builder.SetProtocolHandler(pair.first,
-                                 base::WrapUnique(pair.second.release()));
+      builder.SetProtocolHandler(pair.first, std::move(pair.second));
       if (pair.first == url::kHttpScheme || pair.first == url::kHttpsScheme)
         has_http_handler = true;
     }
@@ -224,6 +221,13 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
       headless_browser_context_->SetRemoveHeaders(false);
       builder.SetCreateHttpTransactionFactoryCallback(
           base::BindOnce(&content::CreateDevToolsNetworkTransactionFactory));
+    }
+    if (capture_resource_metadata_) {
+      builder.SetCreateHttpTransactionFactoryCallback(
+          base::BindOnce(&HeadlessNetworkTransactionFactory::Create,
+                         headless_browser_context_));
+      // We want to use the http cache inside HeadlessNetworkTransactionFactory.
+      builder.DisableHttpCache();
     }
 
     url_request_context_ = builder.Build();

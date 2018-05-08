@@ -17,7 +17,7 @@
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
-#include "components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "ui/base/user_activity/user_activity_observer.h"
@@ -72,7 +72,8 @@ class UserSelectionScreen
   void InitEasyUnlock();
 
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
-  void ShowBannerMessage(const base::string16& message) override;
+  void ShowBannerMessage(const base::string16& message,
+                         bool is_warning) override;
   void ShowUserPodCustomIcon(
       const AccountId& account_id,
       const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions& icon)
@@ -113,10 +114,12 @@ class UserSelectionScreen
   // Determines if user auth status requires online sign in.
   static bool ShouldForceOnlineSignIn(const user_manager::User* user);
 
+  // Builds a |UserAvatarPtr| instance which contains the current image for
+  // |user|.
+  static ash::mojom::UserAvatarPtr BuildMojoUserAvatarForUser(
+      const user_manager::User* user);
+
   // Fills |user_info| with information about |user|.
-  // TODO: Public sesssions exist in login screen, but not lock screen.
-  // We will need public session locales in the future when we change login
-  // screen to view-based as well. See crbug.com/732452.
   static void FillUserMojoStruct(
       const user_manager::User* user,
       bool is_owner,
