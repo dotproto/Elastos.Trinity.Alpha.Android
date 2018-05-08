@@ -1,0 +1,1 @@
+../../../../../../../../../../../.cipd/pkgs/33/_current/tools/proguard/examples/annotations/src/proguard/annotation/KeepClassMemberNames.java

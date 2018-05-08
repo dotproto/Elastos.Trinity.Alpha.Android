@@ -1,0 +1,1 @@
+../../../../../../../../../../.cipd/pkgs/31/_current/platform-tools/systrace/catapult/common/eslint/eslint/smoke_test.py
