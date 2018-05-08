@@ -1,0 +1,53 @@
+Name: Abseil
+Short Name: absl
+URL: https://github.com/abseil/abseil-cpp
+License: Apache 2.0
+License File: LICENSE
+Version: 0
+Revision: af7882601aad93ada881486eeaabc562f1733961
+Security Critical: yes
+
+Description:
+This directory contains the source code of Abseil for C++. This can be used by
+Chromium's dependencies, but shouldn't be used by Chromium itself.
+See: https://goo.gl/TgnJb8.
+
+How to update Abseil:
+
+1. Download the code from the Abseil git repository (see URL).
+
+2. Copy the content of the Abseil git repo to //third_party/abseil-cpp.
+
+4. Generate BUILD.gn files launching bazel_to_gn.py from //third_party/abseil-cpp.
+
+5. Rename functions in absl/base/dynamic_annotations.{h,cc}
+   find . -type f -exec sed -i "s/ValgrindSlowdown(/AbslValgrindSlowdown(/g" {} \;
+   find . -type f -exec sed -i "s/RunningOnValgrind(/AbslRunningOnValgrind(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateBenignRace(/AbslAnnotateBenignRace(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateBenignRaceSized(/AbslAnnotateBenignRaceSized(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateEnableRaceDetection(/AbslAnnotateEnableRaceDetection(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateIgnoreReadsBegin(/AbslAnnotateIgnoreReadsBegin(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateIgnoreReadsEnd(/AbslAnnotateIgnoreReadsEnd(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateIgnoreWritesBegin(/AbslAnnotateIgnoreWritesBegin(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateIgnoreWritesEnd(/AbslAnnotateIgnoreWritesEnd(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateRWLockAcquired(/AbslAnnotateRWLockAcquired(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateRWLockCreate(/AbslAnnotateRWLockCreate(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateRWLockDestroy(/AbslAnnotateRWLockDestroy(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateRWLockReleased(/AbslAnnotateRWLockReleased(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateThreadName(/AbslAnnotateThreadName(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateRWLockCreateStatic(/AbslAnnotateRWLockCreateStatic(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateMemoryIsInitialized(/AbslAnnotateMemoryIsInitialized(/g" {} \;
+   find . -type f -exec sed -i "s/AnnotateMemoryIsUninitialized(/AbslAnnotateMemoryIsUninitialized(/g" {} \;
+
+Local Modifications:
+
+* absl/copts.bzl has been translated to //third_party/absl-cpp/BUILD.gn. Both files
+  contain lists of compiler flags in order to reduce duplication.
+
+* All the BUILD.bazel files has been translated to BUILD.gn files.
+
+* Functions in absl/base/dynamic_annotations.{h,cc} have been renamed to avoid
+  ODR violations.
+
+
+
