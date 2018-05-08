@@ -1,0 +1,83 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("fidl_library.gni")
+
+template("fuchsia_sdk_pkg") {
+  pkg_name = target_name
+
+  pkg_name = target_name
+  if (defined(invoker.name)) {
+    pkg_name = invoker.name
+  }
+
+  have_fidl = defined(invoker.fidl_files)
+
+  if (have_fidl) {
+    fidl_library("${target_name}_fidl") {
+      name = pkg_name
+      forward_variables_from(invoker,
+                             [
+                               "deps",
+                               "public_deps",
+                               "testonly",
+                               "visibility",
+                             ])
+
+      sources = []
+      foreach(file, invoker.fidl_files) {
+        sources += [ "sdk/fidl/${pkg_name}/${file}" ]
+      }
+    }
+  }
+
+  config("${target_name}_config") {
+    visibility = [ ":${invoker.target_name}" ]
+    include_dirs = [ "sdk/pkg/${pkg_name}/include" ]
+  }
+
+  static_library("${target_name}") {
+    forward_variables_from(invoker,
+                           [
+                             "data",
+                             "deps",
+                             "public_deps",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    sources = []
+    if (defined(invoker.sources)) {
+      foreach(src, invoker.sources) {
+        sources += [ "sdk/pkg/${pkg_name}/${src}" ]
+      }
+    }
+
+    if (have_fidl) {
+      public_deps = [
+        ":${invoker.target_name}_fidl",
+      ]
+    }
+
+    public_configs = [ ":${invoker.target_name}_config" ]
+
+    if (defined(invoker.libs)) {
+      configs += [ ":sdk_lib_dirs_config" ]
+      libs = invoker.libs
+    }
+  }
+}
+
+template("fuchsia_sdk_lib_pkg") {
+  fuchsia_sdk_pkg(target_name) {
+    forward_variables_from(invoker, "*")
+    if (defined(invoker.name)) {
+      libs = [ invoker.name ]
+    } else {
+      libs = [ target_name ]
+    }
+  }
+}
