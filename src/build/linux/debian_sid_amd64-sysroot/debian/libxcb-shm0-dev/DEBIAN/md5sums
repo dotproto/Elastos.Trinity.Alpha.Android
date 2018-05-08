@@ -1,0 +1,6 @@
+a82220d71da2dc5e404670137f655415  usr/include/xcb/shm.h
+758fe5c42ba7cd166e8391c9cb8e662f  usr/lib/x86_64-linux-gnu/libxcb-shm.a
+cecfaaaa075d25524d0fb79ea21577d4  usr/lib/x86_64-linux-gnu/pkgconfig/xcb-shm.pc
+2ad7e25d2af6d50c1c0b1bb31af4872f  usr/share/doc/libxcb-shm0-dev/changelog.Debian.gz
+20280c50563cd2efcba7e1823f27d11b  usr/share/doc/libxcb-shm0-dev/changelog.gz
+618ee90893b45d0d0c19d41a3a3d2e7d  usr/share/doc/libxcb-shm0-dev/copyright

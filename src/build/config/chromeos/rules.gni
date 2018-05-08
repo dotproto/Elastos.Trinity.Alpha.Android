@@ -1,0 +1,58 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_chromeos)
+
+declare_args() {
+  cros_board = getenv("SDK_BOARD")
+  cros_sdk_version = getenv("SDK_VERSION")
+}
+
+template("generate_vm_runner_script") {
+  _vm_image_path = "//build/cros_cache/chrome-sdk/tarballs/${cros_board}+${cros_sdk_version}+chromiumos_qemu_image.tar.xz/"
+  _qemu_dir = "//build/cros_cache/chrome-sdk/tarballs/${cros_board}+${cros_sdk_version}+app-emulation/"
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/chromeos/create_vm_test_script.py"
+
+    outputs = [
+      invoker.generated_script,
+    ]
+
+    data = [
+      invoker.generated_script,
+      "//build/chromeos/",
+      "//build/cros_cache/chrome-sdk/misc/",
+      "//third_party/chromite/",
+      _vm_image_path,
+      _qemu_dir,
+    ]
+
+    # Required arguments used at build time by the runner script generator.
+    args = [
+      "--script-output-path",
+      rebase_path(invoker.generated_script, root_build_dir),
+      "--cros-cache",
+      rebase_path("//build/cros_cache/", root_build_dir),
+      "--board",
+      cros_board,
+    ]
+
+    # When --test-exe is specified, run_vm_test will push the exe to the VM and
+    # execute it. Otherwise it wraps a host-side command and just takes care
+    # launching & tearing-down the VM.
+    if (defined(invoker.test_exe)) {
+      args += [
+        "--test-exe",
+        rebase_path(invoker.test_exe, root_build_dir),
+        "--output-directory",
+        rebase_path(root_out_dir, root_build_dir),
+        "--runtime-deps-path",
+        rebase_path(invoker.runtime_deps_file, root_build_dir),
+      ]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-pages/iron-pages.html">
+<link rel="import" href="button_bar.html">
+<link rel="import" href="setup_failed_page.html">
+<link rel="import" href="setup_succeeded_page.html">
+<link rel="import" href="start_setup_page.html">
+
+<dom-module id="multidevice-setup">
+  <template>
+    <iron-pages
+        attr-for-selected="is"
+        selected="[[visiblePageName_]]"
+        selected-item="{{visiblePage_}}">
+      <setup-failed-page></setup-failed-page>
+      <setup-succeeded-page></setup-succeeded-page>
+      <start-setup-page></start-setup-page>
+    </iron-pages>
+    <button-bar
+        forward-button-text="[[visiblePage_.forwardButtonText]]"
+        backward-button-text="[[visiblePage_.backwardButtonText]]">
+    </button-bar>
+  </template>
+  <script src="multidevice_setup.js"></script>
+</dom-module>

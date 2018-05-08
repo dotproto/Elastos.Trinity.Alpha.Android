@@ -1,0 +1,106 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-textarea.html">
+<link rel="import" href="../controls/settings_slider.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../languages_page/languages_browser_proxy.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
+
+<dom-module id="settings-tts-subpage">
+  <template>
+    <style include="settings-shared">
+      h2 {
+        -webkit-padding-start: var(--settings-box-row-padding);
+      }
+
+      .settings-box {
+        -webkit-margin-end: var(--settings-box-row-padding);
+        -webkit-margin-start: var(--settings-box-row-indent);
+        -webkit-padding-end: 0;
+        -webkit-padding-start: 0;
+      }
+    </style>
+    <h2>$i18n{textToSpeechVoices}</h2>
+    <template is="dom-repeat" items="[[languagesToVoices]]" as="lang"
+        sort="alphabeticalSort_">
+      <div class="settings-box first">
+        <div class="start">
+          [[lang.language]]
+        </div>
+        <settings-dropdown-menu label="[[lang.language]]"
+            pref="{{prefs.settings.tts.lang_to_voice_name}}"
+            pref-key="[[lang.code]]"
+            menu-options="[[menuOptionsForLang_(lang)]]"
+            disabled="[[hasOneLanguage_(lang)]]">
+        </settings-dropdown-menu>
+      </div>
+    </template>
+
+    <h2>$i18n{textToSpeechProperties}</h2>
+    <div class="settings-box first">
+      <div class="start">$i18n{textToSpeechRate}</div>
+      <!-- Rate goes from 0.5 to 10 with a step of ~0.5.
+           TODO(katie): May want to make non-linear scale
+           in JS to describe this, rather than a linear scale. -->
+      <settings-slider
+          pref="{{prefs.settings.tts.speech_rate}}"
+          min="1" max="20" scale="2"
+          label-min="$i18n{textToSpeechRateMinimumLabel}"
+          label-max="$i18n{textToSpeechRateMaximumLabel}">
+      </settings-slider>
+    </div>
+    <div class="settings-box continuation">
+      <div class="start">$i18n{textToSpeechPitch}</div>
+      <!-- Pitch goes from 0.1 to 2.0 with a step of ~0.1 -->
+      <settings-slider
+          pref="{{prefs.settings.tts.speech_pitch}}"
+          min="1" max="20" scale="10"
+          label-min="$i18n{textToSpeechPitchMinimumLabel}"
+          label-max="$i18n{textToSpeechPitchMaximumLabel}">
+      </settings-slider>
+    </div>
+    <div class="settings-box continuation">
+      <div class="start">$i18n{textToSpeechVolume}</div>
+      <!-- Volume goes from 0.1 to 1.0 with a step of ~0.05.
+           TODO(katie): Does it make sense to include values lower than 0.5? -->
+      <settings-slider
+          pref="{{prefs.settings.tts.speech_volume}}"
+          min="1" max="20" scale="20"
+          label-min="$i18n{textToSpeechVolumeMinimumLabel}"
+          label-max="$i18n{textToSpeechVolumeMaximumLabel}">
+      </settings-slider>
+    </div>
+    <h2>$i18n{textToSpeechPreviewHeading}</h2>
+    <div class="settings-box first">
+      <div class="start">
+        <paper-textarea id="previewInput" type="text"
+            label="$i18n{textToSpeechPreviewInputLabel}"
+            always-float-label value="$i18n{textToSpeechPreviewInput}">
+        </paper-textarea>
+      </div>
+      <paper-button on-click="onPreviewTtsClick_">
+          $i18n{textToSpeechPreviewPlay}
+      </paper-button>
+    </div>
+    <h2>$i18n{textToSpeechEngines}</h2>
+    <template is="dom-repeat" items="[[extensions]]" as="extension">
+      <div class="settings-box continuation">
+        <div id="extension_name_[[index]]" class="start">
+          [[extension.name]]
+        </div>
+        <paper-button on-click="onManageTtsEngineSettingsClick_"
+            aria-describedby="extension_name_[[index]]"
+            hidden="[[!extension.options_page]]">
+          $i18n{settings}
+        </paper-button>
+      </div>
+    </template>
+    <div class="settings-box block continuation">
+      <a href="">$i18n{textToSpeechInstallEngines}</a>
+    </div>
+  </template>
+  <script src="tts_subpage.js"></script>
+</dom-module>
