@@ -40,3 +40,5 @@ git init
 git fetch https://github.com/elastos/Elastos.Trinity.Android.git
 git checkout FETCH_HEAD
 ```
+
+61e373a677a42fcdc951221ba2d0d16d13c738a8
