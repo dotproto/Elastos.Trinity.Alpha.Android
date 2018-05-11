@@ -305,6 +305,8 @@ group("gn_all") {
       "//third_party/catapult/devil",
       "//third_party/errorprone:errorprone_java",
       "//third_party/smhasher:murmurhash3",
+      "//third_party/elastos:elastos",
+      "//third_party/chello:chello",
       "//tools/android:android_tools",
       "//tools/android:memconsumer",
       "//tools/android:push_apps_to_background",

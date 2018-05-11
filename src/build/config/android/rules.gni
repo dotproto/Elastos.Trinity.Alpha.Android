@@ -2429,6 +2429,31 @@ if (enable_java_templates) {
             [ "//base/android/linker:chromium_android_linker" ]
       }
 
+    _extra_native_libs +=
+        [
+            "//third_party/elastos/lib/libstlport.so",
+            "//third_party/elastos/lib/libc++_shared.so",
+            "//third_party/elastos/lib/libcrypto.so",
+            "//third_party/elastos/lib/libelacommon.so",
+            "//third_party/elastos/lib/libelasession.so",
+            "//third_party/elastos/lib/libelacarrier.so",
+            "//third_party/elastos/lib/libicuuc.cr.so",
+            "//third_party/elastos/lib/libElastos.CoreLibrary.so",
+            "//third_party/elastos/lib/libElastos.Runtime.so",
+        ]
+    _extra_native_libs_deps +=
+        [
+            "//third_party/elastos:elastos"
+        ]
+
+    _extra_native_libs +=
+        [ 
+            "//third_party/chello/libchello.so",
+            "//third_party/chello/libElastos.HelloCarDemo.so"
+        ]
+    _extra_native_libs_deps +=
+        [ "//third_party/chello:chello" ]
+
       _create_stack_script_rule_name = "${_template_name}__stack_script"
       _final_deps += [ ":${_create_stack_script_rule_name}" ]
       stack_script(_create_stack_script_rule_name) {
