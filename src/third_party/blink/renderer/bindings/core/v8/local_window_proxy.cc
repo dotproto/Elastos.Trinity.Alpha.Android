@@ -29,7 +29,7 @@
  */
 
 #include "third_party/blink/renderer/bindings/core/v8/local_window_proxy.h"
-#include "third_party/blink/renderer/bindings/core/v8/ModuleManager.h"
+#include "third_party/blink/renderer/bindings/core/v8/car/car_manager.h"
 #include "third_party/blink/renderer/bindings/core/v8/initialize_v8_extras_binding.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
@@ -340,7 +340,7 @@ void LocalWindowProxy::UpdateDocumentProperty() {
       ToV8(GetFrame()->GetDocument(), context->Global(), GetIsolate());
   DCHECK(document_wrapper->IsObject());
 
-  ela::ModuleManager::initialize(context->GetIsolate());
+  ela::CarManager::initialize(GetIsolate());
   // Update the cached accessor for window.document.
   CHECK(V8PrivateProperty::GetWindowDocumentCachedAccessor(GetIsolate())
             .Set(context->Global(), document_wrapper));
