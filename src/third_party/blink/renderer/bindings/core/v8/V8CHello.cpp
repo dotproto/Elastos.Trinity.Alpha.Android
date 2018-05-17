@@ -109,10 +109,8 @@ void V8CHello::installV8CHelloTemplate(v8::Isolate* isolate)
     LOG(INFO) << "V8CHello::installV8CHelloTemplate";
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-    Local<FunctionTemplate> CHello_fun_template =
-      FunctionTemplate::New(isolate, CHelloCreate);
-    Local<Signature> CHello_signature =
-      Signature::New(isolate, CHello_fun_template);
+    Local<FunctionTemplate> CHello_fun_template = FunctionTemplate::New(isolate, CHelloCreate);
+    Local<Signature> CHello_signature = Signature::New(isolate, CHello_fun_template);
     CHello_fun_template->SetClassName(
       v8::String::NewFromUtf8(isolate, "CHello", NewStringType::kNormal)
           .ToLocalChecked());

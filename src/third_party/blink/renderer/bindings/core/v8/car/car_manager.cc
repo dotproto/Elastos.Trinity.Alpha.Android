@@ -44,7 +44,6 @@ static Local<Value> Throw(v8::Isolate *isolate, const char *message)
 
 static void MethodInvoke(const v8::FunctionCallbackInfo<v8::Value> &args)
 {
-    LOG(INFO) << "MethodInvoke" ;
     v8::Isolate *isolate = args.GetIsolate();
     HandleScope handle_scope(isolate);
 
@@ -98,7 +97,6 @@ static void MethodInvoke(const v8::FunctionCallbackInfo<v8::Value> &args)
 // 创建对应的Car对象，并加入到js对象的扩展空间
 void ClassNew(const v8::FunctionCallbackInfo<v8::Value> &args)
 {
-    LOG(INFO) << "ClassNew";
     v8::Isolate *isolate = args.GetIsolate();
     HandleScope handle_scope(isolate);
 
@@ -128,7 +126,7 @@ void ClassNew(const v8::FunctionCallbackInfo<v8::Value> &args)
         LOG(INFO) << "CreateObject failed";
         return;
     }
-    LOG(INFO) << "ClassNew: " << className << "[" << pClassInfo << "]" << " this: [" << pObject << "]";
+    LOG(INFO) << "ClassNew: " << className << " [" << pClassInfo << "]" << " this: [" << pObject << "]";
     args.Holder()->SetInternalField(0, v8::External::New(isolate, pObject));
 }
 
@@ -172,25 +170,21 @@ static void Require(const v8::FunctionCallbackInfo<v8::Value> &args)
     }
 
     // 注册所有的类
+    //LOG(INFO) << "nClassCnt:" << nClassCnt;
     for(int i = 0 ; i < nClassCnt ; i++)  {
         IClassInfo* pClassInfo = (*pClassInfoArray)[i];
-        v8::Local<v8::External> classInfo = v8::External::New(isolate, (void *)pClassInfo);
-        Local<FunctionTemplate> class_fun_template = FunctionTemplate::New(isolate, ClassNew, classInfo);
+        Local<FunctionTemplate> class_fun_template = 
+            FunctionTemplate::New(isolate, ClassNew, v8::External::New(isolate, (void *)pClassInfo));
         Local<v8::Signature> class_signature = v8::Signature::New(isolate, class_fun_template);
 
         Elastos::String className;
         pClassInfo->GetName(&className);
-        LOG(INFO) << "Require: inject class: " << className << "[" << pClassInfo << "]";
+        LOG(INFO) << "Require: Set Class: " << className.string() << " [" << pClassInfo << "]";
         class_fun_template->SetClassName(
-            v8::String::NewFromUtf8(isolate, className, NewStringType::kNormal)
+            v8::String::NewFromUtf8(isolate, className.string(), NewStringType::kNormal)
             .ToLocalChecked());
         class_fun_template->ReadOnlyPrototype();
-
         class_fun_template->InstanceTemplate()->SetInternalFieldCount(1);
-        context->Global()->Set(
-            v8::String::NewFromUtf8(isolate, className, NewStringType::kNormal)
-            .ToLocalChecked(),
-            class_fun_template->GetFunction());
 
         // 注册所有的方法
         Int32 nMtdCnt;
@@ -214,13 +208,17 @@ static void Require(const v8::FunctionCallbackInfo<v8::Value> &args)
                 LOG(INFO) << "Require: pMethodInfo->GetName failed";
                 return;
             }
-            LOG(INFO) << "Require: add method: " << szMtdName << "[" << pMethodInfo << "] for " << className;
+            LOG(INFO) << "Require: Set method: " << szMtdName.string() << " [" << pMethodInfo << "] for " << className.string();
             class_fun_template->PrototypeTemplate()->Set(
-                //v8::String::NewFromUtf8(isolate, szMtdName, NewStringType::kNormal)
-                v8::String::NewFromUtf8(isolate, "Hello", NewStringType::kNormal)
+                v8::String::NewFromUtf8(isolate, szMtdName.string(), NewStringType::kNormal)
                     .ToLocalChecked(),
                 FunctionTemplate::New(isolate, MethodInvoke, v8::External::New(isolate, (void *)(pMethodInfo)), class_signature));
         }
+
+        context->Global()->Set(
+            v8::String::NewFromUtf8(isolate, className.string(), NewStringType::kNormal)
+            .ToLocalChecked(),
+            class_fun_template->GetFunction());
     }
 }
 
