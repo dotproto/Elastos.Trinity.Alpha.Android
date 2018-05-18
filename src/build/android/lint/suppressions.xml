@@ -315,7 +315,7 @@ Still reading?
   </issue>
   <!-- Our generated enums are allowed to have the same values. -->
   <issue id="UniqueConstants" severity="ignore"/>
-  <issue id="UnusedResources">
+  <issue id="UnusedResources" severity="ignore">
     <!-- Do not add new suppressions without rationale. -->
     <!-- 3 raw resources are accessed by URL in various places -->
     <ignore regexp="PRODUCT_DIR/gen/remoting/android/.*/res/raw/credits.html"/>
