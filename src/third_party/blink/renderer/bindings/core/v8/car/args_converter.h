@@ -14,24 +14,24 @@
 #define MAX_PREFERENCE_TITLE         128
 #define MAX_PREFERENCE_STYLE         128
 
-class V8ParameterNormalizer
+class ArgsConverter
 {
 public:
-    V8ParameterNormalizer(v8::Isolate* isolate, const v8::FunctionCallbackInfo<v8::Value> args);
-    ECode Normalize(IFunctionInfo *pFunctionInfo, IArgumentList *pArgumentList);
+    ArgsConverter(const v8::FunctionCallbackInfo<v8::Value> args);
+    ECode Normalize(IMethodInfo* methodInfo, IArgumentList *pArgumentList);
     //ECode GetReturnValue(JSValueRef *rval);
-    ~V8ParameterNormalizer();
+    ~ArgsConverter();
 
 private:
     void FreeParams();
     //ECode NativeVal2JsVal(IParamInfo *paramInfo, void *nativeVal, JSValueRef *rval, Boolean isCallerAllocOut);
 
 private:
-    //v8::Isolate*            m_isolate;
-    v8::FunctionCallbackInfo<v8::Value> args;
+    size_t                  m_argc;
+    v8::FunctionCallbackInfo<v8::Value> m_args;
     char                    m_paramBuff[MAX_PARAMETER_COUNT * 8];
     Int32                   m_params[MAX_PARAMETER_COUNT];
-    //Int32                   m_outParamCount;
+    Int32                   m_outParamCount;
     ArrayOf<IParamInfo*>*   m_paramInfos;
 };
 

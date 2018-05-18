@@ -2,77 +2,78 @@
 #include <stdio.h>
 
 #include "args_converter.h"
+#include "var_converter.h"
+#include "base/logging.h"
 
 #define PUSH_OUT_PARAM(type) do {                                           \
-	pArgumentList->SetOutputArgumentOf##type##Ptr(i, (type *)outParamBuff); \
-	m_params[i] = (Int32)outParamBuff;                                      \
-	outParamBuff += 8;                                                      \
+    argList->SetOutputArgumentOf##type##Ptr(i, (type *)outParamBuff); \
+    m_params[i] = (Int32)outParamBuff;                                      \
+    outParamBuff += 8;                                                      \
 } while(0)
 
 #define PUSH_STRBUFF_PARAM(type) do {                                       \
-	Int32 size;                                                             \
-	ec = paramInfo->GetAdvisedCapacity(&size);                              \
-	if (FAILED(ec) || size == 0) size = DEFAULT_STRINGBUFF_LEN;             \
-	    else size++;                                                        \
-	type##StringBuf *pstrBuf = type##StringBuf::Alloc(size);                \
-	if (!pstrBuf) {                                                         \
-	    ec = E_OUT_OF_MEMORY;                                               \
-	    goto ERR;                                                           \
-	}                                                                       \
-	pArgumentList->SetOutputArgumentOf##type##StringBufPtr(i, pstrBuf);     \
-	m_params[i] = (Int32)pstrBuf;                                           \
+    Int32 size;                                                             \
+    ec = paramInfo->GetAdvisedCapacity(&size);                              \
+    if (FAILED(ec) || size == 0) size = DEFAULT_STRINGBUFF_LEN;             \
+        else size++;                                                        \
+    type##StringBuf *pstrBuf = type##StringBuf::Alloc(size);                \
+    if (!pstrBuf) {                                                         \
+        ec = E_OUT_OF_MEMORY;                                               \
+        goto ERR;                                                           \
+    }                                                                       \
+    argList->SetOutputArgumentOf##type##StringBufPtr(i, pstrBuf);     \
+    m_params[i] = (Int32)pstrBuf;                                           \
 } while(0)
 
-V8ParameterNormalizer::V8ParameterNormalizer(
-    v8::Isolate* isolate, const v8::FunctionCallbackInfo<v8::Value> args)
-      : args(args)
-      //, m_isolate(isolate)
-      //, m_outParamCount(0)
+ArgsConverter::ArgsConverter(const v8::FunctionCallbackInfo<v8::Value> args)
+    : m_args(args)
 {
+    m_argc = args.Length();
+    m_outParamCount = 0;
     memset(m_paramBuff, 0, sizeof(Int32) * MAX_PARAMETER_COUNT);
     memset(m_params, 0, sizeof(Int32) * MAX_PARAMETER_COUNT);
 }
 
-V8ParameterNormalizer::~V8ParameterNormalizer()
+ArgsConverter::~ArgsConverter()
 {
     FreeParams();
 }
 
-ECode V8ParameterNormalizer::Normalize(
-    IFunctionInfo *pFunctionInfo,
-    IArgumentList *pArgumentList)
+ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
 {
-    if (!pFunctionInfo || !pArgumentList) {
+    if (!methodInfo || !argList) {
+        LOG(ERROR) << "ArgsConverter::Normalize E_INVALID_ARGUMENT";
         return E_INVALID_ARGUMENT;
     }
-#if 0
+
     Int32 paramCount;
-    ECode ec = pFunctionInfo->GetParamCount(&paramCount);
-    if (FAILED(ec)) return ec;
-    if (0 == paramCount) return NOERROR;
-
-    m_paramInfos = BufferOf<IParamInfo *>::Alloc(paramCount);
-    if (!m_paramInfos) return E_OUT_OF_MEMORY;
-
-    ec = pFunctionInfo->GetAllParamInfos(m_paramInfos);
+    ECode ec = methodInfo->GetParamCount(&paramCount);
     if (FAILED(ec)) {
-        return FAILED(ec) ? ec : -1;
+        LOG(ERROR) << "ArgsConverter::Normalize GetParamCount faild.";
+        return ec;
     }
 
-    IParamInfo *paramInfo;
-    IDataTypeInfo *typeInfo;
-    CarDataType dataType;
-    ParamIOAttrib ioAttrib;
+    m_paramInfos = ArrayOf<IParamInfo*>::Alloc(paramCount);
+    ec = methodInfo->GetAllParamInfos(m_paramInfos);
+    if (FAILED(ec)) {
+        LOG(ERROR) << "ArgsConverter::Normalize GetAllParamInfos faild.";
+        return ec;
+    }
 
-    char *outParamBuff = m_paramBuff;
+    IParamInfo*       paramInfo;
+    IDataTypeInfo*    typeInfo;
+    CarDataType       dataType;
+    ParamIOAttribute  ioAttrib;
+
+    //char* outParamBuff = m_paramBuff;
     for (Int32 i = 0; i < paramCount; i++) {
         paramInfo = (*m_paramInfos)[i];
         if (!paramInfo) return E_NO_INTERFACE;
 
         paramInfo->GetTypeInfo(&typeInfo);
         typeInfo->GetDataType(&dataType);
-        paramInfo->GetIOAttrib(&ioAttrib);
-        if (ParamIOAttrib_In == ioAttrib) {
+        paramInfo->GetIOAttribute(&ioAttrib);
+        if (ParamIOAttribute_In == ioAttrib) {
             if (m_argc <= 0) {
                 ec = E_INVALID_ARGUMENT;
                 goto ERR;
@@ -82,209 +83,114 @@ ECode V8ParameterNormalizer::Normalize(
             switch(dataType) {
             case CarDataType_Int16: {
                 Int16 val;
-                ec = jsVal2Int16(m_ctx, m_argv[i], &val);
+                ec = jsVal2Int16(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Int16,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfInt16(i, val);
+                argList->SetInputArgumentOfInt16(i, val);
                 break;
             }
             case CarDataType_Int32: {
                 Int32 val;
-                ec = jsVal2Int32(m_ctx, m_argv[i], &val);
+                ec = jsVal2Int32(m_args[i], &val);
                 if (FAILED(ec))
                     goto ERR;
                 printf("Param %d ,After jsVal2Int32,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfInt32(i, val);
+                argList->SetInputArgumentOfInt32(i, val);
                 break;
             }
             case CarDataType_Int64: {
                 Int64 val;
-                ec = jsVal2Int64(m_ctx, m_argv[i], &val);
+                ec = jsVal2Int64(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2Int64,val=%I64d\n", i, val);
-                pArgumentList->SetInputArgumentOfInt64(i, val);
+                //printf("Param %d ,After jsVal2Int64,val=%I64d\n", i, val);
+                argList->SetInputArgumentOfInt64(i, val);
                 break;
             }
             case CarDataType_Byte: {
                 Byte val;
-                ec = jsVal2Byte(m_ctx, m_argv[i], &val);
+                ec = jsVal2Byte(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Float,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfByte(i, val);
+                argList->SetInputArgumentOfByte(i, val);
                 break;
             }
             case CarDataType_Float: {
                 Float val;
-                ec = jsVal2Float(m_ctx, m_argv[i], &val);
+                ec = jsVal2Float(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Float,val=%f\n", i, val);
-                pArgumentList->SetInputArgumentOfFloat(i, val);
+                argList->SetInputArgumentOfFloat(i, val);
                 break;
             }
             case CarDataType_Double: {
                 Double val;
-                ec = jsVal2Double(m_ctx, m_argv[i], &val);
+                ec = jsVal2Double(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Double,val=%f\n", i, val);
-                pArgumentList->SetInputArgumentOfDouble(i, val);
+                argList->SetInputArgumentOfDouble(i, val);
                 break;
             }
-            case CarDataType_AChar: {
+#if 0
+            case CarDataType_Char32: {
+            //case CarDataType_AChar: {
                 AChar val;
-                ec = jsVal2AChar(m_ctx, m_argv[i], &val);
+                ec = jsVal2AChar(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2AChar,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfAChar(i, val);
+                argList->SetInputArgumentOfAChar(i, val);
                 break;
             }
-            case CarDataType_WChar: {
-                WChar val;
-                ec = jsVal2WChar(m_ctx, m_argv[i], &val);
-                if (FAILED(ec)) goto ERR;
-                wprintf(L"Param %d ,After jsVal2WChar,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfWChar(i, val);
-                break;
-            }
-            case CarDataType_AString: {
-                char *val = NULL;
-                ec = jsVal2AString(m_ctx, m_argv[i], &val);
-                if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2AString,val=%s\n", i, val);
-                pArgumentList->SetInputArgumentOfAString(i, val);
-                m_params[i] = (Int32)val;
-                break;
-            }
-            case CarDataType_WString: {
-                wchar_t *val = NULL;
-                ec = jsVal2WString(m_ctx, m_argv[i], &val);
-                if (FAILED(ec)) goto ERR;
-                wprintf(L"Param %d ,After jsVal2WString,val=%s\n", i, val);
-                pArgumentList->SetInputArgumentOfWString(i, val);
-                m_params[i] = (Int32)val;
+            case CarDataType_String:{
                 break;
             }
             case CarDataType_Boolean: {
                 Boolean val;
-                ec = jsVal2Boolean(m_ctx, m_argv[i], &val);
+                ec = jsVal2Boolean(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Boolean,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfBoolean(i, val);
-                break;
-            }
-            /*
-            case CarDataType_EMuid: {
-            EMuid *val = (EMuid *)malloc(sizeof(EMuid));
-            if (val == NULL) {
-            ec = E_OUT_OF_MEMORY;
-            goto ERR;
-            }
-            ec = jsVal2EMuid(m_cx, m_argv[i], val);
-            if (FAILED(ec)) {
-            free(val);
-            goto ERR;
-            }
-            pArgumentList->SetInputArgumentOfEMuid(i, val);
-            m_params[i] = (Int32)val;
-            break;
-            }
-            case CarDataType_EGuid: {
-            EGuid *val = (EGuid *)malloc(sizeof(EGuid));
-            if (val == NULL) {
-            ec = E_OUT_OF_MEMORY;
-            goto ERR;
-            }
-
-            ec = jsVal2EGuid(m_cx, m_argv[i], val);
-            if (FAILED(ec)) {
-            free(val);
-            goto ERR;
-            }
-            pArgumentList->SetInputArgumentOfEGuid(i, val);
-            m_params[i] = (Int32)val;
-            break;
-            }*/
-            case CarDataType_ECode: {
-                ECode val;
-                ec = jsVal2ECode(m_ctx, m_argv[i], &val);
-                if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2ECode,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfECode(i, val);
+                argList->SetInputArgumentOfBoolean(i, val);
                 break;
             }
             case CarDataType_Enum: {
                 Int32 val;
-                ec = jsVal2Int32(m_ctx, m_argv[i], &val);
+                ec = jsVal2Int32(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
                 printf("Param %d ,After jsVal2Enum,val=%d\n", i, val);
-                pArgumentList->SetInputArgumentOfEnum(i, val);
+                argList->SetInputArgumentOfEnum(i, val);
                 break;
             }
-            case CarDataType_ArrayOf:
-            case CarDataType_BufferOf:
-                /*{
-                IVariableOfCarArray *variable;
-                PCarQuintet value;
-                ICarArrayInfo * piCarArrayInfo;
-                piCarArrayInfo = ICarArrayInfo::Probe(typeInfo);
-                if (!piCarArrayInfo) ec = E_NO_INTERFACE; else ec = NOERROR;
-                if (FAILED(ec)) goto ERR;
-
-                ec = jsVal2Array(m_cx, m_argv[i], piCarArrayInfo, &variable);
-                if (FAILED(ec)) goto ERR;
-                ec = variable->GetPayload((PVoid*)&value);
-                if (FAILED(ec)) {
-                variable->Release();
-                goto ERR;
-                }
-                pArgumentList->SetInputArgumentOfCarArray(i, value);
-                m_params[i] = (Int32)variable;
+            case CarDataType_Interface: {
                 break;
-                }
-
-                case CarDataType_Struct:{
-                PVoid value;
-                IVariableOfStruct *variable;
-                IStructInfo * piStructInfo;
-                piStructInfo = IStructInfo::Probe(typeInfo);
-                if (!piStructInfo) ec = E_NO_INTERFACE; else ec = NOERROR;
-                if (FAILED(ec)) goto ERR;
-
-                ec = jsVal2Struct(m_cx, m_argv[i], piStructInfo, &variable);
-                if (FAILED(ec)) goto ERR;
-
-                ec = variable->GetPayload(&value);
-                if (FAILED(ec)) {
-                variable->Release();
-                goto ERR;
-                }
-                pArgumentList->SetInputArgumentOfStructPtr(i, value);
-                m_params[i] = (Int32)variable;
+            }
+            case CarDataType_EMuid: {
                 break;
-                }
-
-                case CarDataType_Interface: {
-                PInterface object;
-                IInterfaceInfo * piInterfaceInfo;
-                piInterfaceInfo = IInterfaceInfo::Probe(typeInfo);
-                if (!piInterfaceInfo) ec = E_NO_INTERFACE; else ec = NOERROR;
-                if (FAILED(ec)) goto ERR;
-                ec = jsVal2Interface(m_cx, m_argv[i], piInterfaceInfo, &object);
-                if (FAILED(ec)) goto ERR;
-                pArgumentList->SetInputArgumentOfObjectPtr(i, object);
-                m_params[i] = (Int32)object;
+            }
+            case CarDataType_EGuid: {
                 break;
-                }
-                */
+            }
+            case CarDataType_ECode: {
+                ECode val;
+                ec = jsVal2ECode(m_args[i], &val);
+                if (FAILED(ec)) goto ERR;
+                printf("Param %d ,After jsVal2ECode,val=%d\n", i, val);
+                argList->SetInputArgumentOfECode(i, val);
+                break;
+            }
+            case CarDataType_ArrayOf:{
+                break;
+            }
+#endif
             default:
                 assert(0 && " not implemented");
                 ec = E_NOT_SUPPORTED;
                 goto ERR;
                 break;
             }
-        }
-        else if (ParamIOAttrib_CallerAllocOut == ioAttrib) {
+        } // if
+        else if (ParamIOAttribute_CallerAllocOut == ioAttrib) {
             m_outParamCount++;
             switch(dataType) {
+#if 0
             case CarDataType_Int16:
                 PUSH_OUT_PARAM(Int16);
                 break;
@@ -303,106 +209,30 @@ ECode V8ParameterNormalizer::Normalize(
             case CarDataType_Double:
                 PUSH_OUT_PARAM(Double);
                 break;
-
-            case CarDataType_AChar:
-                PUSH_OUT_PARAM(AChar);
+            case CarDataType_Char32:
                 break;
-            case CarDataType_WChar:
-                PUSH_OUT_PARAM(WChar);
-                break;
-            case CarDataType_AStringBuf:
-                PUSH_STRBUFF_PARAM(A);
-                break;
-            case CarDataType_WStringBuf:
-                PUSH_STRBUFF_PARAM(W);
+            case CarDataType_String:
                 break;
             case CarDataType_Boolean:
                 PUSH_OUT_PARAM(Boolean);
                 break;
-                /*
-                case CarDataType_Interface: {
-                pArgumentList->SetOutputArgumentOfObjectPtrPtr(i, (PInterface *)outParamBuff);
+            case CarDataType_Enum:
+                argList->SetOutputArgumentOfEnumPtr(i, (Int32 *)outParamBuff);
                 m_params[i] = (Int32)outParamBuff;
                 outParamBuff += 8;
                 break;
-                }
-                case CarDataType_EMuid: {
-                EMuid *val = (EMuid *)malloc(sizeof(EMuid));
-                if (val == NULL) {
-                ec = E_OUT_OF_MEMORY;
-                goto ERR;
-                }
-                memset(val, 0, sizeof(EMuid));
-                pArgumentList->SetOutputArgumentOfEMuidPtr(i, val);
-                m_params[i] = (Int32)val;
+            case CarDataType_Interface:
                 break;
-                }
-                case CarDataType_EGuid: {
-                EGuid *val = (EGuid *)malloc(sizeof(EGuid));
-                if (val == NULL) {
-                ec = E_OUT_OF_MEMORY;
-                goto ERR;
-                }
-                memset(val, 0, sizeof(EGuid));
-                pArgumentList->SetOutputArgumentOfEGuidPtr(i, val);
-                m_params[i] = (Int32)val;
+            case CarDataType_EMuid:
                 break;
-                }
-                */
+            case CarDataType_EGuid:
+                break;
             case CarDataType_ECode:
                 PUSH_OUT_PARAM(ECode);
                 break;
-            case CarDataType_Enum:
-                pArgumentList->SetOutputArgumentOfEnumPtr(i, (Int32 *)outParamBuff);
-                m_params[i] = (Int32)outParamBuff;
-                outParamBuff += 8;
-                break;
             case CarDataType_ArrayOf:
-            case CarDataType_BufferOf:
-                /*{
-                Int32 size;
-                PCarQuintet value;
-                IVariableOfCarArray *variable;
-
-                ICarArrayInfo * piCarArrayInfo;
-                piCarArrayInfo = ICarArrayInfo::Probe(typeInfo);
-                if (!piCarArrayInfo) ec = E_NO_INTERFACE; else ec = NOERROR;
-                if (FAILED(ec)) goto ERR;
-
-                ec = paramInfo->GetAdvisedCapacity(&size);
-                if (FAILED(ec) || size == 0) size = DEFAULT_STRINGBUFF_LEN;
-                ec = piCarArrayInfo->CreateVariable(size, &variable);
-                if (FAILED(ec)) goto ERR;
-
-                ec = variable->GetPayload((PVoid*)&value);
-                if (FAILED(ec)) {
-                variable->Release();
-                goto ERR;
-                }
-                pArgumentList->SetOutputArgumentOfCarArrayPtr(i, value);
-                m_params[i] = (Int32)variable;
                 break;
-                }
-                case CarDataType_Struct: {
-                IVariableOfStruct *variable;
-                PVoid value;
-                IStructInfo * piStructInfo;
-                piStructInfo = IStructInfo::Probe(typeInfo);
-                if (!piStructInfo) ec = E_NO_INTERFACE; else ec = NOERROR;
-                if (FAILED(ec)) goto ERR;
-
-                ec = piStructInfo->CreateVariable(&variable);
-                if (FAILED(ec)) goto ERR;
-                ec = variable->GetPayload(&value);
-                if (FAILED(ec)) {
-                variable->Release();
-                goto ERR;
-                }
-                pArgumentList->SetOutputArgumentOfStructPtr(i, value);
-                m_params[i] = (Int32)variable;
-                break;
-                }
-                */
+#endif
             default:
                 assert(0 && " not implemented");
                 ec = E_NOT_SUPPORTED;
@@ -413,23 +243,25 @@ ECode V8ParameterNormalizer::Normalize(
         else {
             m_outParamCount++;
             switch(dataType) {
+#if 0
             case CarDataType_AStringBuf:
-                pArgumentList->SetOutputArgumentOfAStringBufPtrPtr(i, (AStringBuf **)outParamBuff);
+                argList->SetOutputArgumentOfAStringBufPtrPtr(i, (AStringBuf **)outParamBuff);
                 m_params[i] = (Int32)outParamBuff;
                 outParamBuff += 8;
                 break;
             case CarDataType_WStringBuf:
-                pArgumentList->SetOutputArgumentOfWStringBufPtrPtr(i, (WStringBuf **)outParamBuff);
+                argList->SetOutputArgumentOfWStringBufPtrPtr(i, (WStringBuf **)outParamBuff);
                 m_params[i] = (Int32)outParamBuff;
                 outParamBuff += 8;
                 break;
             case CarDataType_ArrayOf:
             case CarDataType_BufferOf:
-                pArgumentList->SetOutputArgumentOfCarArrayPtrPtr(i, (PCarQuintet *)outParamBuff);
+                argList->SetOutputArgumentOfCarArrayPtrPtr(i, (PCarQuintet *)outParamBuff);
                 m_params[i] = (Int32)outParamBuff;
                 outParamBuff += 8;
                 break;
                 //case CarDataType_Struct: IsNeed ?
+#endif
             default:
                 assert(0 && " not implemented");
                 ec = E_NOT_SUPPORTED;
@@ -438,17 +270,17 @@ ECode V8ParameterNormalizer::Normalize(
             }
         }
         typeInfo->Release();
-    }
+    } // for
+
     return NOERROR;
 ERR:
     paramInfo->Release();
     typeInfo->Release();
     return ec;
-#endif
-    return NOERROR;
 }
+
 #if 0
-ECode V8ParameterNormalizer::GetReturnValue(JSValueRef *rval)
+ECode ArgsConverter::GetReturnValue(JSValueRef *rval)
 {
     if (0 == m_outParamCount) return NOERROR;
 
@@ -467,7 +299,8 @@ ECode V8ParameterNormalizer::GetReturnValue(JSValueRef *rval)
             return NativeVal2JsVal(paramInfo, (void *)m_params[i], rval,
                                    ParamIOAttrib_CallerAllocOut  == ioAttrib);
         }
-    } else {
+    }
+    else {
         /*
         JSObject *pRetObj = JS_NewObject(m_cx, &js_ObjectClass, NULL, NULL);
         if (NULL == pRetObj) return E_OUT_OF_MEMORY;
@@ -501,10 +334,12 @@ ECode V8ParameterNormalizer::GetReturnValue(JSValueRef *rval)
 
     return NOERROR;
 }
+#endif
 
-
-ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *nativeVal, JSValueRef *rval, Boolean isCallerAllocOut)
+#if 0
+ECode ArgsConverter::NativeVal2JsVal(IParamInfo *paramInfo, void *nativeVal, JSValueRef *rval, Boolean isCallerAllocOut)
 {
+    ECode ec = NOERROR;
     assert(paramInfo && nativeVal && rval);
 
     IDataTypeInfo *typeInfo;
@@ -512,33 +347,33 @@ ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *native
 
     paramInfo->GetTypeInfo(&typeInfo);
     typeInfo->GetDataType(&dataType);
-    ECode ec = NOERROR;
+
     switch(dataType) {
     case CarDataType_Int16:
-        *rval = JSValueMakeNumber(m_ctx, *(Int16 *)nativeVal);
+        *rval = JSValueMakeNumber(*(Int16 *)nativeVal);
         break;
     case CarDataType_Int32:
-        *rval = JSValueMakeNumber(m_ctx, *(Int32 *)nativeVal);
+        *rval = JSValueMakeNumber(*(Int32 *)nativeVal);
         break;
     case CarDataType_Int64:
-        *rval = JSValueMakeNumber(m_ctx, (double) * (Int64 *)nativeVal);
+        *rval = JSValueMakeNumber((double) * (Int64 *)nativeVal);
         break;
     case CarDataType_Byte: {
         JSStringRef jsStr = JSStringCreateWithUTF8CString((const char *)(Byte *)nativeVal);
-        *rval = JSValueMakeString(m_ctx, jsStr);
+        *rval = JSValueMakeString(jsStr);
         break;
     }
     case CarDataType_Float:
-        *rval = JSValueMakeNumber(m_ctx, (double) * (Float *)nativeVal);
+        *rval = JSValueMakeNumber((double) * (Float *)nativeVal);
         break;
     case CarDataType_Double:
-        //JS_NewDoubleValue(m_ctx, (jsdouble)*(Double*)nativeVal, rval);
-        *rval = JSValueMakeNumber(m_ctx, *(Double *)nativeVal);
+        //JS_NewDoubleValue((jsdouble)*(Double*)nativeVal, rval);
+        *rval = JSValueMakeNumber(*(Double *)nativeVal);
         //rval=(JSValueRef*)nativeVal;
         break;
     case CarDataType_AChar: {
         JSStringRef jsStr = JSStringCreateWithUTF8CString((const char *)(AChar *)nativeVal);
-        *rval = JSValueMakeString(m_ctx, jsStr);
+        *rval = JSValueMakeString(jsStr);
         break;
     }
     case CarDataType_WChar: {
@@ -547,7 +382,7 @@ ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *native
         char *pChar;
         wctomb(pChar, wc);
         JSStringRef jsStr = JSStringCreateWithUTF8CString((const char *)pChar);
-        *rval = JSValueMakeString(m_ctx, jsStr);
+        *rval = JSValueMakeString(jsStr);
         break;
     }
     case CarDataType_AStringBuf: {
@@ -555,7 +390,7 @@ ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *native
         AStringBuf *pstrBuf = *(AStringBuf **)nativeVal;
         char *pCh = pstrBuf->GetPayload();
         JSStringRef jsStr = JSStringCreateWithUTF8CString((const char *)pCh);
-        *rval = JSValueMakeString(m_ctx, jsStr);
+        *rval = JSValueMakeString(jsStr);
         break;
     }
     case CarDataType_WStringBuf: {
@@ -567,17 +402,17 @@ ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *native
         }
         char *pCh = CW2A(pstrBuf->GetPayload());
         JSStringRef jsStr = JSStringCreateWithUTF8CString((const char *)pCh);
-        *rval = JSValueMakeString(m_ctx, jsStr);
+        *rval = JSValueMakeString(jsStr);
         break;
     }
     case CarDataType_Boolean: {
-        *rval = JSValueMakeBoolean(m_ctx, (bool) * (Boolean *)nativeVal);
+        *rval = JSValueMakeBoolean((bool) * (Boolean *)nativeVal);
         break;
         case CarDataType_ECode:
-            *rval = JSValueMakeNumber(m_ctx, *(Int32 *)nativeVal);
+            *rval = JSValueMakeNumber(*(Int32 *)nativeVal);
             break;
         case CarDataType_Enum:
-            *rval = JSValueMakeNumber(m_ctx, *(Int32 *)nativeVal);
+            *rval = JSValueMakeNumber(*(Int32 *)nativeVal);
             break;
         }
         /*
@@ -631,127 +466,125 @@ ECode V8ParameterNormalizer::NativeVal2JsVal(IParamInfo *paramInfo, void *native
         assert(0 && " not implemented");
         break;
     }
-
 EXIT:
     typeInfo->Release();
     return ec;
 }
 #endif
 
-void  V8ParameterNormalizer::FreeParams()
+
+void ArgsConverter::FreeParams()
 {
-    if (!m_paramInfos) return ;
-    /*
+    if (!m_paramInfos)
+        return ;
+#if 0
     Int32 count = m_paramInfos->GetUsed();
-    IParamInfo * paramInfo;
-    IDataTypeInfo * typeInfo;
+    IParamInfo *paramInfo;
+    IDataTypeInfo *typeInfo;
     CarDataType dataType;
     ParamIOAttrib ioAttrib;
     ECode ec = NOERROR;
 
     for (Int32 i = 0; i < count; i++) {
-    if (0 != m_params[i]) {
-    paramInfo = (*m_paramInfos)[i];
-    if (!paramInfo) continue;
+        if (0 != m_params[i]) {
+            paramInfo = (*m_paramInfos)[i];
+            if (!paramInfo) continue;
 
-    paramInfo->GetTypeInfo(&typeInfo);
-    typeInfo->GetDataType(&dataType);
-    paramInfo->GetIOAttrib(&ioAttrib);
+            paramInfo->GetTypeInfo(&typeInfo);
+            typeInfo->GetDataType(&dataType);
+            paramInfo->GetIOAttrib(&ioAttrib);
 
-    switch(dataType) {
-    case CarDataType_AString:
-    case CarDataType_WString:
-    free((void*)m_params[i]);
-    break;
-    case CarDataType_AStringBuf: {
-    AStringBuf *pstrBuf;
-    if (ParamIOAttrib_CallerAllocOut == ioAttrib) {
-    pstrBuf = (AStringBuf*)m_params[i];
-    }
-    else {
-    pstrBuf = *(AStringBuf**)m_params[i];
-    }
-    if (pstrBuf) AStringBuf::Free(pstrBuf);
-    break;
-    }
-    case CarDataType_WStringBuf: {
-    WStringBuf *pstrBuf;
-    if (ParamIOAttrib_CallerAllocOut == ioAttrib) {
-    pstrBuf = (WStringBuf*)m_params[i];
-    }
-    else {
-    pstrBuf = *(WStringBuf**)m_params[i];
-    }
-    if (pstrBuf) WStringBuf::Free(pstrBuf);
-    break;
-    }
-    case CarDataType_EMuid: {
-    EMuid *val = (EMuid *)m_params[i];
-    if (val) free((void*)val);
-    break;
-    }
-    case CarDataType_EGuid: {
-    EGuid *val = (EGuid *)m_params[i];
-    if (val) {
-    if (val->pUunm) {
-    free(val->pUunm);
-    }
-    free((void*)val);
-    }
-    break;
-    }
-    case CarDataType_Interface: {
-    if (ParamIOAttrib_In == ioAttrib) {
-    PInterface object = (PInterface)m_params[i];
-    object->Release();
-    }
-    else {
-    PInterface object = *(PInterface*)m_params[i];
-    if (object) object->Release();
-    }
-    break;
-    }
-    case CarDataType_Struct: {
-    IVariableOfStruct *variable =
-    (IVariableOfStruct *)m_params[i];
-    if (1) {
-    AStringBuf_<256>  name;
-    typeInfo->GetName(&name);
-    if (!strcmp("VARIANT", name)) {
-    Variant * var;
-    ec = variable->GetPayload((PVoid*)&var);
-    if (SUCCEEDED(ec)) {
-    var->Clear();
-    }
-    }
-    }
-    variable->Release();
-    break;
-    }
-    case CarDataType_ArrayOf:
-    case CarDataType_BufferOf: {
-    ICarArrayInfo * piCarArrayInfo;
-    piCarArrayInfo = ICarArrayInfo::Probe(typeInfo);
-    if (ParamIOAttrib_CalleeAllocOut == ioAttrib) {
-    IVariableOfCarArray *variable;
-    piCarArrayInfo->CreateVariableBox( //todo
-    (PCarQuintet)*(Int32*)m_params[i],
-    &variable);
-    FreeArray(piCarArrayInfo, variable);
-    free((PCarQuintet)*(Int32*)m_params[i]);
-    }
-    else {
-    FreeArray(piCarArrayInfo, (IVariableOfCarArray *)m_params[i]);
-    }
-    break;
-    }
-    default:
-    break;
-    }
-    typeInfo->Release();
-    }
-    (*m_paramInfos)[i]->Release();
+            switch(dataType) {
+            case CarDataType_AString:
+            case CarDataType_WString:
+                free((void *)m_params[i]);
+                break;
+            case CarDataType_AStringBuf: {
+                AStringBuf *pstrBuf;
+                if (ParamIOAttrib_CallerAllocOut == ioAttrib) {
+                    pstrBuf = (AStringBuf *)m_params[i];
+                } else {
+                    pstrBuf = *(AStringBuf **)m_params[i];
+                }
+                if (pstrBuf) AStringBuf::Free(pstrBuf);
+                break;
+            }
+            case CarDataType_WStringBuf: {
+                WStringBuf *pstrBuf;
+                if (ParamIOAttrib_CallerAllocOut == ioAttrib) {
+                    pstrBuf = (WStringBuf *)m_params[i];
+                } else {
+                    pstrBuf = *(WStringBuf **)m_params[i];
+                }
+                if (pstrBuf) WStringBuf::Free(pstrBuf);
+                break;
+            }
+            case CarDataType_EMuid: {
+                EMuid *val = (EMuid *)m_params[i];
+                if (val) free((void *)val);
+                break;
+            }
+            case CarDataType_EGuid: {
+                EGuid *val = (EGuid *)m_params[i];
+                if (val) {
+                    if (val->pUunm) {
+                        free(val->pUunm);
+                    }
+                    free((void *)val);
+                }
+                break;
+            }
+            case CarDataType_Interface: {
+                if (ParamIOAttrib_In == ioAttrib) {
+                    PInterface object = (PInterface)m_params[i];
+                    object->Release();
+                } else {
+                    PInterface object = *(PInterface *)m_params[i];
+                    if (object) object->Release();
+                }
+                break;
+            }
+            case CarDataType_Struct: {
+                IVariableOfStruct *variable =
+                    (IVariableOfStruct *)m_params[i];
+                if (1) {
+                    AStringBuf_<256>  name;
+                    typeInfo->GetName(&name);
+                    if (!strcmp("VARIANT", name)) {
+                        Variant *var;
+                        ec = variable->GetPayload((PVoid *)&var);
+                        if (SUCCEEDED(ec)) {
+                            var->Clear();
+                        }
+                    }
+                }
+                variable->Release();
+                break;
+            }
+            case CarDataType_ArrayOf:
+            case CarDataType_BufferOf: {
+                ICarArrayInfo *piCarArrayInfo;
+                piCarArrayInfo = ICarArrayInfo::Probe(typeInfo);
+                if (ParamIOAttrib_CalleeAllocOut == ioAttrib) {
+                    IVariableOfCarArray *variable;
+                    piCarArrayInfo->CreateVariableBox( //todo
+                        (PCarQuintet) * (Int32 *)m_params[i],
+                        &variable);
+                    FreeArray(piCarArrayInfo, variable);
+                    free((PCarQuintet) * (Int32 *)m_params[i]);
+                } else {
+                    FreeArray(piCarArrayInfo, (IVariableOfCarArray *)m_params[i]);
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            typeInfo->Release();
+        }
+        (*m_paramInfos)[i]->Release();
     }
     BufferOf<IParamInfo *>::Free(m_paramInfos);
-    */
+#endif
+
 }

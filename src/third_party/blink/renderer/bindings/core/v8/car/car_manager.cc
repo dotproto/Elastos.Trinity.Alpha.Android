@@ -1,5 +1,4 @@
-#include "elastos.h"
-#include "ElastosCore.h"
+//#include "ElastosCore.h"
 
 #include "car_manager.h"
 #include "args_converter.h"
@@ -16,24 +15,20 @@ using std::pair;
 using std::string;
 
 using v8::Context;
-using v8::EscapableHandleScope;
 using v8::External;
-using v8::Function;
 using v8::FunctionTemplate;
 using v8::Global;
 using v8::HandleScope;
 using v8::Local;
-using v8::MaybeLocal;
-using v8::Name;
-using v8::NamedPropertyHandlerConfiguration;
-using v8::NewStringType;
 using v8::Object;
 using v8::ObjectTemplate;
-using v8::PropertyCallbackInfo;
 using v8::Script;
 using v8::String;
+using v8::NewStringType;
 using v8::TryCatch;
 using v8::Value;
+using v8::Persistent;
+using v8::internal::GlobalHandles;
 
 static Local<Value> Throw(v8::Isolate *isolate, const char *message)
 {
@@ -81,8 +76,8 @@ static void MethodInvoke(const v8::FunctionCallbackInfo<v8::Value> &args)
         LOG(INFO) << "SetOutputArgumentOfStringPtr failed.";
         return;
     }
-    //V8ParameterNormalizer JSNormalizer(isolate, args);
-    //ec = JSNormalizer.Normalize(pMethodInfo, pArgList);
+    ArgsConverter argsConverter(args);
+    ec = argsConverter.Normalize(pMethodInfo, pArgList);
 
     // 执行方法
     pMethodInfo->Invoke(thisObj, pArgList);
@@ -94,23 +89,31 @@ static void MethodInvoke(const v8::FunctionCallbackInfo<v8::Value> &args)
                       output.GetByteLength()).ToLocalChecked());
 }
 
+static void Destructor(const v8::WeakCallbackInfo<v8::Persistent<v8::Object> >& data)
+{
+    v8::Persistent<v8::Object>* handle = data.GetParameter();
+    handle->Reset();
+    LOG(INFO) << "Destructor: handle [" << handle << "]";
+    IInterface* object = reinterpret_cast<IInterface*>(data.GetInternalField(0));
+    LOG(INFO) << "Destructor: object [" << object << "]";
+    object->Release();
+}
+
 // 创建对应的Car对象，并加入到js对象的扩展空间
-void ClassNew(const v8::FunctionCallbackInfo<v8::Value> &args)
+static void Constructor(const v8::FunctionCallbackInfo<v8::Value> &args)
 {
     v8::Isolate *isolate = args.GetIsolate();
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
     HandleScope handle_scope(isolate);
 
-    // 1. 获取类信息
+    // 1. Get Car class info.
     IClassInfo* pClassInfo = reinterpret_cast<IClassInfo*>(args.Data().As<v8::External>()->Value());
     if (!args.IsConstructCall()) {
         Throw(isolate, "class must be constructed with new");
         return;
     }
-    // for debug
-    Elastos::String className;
-    pClassInfo->GetName(&className);
 
-    // 2. 获取构造函数参数
+    // 2. Get the param of constructor.
     //if (args.Length() < 1 || !args[0]->IsNumber()) {
     //    Throw(isolate, "new class invalid argument");
     //    return;
@@ -119,15 +122,33 @@ void ClassNew(const v8::FunctionCallbackInfo<v8::Value> &args)
     //String::Utf8Value str(isolate, args[0]);
     //int count = args[0]->Int32Value(isolate->GetCurrentContext()).FromJust();;
 
-    // 3. 创建本地对象,并将本地对象设置到js对象的隐藏域起始位置，相当于this指针。
+    // 3. Create a c++ object and set the c++ object as the beginning of the hidden
+    // field of the js object, which is equivalent to this pointer.
     IInterface* pObject;
     ECode ec = pClassInfo->CreateObject((IInterface**)&pObject);
     if (FAILED(ec)) {
         LOG(INFO) << "CreateObject failed";
         return;
     }
-    LOG(INFO) << "ClassNew: " << className << " [" << pClassInfo << "]" << " this: [" << pObject << "]";
-    args.Holder()->SetInternalField(0, v8::External::New(isolate, pObject));
+
+    // 4. Make object handle weak so we can delete the data format once GC kicks in.
+    v8::Persistent<v8::Object> handle;
+    {
+        v8::HandleScope scope(isolate);
+        v8::Local<v8::ObjectTemplate> object_template = v8::ObjectTemplate::New(isolate);
+        object_template->SetInternalFieldCount(1);
+        v8::Local<v8::Object> obj = object_template->NewInstance(context).ToLocalChecked();
+
+        handle.Reset(isolate, obj);
+        obj->SetAlignedPointerInInternalField(0, pObject);
+    }
+    handle.SetWeak(&handle, Destructor, v8::WeakCallbackType::kInternalFields);
+
+    // == for debug ==
+    Elastos::String className;
+    pClassInfo->GetName(&className);
+    LOG(INFO) << "Constructor: " << className << " [" << pClassInfo << "]" << " this: [" << pObject << "]";
+    args.Holder()->SetInternalField(0, External::New(isolate, pObject));
 }
 
 // ------------------------- initialize ---------------------------------------------
@@ -173,18 +194,18 @@ static void Require(const v8::FunctionCallbackInfo<v8::Value> &args)
     //LOG(INFO) << "nClassCnt:" << nClassCnt;
     for(int i = 0 ; i < nClassCnt ; i++)  {
         IClassInfo* pClassInfo = (*pClassInfoArray)[i];
-        Local<FunctionTemplate> class_fun_template = 
-            FunctionTemplate::New(isolate, ClassNew, v8::External::New(isolate, (void *)pClassInfo));
-        Local<v8::Signature> class_signature = v8::Signature::New(isolate, class_fun_template);
+        Local<FunctionTemplate> car_class_template = 
+            FunctionTemplate::New(isolate, Constructor, v8::External::New(isolate, (void *)pClassInfo));
+        Local<v8::Signature> car_class_signature = v8::Signature::New(isolate, car_class_template);
 
         Elastos::String className;
         pClassInfo->GetName(&className);
         LOG(INFO) << "Require: Set Class: " << className.string() << " [" << pClassInfo << "]";
-        class_fun_template->SetClassName(
+        car_class_template->SetClassName(
             v8::String::NewFromUtf8(isolate, className.string(), NewStringType::kNormal)
             .ToLocalChecked());
-        class_fun_template->ReadOnlyPrototype();
-        class_fun_template->InstanceTemplate()->SetInternalFieldCount(1);
+        car_class_template->ReadOnlyPrototype();
+        car_class_template->InstanceTemplate()->SetInternalFieldCount(1);
 
         // 注册所有的方法
         Int32 nMtdCnt;
@@ -209,16 +230,16 @@ static void Require(const v8::FunctionCallbackInfo<v8::Value> &args)
                 return;
             }
             LOG(INFO) << "Require: Set method: " << szMtdName.string() << " [" << pMethodInfo << "] for " << className.string();
-            class_fun_template->PrototypeTemplate()->Set(
+            car_class_template->PrototypeTemplate()->Set(
                 v8::String::NewFromUtf8(isolate, szMtdName.string(), NewStringType::kNormal)
                     .ToLocalChecked(),
-                FunctionTemplate::New(isolate, MethodInvoke, v8::External::New(isolate, (void *)(pMethodInfo)), class_signature));
+                FunctionTemplate::New(isolate, MethodInvoke, v8::External::New(isolate, (void *)(pMethodInfo)), car_class_signature));
         }
 
         context->Global()->Set(
             v8::String::NewFromUtf8(isolate, className.string(), NewStringType::kNormal)
             .ToLocalChecked(),
-            class_fun_template->GetFunction());
+            car_class_template->GetFunction());
     }
 }
 

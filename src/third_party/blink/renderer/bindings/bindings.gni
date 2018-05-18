@@ -159,6 +159,8 @@ bindings_core_v8_files =
                     "core/v8/car/car_manager.cc",
                     "core/v8/car/args_converter.h",
                     "core/v8/car/args_converter.cc",
+                    "core/v8/car/var_converter.h",
+                    "core/v8/car/var_converter.cc",
                     "core/v8/window_proxy.cc",
                     "core/v8/window_proxy.h",
                     "core/v8/window_proxy_manager.cc",
