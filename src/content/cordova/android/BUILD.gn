@@ -1,0 +1,183 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//third_party/icu/config.gni")
+
+cordova_app_manifest =
+    "$target_gen_dir/cordova_app_manifest/AndroidManifest.xml"
+
+jinja_template("cordova_app_manifest") {
+  input = "app/AndroidManifest.xml.jinja2"
+  output = cordova_app_manifest
+}
+
+android_resources("cordova_app_apk_resources") {
+  resource_dirs = [ "app/res" ]
+  android_manifest = cordova_app_manifest
+  android_manifest_dep = ":cordova_app_manifest"
+}
+
+
+generate_jni("cordova_shell_jni_headers") {
+  jni_package = "content/cordova"
+  sources = [
+    "CordovaLib/src/org/apache/cordova/engine/ShellWebView.java",
+  ]
+}
+
+shared_library("cordova_shell_lib") {
+testonly = true
+  testonly = true
+  deps = [
+    "//base",
+    ":cordova_shell_jni_headers",
+    "//build/config/sanitizers:deps",
+    "//components/crash/content/browser",
+    "//content/shell:content_shell_lib",
+    "//content/shell:pak",
+    "//media",
+    "//skia",
+  ]
+  sources = [
+    "shell_webview.cc",
+    "shell_webview.h",
+    "shell_webview_jni_registrar.cc",
+    "shell_webview_jni_registrar.h",
+    "shell_webview_library_loader.cc",
+  ]
+}
+
+
+android_library("cordova_lib_java") {
+  deps = [
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//device/geolocation:geolocation_java",
+    "//media/base/android:media_java",
+    "//media/capture/video/android:capture_java",
+    "//mojo/public/java:system_java",
+    "//net/android:net_java",
+    "//ui/android:ui_java",
+  ]
+  java_files = [
+    "CordovaLib/src/org/apache/cordova/AuthenticationToken.java",
+    "CordovaLib/src/org/apache/cordova/BuildHelper.java",
+    "CordovaLib/src/org/apache/cordova/CallbackContext.java",
+    "CordovaLib/src/org/apache/cordova/CallbackMap.java",
+    "CordovaLib/src/org/apache/cordova/Config.java",
+    "CordovaLib/src/org/apache/cordova/ConfigXmlParser.java",
+    "CordovaLib/src/org/apache/cordova/CordovaActivity.java",
+    "CordovaLib/src/org/apache/cordova/CordovaArgs.java",
+    "CordovaLib/src/org/apache/cordova/CordovaBridge.java",
+    "CordovaLib/src/org/apache/cordova/CordovaClientCertRequest.java",
+    "CordovaLib/src/org/apache/cordova/CordovaDialogsHelper.java",
+    "CordovaLib/src/org/apache/cordova/CordovaHttpAuthHandler.java",
+    "CordovaLib/src/org/apache/cordova/CordovaInterfaceImpl.java",
+    "CordovaLib/src/org/apache/cordova/CordovaInterface.java",
+    "CordovaLib/src/org/apache/cordova/CordovaPlugin.java",
+    "CordovaLib/src/org/apache/cordova/CordovaPreferences.java",
+    "CordovaLib/src/org/apache/cordova/CordovaResourceApi.java",
+    "CordovaLib/src/org/apache/cordova/CordovaWebViewEngine.java",
+    "CordovaLib/src/org/apache/cordova/CordovaWebViewImpl.java",
+    "CordovaLib/src/org/apache/cordova/CordovaWebView.java",
+    "CordovaLib/src/org/apache/cordova/CoreAndroid.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemCookieManager.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemExposedJsApi.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemWebChromeClient.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemWebViewClient.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemWebViewEngine.java",
+    "CordovaLib/src/org/apache/cordova/engine/SystemWebView.java",
+    "CordovaLib/src/org/apache/cordova/engine/ShellWebView.java",
+    "CordovaLib/src/org/apache/cordova/engine/ShellWebViewEngine.java",
+    "CordovaLib/src/org/apache/cordova/ExposedJsApi.java",
+    "CordovaLib/src/org/apache/cordova/ICordovaClientCertRequest.java",
+    "CordovaLib/src/org/apache/cordova/ICordovaCookieManager.java",
+    "CordovaLib/src/org/apache/cordova/ICordovaHttpAuthHandler.java",
+    "CordovaLib/src/org/apache/cordova/LOG.java",
+    "CordovaLib/src/org/apache/cordova/NativeToJsMessageQueue.java",
+    "CordovaLib/src/org/apache/cordova/PermissionHelper.java",
+    "CordovaLib/src/org/apache/cordova/PluginEntry.java",
+    "CordovaLib/src/org/apache/cordova/PluginManager.java",
+    "CordovaLib/src/org/apache/cordova/PluginResult.java",
+    "CordovaLib/src/org/apache/cordova/ResumeCallback.java",
+    "CordovaLib/src/org/apache/cordova/Whitelist.java",
+  ]
+}
+
+
+android_library("cordova_app_java") {
+  deps = [
+    ":cordova_lib_java",
+    ":cordova_app_apk_resources",
+  ]
+  java_files = [
+    "app/java/com/example/hello/MainActivity.java",
+    "app/java/org/apache/cordova/whitelist/WhitelistPlugin.java",
+  ]
+}
+
+android_assets("cordova_app_assets") {
+  renaming_sources = [
+    "app/assets/www/cordova.js",
+    "app/assets/www/index.html",
+    "app/assets/www/cordova_plugins.js",
+    "app/assets/www/css/index.css",
+    "app/assets/www/img/logo.png",
+    "app/assets/www/js/index.js",
+    "app/assets/www/cordova-js-src/exec.js",
+    "app/assets/www/cordova-js-src/platform.js",
+    "app/assets/www/cordova-js-src/android/nativeapiprovider.js",
+    "app/assets/www/cordova-js-src/android/promptbasednativeapi.js",
+    "app/assets/www/cordova-js-src/plugin/android/app.js",
+    "app/assets/www/plugins/cordova-plugin-camera/www/CameraConstants.js",
+    "app/assets/www/plugins/cordova-plugin-camera/www/CameraPopoverOptions.js",
+    "app/assets/www/plugins/cordova-plugin-camera/www/Camera.js",
+    "app/assets/www/plugins/cordova-plugin-camera/www/CameraPopoverHandle.js",
+  ]
+
+  renaming_destinations = [
+    "www/cordova.js",
+    "www/index.html",
+    "www/cordova_plugins.js",
+    "www/css/index.css",
+    "www/img/logo.png",
+    "www/js/index.js",
+    "www/cordova-js-src/exec.js",
+    "www/cordova-js-src/platform.js",
+    "www/cordova-js-src/android/nativeapiprovider.js",
+    "www/cordova-js-src/android/promptbasednativeapi.js",
+    "www/cordova-js-src/plugin/android/app.js",
+    "www/plugins/cordova-plugin-camera/www/CameraConstants.js",
+    "www/plugins/cordova-plugin-camera/www/CameraPopoverOptions.js",
+    "www/plugins/cordova-plugin-camera/www/Camera.js",
+    "www/plugins/cordova-plugin-camera/www/CameraPopoverHandle.js",
+  ]
+
+
+  disable_compression = true
+}
+
+android_apk("cordova_app_apk") {
+  testonly = true
+  deps = [
+    ":cordova_app_java",
+    ":cordova_app_assets",
+    "//content/shell/android:content_shell_assets",
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//content/shell/android:content_shell_apk_java",
+    "//content/public/test/android:layouttest_java_support",
+    "//content/shell/android:libcontent_shell_content_view",
+    ":cordova_shell_lib",
+    "//ui/android:ui_java",
+    "//third_party/mesa:osmesa",
+  ]
+  apk_name = "CordovaApp"
+  android_manifest = cordova_app_manifest
+  android_manifest_dep = ":cordova_app_manifest"
+  shared_libraries = [ ":cordova_shell_lib" ]
+  loadable_modules = [ "$root_out_dir/libosmesa.so" ]
+}
