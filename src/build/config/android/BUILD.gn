@@ -79,8 +79,6 @@ config("compiler") {
     "-isystem" +
         rebase_path("$android_ndk_root/sysroot/usr/include/$abi_target",
                     root_build_dir),
-    "-isystem" + rebase_path("../../third_party/elastos/inc",
-                    root_build_dir),
     "-D__ANDROID_API__=$compile_api_level",
 
     # Temporary workaround for third party dependencies requiring this to be

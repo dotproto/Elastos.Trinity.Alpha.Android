@@ -85,7 +85,7 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 Int16 val;
                 ec = jsVal2Int16(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2Int16,val=%d\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Int16,val=" << val;
                 argList->SetInputArgumentOfInt16(i, val);
                 break;
             }
@@ -94,7 +94,7 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 ec = jsVal2Int32(m_args[i], &val);
                 if (FAILED(ec))
                     goto ERR;
-                printf("Param %d ,After jsVal2Int32,val=%d\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Int32,val=" << val;
                 argList->SetInputArgumentOfInt32(i, val);
                 break;
             }
@@ -102,7 +102,7 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 Int64 val;
                 ec = jsVal2Int64(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                //printf("Param %d ,After jsVal2Int64,val=%I64d\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Int64,val=" << val;
                 argList->SetInputArgumentOfInt64(i, val);
                 break;
             }
@@ -110,7 +110,7 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 Byte val;
                 ec = jsVal2Byte(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2Float,val=%d\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Byte,val=" << val;
                 argList->SetInputArgumentOfByte(i, val);
                 break;
             }
@@ -118,7 +118,7 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 Float val;
                 ec = jsVal2Float(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2Float,val=%f\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Float,val=" << val;
                 argList->SetInputArgumentOfFloat(i, val);
                 break;
             }
@@ -126,23 +126,14 @@ ECode ArgsConverter::Normalize(IMethodInfo* methodInfo, IArgumentList* argList)
                 Double val;
                 ec = jsVal2Double(m_args[i], &val);
                 if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2Double,val=%f\n", i, val);
+                LOG(INFO) << "m_args["<< i << "] After jsVal2Double,val=" << val;
                 argList->SetInputArgumentOfDouble(i, val);
-                break;
-            }
-#if 0
-            case CarDataType_Char32: {
-            //case CarDataType_AChar: {
-                AChar val;
-                ec = jsVal2AChar(m_args[i], &val);
-                if (FAILED(ec)) goto ERR;
-                printf("Param %d ,After jsVal2AChar,val=%d\n", i, val);
-                argList->SetInputArgumentOfAChar(i, val);
                 break;
             }
             case CarDataType_String:{
                 break;
             }
+#if 0
             case CarDataType_Boolean: {
                 Boolean val;
                 ec = jsVal2Boolean(m_args[i], &val);

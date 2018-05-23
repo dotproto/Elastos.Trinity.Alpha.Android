@@ -55,8 +55,7 @@ double jsVal2DoubleAssit(Local<Value> jsv)
         return E_INVALID_ARGUMENT;
     }
 
-    double d = jsv->NumberValue();
-    return d;
+    return jsv->NumberValue();
 }
 
 unsigned short double2Uint16Assit(double d)
@@ -84,8 +83,6 @@ unsigned short double2Uint16Assit(double d)
     return v;
 }
 
-
-//=================javascript 2 CAR ========================================//
 ECode jsVal2Int16(Local<Value> jsv, Int16 *val)
 {
     if (!val) return E_INVALID_ARGUMENT;
@@ -99,12 +96,8 @@ ECode jsVal2Int16(Local<Value> jsv, Int16 *val)
 ECode jsVal2Int32(Local<Value> jsv, Int32 *val)
 {
     if (!val) return E_INVALID_ARGUMENT;
+    *val = jsv->Int32Value();
 
-    double d = jsVal2DoubleAssit(jsv);
-    if(d <= -2147483648.0 || 2147483647.0 < d) { //depend on the range of Int32 in CAR
-        return E_INVALID_ARGUMENT;
-    }
-    *val = (Int32)floor(d + 0.5);
     return NOERROR;
 }
 
@@ -401,7 +394,7 @@ ECode jsVal2Boolean(Local<Value> jsv, Boolean *val)
     if (!val || (!JSValueIsBoolean(jsv) && !JSValueIsNumber(jsv)))
         return E_INVALID_ARGUMENT;
 
-    bool b = JSValueToBoolean(jsv);
+    bool b = jsv->BooleanValue();
     *val = (Boolean)b;
     return NOERROR;
 }

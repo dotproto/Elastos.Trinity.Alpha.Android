@@ -155,12 +155,6 @@ bindings_core_v8_files =
                     "core/v8/v8_wasm_response_extensions.h",
                     "core/v8/v8_worker_or_worklet_event_listener.cc",
                     "core/v8/v8_worker_or_worklet_event_listener.h",
-                    "core/v8/car/car_manager.h",
-                    "core/v8/car/car_manager.cc",
-                    "core/v8/car/args_converter.h",
-                    "core/v8/car/args_converter.cc",
-                    "core/v8/car/var_converter.h",
-                    "core/v8/car/var_converter.cc",
                     "core/v8/window_proxy.cc",
                     "core/v8/window_proxy.h",
                     "core/v8/window_proxy_manager.cc",
@@ -184,6 +178,18 @@ bindings_core_v8_files =
                   ],
                   "abspath")
 
+bindings_car_bridge_files =
+    get_path_info([
+                    "core/v8/car/car_manager.h",
+                    "core/v8/car/car_manager.cc",
+                    "core/v8/car/args_converter.h",
+                    "core/v8/car/args_converter.cc",
+                    "core/v8/car/var_converter.h",
+                    "core/v8/car/var_converter.cc",
+                    "core/v8/car/bridge/js-2-car.cc",
+                  ],
+                  "abspath")
+bindings_core_v8_files += bindings_car_bridge_files
 bindings_dir = get_path_info(".", "abspath")
 blink_output_dir = "$root_gen_dir/third_party/blink/renderer"
 bindings_output_dir = "$root_gen_dir/third_party/blink/renderer/bindings"
