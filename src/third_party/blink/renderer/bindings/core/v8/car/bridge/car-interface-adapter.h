@@ -3,16 +3,9 @@
 
 # include <cstdarg>
 # include <cstddef>
-
-# include <node.h>
-
 # include <nan.h>
-
 # include <elastos.h>
-
 # include "macros.h"
-
-
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 

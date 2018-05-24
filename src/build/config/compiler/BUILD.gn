@@ -361,7 +361,7 @@ config("compiler") {
       }
     }
   }
-
+  cflags += [ "-fexceptions" ]
   # Linux/Android/Fuchsia common flags setup.
   # ---------------------------------
   if (is_linux || is_android || is_fuchsia) {

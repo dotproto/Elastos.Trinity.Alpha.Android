@@ -1,8 +1,6 @@
 #ifndef __CAR_BRIDGE_CAR_NAMESPACE_H
 # define __CAR_BRIDGE_CAR_NAMESPACE_H
 
-# include <node.h>
-
 # include <nan.h>
 
 # include <elastos.h>

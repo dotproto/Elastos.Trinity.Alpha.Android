@@ -1,14 +1,9 @@
 #ifndef __CAR_BRIDGE_CAR_ARGUMENTS_H
 # define __CAR_BRIDGE_CAR_ARGUMENTS_H
 
-# include <node.h>
-
 # include <nan.h>
-
 # include <elastos.h>
-
 # include "macros.h"
-
 # include "weak-external-base.h"
 
 

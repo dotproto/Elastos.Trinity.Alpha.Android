@@ -1,8 +1,6 @@
 #ifndef __CAR_BRIDGE_CAR_CONSTANT_H
 # define __CAR_BRIDGE_CAR_CONSTANT_H
 
-# include <node.h>
-
 # include <nan.h>
 
 # include <elastos.h>

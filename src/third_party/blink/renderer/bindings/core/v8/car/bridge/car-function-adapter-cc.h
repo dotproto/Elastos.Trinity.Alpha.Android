@@ -7,8 +7,6 @@
 # include <memory>
 # include <new>
 
-# include <node.h>
-
 # include <nan.h>
 
 # include <elastos.h>
@@ -58,27 +56,31 @@ _ELASTOS ECode CARFunctionAdapter::Call(T firstArgument, ...) noexcept
 template<class T>
 _ELASTOS ECode CARFunctionAdapter::Call(T firstArgument, va_list ap) noexcept
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         size_t argc;
 
         argc = _paramInfos->GetLength();
         ::std::unique_ptr<::v8::Local<::v8::Value> []> argv(new(::std::nothrow) ::v8::Local<::v8::Value>[argc]);
+#if 0//?jw
         if (argv == nullptr)
             throw Error(Error::NO_MEMORY, "");
-
+#endif
         SetArgumentOf((*_paramInfos)[0], argc, argv.get(), 0, &firstArgument);
         for (size_t i = 1; i < argc; ++i)
             SetArgumentOf((*_paramInfos)[i], argc, argv.get(), i, ap);
 
         CallFunction(argc, argv.get());
+#if 0//?jw
     } catch (Error const &error) {
         return ToECode(error);
     } catch (...) {
         return E_FAILED;
     }
-
+#endif
     return NO_ERROR;
 }
 

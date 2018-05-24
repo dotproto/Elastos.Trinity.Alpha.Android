@@ -58,11 +58,10 @@ X(int32_t)
 
 template<typename T>
 inline
-typename imp::ToFactory<T>::return_t NanTo(v8::Local<v8::Value> val) {
+typename imp::ToFactory<T>::return_t To(v8::Local<v8::Value> val) {
   return imp::ToFactory<T>::convert(val);
 }
 
 # include "nan_converters_43_inl.h"
-
 
 #endif  // NAN_CONVERTERS_H_

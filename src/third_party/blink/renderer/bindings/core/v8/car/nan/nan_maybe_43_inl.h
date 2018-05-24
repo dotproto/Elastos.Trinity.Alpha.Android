@@ -102,10 +102,6 @@ inline Maybe<bool> Set(
   return obj->Set(isolate->GetCurrentContext(), index, value);
 }
 
-#if NODE_MODULE_VERSION < NODE_4_0_MODULE_VERSION
-#include "nan_define_own_property_helper.h"  // NOLINT(build/include)
-#endif
-
 inline Maybe<bool> DefineOwnProperty(
     v8::Local<v8::Object> obj
   , v8::Local<v8::String> key
@@ -113,18 +109,8 @@ inline Maybe<bool> DefineOwnProperty(
   , v8::PropertyAttribute attribs = v8::None) {
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
   v8::HandleScope scope(isolate);
-#if NODE_MODULE_VERSION >= NODE_4_0_MODULE_VERSION
   return obj->DefineOwnProperty(isolate->GetCurrentContext(), key, value,
                                 attribs);
-#else
-  Maybe<v8::PropertyAttribute> maybeCurrent =
-      obj->GetPropertyAttributes(isolate->GetCurrentContext(), key);
-  if (maybeCurrent.IsNothing()) {
-    return Nothing<bool>();
-  }
-  v8::PropertyAttribute current = maybeCurrent.FromJust();
-  return imp::DefineOwnPropertyHelper(current, obj, key, value, attribs);
-#endif
 }
 
 NAN_DEPRECATED inline Maybe<bool> ForceSet(
@@ -134,14 +120,10 @@ NAN_DEPRECATED inline Maybe<bool> ForceSet(
   , v8::PropertyAttribute attribs = v8::None) {
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
   v8::HandleScope scope(isolate);
-#if NODE_MODULE_VERSION >= NODE_9_0_MODULE_VERSION
   return key->IsName()
              ? obj->DefineOwnProperty(isolate->GetCurrentContext(),
                                       key.As<v8::Name>(), value, attribs)
              : Nothing<bool>();
-#else
-  return obj->ForceSet(isolate->GetCurrentContext(), key, value, attribs);
-#endif
 }
 
 inline MaybeLocal<v8::Value> Get(
@@ -334,7 +316,6 @@ inline Maybe<int> GetEndColumn(v8::Local<v8::Message> msg) {
 inline MaybeLocal<v8::Object> CloneElementAt(
     v8::Local<v8::Array> array
   , uint32_t index) {
-#if (NODE_MODULE_VERSION >= NODE_6_0_MODULE_VERSION)
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
   v8::EscapableHandleScope scope(isolate);
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
@@ -347,12 +328,6 @@ inline MaybeLocal<v8::Object> CloneElementAt(
     return scope.Escape(v8::Local<v8::Object>());
   }
   return scope.Escape(obj->Clone());
-#else
-  v8::Isolate *isolate = v8::Isolate::GetCurrent();
-  v8::EscapableHandleScope scope(isolate);
-  return scope.Escape(array->CloneElementAt(isolate->GetCurrentContext(), index)
-                          .FromMaybe(v8::Local<v8::Object>()));
-#endif
 }
 
 inline MaybeLocal<v8::Value> Call(

@@ -6,27 +6,18 @@
 
 #include <v8.h>
 #include "nan.h"
-#if 0
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "libc-ext.h"
 
 #include "car-interface-adapter.h"
 #include "car-object.h"
 #include "error.h"
 
-
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
-
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 bool Is(IDataTypeInfo const *dataTypeInfo, Local<Value> value);
@@ -77,7 +68,6 @@ bool CanBeUsedAsInt16(Local<Value> value, int *priority)
 
     return true;
 }
-
 Int16 ToInt16(Local<Value> value)
 {
     return To<int32_t>(value).FromJust();
@@ -424,6 +414,7 @@ bool CanBeUsedAsString(Local<Value> value, int *priority)
 
     return true;
 }
+
 
 void ToString(_ELASTOS String &s, Local<Value> value)
 {
@@ -3207,6 +3198,6 @@ IAspect *AsAspect(Local<Value> value)
     return static_cast<IAspect *>(AsCARObject(value));
 }
 
+
 CAR_BRIDGE_NAMESPACE_END
 
-#endif

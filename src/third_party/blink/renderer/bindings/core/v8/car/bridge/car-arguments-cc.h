@@ -3,15 +3,9 @@
 
 # include <memory>
 # include <new>
-
-# include <node.h>
-
 # include <nan.h>
-
 # include <elastos.h>
-
 # include "macros.h"
-
 # include "error.h"
 # include "weak-external-base.h"
 

@@ -56,8 +56,7 @@ template<typename T, typename M> class Persistent :
   }
 };
 
-#if defined(V8_MAJOR_VERSION) && (V8_MAJOR_VERSION > 4 ||                      \
-  (V8_MAJOR_VERSION == 4 && defined(V8_MINOR_VERSION) && V8_MINOR_VERSION >= 3))
+
 template<typename T>
 class Global : public v8::Global<T> {
  public:
@@ -92,41 +91,5 @@ class Global : public v8::Global<T> {
         parameter, callback, type);
   }
 };
-#else
-template<typename T>
-class Global : public v8::UniquePersistent<T> {
- public:
-  inline Global() : v8::UniquePersistent<T>() {}
-
-  template<typename S> inline Global(v8::Local<S> that) :
-    v8::UniquePersistent<T>(v8::Isolate::GetCurrent(), that) {}
-
-  template<typename S>
-  inline
-  Global(const v8::PersistentBase<S> &that) :  // NOLINT(runtime/explicit)
-      v8::UniquePersistent<S>(v8::Isolate::GetCurrent(), that) {}
-
-  inline void Reset() { v8::PersistentBase<T>::Reset(); }
-
-  template <typename S>
-  inline void Reset(const v8::Local<S> &other) {
-    v8::PersistentBase<T>::Reset(v8::Isolate::GetCurrent(), other);
-  }
-
-  template <typename S>
-  inline void Reset(const v8::PersistentBase<S> &other) {
-    v8::PersistentBase<T>::Reset(v8::Isolate::GetCurrent(), other);
-  }
-
-  template<typename P>
-  inline void SetWeak(
-    P *parameter
-    , typename WeakCallbackInfo<P>::Callback callback
-    , WeakCallbackType type) {
-    reinterpret_cast<Persistent<T>*>(this)->SetWeak(
-        parameter, callback, type);
-  }
-};
-#endif
 
 #endif  // NAN_PERSISTENT_12_INL_H_

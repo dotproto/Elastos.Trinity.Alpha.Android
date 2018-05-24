@@ -19,8 +19,6 @@ class TypedArrayContents {
     size_t length = 0;
     void*  data = NULL;
 
-#if defined(V8_MAJOR_VERSION) && (V8_MAJOR_VERSION > 4 ||                      \
-  (V8_MAJOR_VERSION == 4 && defined(V8_MINOR_VERSION) && V8_MINOR_VERSION >= 3))
 
     if (from->IsArrayBufferView()) {
       v8::Local<v8::ArrayBufferView> array =
@@ -34,29 +32,6 @@ class TypedArrayContents {
       data   = static_cast<char*>(buffer->GetContents().Data()) + byte_offset;
     }
 
-#else
-
-    if (from->IsObject() && !from->IsNull()) {
-      v8::Local<v8::Object> array = v8::Local<v8::Object>::Cast(from);
-
-      MaybeLocal<v8::Value> buffer = Get(array,
-        New<v8::String>("buffer").ToLocalChecked());
-      MaybeLocal<v8::Value> byte_length = Get(array,
-        New<v8::String>("byteLength").ToLocalChecked());
-      MaybeLocal<v8::Value> byte_offset = Get(array,
-        New<v8::String>("byteOffset").ToLocalChecked());
-
-      if (!buffer.IsEmpty() &&
-          !byte_length.IsEmpty() && byte_length.ToLocalChecked()->IsUint32() &&
-          !byte_offset.IsEmpty() && byte_offset.ToLocalChecked()->IsUint32()) {
-        data = array->GetIndexedPropertiesExternalArrayData();
-        if(data) {
-          length = byte_length.ToLocalChecked()->Uint32Value() / sizeof(T);
-        }
-      }
-    }
-
-#endif
 
 #if defined(_MSC_VER) && _MSC_VER >= 1900 || __cplusplus >= 201103L
     assert(reinterpret_cast<uintptr_t>(data) % alignof (T) == 0);

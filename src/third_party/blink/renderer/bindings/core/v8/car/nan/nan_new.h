@@ -18,21 +18,21 @@ template <>
 inline
 v8::Local<v8::Integer>
 To<v8::Integer>(v8::Local<v8::Integer> i) {
-  return NanTo<v8::Integer>(i).ToLocalChecked();
+  return Nan::To<v8::Integer>(i).ToLocalChecked();
 }
 
 template <>
 inline
 v8::Local<v8::Int32>
 To<v8::Int32>(v8::Local<v8::Integer> i) {
-  return NanTo<v8::Int32>(i).ToLocalChecked();
+  return Nan::To<v8::Int32>(i).ToLocalChecked();
 }
 
 template <>
 inline
 v8::Local<v8::Uint32>
 To<v8::Uint32>(v8::Local<v8::Integer> i) {
-  return NanTo<v8::Uint32>(i).ToLocalChecked();
+  return Nan::To<v8::Uint32>(i).ToLocalChecked();
 }
 
 template <typename T> struct FactoryBase {
@@ -173,7 +173,6 @@ struct Factory<v8::StringObject> : FactoryBase<v8::StringObject> {
 
 }  // end of namespace imp
 
-
 namespace imp {
 
 template <>
@@ -186,7 +185,6 @@ struct Factory<v8::UnboundScript> : MaybeFactoryBase<v8::UnboundScript> {
 }  // end of namespace imp
 
 # include "nan_implementation_12_inl.h"
-
 
 //=== API ======================================================================
 
@@ -243,17 +241,11 @@ New( FunctionCallback callback
 }
 
 // Convenience
-
-#if NODE_MODULE_VERSION < IOJS_3_0_MODULE_VERSION
 template <typename T> inline v8::Local<T> New(v8::Handle<T> h);
-#endif
 
-#if NODE_MODULE_VERSION > NODE_0_10_MODULE_VERSION
 template <typename T, typename M>
-    inline v8::Local<T> New(v8::Persistent<T, M> const& p);
-#else
-template <typename T> inline v8::Local<T> New(v8::Persistent<T> const& p);
-#endif
+inline v8::Local<T> New(v8::Persistent<T, M> const& p);
+
 template <typename T, typename M>
 inline v8::Local<T> New(Persistent<T, M> const& p);
 template <typename T>

@@ -3,7 +3,7 @@
 
 # include <cstdarg>
 
-# include <node.h>
+
 
 # include <nan.h>
 

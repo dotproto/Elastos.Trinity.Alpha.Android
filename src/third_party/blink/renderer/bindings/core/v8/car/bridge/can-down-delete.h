@@ -3,8 +3,6 @@
 
 # include "macros.h"
 
-
-
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 class CanDownDelete {

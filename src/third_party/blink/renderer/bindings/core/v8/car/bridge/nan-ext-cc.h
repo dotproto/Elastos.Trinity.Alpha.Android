@@ -1,7 +1,7 @@
 #ifndef __CAR_BRIDGE_NAN_EXT_CC_H
 # define __CAR_BRIDGE_NAN_EXT_CC_H
 
-# include <node.h>
+
 
 # include <nan.h>
 

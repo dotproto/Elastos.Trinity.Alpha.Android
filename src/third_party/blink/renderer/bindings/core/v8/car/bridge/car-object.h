@@ -9,8 +9,6 @@
 # include <memory>
 # include <set>
 
-# include <node.h>
-
 # include <nan.h>
 
 # include <elastos.h>
