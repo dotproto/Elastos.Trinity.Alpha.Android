@@ -268,7 +268,7 @@ public class SystemWebChromeClient extends WebChromeClient {
                 @Override
                 public void onActivityResult(int requestCode, int resultCode, Intent intent) {
                     Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
-                    LOG.d(LOG_TAG, "Receive file chooser URL: " + result);
+                    //LOG.d(LOG_TAG, "Receive file chooser URL: " + result);
                     filePathsCallback.onReceiveValue(result);
                 }
             }, intent, FILECHOOSER_RESULTCODE);

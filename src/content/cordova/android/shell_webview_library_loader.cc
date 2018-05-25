@@ -3,19 +3,16 @@
 // found in the LICENSE file.
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_utils.h"
 #include "base/android/library_loader/library_loader_hooks.h"
 #include "base/bind.h"
 #include "content/public/app/content_jni_onload.h"
 #include "content/public/app/content_main.h"
 #include "content/public/browser/android/compositor.h"
-#include "content/cordova/android/shell_webview_jni_registrar.h"
 #include "content/shell/app/shell_main_delegate.h"
+#include "content/cordova/android/cordova_shell_jni_registration.h"
 
 namespace {
-
-bool RegisterJNI(JNIEnv* env) {
-  return content::android::RegisterShellWebviewJni(env);
-}
 
 bool NativeInit() {
   if (!content::android::OnJNIOnLoadInit())
@@ -32,10 +29,19 @@ bool NativeInit() {
 // This is called by the VM when the shared library is first loaded.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   LOG(ERROR) << "shell_webview_library:JNI_OnLoad";
+
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (!content::android::OnJNIOnLoadRegisterJNI(env) || !RegisterJNI(env) ||
-      !NativeInit()) {
+  if (!RegisterMainDexNatives(env))
+    return -1;
+
+  // Do not register JNI methods in secondary dex for non-browser process.
+  bool is_browser_process =
+      !base::android::IsSelectiveJniRegistrationEnabled(env);
+  if (is_browser_process && !RegisterNonMainDexNatives(env))
+    return -1;
+
+  if (!NativeInit()) {
     return -1;
   }
   return JNI_VERSION_1_4;

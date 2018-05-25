@@ -28,39 +28,44 @@ import org.apache.cordova.ICordovaCookieManager;
 
 class SystemCookieManager implements ICordovaCookieManager {
 
-    protected final WebView webView;
+    protected final WebView mWebView;
     private final CookieManager cookieManager;
 
     //Added because lint can't see the conditional RIGHT ABOVE this
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public SystemCookieManager(WebView webview) {
-        webView = webview;
+    public SystemCookieManager(WebView webView) {
+        mWebView = webView;
         cookieManager = CookieManager.getInstance();
 
         //REALLY? Nobody has seen this UNTIL NOW?
-        cookieManager.setAcceptFileSchemeCookies(true);
+        CookieManager.setAcceptFileSchemeCookies(true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cookieManager.setAcceptThirdPartyCookies(webView, true);
         }
     }
 
+    @Override
     public void setCookiesEnabled(boolean accept) {
         cookieManager.setAcceptCookie(accept);
     }
 
+    @Override
     public void setCookie(final String url, final String value) {
         cookieManager.setCookie(url, value);
     }
 
+    @Override
     public String getCookie(final String url) {
         return cookieManager.getCookie(url);
     }
 
+    @Override
     public void clearCookies() {
         cookieManager.removeAllCookie();
     }
 
+    @Override
     public void flush() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cookieManager.flush();

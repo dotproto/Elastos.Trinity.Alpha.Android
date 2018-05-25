@@ -18,16 +18,24 @@ void ShellWebView::PlatformSetContents() {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())return;
-  Java_ShellWebView_initContentViewCore(env, obj.obj(),
+  Java_ShellWebView_initContentViewCore(env, obj,
                                        web_contents()->GetJavaWebContents());
 }
 
 // Register native methods
-bool ShellWebView::Register(JNIEnv* env) {
+/*bool ShellWebView::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
+}*/
+
+ShellWebView::ShellWebView(){
+
 }
 
-static jlong Init(JNIEnv* env,
+ShellWebView::~ShellWebView(){
+
+}
+
+static jlong JNI_ShellWebView_Init(JNIEnv* env,
                   const JavaParamRef<jclass>& clazz) {
   return reinterpret_cast<intptr_t>(new ShellWebView());
 }

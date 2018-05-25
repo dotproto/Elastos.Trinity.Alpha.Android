@@ -33,7 +33,7 @@ import android.content.Context;
 public class ConfigXmlParser {
     private static String TAG = "ConfigXmlParser";
 
-    private String launchUrl = "file:///android_asset/www/index.html";
+    private String launchUrl = "file:///sdcard/www/index.html";
     //private String launchUrl = "https://sina.cn";
     private CordovaPreferences prefs = new CordovaPreferences();
     private ArrayList<PluginEntry> pluginEntries = new ArrayList<PluginEntry>(20);
@@ -47,8 +47,8 @@ public class ConfigXmlParser {
     }
 
     public String getLaunchUrl() {
-        return "http://wangda.test.bizsov.com";
-        //return launchUrl;
+        //return "http://wangda.test.bizsov.com";
+        return launchUrl;
     }
 
     public void parse(Context action) {

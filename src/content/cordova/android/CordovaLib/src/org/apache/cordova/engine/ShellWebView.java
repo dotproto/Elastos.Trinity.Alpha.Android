@@ -38,9 +38,8 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.browser.ActivityContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentVideoViewEmbedder;
-import org.chromium.content.browser.ContentView;
-import org.chromium.content.browser.ContentViewClient;
-import org.chromium.content.browser.ContentViewCore;
+import org.chromium.components.content_view.ContentView;
+import org.chromium.content.browser.ContentViewCoreImpl;
 import org.chromium.content.browser.ContentViewRenderView;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -50,13 +49,10 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.MemoryPressureListener;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.DeviceUtils;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.WebContents;
@@ -64,9 +60,11 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import android.content.Intent;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import org.chromium.content_public.browser.ContentViewCore;
 
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.content_public.browser.JavaScriptCallback;
+import org.chromium.content_public.browser.JavascriptInjector;
 
 @JNINamespace("content")
 class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.EngineView {
@@ -74,14 +72,15 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
 
     private static final int WARN = 1;
 
-    private ContentViewCore mContentViewCore;
+    private static final boolean useAsync = true;
+
+    private ContentViewCoreImpl mContentViewCore;
     private WebContents mWebContents;
     private NavigationController mNavigationController;
-    private final ContentViewClient mContentViewClient = new ContentViewClient();
     private ActivityWindowAndroid mWindowAndroid;
     private ContentViewRenderView mContentViewRenderView;
     private ContentView mContentView;
-    private ShellViewAndroidDelegate mViewAndroidDelegate;
+    private ViewAndroidDelegate mViewAndroidDelegate;
 
     private FrameLayout mContentViewHolder;
     private long mNativeShellWebView;
@@ -89,6 +88,8 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
     private boolean finishInitialized = false;
 
     private String pendingUrl;
+
+    private JavascriptInjector mJavascriptInjector;
 
     public ShellWebView(Context context) {
         this(context, null);
@@ -98,11 +99,15 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
         return mContentViewHolder;
     }
 
+    public ViewGroup getContentView() {
+        ViewAndroidDelegate viewDelegate = mWebContents.getViewAndroidDelegate();
+        return viewDelegate != null ? viewDelegate.getContainerView() : null;
+    }
+
     public ShellWebView(Context context, AttributeSet attrs) {
         super(context, attrs);
         mContentViewHolder = new FrameLayout(context);
-        mContentViewCore = new ContentViewCore(context, "");
-        mContentView = ContentView.createContentView(getContext(), mContentViewCore);
+
         mNativeShellWebView = nativeInit();
         nativeSetJavaPeer(mNativeShellWebView, this);
         initView();
@@ -111,6 +116,14 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
     @Override
     public CordovaWebView getCordovaWebView() {
         return null;
+    }
+
+
+    private JavascriptInjector getJavascriptInjector() {
+        if (mJavascriptInjector == null) {
+            mJavascriptInjector = JavascriptInjector.fromWebContents(mWebContents);
+        }
+        return mJavascriptInjector;
     }
 
     public void initView() {
@@ -141,6 +154,18 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
 
     private void startup(){
         Log.e(TAG, "startup");
+        if (!useAsync){
+            try{
+                BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                        .startBrowserProcessesSync(false);
+                finishInitialization();
+                return;
+            } catch (ProcessInitException e) {
+                Log.e(TAG, "Unable to load native library.", e);
+                System.exit(-1);
+            }
+        }
+
         try {
             BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesAsync(
@@ -176,69 +201,23 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
         }
         Log.e(TAG, "loadUrl:" + url);
         mNavigationController.loadUrl(new LoadUrlParams(sanitizeUrl(url)));
-        mContentViewCore.getContainerView().clearFocus();
-        mContentViewCore.getContainerView().requestFocus();
+        getContentView().clearFocus();
+        getContentView().requestFocus();
     }
 
-    public class ShellViewAndroidDelegate extends ViewAndroidDelegate {
-        private final ViewGroup mContainerView;
-
-        public ShellViewAndroidDelegate(ViewGroup containerView) {
-            mContainerView = containerView;
-        }
-
-        @Override
-        public void startContentIntent(Intent intent, String intentUrl, boolean isMainFrame) {
-
-        }
-
-        @Override
-        public ViewGroup getContainerView() {
-            return mContainerView;
-        }
-    }
-
-    private ActionMode.Callback defaultActionCallback() {
-        final ActionModeCallbackHelper helper =
-                mContentViewCore.getActionModeCallbackHelper();
-
-        return new ActionMode.Callback() {
-            @Override
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                helper.onCreateActionMode(mode, menu);
-                return true;
-            }
-
-            @Override
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return helper.onPrepareActionMode(mode, menu);
-            }
-
-            @Override
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return helper.onActionItemClicked(mode, item);
-            }
-
-            @Override
-            public void onDestroyActionMode(ActionMode mode) {
-                helper.onDestroyActionMode();
-            }
-        };
-    }
 
     @CalledByNative
     private void initContentViewCore(WebContents webContents) {
-        Log.e(TAG, "initContentViewCore from native");
+        Log.e(TAG, "initContentViewCore from native:" + webContents);
         finishInitialized = true;
         Context context = getContext();
-        mViewAndroidDelegate = new ShellViewAndroidDelegate(mContentView);
-        mContentViewCore.initialize(mViewAndroidDelegate, mContentView, webContents, mWindowAndroid);
-        mContentViewCore.setActionModeCallback(defaultActionCallback());
-        mContentViewCore.setContentViewClient(mContentViewClient);
-        mWebContents = mContentViewCore.getWebContents();
+        mContentView = ContentView.createContentView(context, webContents);
+        mViewAndroidDelegate = ViewAndroidDelegate.createBasicDelegate(mContentView);
+        mContentViewCore = (ContentViewCoreImpl) ContentViewCore.create(
+                context, "", webContents, mViewAndroidDelegate, mContentView, mWindowAndroid);
+        mWebContents = webContents;
         mNavigationController = mWebContents.getNavigationController();
-        if (getParent() != null) mContentViewCore.onShow();
-
+        if (getParent() != null) mWebContents.onShow();
         mContentViewHolder.addView(mContentViewRenderView,
                     new FrameLayout.LayoutParams(
                             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -249,12 +228,12 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
         mContentView.requestFocus();
-        mContentViewRenderView.setCurrentContentViewCore(mContentViewCore);
+        mContentViewRenderView.setCurrentWebContents(mWebContents);
     }
 
     public String getUrl(){
         if (isDestroyed(WARN)) return null;
-        String url =  mWebContents.getUrl();
+        String url =  mWebContents.getVisibleUrl();
         if (url == null || url.trim().isEmpty()) return null;
         return url;
     }
@@ -299,7 +278,11 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
     }
 
     public void addJavascriptInterface(final Object obj, final String interfaceName){
-        mContentViewCore.addPossiblyUnsafeJavascriptInterface(obj, interfaceName, null);
+        if (finishInitialized){
+            getJavascriptInjector().addPossiblyUnsafeInterface(obj, interfaceName, null);
+        }else{
+
+        }
     }
 
     public void destroy(){

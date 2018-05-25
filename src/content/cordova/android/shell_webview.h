@@ -24,26 +24,30 @@ namespace content {
 
 class ShellWebView{
 public:
+  ShellWebView();
+  ~ShellWebView();
 
 	WebContents* web_contents() const { return web_contents_.get(); }
 
-	void SetWebContents(WebContents* web_contents){web_contents_.reset(web_contents);}
+	void SetWebContents(std::unique_ptr<WebContents> web_contents){
+    web_contents_.reset(std::move(web_contents.get()));
+  }
 
-
-    static bool Register(JNIEnv* env);
+  //  static bool Register(JNIEnv* env);
 
 	void PlatformSetContents();
 
-    void SetJavaPeer(JNIEnv* env,
+  void SetJavaPeer(JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& shell_webview);
 
-    void CreateWebContent(JNIEnv* env,
+  void CreateWebContent(JNIEnv* env,
                  const JavaParamRef<jobject>& obj);
 
 private:
     std::unique_ptr<WebContents> web_contents_;
     JavaObjectWeakGlobalRef java_ref_;
+    //base::android::ScopedJavaGlobalRef<jobject> java_object_;
 
 };
 

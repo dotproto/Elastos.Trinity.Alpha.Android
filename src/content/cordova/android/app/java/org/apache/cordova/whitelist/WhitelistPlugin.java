@@ -118,7 +118,7 @@ public class WhitelistPlugin extends CordovaPlugin {
 
     @Override
     public Boolean shouldAllowRequest(String url) {
-        if (Boolean.TRUE == shouldAllowNavigation(url)) {
+        if (Boolean.TRUE.equals(shouldAllowNavigation(url))) {
             return true;
         }
         if (allowedRequests.isUrlWhiteListed(url)) {

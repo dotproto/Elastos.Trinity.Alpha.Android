@@ -29,6 +29,7 @@ public class ResumeCallback extends CallbackContext {
     private final String TAG = "CordovaResumeCallback";
     private String serviceName;
     private PluginManager pluginManager;
+    private final Object mLock = new Object();
 
     public ResumeCallback(String serviceName, PluginManager pluginManager) {
         super("resumecallback", null);
@@ -38,7 +39,7 @@ public class ResumeCallback extends CallbackContext {
 
     @Override
     public void sendPluginResult(PluginResult pluginResult) {
-        synchronized (this) {
+        synchronized (mLock) {
             if (finished) {
                 LOG.w(TAG, serviceName + " attempted to send a second callback to ResumeCallback\nResult was: " + pluginResult.getMessage());
                 return;

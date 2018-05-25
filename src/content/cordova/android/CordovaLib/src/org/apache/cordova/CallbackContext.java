@@ -50,14 +50,14 @@ public class CallbackContext {
     }
 
     public void sendPluginResult(PluginResult pluginResult) {
-        synchronized (this) {
+        //synchronized (this) {
             if (finished) {
                 LOG.w(LOG_TAG, "Attempted to send a second callback for ID: " + callbackId + "\nResult was: " + pluginResult.getMessage());
                 return;
             } else {
                 finished = !pluginResult.getKeepCallback();
             }
-        }
+        //}
         webView.sendPluginResult(pluginResult, callbackId);
     }
 
