@@ -27,7 +27,7 @@ _CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo *carArrayInfo, _ELASTOS
 }
 
 template<class _CalleeAllocStruct>
-_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo *structInfo, void **struct_)
+_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo const* structInfo, void **struct_)
 {
     ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
     if (_struct == nullptr)

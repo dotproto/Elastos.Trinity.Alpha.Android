@@ -2,9 +2,7 @@
 # define __CAR_BRIDGE_CAR_CONSTANT_H
 
 # include <nan.h>
-
 # include <elastos.h>
-
 # include "macros.h"
 
 

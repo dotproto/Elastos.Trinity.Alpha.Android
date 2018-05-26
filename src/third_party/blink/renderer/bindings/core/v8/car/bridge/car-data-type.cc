@@ -3,9 +3,6 @@
 #include <map>
 #include <vector>
 
-#include <nan.h>
-#include <elastos.h>
-#include "macros.h"
 #include "nan-ext.h"
 #include "car-constantoid.h"
 #include "car-data-type.h"

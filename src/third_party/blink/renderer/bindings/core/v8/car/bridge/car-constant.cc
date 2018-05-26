@@ -1,9 +1,6 @@
 
 #include <map>
 #include <nan.h>
-#include <elastos.h>
-#include "macros.h"
-#include "nan-ext.h"
 #include "car-constantoid.h"
 
 using namespace std;
@@ -22,19 +19,19 @@ static map<AutoPtr<IConstantInfo >, CopyablePersistent<NumberObject>> _mapConsta
 
 #pragma clang diagnostic pop
 
-Local<NumberObject> CARant(IConstantInfo   * antInfo)
+Local<NumberObject> CARConstant(IConstantInfo * constantInfo)
 {
-    Local<NumberObject> ant;
+    Local<NumberObject> constant;
 
-    auto &_ant = _mapConstantInfoToCARConstant[antInfo];
-    if (!_ant.IsEmpty())
-        return New(_ant);
+    auto &_constant = _mapConstantInfoToCARConstant[constantInfo];
+    if (!_constant.IsEmpty())
+        return New(_constant);
 
-    ant = CARConstantoid(antInfo, "CARant");
+    constant = CARConstantoid(constantInfo, "CARConstant");
 
-    _ant.Reset(ant);
+    _constant.Reset(constant);
 
-    return ant;
+    return constant;
 }
 
 CAR_BRIDGE_NAMESPACE_END

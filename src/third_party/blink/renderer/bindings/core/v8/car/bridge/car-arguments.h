@@ -40,7 +40,7 @@ protected:
 };
 
 template<class _CalleeAllocStruct = struct CalleeAllocStruct>
-_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo *structInfo, void **struct_);
+_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo * structInfo, void **struct_);
 
 struct CallerAllocInt16: CARArgumentBase {
     _ELASTOS Int16 *i16 = nullptr;
