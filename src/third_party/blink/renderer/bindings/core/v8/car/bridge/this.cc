@@ -1,6 +1,3 @@
-
-#include <node.h>
-
 #include <nan.h>
 
 #include "macros.h"
@@ -13,9 +10,7 @@
 #include "parse-uri.h"
 #include "require.h"
 
-
-
-using namespace node;
+#if 0
 
 using namespace Nan;
 
@@ -70,3 +65,4 @@ NODE_MODULE(CARBridge, Initialize);
 
 CAR_BRIDGE_NAMESPACE_END
 
+#endif

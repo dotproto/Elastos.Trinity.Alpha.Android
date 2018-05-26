@@ -5,37 +5,30 @@
 #include <map>
 #include <string>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
 
 #include "car-data-type.h"
 #include "error.h"
 #include "js-2-car.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static map<AutoPtr<IFunctionInfo const>, CopyablePersistent<Object>> _mapFunctionInfoToCARFunction;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+static map<AutoPtr<IFunctionInfo>, CopyablePersistent<Object>> _mapFunctionInfoToCARFunction;
+#pragma clang diagnostic pop
 
-static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const *what)
+static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -49,7 +42,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
     _ELASTOS Int32 nParams;
 
-    AutoPtr<ArrayOf<IParamInfo const *> > paramInfos;
+    AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
 
     auto &_function = _mapFunctionInfoToCARFunction[functionInfo];
     if (!_function.IsEmpty())
@@ -64,7 +57,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
     ec = functionInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(function,
             New("$name").ToLocalChecked(),
@@ -74,7 +67,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 #if 0
     ec = functionInfo->GetAnnotation(&annotation);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(function,
             New("$annotation").ToLocalChecked(),
@@ -84,20 +77,20 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 #endif
     ec = functionInfo->GetParamCount(&nParams);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    paramInfos = ArrayOf<IParamInfo const *>::Alloc(nParams);
+    paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = functionInfo->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nParams; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IParamInfo const *paramInfo;
+        IParamInfo *paramInfo;
 
         Local<Object> param;
 
@@ -106,11 +99,11 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
         _ELASTOS Int32 index;
 
         ParamIOAttribute io;
-        char const *_io;
+        const char *_io;
 
         _ELASTOS Boolean isReturnValue;
 
-        AutoPtr<IDataTypeInfo const> typeInfo;
+        AutoPtr<IDataTypeInfo> typeInfo;
         IDataTypeInfo *_typeInfo;
 
         paramInfo = (*paramInfos)[i];
@@ -124,7 +117,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
         ec = paramInfo->GetName(&paramName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$name").ToLocalChecked(),
@@ -133,7 +126,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
         ec = paramInfo->GetIndex(&index);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$index").ToLocalChecked(),
@@ -142,7 +135,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
         ec = paramInfo->GetIOAttribute(&io);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         if (io == ParamIOAttribute_In)
             _io = "Input";
@@ -160,7 +153,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
         ec = paramInfo->IsReturnValue(&isReturnValue);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$isReturnValue").ToLocalChecked(),
@@ -169,7 +162,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
 
         ec = paramInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         typeInfo = _typeInfo, _typeInfo->Release();
 
@@ -193,7 +186,7 @@ static Local<Object> _CARFunction(IFunctionInfo const *functionInfo, char const 
     return scope.Escape(function);
 }
 
-static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo const *functionInfos[], char const *what)
+static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *functionInfos[], const char *what)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -204,24 +197,24 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo const *fu
     Local<Object> functionCandidates;
 
     if (nFunctionInfos == 0)
-        throw Error(Error::INVALID_ARGUMENT, "");
+        LOG(Error::INVALID_ARGUMENT, 0);
 
     if (nFunctionInfos == 1)
         return _CARFunction(functionInfos[0], what);
 
     ec = functionInfos[0]->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (size_t i = 1; i < nFunctionInfos; ++i) {
         _ELASTOS String _name;
 
         ec = functionInfos[i]->GetName(&_name);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         if (_name != name)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
     }
 
     functionCandidates = New<Object>();
@@ -245,37 +238,37 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo const *fu
     return scope.Escape(functionCandidates);
 }
 
-Local<Object> CARConstructor(IConstructorInfo const *constructorInfo)
+Local<Object> CARConstructor(IConstructorInfo *constructorInfo)
 {
-    return _CARFunction(static_cast<IFunctionInfo const *>(constructorInfo), "CARConstructor");
+    return _CARFunction(static_cast<IFunctionInfo *>(constructorInfo), "CARConstructor");
 }
 
-Local<Object> CARConstructor(size_t nConstructorInfos, IConstructorInfo const *constructorInfos[])
+Local<Object> CARConstructor(size_t nConstructorInfos, IConstructorInfo *constructorInfos[])
 {
     return _CARFunction(
-            nConstructorInfos, reinterpret_cast<IFunctionInfo const **>(constructorInfos),
+            nConstructorInfos, reinterpret_cast<IFunctionInfo **>(constructorInfos),
             "CARConstructor");
 }
 
-Local<Object> CARMethod(IMethodInfo const *methodInfo)
+Local<Object> CARMethod(IMethodInfo *methodInfo)
 {
-    return _CARFunction(static_cast<IFunctionInfo const *>(methodInfo), "CARMethod");
+    return _CARFunction(static_cast<IFunctionInfo *>(methodInfo), "CARMethod");
 }
 
-Local<Object> CARMethod(size_t nMethodInfos, IMethodInfo const *methodInfos[])
+Local<Object> CARMethod(size_t nMethodInfos, IMethodInfo *methodInfos[])
 {
-    return _CARFunction(nMethodInfos, reinterpret_cast<IFunctionInfo const **>(methodInfos), "CARMethod");
+    return _CARFunction(nMethodInfos, reinterpret_cast<IFunctionInfo **>(methodInfos), "CARMethod");
 }
 
-Local<Object> CARCallbackMethod(ICallbackMethodInfo const *callbackMethodInfo)
+Local<Object> CARCallbackMethod(ICallbackMethodInfo *callbackMethodInfo)
 {
-    return _CARFunction(static_cast<IFunctionInfo const *>(callbackMethodInfo), "CARCallbackMethod");
+    return _CARFunction(static_cast<IFunctionInfo *>(callbackMethodInfo), "CARCallbackMethod");
 }
 
-Local<Object> CARCallbackMethod(size_t nCallbackMethodInfos, ICallbackMethodInfo const *callbackMethodInfos[])
+Local<Object> CARCallbackMethod(size_t nCallbackMethodInfos, ICallbackMethodInfo const * callbackMethodInfos[])
 {
     return _CARFunction(
-            nCallbackMethodInfos, reinterpret_cast<IFunctionInfo const **>(callbackMethodInfos),
+            nCallbackMethodInfos, reinterpret_cast<IFunctionInfo **>(const_cast<ICallbackMethodInfo**>(callbackMethodInfos)),
             "CARCallbackMethod");
 }
 

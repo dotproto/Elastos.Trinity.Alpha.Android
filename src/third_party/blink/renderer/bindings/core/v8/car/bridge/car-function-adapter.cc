@@ -5,7 +5,6 @@
 #include <memory>
 #include <new>
 
-#include <node.h>
 
 #include <nan.h>
 
@@ -27,7 +26,7 @@
 
 using namespace std;
 
-using namespace node;
+#if 0
 
 using namespace Nan;
 
@@ -2486,3 +2485,4 @@ ECode CARFunctionAdapter::Call(va_list ap) noexcept
 
 CAR_BRIDGE_NAMESPACE_END
 
+#endif //0

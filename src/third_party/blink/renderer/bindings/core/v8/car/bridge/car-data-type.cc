@@ -1,43 +1,33 @@
-
 #include <cstddef>
 #include <cstdlib>
-
 #include <map>
 #include <vector>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
-
 #include "car-constantoid.h"
 #include "car-data-type.h"
 #include "car-function.h"
 #include "error.h"
 #include "js-2-car.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static map<AutoPtr<IDataTypeInfo const>, CopyablePersistent<Object>> _mapIntrinsicTypeInfoToCARIntrinsicType;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
 
-static Local<Object> _CARIntrinsicType(IDataTypeInfo const *intrinsicTypeInfo)
+static map<AutoPtr<IDataTypeInfo >, CopyablePersistent<Object>> _mapIntrinsicTypeInfoToCARIntrinsicType;
+
+static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -51,7 +41,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo const *intrinsicTypeInfo)
 
     ec = intrinsicTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -69,7 +59,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo const *intrinsicTypeInfo)
         break;
 
     default:
-        throw Error(Error::INVALID_ARGUMENT, "");
+        LOG(Error::INVALID_ARGUMENT, 0);
     }
 
     auto &_intrinsicType = _mapIntrinsicTypeInfoToCARIntrinsicType[intrinsicTypeInfo];
@@ -85,7 +75,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo const *intrinsicTypeInfo)
 
     ec = intrinsicTypeInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(intrinsicType,
             New("$name").ToLocalChecked(),
@@ -97,11 +87,11 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo const *intrinsicTypeInfo)
     return scope.Escape(intrinsicType);
 }
 
-Local<Object> CARDataType(IDataTypeInfo const *dataTypeInfo);
+Local<Object> CARDataType(IDataTypeInfo  *dataTypeInfo);
 
-static map<AutoPtr<ILocalPtrInfo const>, CopyablePersistent<Object>> _mapLocalPtrInfoToCARLocalPtr;
+static map<AutoPtr<ILocalPtrInfo >, CopyablePersistent<Object>> _mapLocalPtrInfoToCARLocalPtr;
 
-Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
+Local<Object> CARLocalPtr(ILocalPtrInfo  *localPtrInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -111,7 +101,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
 
     _ELASTOS String name;
 
-    AutoPtr<IDataTypeInfo const> targetTypeInfo;
+    AutoPtr<IDataTypeInfo > targetTypeInfo;
     IDataTypeInfo *_targetTypeInfo;
 
     _ELASTOS Int32 level;
@@ -129,7 +119,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
 
     ec = localPtrInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localPtr,
             New("$name").ToLocalChecked(),
@@ -138,7 +128,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
 
     ec = localPtrInfo->GetTargetTypeInfo(&_targetTypeInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     targetTypeInfo = _targetTypeInfo, _targetTypeInfo->Release();
 
@@ -149,7 +139,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
 
     ec = localPtrInfo->GetPtrLevel(&level);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localPtr,
             New("level").ToLocalChecked(),
@@ -161,9 +151,9 @@ Local<Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo)
     return scope.Escape(localPtr);
 }
 
-static map<AutoPtr<IDataTypeInfo const>, CopyablePersistent<Object>> _mapLocalTypeInfoToCARLocalType;
+static map<AutoPtr<IDataTypeInfo >, CopyablePersistent<Object>> _mapLocalTypeInfoToCARLocalType;
 
-Local<Object> CARLocalType(IDataTypeInfo const *localTypeInfo)
+Local<Object> CARLocalType(IDataTypeInfo  *localTypeInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -186,7 +176,7 @@ Local<Object> CARLocalType(IDataTypeInfo const *localTypeInfo)
 
     ec = localTypeInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localTypeObject,
             New("$name").ToLocalChecked(),
@@ -198,9 +188,9 @@ Local<Object> CARLocalType(IDataTypeInfo const *localTypeInfo)
     return scope.Escape(localTypeObject);
 }
 
-static map<AutoPtr<IEnumInfo const>, CopyablePersistent<Object>> _mapEnumInfoToCAREnum;
+static map<AutoPtr<IEnumInfo >, CopyablePersistent<Object>> _mapEnumInfoToCAREnum;
 
-Local<Object> CAREnum(IEnumInfo const *enumInfo)
+Local<Object> CAREnum(IEnumInfo  *enumInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -216,7 +206,7 @@ Local<Object> CAREnum(IEnumInfo const *enumInfo)
 
     _ELASTOS Int32 nItems;
 
-    AutoPtr<ArrayOf<IEnumItemInfo const *> > itemInfos;
+    AutoPtr<ArrayOf<IEnumItemInfo  *> > itemInfos;
 
     auto &_enum = _mapEnumInfoToCAREnum[enumInfo];
     if (!_enum.IsEmpty())
@@ -231,7 +221,7 @@ Local<Object> CAREnum(IEnumInfo const *enumInfo)
 
     ec = enumInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     _namespace = ToValue(namespace_);
 
@@ -242,7 +232,7 @@ Local<Object> CAREnum(IEnumInfo const *enumInfo)
 
     ec = enumInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(enum_,
             New("$name").ToLocalChecked(),
@@ -251,41 +241,41 @@ Local<Object> CAREnum(IEnumInfo const *enumInfo)
 
     ec = enumInfo->GetItemCount(&nItems);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    itemInfos = ArrayOf<IEnumItemInfo const *>::Alloc(nItems);
+    itemInfos = ArrayOf<IEnumItemInfo  *>::Alloc(nItems);
     if (itemInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = enumInfo->GetAllItemInfos(reinterpret_cast<ArrayOf<IEnumItemInfo *> *>(itemInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nItems; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IEnumItemInfo const *itemInfo;
+        IEnumItemInfo  *itemInfo;
 
-        Local<NumberObject> constantoid;
+        Local<NumberObject> antoid;
 
         _ELASTOS String itemName;
 
         itemInfo = (*itemInfos)[i];
 
-        constantoid = CARConstantoid(itemInfo, "CAREnumItem");
+        antoid = CARConstantoid(itemInfo, "CAREnumItem");
 
-        DefineOwnProperty(constantoid,
+        DefineOwnProperty(antoid,
                 New("$namespace").ToLocalChecked(),
                 _namespace,
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
 
         ec = itemInfo->GetName(&itemName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(enum_,
                 ToValue(itemName).As<::v8::String>(),
-                constantoid,
+                antoid,
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
     }
 
@@ -295,7 +285,7 @@ Local<Object> CAREnum(IEnumInfo const *enumInfo)
 }
 
 template<class ArrayInfo>
-Local<Object> _Array(ArrayInfo const *arrayInfo)
+Local<Object> _Array(ArrayInfo  *arrayInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -305,7 +295,7 @@ Local<Object> _Array(ArrayInfo const *arrayInfo)
 
     _ELASTOS String name;
 
-    AutoPtr<IDataTypeInfo const> elementTypeInfo;
+    AutoPtr<IDataTypeInfo > elementTypeInfo;
     IDataTypeInfo *_elementTypeInfo;
 
     array = New<Object>();
@@ -317,7 +307,7 @@ Local<Object> _Array(ArrayInfo const *arrayInfo)
 
     ec = arrayInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(array,
             New("$name").ToLocalChecked(),
@@ -326,7 +316,7 @@ Local<Object> _Array(ArrayInfo const *arrayInfo)
 
     ec = arrayInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
 
@@ -338,9 +328,9 @@ Local<Object> _Array(ArrayInfo const *arrayInfo)
     return scope.Escape(array);
 }
 
-static map<AutoPtr<ICarArrayInfo const>, CopyablePersistent<Object>> _mapCARArrayInfoToCARArray;
+static map<AutoPtr<ICarArrayInfo >, CopyablePersistent<Object>> _mapCARArrayInfoToCARArray;
 
-Local<Object> CARArray(ICarArrayInfo const *carArrayInfo)
+Local<Object> CARArray(ICarArrayInfo  *carArrayInfo)
 {
     Local<Object> carArray;
 
@@ -355,9 +345,9 @@ Local<Object> CARArray(ICarArrayInfo const *carArrayInfo)
     return carArray;
 }
 
-static map<AutoPtr<ICppVectorInfo const>, CopyablePersistent<Object>> _mapCPPVectorInfoToCARCPPVector;
+static map<AutoPtr<ICppVectorInfo >, CopyablePersistent<Object>> _mapCPPVectorInfoToCARCPPVector;
 
-Local<Object> CARCPPVector(ICppVectorInfo const *cppVectorInfo)
+Local<Object> CARCPPVector(ICppVectorInfo  *cppVectorInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -375,7 +365,7 @@ Local<Object> CARCPPVector(ICppVectorInfo const *cppVectorInfo)
 
     ec = cppVectorInfo->GetLength(&length);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(cppVector,
             New("length").ToLocalChecked(),
@@ -387,9 +377,9 @@ Local<Object> CARCPPVector(ICppVectorInfo const *cppVectorInfo)
     return scope.Escape(cppVector);
 }
 
-static map<AutoPtr<IStructInfo const>, CopyablePersistent<Object>> _mapStructInfoToCARStruct;
+static map<AutoPtr<IStructInfo >, CopyablePersistent<Object>> _mapStructInfoToCARStruct;
 
-Local<Object> CARStruct(IStructInfo const *structInfo)
+Local<Object> CARStruct(IStructInfo  *structInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -401,7 +391,7 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
 
     _ELASTOS Int32 nFieldInfos;
 
-    AutoPtr<ArrayOf<IFieldInfo const *> > fieldInfos;
+    AutoPtr<ArrayOf<IFieldInfo  *> > fieldInfos;
 
     auto &_struct = _mapStructInfoToCARStruct[structInfo];
     if (!_struct.IsEmpty())
@@ -416,7 +406,7 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
 
     ec = structInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(struct_,
             New("$name").ToLocalChecked(),
@@ -425,26 +415,26 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
 
     ec = structInfo->GetFieldCount(&nFieldInfos);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    fieldInfos = ArrayOf<IFieldInfo const *>::Alloc(nFieldInfos);
+    fieldInfos = ArrayOf<IFieldInfo  *>::Alloc(nFieldInfos);
     if (fieldInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = structInfo->GetAllFieldInfos(reinterpret_cast<ArrayOf<IFieldInfo *> *>(fieldInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nFieldInfos; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IFieldInfo const *fieldInfo;
+        IFieldInfo  *fieldInfo;
 
         Local<Object> field;
 
         _ELASTOS String fieldName;
 
-        AutoPtr<IDataTypeInfo const> typeInfo;
+        AutoPtr<IDataTypeInfo > typeInfo;
         IDataTypeInfo *_typeInfo;
 
         fieldInfo = (*fieldInfos)[i];
@@ -458,7 +448,7 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
 
         ec = fieldInfo->GetName(&fieldName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(field,
                 New("$name").ToLocalChecked(),
@@ -467,7 +457,7 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
 
         ec = fieldInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         typeInfo = _typeInfo, _typeInfo->Release();
 
@@ -487,9 +477,9 @@ Local<Object> CARStruct(IStructInfo const *structInfo)
     return scope.Escape(struct_);
 }
 
-typedef Local<Object> (*NewMethod)(size_t nMethodInfos, IFunctionInfo const *methodInfos[]);
+typedef Local<Object> (*NewMethod)(size_t nMethodInfos, IFunctionInfo  *methodInfos[]);
 
-static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char const *what, NewMethod newMethod)
+static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *what, NewMethod newMethod)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -509,9 +499,9 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     _ELASTOS Int32 nMethods;
 
-    AutoPtr<ArrayOf<IFunctionInfo const *> > methodInfos;
+    AutoPtr<ArrayOf<IFunctionInfo  *> > methodInfos;
 
-    map<_ELASTOS String, vector<IFunctionInfo const *>> mapNameToMethodInfos;
+    map<_ELASTOS String, vector<IFunctionInfo  *>> mapNameToMethodInfos;
 
     interface_ = New<Object>();
 
@@ -522,7 +512,7 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$namespace").ToLocalChecked(),
@@ -531,7 +521,7 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$name").ToLocalChecked(),
@@ -540,7 +530,7 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->GetId(&id);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$id").ToLocalChecked(),
@@ -549,7 +539,7 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->IsLocal(&local);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$local").ToLocalChecked(),
@@ -558,15 +548,15 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->HasBase(&hasBase);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasBase != FALSE) {
-        AutoPtr<IInterfaceInfo const> baseInfo;
+        AutoPtr<IInterfaceInfo > baseInfo;
         IInterfaceInfo *_baseInfo;
 
         ec = interfaceInfo->GetBaseInfo(&_baseInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         baseInfo = _baseInfo, _baseInfo->Release();
 
@@ -578,18 +568,18 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    methodInfos = ArrayOf<IFunctionInfo const *>::Alloc(nMethods);
+    methodInfos = ArrayOf<IFunctionInfo  *>::Alloc(nMethods);
     if (methodInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nMethods; ++i) {
-        IFunctionInfo const *methodInfo;
+        IFunctionInfo  *methodInfo;
 
         _ELASTOS String methodName;
 
@@ -597,13 +587,13 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
 
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         mapNameToMethodInfos[methodName].push_back(methodInfo);
     }
 
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
         DefineOwnProperty(interface_,
                 ToValue(it->first).As<::v8::String>(),
@@ -614,14 +604,14 @@ static Local<Object> _CARInterface(IInterfaceInfo const *interfaceInfo, char con
     return scope.Escape(interface_);
 }
 
-inline Local<Object> _CARMethod(size_t nMethodInfos, IFunctionInfo const *methodInfos[])
+inline Local<Object> _CARMethod(size_t nMethodInfos, IFunctionInfo  *methodInfos[])
 {
-    return CARMethod(nMethodInfos, reinterpret_cast<IMethodInfo const **>(methodInfos));
+    return CARMethod(nMethodInfos, reinterpret_cast<IMethodInfo **>(methodInfos));
 }
 
-static map<AutoPtr<IInterfaceInfo const>, CopyablePersistent<Object>> _mapInterfaceInfoToCARInterface;
+static map<AutoPtr<IInterfaceInfo >, CopyablePersistent<Object>> _mapInterfaceInfoToCARInterface;
 
-Local<Object> CARInterface(IInterfaceInfo const *interfaceInfo)
+Local<Object> CARInterface(IInterfaceInfo  *interfaceInfo)
 {
     Local<Object> interface_;
 
@@ -636,17 +626,17 @@ Local<Object> CARInterface(IInterfaceInfo const *interfaceInfo)
     return interface_;
 }
 
-inline Local<Object> _CARCallbackMethod(size_t nCallbackMethodInfos, IFunctionInfo const *callbackMethodInfos[])
+inline Local<Object> _CARCallbackMethod(size_t nCallbackMethodInfos, IFunctionInfo  *callbackMethodInfos[])
 {
     return CARCallbackMethod(
-            nCallbackMethodInfos, reinterpret_cast<ICallbackMethodInfo const **>(callbackMethodInfos));
+            nCallbackMethodInfos, reinterpret_cast<ICallbackMethodInfo  **>(callbackMethodInfos));
 }
 
 static
-map<AutoPtr<ICallbackInterfaceInfo const>, CopyablePersistent<Object>>
+map<AutoPtr<ICallbackInterfaceInfo >, CopyablePersistent<Object>>
 _mapCallbackInterfaceInfoToCARCallbackInterface;
 
-Local<Object> CARCallbackInterface(ICallbackInterfaceInfo const *callbackInterfaceInfo)
+Local<Object> CARCallbackInterface(ICallbackInterfaceInfo  *callbackInterfaceInfo)
 {
     Local<Object> callbackInterface;
 
@@ -661,7 +651,7 @@ Local<Object> CARCallbackInterface(ICallbackInterfaceInfo const *callbackInterfa
     return callbackInterface;
 }
 
-Local<Object> CARDataType(IDataTypeInfo const *dataTypeInfo)
+Local<Object> CARDataType(IDataTypeInfo  *dataTypeInfo)
 {
     ECode ec;
 
@@ -669,7 +659,7 @@ Local<Object> CARDataType(IDataTypeInfo const *dataTypeInfo)
 
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -687,30 +677,33 @@ Local<Object> CARDataType(IDataTypeInfo const *dataTypeInfo)
         return _CARIntrinsicType(dataTypeInfo);
 
     case CarDataType_LocalPtr:
-        return CARLocalPtr(static_cast<ILocalPtrInfo const *>(dataTypeInfo));
+        return CARLocalPtr(static_cast<ILocalPtrInfo  *>(dataTypeInfo));
 
     case CarDataType_LocalType:
         return CARLocalType(dataTypeInfo);
 
     case CarDataType_Enum:
-        return CAREnum(static_cast<IEnumInfo const *>(dataTypeInfo));
+        return CAREnum(static_cast<IEnumInfo  *>(dataTypeInfo));
 
     case CarDataType_ArrayOf:
-        return CARArray(static_cast<ICarArrayInfo const *>(dataTypeInfo));
+        return CARArray(static_cast<ICarArrayInfo  *>(dataTypeInfo));
 
     case CarDataType_CppVector:
-        return CARCPPVector(static_cast<ICppVectorInfo const *>(dataTypeInfo));
+        return CARCPPVector(static_cast<ICppVectorInfo  *>(dataTypeInfo));
 
     case CarDataType_Struct:
-        return CARStruct(static_cast<IStructInfo const *>(dataTypeInfo));
+        return CARStruct(static_cast<IStructInfo  *>(dataTypeInfo));
 
     case CarDataType_Interface:
-        return CARInterface(static_cast<IInterfaceInfo const *>(dataTypeInfo));
+        return CARInterface(static_cast<IInterfaceInfo  *>(dataTypeInfo));
 
     default:
         abort();
     }
 }
 
+#pragma clang diagnostic pop
+
 CAR_BRIDGE_NAMESPACE_END
+
 

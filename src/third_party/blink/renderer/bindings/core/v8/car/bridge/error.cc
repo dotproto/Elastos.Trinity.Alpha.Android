@@ -4,21 +4,12 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "elastos-ext.h"
-
 #include "error.h"
 
-
-
-using namespace node;
 
 using namespace Nan;
 
@@ -158,7 +149,9 @@ void Error::Set(enum Type type, int code, char const *messageFormat, va_list ap)
 
 void Error::Set(int code, char const *messageFormat, va_list ap) noexcept
 {
+#if 0 //?jw
     Set(TYPE_INTRINSIC, messageFormat, ap);
+#endif
 }
 
 bool CanBeUsedAsError(Local<Value> value)
@@ -272,4 +265,3 @@ ECode ToECode(Error const &error) noexcept
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

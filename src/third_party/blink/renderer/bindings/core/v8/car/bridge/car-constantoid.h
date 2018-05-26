@@ -1,13 +1,9 @@
 #ifndef __CAR_BRIDGE_CAR_CONSTANTOID_H
-# define __CAR_BRIDGE_CAR_CONSTANTOID_H
+#define __CAR_BRIDGE_CAR_CONSTANTOID_H
 
-# include <nan.h>
-
-# include <elastos.h>
-
-# include "macros.h"
-
-
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
@@ -16,6 +12,6 @@ template<class ConstantoidInfo>
 
 CAR_BRIDGE_NAMESPACE_END
 
-# include "car-constantoid-cc.h"
+#include "car-constantoid-cc.h"
 
 #endif

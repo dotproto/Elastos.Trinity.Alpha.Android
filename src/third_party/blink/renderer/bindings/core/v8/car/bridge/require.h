@@ -1,16 +1,11 @@
 #ifndef __CAR_BRIDGE_REQUIRE_H
 # define __CAR_BRIDGE_REQUIRE_H
 
-# include <cstddef>
-# include <cstdint>
+#include <cstddef>
+#include <cstdint>
 
-# include <node.h>
-
-# include <nan.h>
-
-# include "macros.h"
-
-
+#include <nan.h>
+#include "macros.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 

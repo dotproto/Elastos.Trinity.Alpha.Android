@@ -32,9 +32,9 @@ private:
 
     _ELASTOS Int32 _referenceCount;
 
-    _ELASTOS AutoPtr<IInterfaceInfo const> _interfaceInfo;
+    _ELASTOS AutoPtr<IInterfaceInfo> _interfaceInfo;
     _ELASTOS InterfaceID _interfaceId;
-    _ELASTOS AutoPtr<_ELASTOS ArrayOf<IMethodInfo const *> const> _methodInfos;
+    _ELASTOS AutoPtr<_ELASTOS ArrayOf<IMethodInfo *>> _methodInfos;
 
     ::Nan::Persistent<::v8::Object> _object;
 
@@ -56,7 +56,7 @@ private:
 
     static CARAPI CallOtherMethodIndexed(size_t index, CARInterfaceAdapter *self, va_list ap) noexcept;
 
-    CARInterfaceAdapter(IInterfaceInfo const *interfaceInfo, ::v8::Local<::v8::Object> object);
+    CARInterfaceAdapter(IInterfaceInfo *interfaceInfo, ::v8::Local<::v8::Object> object);
 
     CARInterfaceAdapter(CARInterfaceAdapter const &carInterfaceAdapter) = delete;
 

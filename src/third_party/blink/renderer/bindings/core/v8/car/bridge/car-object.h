@@ -72,7 +72,7 @@ private:
 
     static ::Nan::Persistent<::v8::FunctionTemplate> _classBaseTemplate;
 
-    _ELASTOS AutoPtr<IClassInfo const> _classInfo;
+    _ELASTOS AutoPtr<IClassInfo > _classInfo;
 
     _ELASTOS AutoPtr<IInterface> _carObject;
 
@@ -123,7 +123,7 @@ private:
     static NAN_METHOD(InRegime);
 
     static ::v8::Local<::v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
-            _ELASTOS ArrayOf<IConstructorInfo const *> const &constructorInfos,
+            _ELASTOS ArrayOf<IConstructorInfo *> &constructorInfos,
             ::Nan::FunctionCallback constructor, ::v8::Local<::v8::Value> data);
 
     static ::v8::Local<::v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
@@ -148,11 +148,11 @@ private:
 
     CARObject(IClassInfo const *classInfo, IInterface *carObject) noexcept;
 
-    CARObject(CARObject const &carObject) = delete;
+    CARObject(CARObject &carObject) = delete;
 
     CARObject(CARObject &&carObject) = delete;
 
-    CARObject &operator=(CARObject const &carObject) = delete;
+    CARObject &operator=(CARObject &carObject) = delete;
 
     CARObject &operator=(CARObject &&carObject) = delete;
 };

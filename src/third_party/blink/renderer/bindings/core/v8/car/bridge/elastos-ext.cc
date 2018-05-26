@@ -1,17 +1,13 @@
 
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "elastos-ext.h"
-
-
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-char const *GetEName(ECode ecode) noexcept
+const char *GetEName(ECode ecode) noexcept
 {
     switch (ERROR(ecode)) {
     case NOERROR:
@@ -155,7 +151,7 @@ char const *GetEName(ECode ecode) noexcept
 }
 
 template<class NamespacedDataTypeInfo>
-static ECode _GetFullName(NamespacedDataTypeInfo const *namespacedDataTypeInfo, String *fullName) noexcept
+static ECode _GetFullName(NamespacedDataTypeInfo *namespacedDataTypeInfo, String *fullName) noexcept
 {
     ECode ec;
 
@@ -182,7 +178,7 @@ static ECode _GetFullName(NamespacedDataTypeInfo const *namespacedDataTypeInfo, 
     return NOERROR;
 }
 
-ECode GetFullName(IDataTypeInfo const *dataTypeInfo, String *fullName) noexcept
+ECode GetFullName(IDataTypeInfo *dataTypeInfo, String *fullName) noexcept
 {
     ECode ec;
 
@@ -200,7 +196,7 @@ ECode GetFullName(IDataTypeInfo const *dataTypeInfo, String *fullName) noexcept
 
     switch (dataType) {
     case CarDataType_Enum:
-        ec = _GetFullName(static_cast<IEnumInfo const *>(dataTypeInfo), fullName);
+        ec = _GetFullName(static_cast<IEnumInfo *>(dataTypeInfo), fullName);
         if (FAILED(ec))
             return ec;
 
@@ -210,7 +206,7 @@ ECode GetFullName(IDataTypeInfo const *dataTypeInfo, String *fullName) noexcept
         break;
 
     case CarDataType_Interface:
-        ec = _GetFullName(static_cast<IInterfaceInfo const *>(dataTypeInfo), fullName);
+        ec = _GetFullName(static_cast<IInterfaceInfo *>(dataTypeInfo), fullName);
         if (FAILED(ec))
             return ec;
 
@@ -225,7 +221,7 @@ ECode GetFullName(IDataTypeInfo const *dataTypeInfo, String *fullName) noexcept
     return NOERROR;
 }
 
-ECode GetCategory(IClassInfo const *classInfo, enum ClassCategory *category) noexcept
+ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept
 {
     ECode ec;
 
@@ -276,7 +272,7 @@ ECode GetCategory(IClassInfo const *classInfo, enum ClassCategory *category) noe
     return NOERROR;
 }
 
-ECode GetImportedModuleCount(IModuleInfo const *moduleInfo, Int32 *count) noexcept
+ECode GetImportedModuleCount(IModuleInfo *moduleInfo, Int32 *count) noexcept
 {
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
@@ -287,8 +283,8 @@ ECode GetImportedModuleCount(IModuleInfo const *moduleInfo, Int32 *count) noexce
     return moduleInfo->GetImportModuleInfoCount(count);
 }
 
-ECode GetAllImportedModuleInfos(IModuleInfo const *moduleInfo,
-        ArrayOf<IModuleInfo const *> *importedModuleInfos) noexcept
+ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
+        ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept
 {
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
@@ -299,15 +295,15 @@ ECode GetAllImportedModuleInfos(IModuleInfo const *moduleInfo,
     return moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos));
 }
 
-ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
-        String const &path,
-        IModuleInfo const **importedModuleInfo) noexcept;
+ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
+        String &path,
+        IModuleInfo **importedModuleInfo) noexcept;
 
-ECode HasImportedModule(IModuleInfo const *moduleInfo, String const &path, Boolean *has) noexcept
+ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noexcept
 {
     ECode ec;
 
-    IModuleInfo const *_;
+    IModuleInfo *_;
 
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
@@ -333,15 +329,15 @@ ECode HasImportedModule(IModuleInfo const *moduleInfo, String const &path, Boole
     return ec;
 }
 
-ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
-        String const &path,
-        IModuleInfo const **importedModuleInfo) noexcept
+ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
+        String &path,
+        IModuleInfo **importedModuleInfo) noexcept
 {
     ECode ec;
 
     Int32 nImportedModules;
 
-    AutoPtr<ArrayOf<IModuleInfo const *> > importedModuleInfos;
+    AutoPtr<ArrayOf<IModuleInfo *> > importedModuleInfos;
 
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
@@ -353,7 +349,7 @@ ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
     if (FAILED(ec))
         return ec;
 
-    importedModuleInfos = ArrayOf<IModuleInfo const *>::Alloc(nImportedModules);
+    importedModuleInfos = ArrayOf<IModuleInfo *>::Alloc(nImportedModules);
     if (importedModuleInfos == 0)
         return E_OUT_OF_MEMORY;
 
@@ -362,7 +358,7 @@ ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
         return ec;
 
     for (Int32 i = 0; i < nImportedModules; ++i) {
-        IModuleInfo const *_importedModuleInfo;
+        IModuleInfo *_importedModuleInfo;
 
         String _path;
 
@@ -384,7 +380,7 @@ ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
     return NOERROR;
 }
 
-ECode HasConstant(IModuleInfo const *moduleInfo, String const &name, Boolean *has) noexcept
+ECode HasConstant(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -414,7 +410,7 @@ ECode HasConstant(IModuleInfo const *moduleInfo, String const &name, Boolean *ha
     return ec;
 }
 
-ECode HasEnum(IModuleInfo const *moduleInfo, String const &fullName, Boolean *has) noexcept
+ECode HasEnum(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -444,7 +440,7 @@ ECode HasEnum(IModuleInfo const *moduleInfo, String const &fullName, Boolean *ha
     return ec;
 }
 
-ECode HasStruct(IModuleInfo const *moduleInfo, String const &name, Boolean *has) noexcept
+ECode HasStruct(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -474,7 +470,7 @@ ECode HasStruct(IModuleInfo const *moduleInfo, String const &name, Boolean *has)
     return ec;
 }
 
-ECode HasTypeAlias(IModuleInfo const *moduleInfo, String const &name, Boolean *has) noexcept
+ECode HasTypeAlias(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -504,7 +500,7 @@ ECode HasTypeAlias(IModuleInfo const *moduleInfo, String const &name, Boolean *h
     return ec;
 }
 
-ECode HasInterface(IModuleInfo const *moduleInfo, String const &fullName, Boolean *has) noexcept
+ECode HasInterface(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -534,7 +530,7 @@ ECode HasInterface(IModuleInfo const *moduleInfo, String const &fullName, Boolea
     return ec;
 }
 
-ECode HasClass(IModuleInfo const *moduleInfo, String const &fullName, Boolean *has) noexcept
+ECode HasClass(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
 {
     ECode ec;
 

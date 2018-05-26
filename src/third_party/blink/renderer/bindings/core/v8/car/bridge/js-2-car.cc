@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include <v8.h>
 #include "nan.h"
 #include <elastos.h>
 #include "macros.h"
@@ -16,8 +15,6 @@
 
 using namespace Nan;
 using namespace v8;
-
-#define LOG(TYPE, MSG) printf("%d %d", TYPE, MSG)
 
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
@@ -801,11 +798,9 @@ void *ToLocalPtr(Local<Value> value)
 {
     if (value->IsExternal())
         return value.As<External>()->Value();
-#if 0//?jw
-    return reinterpret_cast<void *>(To<double>(value).FromJust());
-#else
-    return 0;
-#endif
+    //?jw
+	double temp = To<double>(value).FromJust();
+	return (void *) *(uint64_t *) &temp;
 }
 
 Local<Value> ToValue(void *localPtr)
@@ -922,10 +917,8 @@ bool CanBeUsedAsCARArray(ICarArrayInfo  *carArrayInfo, Local<Value> value, int *
 
     if (!To<::v8::Object>(value).ToLocal(&object))
         return false;
-#if 0//?jw
     if (!IsCARArray(carArrayInfo, object))
         return false;
-#endif
     if (value->IsArray())
         _priority = 0;
     else if (value->IsObject())
@@ -1761,7 +1754,6 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, ICarArrayGetter *carArrayGette
 
 Local<Value> ToValue(ICarArrayInfo *carArrayInfo, CarQuintet  *carQuintet)
 {
-#if 0 //?jw
     ECode ec;
 
     AutoPtr<IVariableOfCarArray> variableOfCARArray;
@@ -1770,7 +1762,7 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, CarQuintet  *carQuintet)
     AutoPtr<ICarArrayGetter > carArrayGetter;
     ICarArrayGetter *_carArrayGetter;
 
-    ec = carArrayInfo->CreateVariableBox(_cast<CarQuintet *>(carQuintet), &_variableOfCARArray);
+    ec = carArrayInfo->CreateVariableBox(const_cast<CarQuintet *>(carQuintet), &_variableOfCARArray);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
 
@@ -1783,10 +1775,6 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, CarQuintet  *carQuintet)
     carArrayGetter = _carArrayGetter, _carArrayGetter->Release();
 
     return ToValue(carArrayInfo, carArrayGetter);
-#else
-    Local<Value> temp;
-    return temp;
-#endif
 }
 
 bool IsCPPVector(ICppVectorInfo *cppVectorInfo, Local<Value> value)
@@ -1838,10 +1826,8 @@ bool CanBeUsedAsCPPVector(ICppVectorInfo  *cppVectorInfo, Local<Value> value, in
 
     if (!To<::v8::Object>(value).ToLocal(&object))
         return false;
-#if 0 //?jw
     if (!IsCPPVector(cppVectorInfo, object))
         return false;
-#endif
     if (value->IsArray())
         _priority = 0;
     else if (value->IsObject())
@@ -2249,7 +2235,7 @@ bool CanBeUsedAsStruct(IStructInfo *structInfo, Local<Value> value, int *priorit
     return true;
 }
 
-void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value> value)
+void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value> value_)
 {
     ECode ec;
 
@@ -2271,7 +2257,7 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
 
-    object = value.As<::v8::Object>();
+    object = value_.As<::v8::Object>();
 
     for (_ELASTOS Int32 i = 0; i < nFields; ++i) {
         ::Nan::HandleScope scope_;
@@ -2279,9 +2265,8 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
         IFieldInfo *fieldInfo;
 
         _ELASTOS String name;
-#if 0//?jw
+
         Local<Value> value;
-#endif
         AutoPtr<IDataTypeInfo> typeInfo;
         IDataTypeInfo *_typeInfo;
 

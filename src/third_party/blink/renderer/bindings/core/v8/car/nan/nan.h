@@ -1,7 +1,6 @@
 #ifndef NAN_H_
 #define NAN_H_
 
-
 #include <algorithm>
 #include <cstring>
 #include <climits>
@@ -11,6 +10,8 @@
 #include <queue>
 #include <string>
 #include <vector>
+
+#include <v8.h>
 
 namespace Nan {
 
@@ -961,7 +962,7 @@ inline ssize_t DecodeWrite(
     , val
     , static_cast<node::encoding>(encoding));
 }
-
+#endif //?jw
 inline void SetPrototypeTemplate(
     v8::Local<v8::FunctionTemplate> templ
   , const char *name
@@ -999,7 +1000,7 @@ inline void SetInstanceTemplate(
   HandleScope scope;
   SetTemplate(templ->InstanceTemplate(), name, value, attributes);
 }
-#endif //jw?
+
 namespace imp {
 
 // Note(@agnat): Helper to distinguish different receiver types. The first

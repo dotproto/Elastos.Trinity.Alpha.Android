@@ -5,31 +5,25 @@
 
 #include <memory>
 #include <vector>
-
 #include "macros.h"
-
 #include "libc-ext.h"
-
 #include "parse-uri.h"
-
 #include "error.h"
-
-
 
 using namespace std;
 
 CAR_BRIDGE_NAMESPACE_BEGIN
-
+#if 0//?jw
 static char const *_Trim(char const *s)
 {
     return nullptr;
 }
-
+#endif
 ParseURI::ParseURI(char const *uri)
 {
     _buf = unique_ptr<char>(strdup(uri));
     if (_buf == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
 }
 
