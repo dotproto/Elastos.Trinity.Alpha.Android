@@ -399,7 +399,7 @@ static Local<Value> _OutputArgumentOf(_ELASTOS String const &typeName,
 
     return scope.Escape(object);
 }
-#if 0//?jw
+
 static Local<Value> _OutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
         GetterCallback getter, SetterCallback setter, Local<Value> data)
 {
@@ -455,7 +455,7 @@ static NAN_GETTER(_GetCalleeAllocOutputArgument)
     }
 #endif
 }
-#endif
+
 struct _Allocated {
     bool allocated = false;
 };
@@ -463,7 +463,7 @@ struct _Allocated {
 struct _CalleeAllocCARArray: CalleeAllocCARArray, _Allocated {};
 
 #define _GetCalleeAllocOutputArgumentOfCARArray _GetCalleeAllocOutputArgument
-#if 0//?jw
+
 static NAN_SETTER(_SetCalleeAllocOutputArgumentOfCARArray)
 {
 #if 0//?try
@@ -526,22 +526,27 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfCARArray)
     }
 #endif
 }
-#endif
+
 static Local<Value> _CalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo, CarQuintet **carQuintet)
 {
     ::Nan::EscapableHandleScope scope;
 
     Local<Value> argument;
-#if 0//?jw
-    unique_ptr<struct _CalleeAllocCARArray, _CalleeAllocCARArray::Deleter> carArray(
-            CalleeAllocCARArray_(carArrayInfo, carQuintet)
+    
+    ::std::unique_ptr<_CalleeAllocCARArray, typename _CalleeAllocCARArray::Deleter> carArray(
+            new(::std::nothrow) _CalleeAllocCARArray
             );
+    if (carArray == nullptr)
+        LOG(Error::NO_MEMORY, 0);
+
+    carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
+    carArray->carQuintet = carQuintet;
 
     argument = _CalleeAllocOutputArgumentOf(static_cast<IDataTypeInfo const *>(carArrayInfo),
             _GetCalleeAllocOutputArgumentOfCARArray,
             _SetCalleeAllocOutputArgumentOfCARArray,
             carArray->self()), carArray.release();
-#endif
+
     return scope.Escape(argument);
 }
 

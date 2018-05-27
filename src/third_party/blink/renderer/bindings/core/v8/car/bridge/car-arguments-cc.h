@@ -12,7 +12,7 @@
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 template<class _CalleeAllocCARArray>
-_CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo *carArrayInfo, _ELASTOS CarQuintet **carQuintet)
+_CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo const *carArrayInfo, _ELASTOS CarQuintet **carQuintet)
 {
     ::std::unique_ptr<_CalleeAllocCARArray, typename _CalleeAllocCARArray::Deleter> carArray(
             new(::std::nothrow) _CalleeAllocCARArray
@@ -20,7 +20,7 @@ _CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo *carArrayInfo, _ELASTOS
     if (carArray == nullptr)
         LOG(Error::NO_MEMORY, 0);
 
-    carArray->carArrayInfo = carArrayInfo;
+    carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
     carArray->carQuintet = carQuintet;
 
     return carArray.release();

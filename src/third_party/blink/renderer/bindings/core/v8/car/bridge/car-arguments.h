@@ -28,7 +28,7 @@ protected:
 };
 
 template<class _CalleeAllocCARArray = struct CalleeAllocCARArray>
-_CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo *carArrayInfo, _ELASTOS CarQuintet **carQuintet);
+_CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo const *carArrayInfo, _ELASTOS CarQuintet **carQuintet);
 
 struct CalleeAllocStruct: CARArgumentBase {
     _ELASTOS AutoPtr<IStructInfo> structInfo;

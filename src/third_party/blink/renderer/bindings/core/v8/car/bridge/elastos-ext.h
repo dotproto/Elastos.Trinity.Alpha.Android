@@ -37,7 +37,7 @@ extern _ELASTOS ECode HasImportedModule(IModuleInfo const *moduleInfo,
 
 extern _ELASTOS ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
         _ELASTOS String const &path,
-        IModuleInfo const **importedModuleInfo) noexcept;
+        IModuleInfo **importedModuleInfo) noexcept;
 
 extern _ELASTOS ECode HasConstant(IModuleInfo const *moduleInfo,
         _ELASTOS String const &name,

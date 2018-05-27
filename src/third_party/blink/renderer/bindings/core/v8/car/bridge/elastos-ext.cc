@@ -296,14 +296,14 @@ ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
 }
 
 ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
-        String &path,
+        const String &path,
         IModuleInfo **importedModuleInfo) noexcept;
 
 ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noexcept
 {
     ECode ec;
 
-    IModuleInfo *_;
+    IModuleInfo *_moduleInfo;
 
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
@@ -311,7 +311,7 @@ ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noe
     if (has == 0)
         return NOERROR;
 
-    ec = GetImportedModuleInfo(moduleInfo, path, &_);
+    ec = GetImportedModuleInfo(moduleInfo, path, &_moduleInfo);
 
     if (ec == E_DOES_NOT_EXIST) {
         *has = FALSE;
@@ -324,13 +324,13 @@ ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noe
 
     *has = TRUE;
 
-    _->Release();
+    _moduleInfo->Release();
 
     return ec;
 }
 
 ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
-        String &path,
+        const String &path,
         IModuleInfo **importedModuleInfo) noexcept
 {
     ECode ec;

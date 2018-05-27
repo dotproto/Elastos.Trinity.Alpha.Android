@@ -24,7 +24,7 @@ _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId)
+static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -37,21 +37,19 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
     _ELASTOS Boolean hasInterface;
     _ELASTOS Boolean hasClass;
 
-    IModuleInfo *moduleInfo = const_cast<IModuleInfo *>(pmoduleInfo);
     ec = HasImportedModule(moduleInfo, _ELASTOS String(entryId), &hasImportedModule);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasImportedModule != FALSE) {
         AutoPtr<IModuleInfo> importedModuleInfo;
-#if 0//?jw
+
         IModuleInfo *_importedModuleInfo;
         ec = GetImportedModuleInfo(moduleInfo, _ELASTOS String(entryId), &_importedModuleInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
-#endif
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
 
@@ -72,7 +70,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         if (hasConstant == FALSE)
             LOG(Error::NONENTITY, 0);
 
-        ec = moduleInfo->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -89,7 +87,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         AutoPtr<IEnumInfo> enumInfo;
         IEnumInfo *_enumInfo;
 
-        ec = moduleInfo->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -106,7 +104,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         AutoPtr<IStructInfo> structInfo;
         IStructInfo *_structInfo;
 
-        ec = moduleInfo->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -123,7 +121,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         AutoPtr<ITypeAliasInfo> typeAliasInfo;
         ITypeAliasInfo *_typeAliasInfo;
 
-        ec = moduleInfo->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -140,7 +138,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         AutoPtr<IInterfaceInfo > interfaceInfo;
         IInterfaceInfo *_interfaceInfo;
 
-        ec = moduleInfo->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -157,7 +155,7 @@ static Local<Value> _Require(IModuleInfo const *pmoduleInfo, char const *entryId
         AutoPtr<IClassInfo> classInfo;
         IClassInfo *_classInfo;
 
-        ec = moduleInfo->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 
@@ -203,7 +201,6 @@ Local<Value> Require(char const *ecoPath,
 
     if (nEntryIds == 0) {
         ::Nan::EscapableHandleScope scope;
-
         return scope.Escape(NewInstance(CARModuleTemplate(moduleInfo)).ToLocalChecked());
     }
 
