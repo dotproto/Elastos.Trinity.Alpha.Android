@@ -1,25 +1,18 @@
 #ifndef __CAR_BRIDGE_CAR_OBJECT_H
-# define __CAR_BRIDGE_CAR_OBJECT_H
+#define __CAR_BRIDGE_CAR_OBJECT_H
 
-# include <cstddef>
-# include <cstdint>
+#include <cstddef>
+#include <cstdint>
 
-# include <functional>
-# include <map>
-# include <memory>
-# include <set>
-
-# include <nan.h>
-
-# include <elastos.h>
-
-# include "macros.h"
-
-# include "nan-ext.h"
-
-# include "car-function-adapter.h"
-
-
+#include <functional>
+#include <map>
+#include <memory>
+#include <set>
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
+#include "nan-ext.h"
+#include "car-function-adapter.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
