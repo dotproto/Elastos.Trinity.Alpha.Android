@@ -4,7 +4,6 @@
 #include <cstddef>
 
 #include <new>
-
 #include <nan.h>
 
 #include <elastos.h>

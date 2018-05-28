@@ -2762,7 +2762,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
 
     return object;
 }
-#if 0//?jw
+
 Local<Value> ToValue(IStructInfo *structInfo, void  *struct_)
 {
     ECode ec;
@@ -2787,7 +2787,7 @@ Local<Value> ToValue(IStructInfo *structInfo, void  *struct_)
 
     return ToValue(structInfo, structGetter);
 }
-#endif
+
 bool IsCARObject(Local<Value> value);
 
 bool IsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)

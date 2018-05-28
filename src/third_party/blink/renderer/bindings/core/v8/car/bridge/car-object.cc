@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-
+#include <cmath>
 #include <map>
 #include <memory>
 #include <new>
@@ -106,8 +106,9 @@ NAN_METHOD(CARObject::On)
         if (carFunctionAdapter == nullptr)
             LOG(Error::NO_MEMORY, 0);
 
-#if 0//??jw
-        carEventHandler = EventHandler::Make((void*)carFunctionAdapter.get(),
+
+#if 0//?jw EventHandler
+        carEventHandler = EventHandler::Make(carFunctionAdapter.get(),
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
                 (void *)(ECode (CARFunctionAdapter::*)(IInterface *, ...))
 #endif
@@ -153,10 +154,9 @@ static bool _MaybeIsConnectionId(Local<Value> value)
         return false;
 
     d = To<double>(value).FromJust();
-#if 0//?jw
-    if (nearbyint(d) != d)
+    if (std::nearbyint(d) != d)
         return false;
-#endif
+
     return d >= 0 && d <= UINTPTR_MAX;
 }
 
@@ -173,6 +173,7 @@ void CARObject::Off(CARObject *carObject,
 
     _callbackMethodInfo = static_cast<ICallbackMethodInfo const *>(carFunctionAdapter->functionInfo());
     ICallbackMethodInfo* callbackMethodInfo = const_cast<ICallbackMethodInfo*>(_callbackMethodInfo);
+
 #if 0 //??jw
     carEventHandler = EventHandler::Make(carFunctionAdapter,
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
@@ -183,7 +184,7 @@ void CARObject::Off(CARObject *carObject,
     ec = callbackMethodInfo->RemoveCallback(carObject->_carObject, carEventHandler);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
-#if 0//?jw compiler error.
+#if 0//?jw _mapNameToMapListenerToCARFunctionAdapter
     carObject->_mapNameToMapListenerToCARFunctionAdapter[name].erase(listener);
 #endif
     carObject->_connectionIds.erase(reinterpret_cast<uintptr_t>(carFunctionAdapter));
@@ -262,7 +263,7 @@ void CARObject::Off(Local<Object> object, Local<::v8::String> name)
 
 NAN_METHOD(CARObject::Off)
 {
-#if 0//?jw
+#if 0//?jw try
     try {
 #endif
         Local<Object> that = info.This();
@@ -288,7 +289,7 @@ NAN_METHOD(CARObject::Off)
         }
 
         NAN_METHOD_RETURN_UNDEFINED();
-#if 0 //?jw
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -303,13 +304,13 @@ NAN_METHOD(CARObject::Off)
 
 NAN_METHOD(CARObject::OffAll)
 {
-#if 0 //?jw
+#if 0//?jw try
     try {
 #endif
         CARObject *thatCARObject;
 
         thatCARObject = Unwrap<CARObject>(info.This());
-#if 0//?jw
+#if 0//?jw try
         ECode ec = thatCARObject->_classInfo->RemoveAllCallbackHandlers(thatCARObject->_carObject);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
@@ -318,7 +319,7 @@ NAN_METHOD(CARObject::OffAll)
         thatCARObject->_connectionIds.clear();
 
         NAN_METHOD_RETURN_UNDEFINED();
-#if 0 //?jw
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -330,10 +331,10 @@ NAN_METHOD(CARObject::OffAll)
     }
 #endif
 }
-
+#if 0//?car remove
 NAN_METHOD(CARObject::EnterRegime)
 {
-#if 0 //?jw
+#if 0//?jw try
     try {
 #endif
         Local<Value> arg0;
@@ -351,13 +352,12 @@ NAN_METHOD(CARObject::EnterRegime)
         thatCARObject = Unwrap<CARObject>(info.This());
 
         regime = Unwrap<CARObject>(arg0.As<Object>());
-#if 0//?jw
         ECode ec = CObject::EnterRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
-#endif
+
         NAN_METHOD_RETURN_UNDEFINED();
-#if 0 //?jw
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -391,11 +391,11 @@ NAN_METHOD(CARObject::LeaveRegime)
         thatCARObject = Unwrap<CARObject>(info.This());
 
         regime = Unwrap<CARObject>(arg0.As<Object>());
-#if 0 //?jw
+
         ECode ec = CObject::LeaveRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
-#endif
+
         NAN_METHOD_RETURN_UNDEFINED();
 #if 0 //?jw
     } catch (Error const &error) {
@@ -409,6 +409,7 @@ NAN_METHOD(CARObject::LeaveRegime)
     }
 #endif
 }
+#endif
 
 NAN_METHOD(CARObject::Equal)
 {
@@ -753,7 +754,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
             _ELASTOS String annotation;
 
             candidate = candidates[i];
-#if 0//?jw
+#if 0//?jw car remove
             ECode ec = candidate->GetAnnotation(&annotation);
             if (FAILED(ec))
                 LOG(Error::TYPE_ELASTOS, ec);
@@ -761,7 +762,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
             oss << annotation << "\n";
         }
 #if 0//?jw
-        LOG(Error::AMBIGUOUS_CALL_OF_OVERLOADED_FUNCTION, "%s", oss.str().data());
+        //LOG(oss.str().data(),Error::AMBIGUOUS_CALL_OF_OVERLOADED_FUNCTION);
 #endif
     }
     AutoPtr<IFunctionInfo > rcandidate = candidates[0];
@@ -3059,7 +3060,7 @@ CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo *>  &
 #endif
         goto done;
     }
-
+#if 0//?jw
     _argv = unique_ptr<unique_ptr<struct _Value> []>(
             reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
@@ -3071,7 +3072,7 @@ CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo *>  &
 
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
-#if 0//?jw
+
     ec = constructorInfo->CreateObjectInRegime(regime, argumentList, &carObject);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);

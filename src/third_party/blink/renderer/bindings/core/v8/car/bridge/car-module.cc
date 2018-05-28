@@ -1,19 +1,10 @@
-
 #include <cstdio>
-
 #include <map>
-
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
-
 #include "elastos-ext.h"
-
 #include "car-constant.h"
 #include "car-data-type.h"
 #include "car-imported-module.h"
@@ -21,8 +12,6 @@
 #include "car-type-alias.h"
 #include "error.h"
 #include "js-2-car.h"
-
-
 
 using namespace std;
 using namespace Nan;
@@ -97,9 +86,8 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
         importedModuleInfos = ArrayOf<IModuleInfo *>::Alloc(nImportedModules);
         if (importedModuleInfos == 0)
             LOG(Error::NO_MEMORY, 0);
-#if 0//?jw
+
         ec = GetAllImportedModuleInfos(moduleInfo, importedModuleInfos);
-#endif
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
 

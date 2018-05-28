@@ -1,4 +1,3 @@
-
 #include <cstdarg>
 #include <cstddef>
 #include <memory>
@@ -7,7 +6,6 @@
 #include "nan-ext.h"
 #include "elastos-ext.h"
 #include "car-function-adapter.h"
-
 #include "car-arguments.h"
 #include "error.h"
 #include "js-2-car.h"
@@ -568,7 +566,6 @@ struct _CalleeAllocStruct: CalleeAllocStruct, _Allocated {};
 
 #define _GetCalleeAllocOutputArgumentOfStruct _GetCalleeAllocOutputArgument
 
-#if 0//?jw
 static NAN_SETTER(_SetCalleeAllocOutputArgumentOfStruct)
 {
 #if 0//?try
@@ -598,10 +595,10 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfStruct)
                 LOG(Error::NO_MEMORY, 0);
 
             ToStruct(struct_->structInfo, _struct.get(), value);
-
             *struct_->struct_ = _struct.release();
-#endif
+
             struct_->allocated = true;
+#endif
         }
 
         struct_->value.Reset(value);
@@ -617,23 +614,25 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfStruct)
     }
 #endif
 }
-#endif
 
-static Local<Value> _CalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo, void **struct_)
+static Local<Value> _CalleeAllocOutputArgumentOfStruct(IStructInfo *structInfo, void **struct_)
 {
     ::Nan::EscapableHandleScope scope;
 
     Local<Value> argument;
-#if 0//jw
-    unique_ptr<struct _CalleeAllocStruct, _CalleeAllocStruct::Deleter> _struct(
-            CalleeAllocStruct_(structInfo, struct_)
-            );
+
+    ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
+    if (_struct == nullptr)
+        LOG(Error::NO_MEMORY, 0);
+
+    _struct->structInfo = structInfo;
+    _struct->struct_ = struct_;
 
     argument = _CalleeAllocOutputArgumentOf(static_cast<IDataTypeInfo const *>(structInfo),
             _GetCalleeAllocOutputArgumentOfStruct,
             _SetCalleeAllocOutputArgumentOfStruct,
             _struct->self()), _struct.release();
-#endif
+
     return scope.Escape(argument);
 }
 
@@ -648,7 +647,7 @@ static void _SetCalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
 
     struct_ = _To<void **>(ap);
 
-    argv[index] = _CalleeAllocOutputArgumentOfStruct(structInfo, struct_);
+    argv[index] = _CalleeAllocOutputArgumentOfStruct(const_cast<IStructInfo*>(structInfo), struct_);
 }
 
 template<class T>
@@ -1866,8 +1865,8 @@ static void _SetCallerAllocOutputArgumentOfLocalType(IDataTypeInfo const *dataTy
 
     argv[index] = _CallerAllocOutputArgumentOfLocalType(dataTypeInfo, localTypeObject);
 }
-
 #endif
+
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfEnum)
 {
 #if 0//?try
@@ -1952,7 +1951,6 @@ static void _SetCallerAllocOutputArgumentOfEnum(IEnumInfo const *enumInfo,
     argv[index] = _CallerAllocOutputArgumentOfEnum(enumInfo, enum_);
 }
 
-#if 0//?jw
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
 {
 #if 0//?try
@@ -1992,9 +1990,8 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
     }
 #endif
 }
-#endif
 
-#if 0//?jw
+
 static NAN_SETTER(_SetCallerAllocOutputArgumentOfCARArray)
 {
 #if 0//?try
@@ -2032,7 +2029,6 @@ static NAN_SETTER(_SetCallerAllocOutputArgumentOfCARArray)
     }
 #endif
 }
-#endif
 
 static Local<Value> _CallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo, CarQuintet *carQuintet)
 {
@@ -2050,16 +2046,21 @@ static Local<Value> _CallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *ca
         LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
-#if 0//?jw
-    unique_ptr<struct CallerAllocCARArray, CallerAllocCARArray::Deleter> carArray(
-            CallerAllocCARArray_(carArrayInfo, variableOfCARArray)
+
+    ::std::unique_ptr<CallerAllocCARArray, typename CallerAllocCARArray::Deleter> carArray(
+            new(::std::nothrow) CallerAllocCARArray
             );
+    if (carArray == nullptr)
+        LOG(Error::NO_MEMORY, 0);
+
+    carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
+    carArray->variableOfCARArray = variableOfCARArray;
 
     argument = _CallerAllocOutputArgumentOf(static_cast<IDataTypeInfo const *>(carArrayInfo),
             _GetCallerAllocOutputArgumentOfCARArray,
             _SetCallerAllocOutputArgumentOfCARArray,
             carArray->self()), carArray.release();
-#endif
+
     return scope.Escape(argument);
 }
 
@@ -2076,7 +2077,7 @@ static void _SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArra
 
     argv[index] = _CallerAllocOutputArgumentOfCARArray(carArrayInfo, carQuintet);
 }
-#if 0//?jw
+
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
 {
 #if 0//?try
@@ -2115,9 +2116,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
     }
 #endif
 }
-#endif
 
-#if 0//?jw
 static NAN_SETTER(_SetCallerAllocOutputArgumentOfStruct)
 {
 #if 0//?try
@@ -2155,7 +2154,6 @@ static NAN_SETTER(_SetCallerAllocOutputArgumentOfStruct)
     }
 #endif
 }
-#endif
 
 static Local<Value> _CallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo, void *struct_)
 {
@@ -2173,16 +2171,23 @@ static Local<Value> _CallerAllocOutputArgumentOfStruct(IStructInfo const *struct
         LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
-#if 0//?jw
+#if 0
     unique_ptr<struct CallerAllocStruct, CallerAllocStruct::Deleter> _struct(
             CallerAllocStruct_(structInfo, variableOfStruct)
             );
+#endif
+    ::std::unique_ptr<CallerAllocStruct, typename CallerAllocStruct::Deleter> _struct(new(::std::nothrow) CallerAllocStruct);
+    if (_struct == nullptr)
+        LOG(Error::NO_MEMORY, 0);
+
+    _struct->structInfo = const_cast<IStructInfo*>(structInfo);
+    _struct->variableOfStruct = variableOfStruct;
 
     argument = _CallerAllocOutputArgumentOf(static_cast<IDataTypeInfo const *>(structInfo),
             _GetCallerAllocOutputArgumentOfStruct,
             _SetCallerAllocOutputArgumentOfStruct,
             _struct->self()), _struct.release();
-#endif
+
     return scope.Escape(argument);
 }
 
@@ -2199,7 +2204,7 @@ static void _SetCallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
 
     argv[index] = _CallerAllocOutputArgumentOfStruct(structInfo, struct_);
 }
-#if 0//?jw
+
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
 {
 #if 0//?try
@@ -2257,22 +2262,26 @@ static NAN_SETTER(_SetCallerAllocOutputArgumentOfInterface)
     }
 #endif
 }
-#endif
+
 static Local<Value> _CallerAllocOutputArgumentOfInterface(IInterfaceInfo const *interfaceInfo, IInterface **interface_)
 {
     ::Nan::EscapableHandleScope scope;
 
     Local<Value> argument;
-#if 0//?jw
-    unique_ptr<struct CallerAllocInterface, CallerAllocInterface::Deleter> _interface(
-            CallerAllocInterface_(interfaceInfo, interface_)
+
+    ::std::unique_ptr<CallerAllocInterface, typename CallerAllocInterface::Deleter> _interface(
+            new(::std::nothrow) CallerAllocInterface
             );
+    if (_interface == nullptr)
+        LOG(Error::NO_MEMORY, 0);
+
+    _interface->interface_ = interface_;
 
     argument = _CallerAllocOutputArgumentOf(static_cast<IDataTypeInfo const *>(interfaceInfo),
             _GetCallerAllocOutputArgumentOfInterface,
             _SetCallerAllocOutputArgumentOfInterface,
             _interface->self()), _interface.release();
-#endif
+
     return scope.Escape(argument);
 }
 
@@ -2459,11 +2468,11 @@ static void _ToError(Error *error, Local<Value> value)
 
 static Local<Value> _CallFunction(Local<Function> function, Local<Value> receiver, size_t argc, Local<Value> argv[])
 {
-#if 0//?jw
+#if 0//?try
     ::Nan::TryCatch tryCatch;
 #endif
     Local<Value> returnValue;
-#if 0//?jw
+#if 0//?callback
     returnValue = ::Nan::MakeCallback(receiver, function, argc, argv);
     if (tryCatch.HasCaught()) {
         Error error;
