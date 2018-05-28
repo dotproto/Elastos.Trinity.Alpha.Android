@@ -106,8 +106,8 @@ NAN_METHOD(CARObject::On)
         if (carFunctionAdapter == nullptr)
             LOG(Error::NO_MEMORY, 0);
 
-#if 0//?jw
-        carEventHandler = EventHandler::Make(carFunctionAdapter.get(),
+#if 0//??jw
+        carEventHandler = EventHandler::Make((void*)carFunctionAdapter.get(),
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
                 (void *)(ECode (CARFunctionAdapter::*)(IInterface *, ...))
 #endif
@@ -173,7 +173,7 @@ void CARObject::Off(CARObject *carObject,
 
     _callbackMethodInfo = static_cast<ICallbackMethodInfo const *>(carFunctionAdapter->functionInfo());
     ICallbackMethodInfo* callbackMethodInfo = const_cast<ICallbackMethodInfo*>(_callbackMethodInfo);
-#if 0 //?jw
+#if 0 //??jw
     carEventHandler = EventHandler::Make(carFunctionAdapter,
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
             (void *)(ECode (CARFunctionAdapter::*)(IInterface *, ...))
@@ -657,7 +657,7 @@ static bool _CanBeUsedAsArgumentOf(IParamInfo const *pparamInfo, struct _Value c
 
 template<class FunctionInfo>
 static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
-        size_t nFunctionInfos, IFunctionInfo const *pfunctionInfos[], size_t argc, struct _Value const *argv[])
+        size_t nFunctionInfos, IFunctionInfo *pfunctionInfos[], size_t argc, struct _Value const *argv[])
 {
     _ELASTOS String name;
 
@@ -1185,9 +1185,7 @@ static NAN_SETTER(_SetOutputArgument)
     try {
 #endif
         struct CARArgumentBase *carArgument;
-
         carArgument = (struct CARArgumentBase *)info.Data().As<External>()->Value();
-
         carArgument->value.Reset(value);
 #if 0//?jw
     } catch (Error const &error) {
@@ -3041,7 +3039,7 @@ NAN_METHOD(CARObject::Probe)
 #endif
 }
 
-CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const *> const &constructorInfos,
+CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo *>  &constructorInfos,
         IRegime *regime,
         size_t argc, Local<Value> argv[])
 {
@@ -3049,11 +3047,12 @@ CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const
     unique_ptr<unique_ptr<struct _Value> []> _argv;
     AutoPtr<IConstructorInfo> constructorInfo;
     AutoPtr<IArgumentList> argumentList;
+    AutoPtr<IFunctionInfo> functionInfo;
 
     _classInfo = const_cast<IClassInfo*>(classInfo);
 
     if (argc == 0) {
-#if 0//?jw
+#if 0//?jw car remove
         ECode ec = classInfo->CreateObjectInRegime(regime, &carObject);
         if (FAILED(ec))
             LOG(Error::TYPE_ELASTOS, ec);
@@ -3064,12 +3063,12 @@ CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const
     _argv = unique_ptr<unique_ptr<struct _Value> []>(
             reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
-#if 0//?jw
-    constructorInfo = 
-            _GetMatchingFunctionForCall<IConstructorInfo>(
-                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo const**>(constructorInfos.GetPayload()),
-                argc, reinterpret_cast<struct _Value const**>(_argv.get())).Get();
-#endif
+
+    functionInfo = _GetMatchingFunctionForCall<IConstructorInfo>(
+                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo **>(constructorInfos.GetPayload()),
+                argc, reinterpret_cast<struct _Value const**>(_argv.get()));
+    constructorInfo = static_cast<IConstructorInfo*>(functionInfo.Get());
+
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
 #if 0//?jw
@@ -3098,13 +3097,13 @@ CARObject *CARObject::NewInRegimeConstructor(size_t argc, Local<Value> argv[], L
     CARObject *carObject = nullptr;
 
     classInfoInRegime = (struct _ClassInfoInRegime const *)data.As<External>()->Value();
-#if 0//?jw
+
     carObject = new(nothrow) CARObject(classInfoInRegime->classInfo, *classInfoInRegime->constructorInfos,
             classInfoInRegime->regime,
             argc, argv);
     if (carObject == nullptr)
         LOG(Error::NO_MEMORY, 0);
-#endif
+
     return carObject;
 }
 
@@ -3164,10 +3163,10 @@ NAN_METHOD(CARObject::InRegime)
         classInfoInRegime->classInfo = classInfo->classInfo;
         classInfoInRegime->constructorInfos = classInfo->constructorInfos;
         classInfoInRegime->regime = static_cast<IRegime *>(regime->_carObject.Get());
-#if 0//?jw
+
         classTemplate = NewClassTemplate(classInfo->classInfo, *classInfo->constructorInfos,
                 NewInRegimeConstructor, classInfoInRegime->self()), classInfoInRegime.release();
-#endif
+
         NAN_METHOD_RETURN_VALUE(GetFunction(classTemplate).ToLocalChecked());
 #if 0//?jw
     } catch (Error const &error) {
@@ -3211,13 +3210,12 @@ NAN_METHOD(CARObject::InvokeMethod)
         unique_ptr<unique_ptr<struct _Value> []> argv(
                 reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
                 );
-#if 0//?jw
-        methodInfo  = static_cast<IMethodInfo const *>(
-                _GetMatchingFunctionForCall<IMethodInfo>(
-                    methodInfos->methodInfos.size(), (IFunctionInfo const **)&methodInfos->methodInfos[0],
-                    argc, reinterpret_cast<struct _Value const **>(argv.get())).Get()
-                );
-#endif
+
+        AutoPtr<IFunctionInfo> functionInfo = _GetMatchingFunctionForCall<IMethodInfo>(
+                    methodInfos->methodInfos.size(), (IFunctionInfo **)&methodInfos->methodInfos[0],
+                    argc, reinterpret_cast<struct _Value const **>(argv.get()));
+        methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
+
         argumentList =
             _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
 
@@ -3293,9 +3291,8 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         LOG(Error::NO_MEMORY, 0);
 
     _classInfo->classInfo = classInfo;
-#if 0//?jw
     _classInfo->constructorInfos = &constructorInfos;
-#endif
+
     SetTemplate(classTemplate,
             ::Nan::New(".__class__").ToLocalChecked(),
             _classInfo->self(),
@@ -3576,7 +3573,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 CARInterface(interfaceInfo),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
     }
-#if 0//?jw
+#if 0//?jw callback
     ec = classInfo->GetCallbackInterfaceCount(&nCallbackInterfaces);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
@@ -3584,7 +3581,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     callbackInterfaceInfos = ArrayOf<ICallbackInterfaceInfo *>::Alloc(nCallbackInterfaces);
     if (callbackInterfaceInfos == 0)
         LOG(Error::NO_MEMORY, 0);
-#if 0//?jw
+#if 0//?jw callback
     ec = classInfo->GetAllCallbackInterfaceInfos(
             reinterpret_cast<ArrayOf<ICallbackInterfaceInfo *> *>(callbackInterfaceInfos.Get())
             );
@@ -3665,9 +3662,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
             if (_methodInfos == nullptr)
                 LOG(Error::NO_MEMORY, 0);
         }
-#if 0//?jw
         _methodInfos->methodInfos.push_back(methodInfo);
-#endif
     }
 
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it) {
@@ -3723,7 +3718,7 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
 
     if (!info.IsConstructCall()) {
         ::Nan::HandleScope scope;
-#if 0//?jw
+#if 0//?jw v8 remove
         NAN_METHOD_RETURN_VALUE(NewInstance(info.Callee(), argc, argv.get()).ToLocalChecked());
 #endif
         return;
@@ -3736,7 +3731,7 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
     NAN_METHOD_RETURN_VALUE(that);
 }
 
-CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo const *> const &constructorInfos,
+CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo *> &constructorInfos,
         size_t argc, Local<Value> argv[])
 {
     ECode ec;
@@ -3744,6 +3739,7 @@ CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo cons
     unique_ptr<unique_ptr<struct _Value> []> _argv;
     AutoPtr<IConstructorInfo> constructorInfo;
     AutoPtr<IArgumentList> argumentList;
+    AutoPtr<IFunctionInfo> functionInfo;
 
     _classInfo = const_cast<IClassInfo*>(pclassInfo);
     IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
@@ -3758,36 +3754,33 @@ CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo cons
     _argv = unique_ptr<unique_ptr<struct _Value> []>(
             reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
-#if 0//?jw
-    constructorInfo = static_cast<IConstructorInfo const*>(
-            _GetMatchingFunctionForCall<IConstructorInfo>(
-                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo const **>(constructorInfos.GetPayload()),
-                argc, reinterpret_cast<struct _Value const **>(_argv.get())).Get()
-            );
-#endif
+
+    functionInfo = _GetMatchingFunctionForCall<IConstructorInfo>(
+                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo **>(constructorInfos.GetPayload()),
+                argc, reinterpret_cast<struct _Value const **>(_argv.get()));
+    constructorInfo = static_cast<IConstructorInfo *>(functionInfo.Get());
+
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
-#if 0//?jw
+
     ec = constructorInfo->CreateObject(argumentList, &carObject);
     if (FAILED(ec))
         LOG(Error::TYPE_ELASTOS, ec);
-#endif
+
 done:
     _carObject = carObject, carObject->Release();
 }
 
 CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Value> data)
 {
-    struct _ClassInfo const *classInfo;
-
+    struct _ClassInfo *classInfo;
     CARObject *carObject = nullptr;
 
-    classInfo = (struct _ClassInfo const *)data.As<External>()->Value();
-#if 0//?jw
+    classInfo = (struct _ClassInfo *)data.As<External>()->Value();
     carObject = new(nothrow) CARObject(classInfo->classInfo, *classInfo->constructorInfos, argc, argv);
     if (carObject == nullptr)
         LOG(Error::NO_MEMORY, 0);
-#endif
+
     return carObject;
 }
 
@@ -3850,9 +3843,9 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
 
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = constructorInfos;
-#if 0//?jw
+
     classTemplate = NewClassTemplate(classInfo, *constructorInfos, NewConstructor, _classInfo->self());
-#endif
+
     _classInfo.release();
 
     _classTemplate.Reset(classTemplate);
