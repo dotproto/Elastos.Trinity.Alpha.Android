@@ -158,6 +158,7 @@ group("gn_all") {
       "//cc:cc_unittests",
       "//components/policy:policy_templates",
       "//content/shell:content_shell",
+      "//content/cordova:content_cordova",
       "//content/test:content_browsertests",
       "//content/test:content_perftests",
       "//content/test:content_unittests",

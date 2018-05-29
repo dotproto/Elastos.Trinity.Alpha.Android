@@ -58,6 +58,8 @@
 #include "device/bluetooth/dbus/dbus_bluez_manager_wrapper_linux.h"
 #endif
 
+#define USE_CORDOVA_SHELL
+
 namespace content {
 
 namespace {
@@ -151,8 +153,12 @@ void ShellBrowserMainParts::InitializeBrowserContexts() {
 
 void ShellBrowserMainParts::InitializeMessageLoopContext() {
   ui::MaterialDesignController::Initialize();
-  /*Shell::CreateNewWindow(browser_context_.get(), GetStartupURL(), nullptr,
-                         gfx::Size());*/
+  //check if cordova context
+#if defined USE_CORDOVA_SHELL
+  return;
+#endif
+  Shell::CreateNewWindow(browser_context_.get(), GetStartupURL(), nullptr,
+                         gfx::Size());
 }
 
 void ShellBrowserMainParts::SetupFieldTrials() {

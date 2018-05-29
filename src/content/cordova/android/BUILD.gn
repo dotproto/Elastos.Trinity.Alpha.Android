@@ -32,7 +32,7 @@ generate_jni("cordova_shell_jni_headers") {
 
 generate_jni_registration("cordova_shell_jni_registration") {
   testonly = true
-  target = ":cordova_app_apk"
+  target = ":elastos_shell_apk"
   output = "$root_gen_dir/content/cordova/android/${target_name}.h"
   exception_files = jni_exception_files
 }
@@ -170,7 +170,7 @@ android_assets("cordova_app_assets") {
   disable_compression = true
 }
 
-android_apk("cordova_app_apk") {
+android_apk("elastos_shell_apk") {
   testonly = true
   enable_multidex = true
   deps = [
@@ -184,7 +184,7 @@ android_apk("cordova_app_apk") {
     "//ui/android:ui_java",
     "//third_party/mesa:osmesa",
   ]
-  apk_name = "CordovaApp"
+  apk_name = "ElastosApp"
   android_manifest = cordova_app_manifest
   android_manifest_dep = ":cordova_app_manifest"
   shared_libraries = [ ":cordova_shell_lib" ]
