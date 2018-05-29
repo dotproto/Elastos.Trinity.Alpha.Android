@@ -85,7 +85,7 @@ CARAPI CARInterfaceAdapter::New(
 
         carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(const_cast<IInterfaceInfo*>(interfaceInfo), object);
         if (carInterfaceAdapter == nullptr)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         _interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
 
@@ -121,19 +121,19 @@ CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo* pinterfaceInfo, Local<:
     ec = interfaceInfo->GetId(&_interfaceId);
 
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     methodInfos = ArrayOf<IMethodInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     _methodInfos = methodInfos;
 }

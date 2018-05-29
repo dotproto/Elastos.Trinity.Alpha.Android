@@ -95,7 +95,7 @@ void AttachAspect(Local<Object> object, ClassID const &aspectId)
 
     ec = _CObject_CreateInstance(aspectId, RGM_SAME_DOMAIN, EIID_IAspect, reinterpret_cast<IInterface **>(&_aspect));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     aspect = _aspect, _aspect->Release();
 
@@ -108,18 +108,18 @@ void AttachAspect(Local<Object> object, ClassID const &aspectId)
 
         _carObject = (IObject *)carObject->Probe(EIID_IObject);
         if (_carObject == 0)
-            LOG(Error::INVALID_ARGUMENT, 0);
+            Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
         ec = aspect->AspectAggregate(AggrType_Aggregate, _carObject);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
     } else {
         struct _Aspects *aspects;
 
         if (!Has(object, New(".__attachedAspects__").ToLocalChecked()).FromJust()) {
             unique_ptr<struct _Aspects, _Aspects::Deleter> _aspects(new(nothrow) struct _Aspects);
             if (_aspects == nullptr)
-                LOG(Error::NO_MEMORY, 0);
+                Throw_LOG(Error::NO_MEMORY, 0);
 
             DefineOwnProperty(object,
                     New(".__attachedAspects__").ToLocalChecked(),
@@ -149,12 +149,12 @@ void DetachAspect(Local<Object> object, ClassID const &aspectId)
 
         _carObject = (IObject *)carObject->Probe(EIID_IObject);
         if (_carObject == 0)
-            LOG(Error::INVALID_ARGUMENT, 0);
+            Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
         ec = _carObject->Aggregate(AggrType_Unaggregate,
                 const_cast<IInterface *>(reinterpret_cast<IInterface const *>(&aspectId)));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
     } else {
         struct _Aspects *aspects;
 

@@ -90,7 +90,7 @@ Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *imoduleInfo)
 
     unique_ptr<struct _ModuleInfo, _ModuleInfo::Deleter> _moduleInfo(new(nothrow) struct _ModuleInfo);
     if (_moduleInfo == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _moduleInfo->moduleInfo = moduleInfo;
 

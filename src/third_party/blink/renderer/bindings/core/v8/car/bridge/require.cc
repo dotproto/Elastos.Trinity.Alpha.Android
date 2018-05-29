@@ -39,7 +39,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasImportedModule(moduleInfo, _ELASTOS String(entryId), &hasImportedModule);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasImportedModule != FALSE) {
         AutoPtr<IModuleInfo> importedModuleInfo;
@@ -47,7 +47,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
         IModuleInfo *_importedModuleInfo;
         ec = GetImportedModuleInfo(moduleInfo, _ELASTOS String(entryId), &_importedModuleInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
@@ -65,14 +65,14 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = HasConstant(moduleInfo, _ELASTOS String(_entryId), &hasConstant);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         if (hasConstant == FALSE)
-            LOG(Error::NONENTITY, 0);
+            Throw_LOG(Error::NONENTITY, 0);
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         constantInfo = _constantInfo, _constantInfo->Release();
 
@@ -81,7 +81,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasEnum(moduleInfo, _ELASTOS String(entryId), &hasEnum);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasEnum != FALSE) {
         AutoPtr<IEnumInfo> enumInfo;
@@ -89,7 +89,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         enumInfo = _enumInfo, _enumInfo->Release();
 
@@ -98,7 +98,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasStruct(moduleInfo, _ELASTOS String(entryId), &hasStruct);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasStruct != FALSE) {
         AutoPtr<IStructInfo> structInfo;
@@ -106,7 +106,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         structInfo = _structInfo, _structInfo->Release();
 
@@ -115,7 +115,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasTypeAlias(moduleInfo, _ELASTOS String(entryId), &hasTypeAlias);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasTypeAlias != FALSE) {
         AutoPtr<ITypeAliasInfo> typeAliasInfo;
@@ -123,7 +123,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         typeAliasInfo = _typeAliasInfo, _typeAliasInfo->Release();
 
@@ -132,7 +132,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasInterface(moduleInfo, _ELASTOS String(entryId), &hasInterface);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasInterface != FALSE) {
         AutoPtr<IInterfaceInfo > interfaceInfo;
@@ -140,7 +140,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         interfaceInfo = _interfaceInfo, _interfaceInfo->Release();
 
@@ -149,7 +149,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasClass(moduleInfo, _ELASTOS String(entryId), &hasClass);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasClass != FALSE) {
         AutoPtr<IClassInfo> classInfo;
@@ -157,7 +157,7 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         ec = const_cast<IModuleInfo *>(moduleInfo)->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         classInfo = _classInfo, _classInfo->Release();
 
@@ -182,22 +182,22 @@ Local<Value> Require(char const *ecoPath,
 
     ec = CReflector::AcquireModuleInfo(_ELASTOS String(ecoPath), &_moduleInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     moduleInfo = _moduleInfo, _moduleInfo->Release();
 
     ec = moduleInfo->GetVersion(&_major, &_minor, &_build, &_revision);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if ((uint32_t)_major != major)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor < minor)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_build != build)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor == minor && (uint32_t)_revision < revision)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
 
     if (nEntryIds == 0) {
         ::Nan::EscapableHandleScope scope;

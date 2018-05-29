@@ -24,11 +24,11 @@ static NAN_METHOD(Require)
         Local<Value> arg0;
 
         if (info.Length() < 1)
-            LOG(Error::INVALID_ARGUMENT, 0);
+            Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!arg0->IsString())
-            LOG(Error::INVALID_ARGUMENT, 0);
+            Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
         ParseURI uri(*Utf8String(arg0));
 

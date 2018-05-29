@@ -23,7 +23,7 @@ ParseURI::ParseURI(char const *uri)
 {
     _buf = unique_ptr<char>(strdup(uri));
     if (_buf == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
 }
 

@@ -36,7 +36,7 @@ static void _SetInputArgumentOfInt16(size_t argc, Local<Value> argv[], size_t in
     Int16 i16;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i16 = _To<int>(ap);
 
@@ -49,7 +49,7 @@ static void _SetInputArgumentOfInt32(size_t argc, Local<Value> argv[], size_t in
     _ELASTOS Int32 i32;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i32 = _To<_ELASTOS Int32>(ap);
 
@@ -62,7 +62,7 @@ static void _SetInputArgumentOfInt64(size_t argc, Local<Value> argv[], size_t in
     Int64 i64;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i64 = _To<Int64>(ap);
 
@@ -75,7 +75,7 @@ static void _SetInputArgumentOfByte(size_t argc, Local<Value> argv[], size_t ind
     Byte byte;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     byte = _To<int>(ap);
 
@@ -88,7 +88,7 @@ static void _SetInputArgumentOfFloat(size_t argc, Local<Value> argv[], size_t in
     Float f;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     f = _To<double>(ap);
 
@@ -101,7 +101,7 @@ static void _SetInputArgumentOfDouble(size_t argc, Local<Value> argv[], size_t i
     Double d;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     d = _To<Double>(ap);
 
@@ -114,7 +114,7 @@ static void _SetInputArgumentOfChar32(size_t argc, Local<Value> argv[], size_t i
     Char32 c32;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     c32 = _To<Char32>(ap);
 
@@ -127,7 +127,7 @@ static void _SetInputArgumentOfString(size_t argc, Local<Value> argv[], size_t i
     void const *p;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     p = _To<void const *>(ap);
 
@@ -142,7 +142,7 @@ static void _SetInputArgumentOfBoolean(size_t argc, Local<Value> argv[], size_t 
     _ELASTOS Boolean b;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     b = _To<int>(ap);
 
@@ -152,12 +152,12 @@ static void _SetInputArgumentOfBoolean(size_t argc, Local<Value> argv[], size_t 
 template<class T>
 static void _SetInputArgumentOfEMuid(size_t argc, Local<Value> argv[], size_t index, T ap)
 {
-    EMuid const *id;
+    EMuid *id;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    id = _To<EMuid const *>(ap);
+    id = _To<EMuid *>(ap);
 
     argv[index] = ToValue(id);
 }
@@ -165,12 +165,12 @@ static void _SetInputArgumentOfEMuid(size_t argc, Local<Value> argv[], size_t in
 template<class T>
 static void _SetInputArgumentOfEGuid(size_t argc, Local<Value> argv[], size_t index, T ap)
 {
-    EGuid const *id;
+    EGuid *id;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    id = _To<EGuid const *>(ap);
+    id = _To<EGuid *>(ap);
 
     argv[index] = ToValue(id);
 }
@@ -181,7 +181,7 @@ static void _SetInputArgumentOfECode(size_t argc, Local<Value> argv[], size_t in
     ECode ecode;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     ecode = _To<ECode>(ap);
 
@@ -195,7 +195,7 @@ static void _SetInputArgumentOfLocalPtr(ILocalPtrInfo const *localPtrInfo,
     void *localPtr;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     localPtr = _To<void *>(ap);
 
@@ -210,7 +210,7 @@ static void _SetInputArgumentOfLocalType(IDataTypeInfo const *dataTypeInfo,
     void const *localTypeObject;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     localTypeObject = _To<void const *>(ap);
 
@@ -224,7 +224,7 @@ static void _SetInputArgumentOfEnum(size_t argc, Local<Value> argv[], size_t ind
     _ELASTOS Int32 enum_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     enum_ = _To<_ELASTOS Int32>(ap);
 
@@ -232,29 +232,29 @@ static void _SetInputArgumentOfEnum(size_t argc, Local<Value> argv[], size_t ind
 }
 
 template<class T>
-static void _SetInputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo,
+static void _SetInputArgumentOfCARArray(ICarArrayInfo *carArrayInfo,
         size_t argc, Local<Value> argv[], size_t index, T ap)
 {
-    CarQuintet const *carQuintet;
+    CarQuintet *carQuintet;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    carQuintet = _To<CarQuintet const *>(ap);
+    carQuintet = _To<CarQuintet *>(ap);
 
     argv[index] = ToValue(carArrayInfo, carQuintet);
 }
 
 template<class T>
-static void _SetInputArgumentOfStruct(IStructInfo const *structInfo,
+static void _SetInputArgumentOfStruct(IStructInfo *structInfo,
         size_t argc, Local<Value> argv[], size_t index, T ap)
 {
-    void const *struct_;
+    void *struct_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    struct_ = _To<void const *>(ap);
+    struct_ = _To<void *>(ap);
 
     argv[index] = ToValue(structInfo, struct_);
 }
@@ -265,7 +265,7 @@ static void _SetInputArgumentOfInterface(size_t argc, Local<Value> argv[], size_
     IInterface *carObject;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     carObject = _To<IInterface *>(ap);
 
@@ -273,16 +273,16 @@ static void _SetInputArgumentOfInterface(size_t argc, Local<Value> argv[], size_
 }
 
 template<class T>
-static void _SetInputArgumentOf(IDataTypeInfo const *dataTypeInfo,
+static void _SetInputArgumentOf(IDataTypeInfo *dataTypeInfo,
         size_t argc, Local<Value> argv[], size_t index, T ap)
 {
     ECode ec;
 
     CarDataType dataType;
 
-    ec = const_cast<IDataTypeInfo *>(dataTypeInfo)->GetDataType(&dataType);
+    ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -363,12 +363,12 @@ static void _SetInputArgumentOf(IDataTypeInfo const *dataTypeInfo,
         break;
 
     case CarDataType_ArrayOf:
-        _SetInputArgumentOfCARArray(static_cast<ICarArrayInfo const *>(dataTypeInfo), argc, argv, index, ap);
+        _SetInputArgumentOfCARArray(static_cast<ICarArrayInfo*>(dataTypeInfo), argc, argv, index, ap);
 
         break;
 
     case CarDataType_Struct:
-        _SetInputArgumentOfStruct(static_cast<IStructInfo const *>(dataTypeInfo), argc, argv, index, ap);
+        _SetInputArgumentOfStruct(static_cast<IStructInfo*>(dataTypeInfo), argc, argv, index, ap);
 
         break;
 
@@ -407,7 +407,7 @@ static Local<Value> _OutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
     ec = const_cast<IDataTypeInfo*>(dataTypeInfo)->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     return _OutputArgumentOf(name, getter, setter, data);
 }
@@ -490,13 +490,13 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfCARArray)
 
             ec = carArray->carArrayInfo->CreateVariable(value.As<Array>()->Length(), &_variableOfCARArray);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
 
             ec = variableOfCARArray->GetSetter(&_carArraySetter);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             carArraySetter = _carArraySetter, _carArraySetter->Release();
 
@@ -504,7 +504,7 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfCARArray)
 
             ec = variableOfCARArray->GetPayload((void **)&carQuintet);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             *carArray->carQuintet = _CarQuintet_Clone(carQuintet);
 
@@ -535,7 +535,7 @@ static Local<Value> _CalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *ca
             new(::std::nothrow) _CalleeAllocCARArray
             );
     if (carArray == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
     carArray->carQuintet = carQuintet;
@@ -555,7 +555,7 @@ static void _SetCalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArra
     CarQuintet **carQuintet;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     carQuintet = _To<CarQuintet **>(ap);
 
@@ -588,11 +588,11 @@ static NAN_SETTER(_SetCalleeAllocOutputArgumentOfStruct)
 
             ec = struct_->structInfo->GetSize(&size);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 #if 0//?jw
             unique_ptr<void> _struct(operator new(size, nothrow));
             if (_struct == nullptr)
-                LOG(Error::NO_MEMORY, 0);
+                Throw_LOG(Error::NO_MEMORY, 0);
 
             ToStruct(struct_->structInfo, _struct.get(), value);
             *struct_->struct_ = _struct.release();
@@ -623,7 +623,7 @@ static Local<Value> _CalleeAllocOutputArgumentOfStruct(IStructInfo *structInfo, 
 
     ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
     if (_struct == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _struct->structInfo = structInfo;
     _struct->struct_ = struct_;
@@ -643,7 +643,7 @@ static void _SetCalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
     void **struct_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     struct_ = _To<void **>(ap);
 
@@ -660,7 +660,7 @@ static void _SetCalleeAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
     ec = const_cast<IDataTypeInfo *>(dataTypeInfo)->GetDataType(&dataType);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_ArrayOf:
@@ -702,7 +702,7 @@ static Local<Value> _CallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeIn
 
     ec = const_cast<IDataTypeInfo*>(dataTypeInfo)->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     return _CallerAllocOutputArgumentOf(name, getter, setter, data);
 }
@@ -783,7 +783,7 @@ static void _SetCallerAllocOutputArgumentOfInt16(size_t argc, Local<Value> argv[
     Int16 *i16;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i16 = _To<Int16 *>(ap);
 
@@ -866,7 +866,7 @@ static void _SetCallerAllocOutputArgumentOfInt32(size_t argc, Local<Value> argv[
     _ELASTOS Int32 *i32;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i32 = _To<_ELASTOS Int32 *>(ap);
 
@@ -949,7 +949,7 @@ static void _SetCallerAllocOutputArgumentOfInt64(size_t argc, Local<Value> argv[
     Int64 *i64;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     i64 = _To<Int64 *>(ap);
 
@@ -1032,7 +1032,7 @@ static void _SetCallerAllocOutputArgumentOfByte(size_t argc, Local<Value> argv[]
     Byte *byte;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     byte = _To<Byte *>(ap);
 
@@ -1115,7 +1115,7 @@ static void _SetCallerAllocOutputArgumentOfFloat(size_t argc, Local<Value> argv[
     Float *f;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     f = _To<Float *>(ap);
 
@@ -1198,7 +1198,7 @@ static void _SetCallerAllocOutputArgumentOfDouble(size_t argc, Local<Value> argv
     Double *d;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     d = _To<Double *>(ap);
 
@@ -1281,7 +1281,7 @@ static void _SetCallerAllocOutputArgumentOfChar32(size_t argc, Local<Value> argv
     Char32 *c32;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     c32 = _To<Char32 *>(ap);
 
@@ -1364,7 +1364,7 @@ static void _SetCallerAllocOutputArgumentOfString(size_t argc, Local<Value> argv
     _ELASTOS String *s;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     s = _To<_ELASTOS String *>(ap);
 
@@ -1447,7 +1447,7 @@ static void _SetCallerAllocOutputArgumentOfBoolean(size_t argc, Local<Value> arg
     _ELASTOS Boolean *b;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     b = _To<_ELASTOS Boolean *>(ap);
 
@@ -1530,7 +1530,7 @@ static void _SetCallerAllocOutputArgumentOfEMuid(size_t argc, Local<Value> argv[
     EMuid *id;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     id = _To<EMuid *>(ap);
 
@@ -1613,7 +1613,7 @@ static void _SetCallerAllocOutputArgumentOfEGuid(size_t argc, Local<Value> argv[
     EGuid *id;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     id = _To<EGuid *>(ap);
 
@@ -1696,7 +1696,7 @@ static void _SetCallerAllocOutputArgumentOfECode(size_t argc, Local<Value> argv[
     ECode *ecode;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     ecode = _To<ECode *>(ap);
 
@@ -1780,7 +1780,7 @@ static void _SetCallerAllocOutputArgumentOfLocalPtr(ILocalPtrInfo const *localPt
     void **localPtr;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     localPtr = _To<void **>(ap);
 
@@ -1859,7 +1859,7 @@ static void _SetCallerAllocOutputArgumentOfLocalType(IDataTypeInfo const *dataTy
     void *localTypeObject;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     localTypeObject = _To<void *>(ap);
 
@@ -1944,7 +1944,7 @@ static void _SetCallerAllocOutputArgumentOfEnum(IEnumInfo const *enumInfo,
     _ELASTOS Int32 *enum_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     enum_ = _To<_ELASTOS Int32 *>(ap);
 
@@ -1970,7 +1970,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
 
             ec = carArray->variableOfCARArray->GetGetter(&_carArrayGetter);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             carArrayGetter = _carArrayGetter, _carArrayGetter->Release();
 
@@ -2009,7 +2009,7 @@ static NAN_SETTER(_SetCallerAllocOutputArgumentOfCARArray)
 
             ec = carArray->variableOfCARArray->GetSetter(&_carArraySetter);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             carArraySetter = _carArraySetter, _carArraySetter->Release();
 
@@ -2043,7 +2043,7 @@ static Local<Value> _CallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *ca
 
     ec = const_cast<ICarArrayInfo*>(carArrayInfo)->CreateVariableBox(carQuintet, &_variableOfCARArray);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
 
@@ -2051,7 +2051,7 @@ static Local<Value> _CallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *ca
             new(::std::nothrow) CallerAllocCARArray
             );
     if (carArray == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
     carArray->variableOfCARArray = variableOfCARArray;
@@ -2071,7 +2071,7 @@ static void _SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArra
     CarQuintet *carQuintet;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     carQuintet = _To<CarQuintet *>(ap);
 
@@ -2097,7 +2097,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
 
             ec = struct_->variableOfStruct->GetGetter(&_structGetter);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             structGetter = _structGetter, _structGetter->Release();
 
@@ -2134,7 +2134,7 @@ static NAN_SETTER(_SetCallerAllocOutputArgumentOfStruct)
 
             ec = struct_->variableOfStruct->GetSetter(&_structSetter);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             structSetter = _structSetter, _structSetter->Release();
 
@@ -2168,7 +2168,7 @@ static Local<Value> _CallerAllocOutputArgumentOfStruct(IStructInfo const *struct
 
     ec = const_cast<IStructInfo*>(structInfo)->CreateVariableBox(struct_, &_variableOfStruct);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
 #if 0
@@ -2178,7 +2178,7 @@ static Local<Value> _CallerAllocOutputArgumentOfStruct(IStructInfo const *struct
 #endif
     ::std::unique_ptr<CallerAllocStruct, typename CallerAllocStruct::Deleter> _struct(new(::std::nothrow) CallerAllocStruct);
     if (_struct == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _struct->structInfo = const_cast<IStructInfo*>(structInfo);
     _struct->variableOfStruct = variableOfStruct;
@@ -2198,7 +2198,7 @@ static void _SetCallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
     void *struct_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     struct_ = _To<void *>(ap);
 
@@ -2273,7 +2273,7 @@ static Local<Value> _CallerAllocOutputArgumentOfInterface(IInterfaceInfo const *
             new(::std::nothrow) CallerAllocInterface
             );
     if (_interface == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _interface->interface_ = interface_;
 
@@ -2292,7 +2292,7 @@ static void _SetCallerAllocOutputArgumentOfInterface(IInterfaceInfo const *inter
     IInterface **interface_;
 
     if (index >= argc)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     interface_ = _To<IInterface **>(ap);
 
@@ -2309,7 +2309,7 @@ static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
     ec = const_cast<IDataTypeInfo *>(dataTypeInfo)->GetDataType(&dataType);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -2424,11 +2424,11 @@ static void _SetArgumentOf(IParamInfo const *paramInfo, size_t argc, Local<Value
 
     ec = const_cast<IParamInfo *>(paramInfo)->GetIOAttribute(&io);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     ec = const_cast<IParamInfo *>(paramInfo)->GetTypeInfo(&_dataTypeInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     dataTypeInfo = _dataTypeInfo, _dataTypeInfo->Release();
 
@@ -2519,20 +2519,20 @@ ECode CARFunctionAdapter::Call(Local<Function> function, Local<Value> receiver,
 
         ec = const_cast<IFunctionInfo*>(functionInfo)->GetParamCount(&nParams);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
         if (paramInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = const_cast<IFunctionInfo*>(functionInfo)->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         argc = nParams;
         unique_ptr<Local<Value> []> argv(new(nothrow) Local<Value>[argc]);
         if (argv == nullptr)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         for (size_t i = 0; i < argc; ++i)
             SetArgumentOf((*paramInfos)[i], argc, argv.get(), i, ap);
@@ -2560,15 +2560,15 @@ CARFunctionAdapter::CARFunctionAdapter(IFunctionInfo const *functionInfo,
 
     ec = const_cast<IFunctionInfo*>(functionInfo)->GetParamCount(&nParams);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = const_cast<IFunctionInfo*>(functionInfo)->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     _paramInfos = paramInfos;
 }
@@ -2632,7 +2632,7 @@ ECode CARFunctionAdapter::Call(va_list ap) noexcept
         argc = _paramInfos->GetLength();
         unique_ptr<Local<Value> []> argv(new(nothrow) Local<Value>[argc]);
         if (argv == nullptr)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         for (size_t i = 0; i < argc; ++i)
             SetArgumentOf((*_paramInfos)[i], argc, argv.get(), i, ap);

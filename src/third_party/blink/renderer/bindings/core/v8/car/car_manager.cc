@@ -1,4 +1,13 @@
-//#include "ElastosCore.h"
+#include <nan.h>
+
+#include "bridge/macros.h"
+#include "bridge/nan-ext.h"
+
+#include "bridge/car-interface-adapter.h"
+#include "bridge/car-object.h"
+#include "bridge/error.h"
+#include "bridge/parse-uri.h"
+#include "bridge/require.h"
 
 #include "car_manager.h"
 #include "args_converter.h"
@@ -30,6 +39,55 @@ using v8::Value;
 using v8::Persistent;
 using v8::internal::GlobalHandles;
 
+using namespace Nan;
+using namespace v8;
+CAR_BRIDGE_NAMESPACE_USING
+
+static NAN_METHOD(Require)
+{
+#if 0 //?try
+    try {
+#endif
+        ::Nan::HandleScope scope;
+
+        Local<Value> arg0;
+
+        if (info.Length() < 1)
+            Throw_LOG(CAR_BRIDGE::Error::INVALID_ARGUMENT, 0);
+
+        arg0 = info[0];
+        if (!arg0->IsString())
+            Throw_LOG(CAR_BRIDGE::Error::INVALID_ARGUMENT, 0);
+
+        ParseURI uri(*Utf8String(arg0));
+
+        NAN_METHOD_RETURN_VALUE(
+                Require(uri.ecoPath(),
+                    uri.major(), uri.minor(), uri.build(), uri.revision(),
+                    uri.nEntryIds(), uri.entryIds())
+                );
+#if 0
+    } catch (Error const &error) {
+        ::Nan::HandleScope scope;
+
+        ThrowError(ToValue(error));
+    } catch (...) {
+        ::Nan::HandleScope scope;
+
+        ThrowError(ToValue(Error(Error::FAILED, "")));
+    }
+#endif
+}
+
+void Car_Initialize(v8::Local<v8::Object> target)
+{
+    CARObject::Initialize();
+    CARInterfaceAdapter::Initialize();
+
+    Export(target, "version", New("0.0.0").ToLocalChecked());
+    Export(target, "require", Require);
+}
+#if 0
 static Local<Value> Throw(v8::Isolate *isolate, const char *message)
 {
     return isolate->ThrowException(
@@ -242,16 +300,18 @@ static void Require(const v8::FunctionCallbackInfo<v8::Value> &args)
             car_class_template->GetFunction());
     }
 }
-
+#endif
 bool ela::CarManager::initialize(v8::Isolate* isolate)
 {
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     LOG(INFO) << "CarManager initialize.";
-
+#if 0
     v8::Local<v8::FunctionTemplate> RequireTemplate = v8::FunctionTemplate::New(isolate, Require);
     context->Global()->Set(context, v8::String::NewFromUtf8(isolate, "require", NewStringType::kNormal)
                   .ToLocalChecked(),
               RequireTemplate->GetFunction());
+#endif
+	Car_Initialize(context->Global());
 
     return 1;
 }

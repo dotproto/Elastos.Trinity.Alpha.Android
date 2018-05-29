@@ -38,7 +38,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
 
     ec = intrinsicTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -56,7 +56,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
         break;
 
     default:
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
     }
 
     auto &_intrinsicType = _mapIntrinsicTypeInfoToCARIntrinsicType[intrinsicTypeInfo];
@@ -72,7 +72,7 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
 
     ec = intrinsicTypeInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(intrinsicType,
             New("$name").ToLocalChecked(),
@@ -116,7 +116,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo  *localPtrInfo)
 
     ec = localPtrInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localPtr,
             New("$name").ToLocalChecked(),
@@ -125,7 +125,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo  *localPtrInfo)
 
     ec = localPtrInfo->GetTargetTypeInfo(&_targetTypeInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     targetTypeInfo = _targetTypeInfo, _targetTypeInfo->Release();
 
@@ -136,7 +136,7 @@ Local<Object> CARLocalPtr(ILocalPtrInfo  *localPtrInfo)
 
     ec = localPtrInfo->GetPtrLevel(&level);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localPtr,
             New("level").ToLocalChecked(),
@@ -173,7 +173,7 @@ Local<Object> CARLocalType(IDataTypeInfo  *localTypeInfo)
 
     ec = localTypeInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(localTypeObject,
             New("$name").ToLocalChecked(),
@@ -218,7 +218,7 @@ Local<Object> CAREnum(IEnumInfo  *enumInfo)
 
     ec = enumInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     _namespace = ToValue(namespace_);
 
@@ -229,7 +229,7 @@ Local<Object> CAREnum(IEnumInfo  *enumInfo)
 
     ec = enumInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(enum_,
             New("$name").ToLocalChecked(),
@@ -238,15 +238,15 @@ Local<Object> CAREnum(IEnumInfo  *enumInfo)
 
     ec = enumInfo->GetItemCount(&nItems);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     itemInfos = ArrayOf<IEnumItemInfo  *>::Alloc(nItems);
     if (itemInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = enumInfo->GetAllItemInfos(reinterpret_cast<ArrayOf<IEnumItemInfo *> *>(itemInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nItems; ++i) {
         ::Nan::HandleScope scope_;
@@ -268,7 +268,7 @@ Local<Object> CAREnum(IEnumInfo  *enumInfo)
 
         ec = itemInfo->GetName(&itemName);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(enum_,
                 ToValue(itemName).As<::v8::String>(),
@@ -304,7 +304,7 @@ Local<Object> _Array(ArrayInfo  *arrayInfo)
 
     ec = arrayInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(array,
             New("$name").ToLocalChecked(),
@@ -313,7 +313,7 @@ Local<Object> _Array(ArrayInfo  *arrayInfo)
 
     ec = arrayInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
 
@@ -362,7 +362,7 @@ Local<Object> CARCPPVector(ICppVectorInfo  *cppVectorInfo)
 
     ec = cppVectorInfo->GetLength(&length);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(cppVector,
             New("length").ToLocalChecked(),
@@ -403,7 +403,7 @@ Local<Object> CARStruct(IStructInfo  *structInfo)
 
     ec = structInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(struct_,
             New("$name").ToLocalChecked(),
@@ -412,15 +412,15 @@ Local<Object> CARStruct(IStructInfo  *structInfo)
 
     ec = structInfo->GetFieldCount(&nFieldInfos);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     fieldInfos = ArrayOf<IFieldInfo  *>::Alloc(nFieldInfos);
     if (fieldInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = structInfo->GetAllFieldInfos(reinterpret_cast<ArrayOf<IFieldInfo *> *>(fieldInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nFieldInfos; ++i) {
         ::Nan::HandleScope scope_;
@@ -445,7 +445,7 @@ Local<Object> CARStruct(IStructInfo  *structInfo)
 
         ec = fieldInfo->GetName(&fieldName);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(field,
                 New("$name").ToLocalChecked(),
@@ -454,7 +454,7 @@ Local<Object> CARStruct(IStructInfo  *structInfo)
 
         ec = fieldInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         typeInfo = _typeInfo, _typeInfo->Release();
 
@@ -509,7 +509,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$namespace").ToLocalChecked(),
@@ -518,7 +518,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$name").ToLocalChecked(),
@@ -527,7 +527,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->GetId(&id);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$id").ToLocalChecked(),
@@ -536,7 +536,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->IsLocal(&local);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(interface_,
             New("$local").ToLocalChecked(),
@@ -545,7 +545,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->HasBase(&hasBase);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasBase != FALSE) {
         AutoPtr<IInterfaceInfo > baseInfo;
@@ -553,7 +553,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
         ec = interfaceInfo->GetBaseInfo(&_baseInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         baseInfo = _baseInfo, _baseInfo->Release();
 
@@ -565,15 +565,15 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     methodInfos = ArrayOf<IFunctionInfo  *>::Alloc(nMethods);
     if (methodInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nMethods; ++i) {
         IFunctionInfo  *methodInfo;
@@ -584,7 +584,7 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
 
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         mapNameToMethodInfos[methodName].push_back(methodInfo);
     }
@@ -656,7 +656,7 @@ Local<Object> CARDataType(IDataTypeInfo  *dataTypeInfo)
 
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:

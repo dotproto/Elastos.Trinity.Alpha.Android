@@ -25,7 +25,7 @@ template<class ConstantoidInfo>
 
     ec = constantoidInfo->GetValue(&value);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     constantoid = ::Nan::New<::v8::NumberObject>(value);
 
@@ -36,7 +36,7 @@ template<class ConstantoidInfo>
 
     ec = constantoidInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(constantoid,
             ::Nan::New("$name").ToLocalChecked(),

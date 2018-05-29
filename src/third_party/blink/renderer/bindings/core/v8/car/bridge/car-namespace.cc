@@ -140,17 +140,17 @@ static Local<ObjectTemplate> _CARNamespaceTemplate(
 
             switch (it->second.type) {
             case _NAMESPACED_ENTRY_TYPE_ENUM:
-                namespacedEntry = CAREnum(static_cast<IEnumInfo const *>(it->second.info.Get()));
+                namespacedEntry = CAREnum(static_cast<IEnumInfo *>(it->second.info.Get()));
 
                 break;
 
             case _NAMESPACED_ENTRY_TYPE_INTERFACE:
-                namespacedEntry = CARInterface(static_cast<IInterfaceInfo const *>(it->second.info.Get()));
+                namespacedEntry = CARInterface(static_cast<IInterfaceInfo *>(it->second.info.Get()));
 
                 break;
 
             case _NAMESPACED_ENTRY_TYPE_CLASS:
-                namespacedEntry = CARObject::NewClassTemplate(static_cast<IClassInfo const *>(it->second.info.Get()));
+                namespacedEntry = CARObject::NewClassTemplate(static_cast<IClassInfo *>(it->second.info.Get()));
 
                 break;
 
@@ -167,7 +167,7 @@ static Local<ObjectTemplate> _CARNamespaceTemplate(
 
             _namespace = strndup(fullName, delimiter - fullName);
             if (_namespace == nullptr)
-                LOG(Error::NO_MEMORY, 0);
+                Throw_LOG(Error::NO_MEMORY, 0);
 
             if (namespaces.count(_namespace) > 0)
                 continue;
@@ -227,11 +227,11 @@ static void _AddNamespacedEntryInfos(_MS2NEI *mapFullNameToNamespacedEntryInfo,
 
         ec = namespacedEntryInfo->GetNamespace(&namespace_);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         ec = namespacedEntryInfo->GetName(&name);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         fullName = namespace_ + "." + name;
 
@@ -273,58 +273,58 @@ Local<ObjectTemplate> CARNamespaceTemplate(IModuleInfo const *pmoduleInfo, char 
 
     unique_ptr<_MS2NEI> mapFullNameToNamespacedEntryInfo(new(nothrow) _MS2NEI());
     if (mapFullNameToNamespacedEntryInfo == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = moduleInfo->GetEnumCount(&nEnums);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nEnums > 0) {
         AutoPtr<ArrayOf<IEnumInfo *> > enumInfos;
 
         enumInfos = ArrayOf<IEnumInfo *>::Alloc(nEnums);
         if (enumInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllEnumInfos(reinterpret_cast<ArrayOf<IEnumInfo *> *>(enumInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         _AddNamespacedEntryInfos(mapFullNameToNamespacedEntryInfo.get(), *enumInfos);
     }
 
     ec = moduleInfo->GetInterfaceCount(&nInterfaces);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nInterfaces > 0) {
         AutoPtr<ArrayOf<IInterfaceInfo *> > interfaceInfos;
 
         interfaceInfos = ArrayOf<IInterfaceInfo *>::Alloc(nInterfaces);
         if (interfaceInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllInterfaceInfos(reinterpret_cast<ArrayOf<IInterfaceInfo *> *>(interfaceInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         _AddNamespacedEntryInfos(mapFullNameToNamespacedEntryInfo.get(), *interfaceInfos);
     }
 
     ec = moduleInfo->GetClassCount(&nClasses);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nClasses > 0) {
         AutoPtr<ArrayOf<IClassInfo *> > classInfos;
 
         classInfos = ArrayOf<IClassInfo *>::Alloc(nClasses);
         if (classInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllClassInfos(reinterpret_cast<ArrayOf<IClassInfo *> *>(classInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         _AddNamespacedEntryInfos(mapFullNameToNamespacedEntryInfo.get(), *classInfos);
     }

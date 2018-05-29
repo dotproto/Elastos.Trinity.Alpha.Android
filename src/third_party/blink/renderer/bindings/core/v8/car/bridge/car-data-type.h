@@ -7,18 +7,18 @@
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-extern ::v8::Local<::v8::Object> CARLocalPtr(ILocalPtrInfo const *localPtrInfo);
-extern ::v8::Local<::v8::Object> CARLocalType(IDataTypeInfo const *dataTypeInfo);
-extern ::v8::Local<::v8::Object> CAREnum(IEnumInfo const *enumInfo);
-extern ::v8::Local<::v8::Object> CARArray(ICarArrayInfo const *carArrayInfo);
-extern ::v8::Local<::v8::Object> CARCPPVector(ICppVectorInfo const *cppVectorInfo);
-extern ::v8::Local<::v8::Object> CARStruct(IStructInfo const *structInfo);
-extern ::v8::Local<::v8::Object> CARInterface(IInterfaceInfo const *interfaceInfo);
+extern ::v8::Local<::v8::Object> CARLocalPtr(ILocalPtrInfo *localPtrInfo);
+extern ::v8::Local<::v8::Object> CARLocalType(IDataTypeInfo *dataTypeInfo);
+extern ::v8::Local<::v8::Object> CAREnum(IEnumInfo *enumInfo);
+extern ::v8::Local<::v8::Object> CARArray(ICarArrayInfo *carArrayInfo);
+extern ::v8::Local<::v8::Object> CARCPPVector(ICppVectorInfo *cppVectorInfo);
+extern ::v8::Local<::v8::Object> CARStruct(IStructInfo *structInfo);
+extern ::v8::Local<::v8::Object> CARInterface(IInterfaceInfo *interfaceInfo);
 
 typedef IInterfaceInfo ICallbackInterfaceInfo;
 
-extern ::v8::Local<::v8::Object> CARCallbackInterface(ICallbackInterfaceInfo const *callbackInterfaceInfo);
-extern ::v8::Local<::v8::Object> CARDataType(IDataTypeInfo const *dataTypeInfo);
+extern ::v8::Local<::v8::Object> CARCallbackInterface(ICallbackInterfaceInfo *callbackInterfaceInfo);
+extern ::v8::Local<::v8::Object> CARDataType(IDataTypeInfo *dataTypeInfo);
 
 CAR_BRIDGE_NAMESPACE_END
 

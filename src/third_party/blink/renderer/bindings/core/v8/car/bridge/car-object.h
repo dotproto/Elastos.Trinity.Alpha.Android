@@ -56,9 +56,7 @@ private:
         }
     };
 
-    typedef ::std::map<CopyablePersistent<::v8::Function>,
-            ::std::unique_ptr<CARFunctionAdapter>,
-            Less<::v8::Function>> MF2CARFA;
+    typedef ::std::map<CopyablePersistent<::v8::Function>, ::std::unique_ptr<CARFunctionAdapter>, Less<::v8::Function>> MF2CARFA;
     typedef ::std::map<CopyablePersistent<::v8::String>, MF2CARFA, Less<::v8::String>> MS2MF2CARFA;
 
     typedef CARObject *(*Constructor)(size_t argc, ::v8::Local<::v8::Value> argv[], ::v8::Local<::v8::Value> data);

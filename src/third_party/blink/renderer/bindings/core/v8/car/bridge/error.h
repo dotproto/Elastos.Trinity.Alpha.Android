@@ -105,7 +105,7 @@ extern bool CanBeUsedAsError(::v8::Local<::v8::Value> value);
 
 extern void ToError(Error *error, ::v8::Local<::v8::Value> value);
 
-extern ::v8::Local<::v8::Value> ToValue(Error const &error);
+extern ::v8::Local<::v8::Value> ToValue(Error &error);
 
 extern _ELASTOS ECode ToECode(Error const &error) noexcept;
 

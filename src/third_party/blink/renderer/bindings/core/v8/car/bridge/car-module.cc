@@ -56,7 +56,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = moduleInfo->GetPath(&path);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(moduleTemplate,
             New("$path").ToLocalChecked(),
@@ -65,7 +65,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = moduleInfo->GetVersion(&major, &minor, &build, &revision);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     char version[48];
 
@@ -78,18 +78,18 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = GetImportedModuleCount(moduleInfo, &nImportedModules);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nImportedModules > 0) {
         AutoPtr<ArrayOf<IModuleInfo *> > importedModuleInfos;
 
         importedModuleInfos = ArrayOf<IModuleInfo *>::Alloc(nImportedModules);
         if (importedModuleInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = GetAllImportedModuleInfos(moduleInfo, importedModuleInfos);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         for (_ELASTOS Int32 i = 0; i < nImportedModules; ++i) {
             ::Nan::HandleScope scope_;
@@ -102,7 +102,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
             ec = importedModuleInfo->GetPath(&importedModulePath);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             SetTemplate(moduleTemplate,
                     ToValue(importedModulePath).As<::v8::String>(),
@@ -113,7 +113,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = moduleInfo->GetConstantCount(&nConstants);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nConstants > 0) {
         AutoPtr<ArrayOf<IConstantInfo *> > constantInfos;
@@ -122,11 +122,11 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
         constantInfos = ArrayOf<IConstantInfo *>::Alloc(nConstants);
         if (constantInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllConstantInfos(reinterpret_cast<ArrayOf<IConstantInfo *> *>(constantInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         constants = New<Object>();
 
@@ -141,7 +141,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
             ec = constantInfo->GetName(&constantName);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             DefineOwnProperty(constants,
                     ToValue(constantName).As<::v8::String>(),
@@ -157,18 +157,18 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = moduleInfo->GetStructCount(&nStructs);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nStructs > 0) {
         AutoPtr<ArrayOf<IStructInfo *> > structInfos;
 
         structInfos = ArrayOf<IStructInfo *>::Alloc(nStructs);
         if (structInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllStructInfos(reinterpret_cast<ArrayOf<IStructInfo *> *>(structInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         for (_ELASTOS Int32 i = 0; i < nStructs; ++i) {
             ::Nan::HandleScope scope_;
@@ -181,7 +181,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
             ec = structInfo->GetName(&structName);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             SetTemplate(moduleTemplate,
                     ToValue(structName).As<::v8::String>(),
@@ -192,18 +192,18 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
     ec = moduleInfo->GetTypeAliasCount(&nTypeAliases);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     if (nTypeAliases > 0) {
         AutoPtr<ArrayOf<ITypeAliasInfo *> > typeAliasInfos;
 
         typeAliasInfos = ArrayOf<ITypeAliasInfo *>::Alloc(nTypeAliases);
         if (typeAliasInfos == 0)
-            LOG(Error::NO_MEMORY, 0);
+            Throw_LOG(Error::NO_MEMORY, 0);
 
         ec = moduleInfo->GetAllTypeAliasInfos(reinterpret_cast<ArrayOf<ITypeAliasInfo *> *>(typeAliasInfos.Get()));
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         for (_ELASTOS Int32 i = 0; i < nTypeAliases; ++i) {
             ::Nan::HandleScope scope_;
@@ -216,7 +216,7 @@ Local<ObjectTemplate> CARModuleTemplate(IModuleInfo const *pmoduleInfo)
 
             ec = typeAliasInfo->GetName(&typeAliasName);
             if (FAILED(ec))
-                LOG(Error::TYPE_ELASTOS, ec);
+                Throw_LOG(Error::TYPE_ELASTOS, ec);
 
             SetTemplate(moduleTemplate,
                     ToValue(typeAliasName).As<::v8::String>(),

@@ -18,7 +18,7 @@ _CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo const *carArrayInfo, _E
             new(::std::nothrow) _CalleeAllocCARArray
             );
     if (carArray == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     carArray->carArrayInfo = const_cast<ICarArrayInfo*>(carArrayInfo);
     carArray->carQuintet = carQuintet;
@@ -31,7 +31,7 @@ _CalleeAllocStruct *CalleeAllocStruct_(IStructInfo const* structInfo, void **str
 {
     ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
     if (_struct == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _struct->structInfo = structInfo;
     _struct->struct_ = struct_;
@@ -44,7 +44,7 @@ _CallerAllocInt16 *CallerAllocInt16_(_ELASTOS Int16 *i16)
 {
     ::std::unique_ptr<_CallerAllocInt16, typename _CallerAllocInt16::Deleter> _i16(new(::std::nothrow) _CallerAllocInt16);
     if (_i16 == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _i16->i16 = i16;
 
@@ -56,7 +56,7 @@ _CallerAllocInt32 *CallerAllocInt32_(_ELASTOS Int32 *i32)
 {
     ::std::unique_ptr<_CallerAllocInt32, typename _CallerAllocInt32::Deleter> _i32(new(::std::nothrow) _CallerAllocInt32);
     if (_i32 == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _i32->i32 = i32;
 
@@ -68,7 +68,7 @@ _CallerAllocInt64 *CallerAllocInt64_(_ELASTOS Int64 *i64)
 {
     ::std::unique_ptr<_CallerAllocInt64, typename _CallerAllocInt64::Deleter> _i64(new(::std::nothrow) _CallerAllocInt64);
     if (_i64 == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _i64->i64 = i64;
 
@@ -80,7 +80,7 @@ _CallerAllocByte *CallerAllocByte_(_ELASTOS Byte *byte)
 {
     ::std::unique_ptr<_CallerAllocByte, typename _CallerAllocByte::Deleter> _byte(new(::std::nothrow) _CallerAllocByte);
     if (_byte == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _byte->byte = byte;
 
@@ -92,7 +92,7 @@ _CallerAllocFloat *CallerAllocFloat_(_ELASTOS Float *f)
 {
     ::std::unique_ptr<_CallerAllocFloat, typename _CallerAllocFloat::Deleter> _f(new(::std::nothrow) _CallerAllocFloat);
     if (_f == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _f->f = f;
 
@@ -104,7 +104,7 @@ _CallerAllocDouble *CallerAllocDouble_(_ELASTOS Double *d)
 {
     ::std::unique_ptr<_CallerAllocDouble, typename _CallerAllocDouble::Deleter> _d(new(::std::nothrow) _CallerAllocDouble);
     if (_d == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _d->d = d;
 
@@ -116,7 +116,7 @@ _CallerAllocChar32 *CallerAllocChar32_(_ELASTOS Char32 *c32)
 {
     ::std::unique_ptr<_CallerAllocChar32, typename _CallerAllocChar32::Deleter> _c32(new(::std::nothrow) _CallerAllocChar32);
     if (_c32 == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _c32->c32 = c32;
 
@@ -128,7 +128,7 @@ _CallerAllocString *CallerAllocString_(_ELASTOS String *s)
 {
     ::std::unique_ptr<_CallerAllocString, typename _CallerAllocString::Deleter> _s(new(::std::nothrow) _CallerAllocString);
     if (_s == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _s->s = s;
 
@@ -140,7 +140,7 @@ _CallerAllocBoolean *CallerAllocBoolean_(_ELASTOS Boolean *b)
 {
     ::std::unique_ptr<_CallerAllocBoolean, typename _CallerAllocBoolean::Deleter> _b(new(::std::nothrow) _CallerAllocBoolean);
     if (_b == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _b->b = b;
 
@@ -152,7 +152,7 @@ _CallerAllocEMuid *CallerAllocEMuid_(_ELASTOS EMuid *id)
 {
     ::std::unique_ptr<_CallerAllocEMuid, typename _CallerAllocEMuid::Deleter> _id(new(::std::nothrow) _CallerAllocEMuid);
     if (_id == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _id->id = id;
 
@@ -164,7 +164,7 @@ _CallerAllocEGuid *CallerAllocEGuid_(_ELASTOS EGuid *id)
 {
     ::std::unique_ptr<_CallerAllocEGuid, typename _CallerAllocEGuid::Deleter> _id(new(::std::nothrow) _CallerAllocEGuid);
     if (_id == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _id->id = id;
 
@@ -176,7 +176,7 @@ _CallerAllocECode *CallerAllocECode_(_ELASTOS ECode *ecode)
 {
     ::std::unique_ptr<_CallerAllocECode, typename _CallerAllocECode::Deleter> _ecode(new(::std::nothrow) _CallerAllocECode);
     if (_ecode == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _ecode->ecode = ecode;
 
@@ -190,7 +190,7 @@ _CallerAllocLocalPtr *CallerAllocLocalPtr_(void **localPtr)
             new(::std::nothrow) _CallerAllocLocalPtr
             );
     if (_localPtr == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _localPtr->localPtr = localPtr;
 
@@ -204,7 +204,7 @@ _CallerAllocLocalType *CallerAllocLocalType_(IDataTypeInfo const *dataTypeInfo, 
             new(::std::nothrow) _CallerAllocLocalType
             );
     if (_localTypeObject == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _localTypeObject->dataTypeInfo = dataTypeInfo;
     _localTypeObject->localTypeObject = localTypeObject;
@@ -217,7 +217,7 @@ _CallerAllocEnum *CallerAllocEnum_(_ELASTOS Int32 *enum_)
 {
     ::std::unique_ptr<_CallerAllocEnum, typename _CallerAllocEnum::Deleter> _enum(new(::std::nothrow) _CallerAllocEnum);
     if (_enum == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _enum->enum_ = enum_;
 
@@ -231,7 +231,7 @@ _CallerAllocCARArray *CallerAllocCARArray_(ICarArrayInfo const *carArrayInfo, IV
             new(::std::nothrow) _CallerAllocCARArray
             );
     if (carArray == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     carArray->carArrayInfo = carArrayInfo;
     carArray->variableOfCARArray = variableOfCARArray;
@@ -244,7 +244,7 @@ _CallerAllocStruct *CallerAllocStruct_(IStructInfo const *structInfo, IVariableO
 {
     ::std::unique_ptr<_CallerAllocStruct, typename _CallerAllocStruct::Deleter> struct_(new(::std::nothrow) _CallerAllocStruct);
     if (struct_ == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     struct_->structInfo = structInfo;
     struct_->variableOfStruct = variableOfStruct;
@@ -259,7 +259,7 @@ _CallerAllocInterface *CallerAllocInterface_(IInterface **interface_)
             new(::std::nothrow) _CallerAllocInterface
             );
     if (_interface == nullptr)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     _interface->interface_ = interface_;
 

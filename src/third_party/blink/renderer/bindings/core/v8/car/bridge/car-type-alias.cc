@@ -49,7 +49,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
 
     ec = typeAliasInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(typeAlias,
             New("$name").ToLocalChecked(),
@@ -58,7 +58,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
 
     ec = typeAliasInfo->IsDummy(&isDummy);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(typeAlias,
             New("isDummy").ToLocalChecked(),
@@ -67,7 +67,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
 
     ec = typeAliasInfo->GetTypeInfo(&_typeInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     typeInfo = _typeInfo, _typeInfo->Release();
 

@@ -57,7 +57,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
     ec = functionInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(function,
             New("$name").ToLocalChecked(),
@@ -67,7 +67,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 #if 0
     ec = functionInfo->GetAnnotation(&annotation);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(function,
             New("$annotation").ToLocalChecked(),
@@ -77,15 +77,15 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 #endif
     ec = functionInfo->GetParamCount(&nParams);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
-        LOG(Error::NO_MEMORY, 0);
+        Throw_LOG(Error::NO_MEMORY, 0);
 
     ec = functionInfo->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nParams; ++i) {
         ::Nan::HandleScope scope_;
@@ -117,7 +117,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
         ec = paramInfo->GetName(&paramName);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$name").ToLocalChecked(),
@@ -126,7 +126,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
         ec = paramInfo->GetIndex(&index);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$index").ToLocalChecked(),
@@ -135,7 +135,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
         ec = paramInfo->GetIOAttribute(&io);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         if (io == ParamIOAttribute_In)
             _io = "Input";
@@ -153,7 +153,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
         ec = paramInfo->IsReturnValue(&isReturnValue);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         DefineOwnProperty(param,
                 New("$isReturnValue").ToLocalChecked(),
@@ -162,7 +162,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
 
         ec = paramInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         typeInfo = _typeInfo, _typeInfo->Release();
 
@@ -197,24 +197,24 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *function
     Local<Object> functionCandidates;
 
     if (nFunctionInfos == 0)
-        LOG(Error::INVALID_ARGUMENT, 0);
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     if (nFunctionInfos == 1)
         return _CARFunction(functionInfos[0], what);
 
     ec = functionInfos[0]->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
     for (size_t i = 1; i < nFunctionInfos; ++i) {
         _ELASTOS String _name;
 
         ec = functionInfos[i]->GetName(&_name);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         if (_name != name)
-            LOG(Error::INVALID_ARGUMENT, 0);
+            Throw_LOG(Error::INVALID_ARGUMENT, 0);
     }
 
     functionCandidates = New<Object>();
