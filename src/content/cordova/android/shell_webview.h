@@ -30,7 +30,7 @@ public:
 	WebContents* web_contents() const { return web_contents_.get(); }
 
 	void SetWebContents(std::unique_ptr<WebContents> web_contents){
-    web_contents_.reset(std::move(web_contents.get()));
+    web_contents_ = std::move(web_contents);
   }
 
   //  static bool Register(JNIEnv* env);
