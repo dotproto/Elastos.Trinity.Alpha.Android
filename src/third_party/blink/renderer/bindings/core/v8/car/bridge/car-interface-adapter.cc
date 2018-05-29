@@ -4,31 +4,18 @@
 #include <cstddef>
 
 #include <new>
-
-#include <node.h>
-
 #include <nan.h>
 
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "elastos-ext.h"
-
 #include "car-interface-adapter.h"
-
 #include "car-function-adapter.h"
 #include "error.h"
 #include "js-2-car.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
@@ -89,56 +76,64 @@ CARAPI CARInterfaceAdapter::New(
         IInterface **interface_,
         IInterfaceInfo const *interfaceInfo, Local<::v8::Object> object) noexcept
 {
+#if 0//?jw
     try {
+#endif
         CARInterfaceAdapter *carInterfaceAdapter;
 
         AutoPtr<IInterface> _interface;
 
-        carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(interfaceInfo, object);
+        carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(const_cast<IInterfaceInfo*>(interfaceInfo), object);
         if (carInterfaceAdapter == nullptr)
-            throw Error(Error::NO_MEMORY, "");
+            LOG(Error::NO_MEMORY, 0);
 
         _interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
 
         if (interface_ != nullptr)
             _interface->AddRef(), *interface_ = _interface;
+#if 0//?jw
     } catch (Error const &error) {
         return ToECode(error);
     } catch (...) {
         return E_FAILED;
     }
-
+#endif
     return NO_ERROR;
 }
 
-CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo const *interfaceInfo, Local<::v8::Object> object):
-    _interfaceInfo(interfaceInfo), _object(object)
+CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo* pinterfaceInfo, Local<::v8::Object> object)
 {
+
     ECode ec;
 
     _ELASTOS Int32 nMethods;
 
-    AutoPtr<ArrayOf<IMethodInfo const *> > methodInfos;
+    AutoPtr<ArrayOf<IMethodInfo *> > methodInfos;
 
     _vtptr = _vtable;
 
     _referenceCount = 0;
-
+	_interfaceInfo = pinterfaceInfo;
+#if 0//?jw
+    //_object = object;
+#endif
+    IInterfaceInfo *interfaceInfo = const_cast<IInterfaceInfo *>(pinterfaceInfo);
     ec = interfaceInfo->GetId(&_interfaceId);
+
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    methodInfos = ArrayOf<IMethodInfo const *>::Alloc(nMethods);
+    methodInfos = ArrayOf<IMethodInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     _methodInfos = methodInfos;
 }
@@ -213,7 +208,7 @@ CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(size_t index, CARInterfaceAda
 {
     ::Nan::HandleScope scope;
 
-    IMethodInfo const *methodInfo;
+    IMethodInfo *methodInfo;
 
     ECode ec;
 
@@ -222,7 +217,7 @@ CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(size_t index, CARInterfaceAda
 
     Local<Value> value;
 
-    methodInfo = (*self->_methodInfos)[index];
+    methodInfo = const_cast<IMethodInfo *>((*self->_methodInfos)[index]);
 
     ec = methodInfo->GetName(&methodName);
     if (FAILED(ec))
@@ -241,4 +236,3 @@ CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(size_t index, CARInterfaceAda
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

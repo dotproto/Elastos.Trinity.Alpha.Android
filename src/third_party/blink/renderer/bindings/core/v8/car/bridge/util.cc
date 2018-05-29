@@ -6,34 +6,22 @@
 #include <string>
 #include <unordered_map>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
-
 #include "error.h"
 #include "js-2-car.h"
 #include "weak-external-base.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
-
+#if 0
 struct _Aspects: WeakExternalBase {
     struct Hash: __hash_base<size_t, ClassID> {
         size_t operator()(ClassID const &id) const
@@ -64,9 +52,8 @@ struct _Aspects: WeakExternalBase {
     };
 
     unordered_map<ClassID, AutoPtr<IAspect>, Hash> mapIdToAspect;
-
 private:
-    ~_Aspects() = default;
+    ~_Aspects() override = default;
 };
 
 IInterface *Probe(Local<Object> object, EIID const &iid)
@@ -108,7 +95,7 @@ void AttachAspect(Local<Object> object, ClassID const &aspectId)
 
     ec = _CObject_CreateInstance(aspectId, RGM_SAME_DOMAIN, EIID_IAspect, reinterpret_cast<IInterface **>(&_aspect));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     aspect = _aspect, _aspect->Release();
 
@@ -121,18 +108,18 @@ void AttachAspect(Local<Object> object, ClassID const &aspectId)
 
         _carObject = (IObject *)carObject->Probe(EIID_IObject);
         if (_carObject == 0)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         ec = aspect->AspectAggregate(AggrType_Aggregate, _carObject);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
     } else {
         struct _Aspects *aspects;
 
         if (!Has(object, New(".__attachedAspects__").ToLocalChecked()).FromJust()) {
             unique_ptr<struct _Aspects, _Aspects::Deleter> _aspects(new(nothrow) struct _Aspects);
             if (_aspects == nullptr)
-                throw Error(Error::NO_MEMORY, "");
+                LOG(Error::NO_MEMORY, 0);
 
             DefineOwnProperty(object,
                     New(".__attachedAspects__").ToLocalChecked(),
@@ -162,12 +149,12 @@ void DetachAspect(Local<Object> object, ClassID const &aspectId)
 
         _carObject = (IObject *)carObject->Probe(EIID_IObject);
         if (_carObject == 0)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         ec = _carObject->Aggregate(AggrType_Unaggregate,
                 const_cast<IInterface *>(reinterpret_cast<IInterface const *>(&aspectId)));
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
     } else {
         struct _Aspects *aspects;
 
@@ -181,6 +168,5 @@ void DetachAspect(Local<Object> object, ClassID const &aspectId)
         aspects->mapIdToAspect.erase(aspectId);
     }
 }
-
+#endif
 CAR_BRIDGE_NAMESPACE_END
-

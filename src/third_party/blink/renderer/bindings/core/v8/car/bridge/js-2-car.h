@@ -1,15 +1,9 @@
 #ifndef __CAR_BRIDGE_JS_2_CAR_H
-# define __CAR_BRIDGE_JS_2_CAR_H
+#define __CAR_BRIDGE_JS_2_CAR_H
 
-# include <node.h>
-
-# include <nan.h>
-
-# include <elastos.h>
-
-# include "macros.h"
-
-
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 

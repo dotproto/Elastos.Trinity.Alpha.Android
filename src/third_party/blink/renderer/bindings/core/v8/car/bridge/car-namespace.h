@@ -2,12 +2,8 @@
 # define __CAR_BRIDGE_CAR_NAMESPACE_H
 
 # include <nan.h>
-
 # include <elastos.h>
-
 # include "macros.h"
-
-
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 

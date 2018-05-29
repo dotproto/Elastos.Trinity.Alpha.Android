@@ -55,8 +55,8 @@ public:
     _ELASTOS ECode Call(va_list ap) noexcept;
 
 private:
-    _ELASTOS AutoPtr<IFunctionInfo const> _functionInfo;
-    _ELASTOS AutoPtr<_ELASTOS ArrayOf<IParamInfo const *> const> _paramInfos;
+    _ELASTOS AutoPtr<IFunctionInfo> _functionInfo;
+    _ELASTOS AutoPtr<_ELASTOS ArrayOf<IParamInfo *> > _paramInfos;
 
     ::Nan::Callback _function;
 

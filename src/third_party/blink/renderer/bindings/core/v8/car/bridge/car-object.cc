@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-
+#include <cmath>
 #include <map>
 #include <memory>
 #include <new>
@@ -12,22 +12,13 @@
 #include <string>
 #include <vector>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "libc++-ext.h"
-
 #include "nan-ext.h"
-
 #include "elastos-ext.h"
-
 #include "car-object.h"
-
 #include "can-down-delete.h"
 #include "car-arguments.h"
 #include "car-data-type.h"
@@ -38,14 +29,8 @@
 #include "util.h"
 #include "weak-external-base.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
@@ -54,87 +39,91 @@ CAR_BRIDGE_NAMESPACE_BEGIN
 
 NAN_METHOD(CARObject::On)
 {
+#if 0 //?try
     try {
+#endif
         ::Nan::HandleScope scope;
-
         MF2CARFA *mapListenerToCARFunctionAdapter = nullptr;
 
         Local<Value> arg0;
         Local<Value> arg1;
 
         CARObject *thatCARObject;
-
         Local<::v8::String> name;
-
         ECode ec;
 
-        AutoPtr<ICallbackMethodInfo const> callbackMethodInfo;
+        AutoPtr<ICallbackMethodInfo> callbackMethodInfo;
+#if 0//?callback
         ICallbackMethodInfo *_callbackMethodInfo;
-
+#endif
         Local<Function> listener;
-
-        uintptr_t connectionId;
-
+        uintptr_t connectionId = 0;
         unique_ptr<CARFunctionAdapter> carFunctionAdapter;
-
         EventHandler carEventHandler;
-
-        unique_ptr<CARFunctionAdapter> *_carFunctionAdapter;
+        unique_ptr<CARFunctionAdapter> *_carFunctionAdapter = nullptr;
 
         if (info.Length() < 2)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!arg0->IsString())
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg1 = info[1];
         if (!arg1->IsFunction())
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         thatCARObject = Unwrap<CARObject>(info.This());
 
         name = arg0.As<::v8::String>();
-
+#if 0//?callback
         ec = thatCARObject->_classInfo->GetCallbackMethodInfo(_ELASTOS String(*Utf8String(name)),
                 &_callbackMethodInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         callbackMethodInfo = _callbackMethodInfo, _callbackMethodInfo->Release();
+#endif
 
         listener = arg1.As<Function>();
 
         if (thatCARObject->_mapNameToMapListenerToCARFunctionAdapter.count(name) > 0) {
+#if 0 //?jw _mapNameToMapListenerToCARFunctionAdapter
             mapListenerToCARFunctionAdapter = &thatCARObject->_mapNameToMapListenerToCARFunctionAdapter[name];
-
+#endif
             if (mapListenerToCARFunctionAdapter->count(listener) > 0) {
+#if 0 //?jw _mapNameToMapListenerToCARFunctionAdapter
                 connectionId = reinterpret_cast<uintptr_t>((*mapListenerToCARFunctionAdapter)[listener].get());
-
+#endif
                 goto done;
-            }
+            } 
+
         }
 
         carFunctionAdapter = unique_ptr<CARFunctionAdapter>(
                 new(nothrow) CARFunctionAdapter(callbackMethodInfo, listener)
                 );
         if (carFunctionAdapter == nullptr)
-            throw Error(Error::NO_MEMORY, "");
+            LOG(Error::NO_MEMORY, 0);
 
+
+#if 0//?jw EventHandler
         carEventHandler = EventHandler::Make(carFunctionAdapter.get(),
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
                 (void *)(ECode (CARFunctionAdapter::*)(IInterface *, ...))
 #endif
                 &CARFunctionAdapter::Call<IInterface *>);
+#endif
 
+#if 0 //?jw _mapNameToMapListenerToCARFunctionAdapter
         if (mapListenerToCARFunctionAdapter == nullptr)
             mapListenerToCARFunctionAdapter = &thatCARObject->_mapNameToMapListenerToCARFunctionAdapter[name];
 
         _carFunctionAdapter = &(*mapListenerToCARFunctionAdapter)[listener];
-
+#endif
         ec = callbackMethodInfo->AddCallback(thatCARObject->_carObject, carEventHandler);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         *_carFunctionAdapter = move(carFunctionAdapter);
 
@@ -144,6 +133,7 @@ NAN_METHOD(CARObject::On)
 
 done:
         NAN_METHOD_RETURN_VALUE(::Nan::New<Number>(connectionId));
+#if 0 //?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -153,6 +143,7 @@ done:
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static bool _MaybeIsConnectionId(Local<Value> value)
@@ -163,7 +154,7 @@ static bool _MaybeIsConnectionId(Local<Value> value)
         return false;
 
     d = To<double>(value).FromJust();
-    if (nearbyint(d) != d)
+    if (std::nearbyint(d) != d)
         return false;
 
     return d >= 0 && d <= UINTPTR_MAX;
@@ -174,40 +165,40 @@ void CARObject::Off(CARObject *carObject,
         Local<::v8::String> name,
         Local<Function> listener)
 {
-    ICallbackMethodInfo const *callbackMethodInfo;
+    ICallbackMethodInfo const * _callbackMethodInfo;
 
     EventHandler carEventHandler;
 
     ECode ec;
 
-    callbackMethodInfo = static_cast<ICallbackMethodInfo const *>(carFunctionAdapter->functionInfo());
+    _callbackMethodInfo = static_cast<ICallbackMethodInfo const *>(carFunctionAdapter->functionInfo());
+    ICallbackMethodInfo* callbackMethodInfo = const_cast<ICallbackMethodInfo*>(_callbackMethodInfo);
 
+#if 0 //??jw
     carEventHandler = EventHandler::Make(carFunctionAdapter,
 #ifdef _ELASTOS_BUG_EVENT_HANDLER_MAKE
             (void *)(ECode (CARFunctionAdapter::*)(IInterface *, ...))
 #endif
             &CARFunctionAdapter::Call<IInterface *>);
-
+#endif
     ec = callbackMethodInfo->RemoveCallback(carObject->_carObject, carEventHandler);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
-
+        LOG(Error::TYPE_ELASTOS, ec);
+#if 0//?jw _mapNameToMapListenerToCARFunctionAdapter
     carObject->_mapNameToMapListenerToCARFunctionAdapter[name].erase(listener);
-
+#endif
     carObject->_connectionIds.erase(reinterpret_cast<uintptr_t>(carFunctionAdapter));
 }
 
 void CARObject::Off(CARObject *carObject, CARFunctionAdapter *carFunctionAdapter)
 {
     ::Nan::HandleScope scope;
-
     ECode ec;
-
     _ELASTOS String name;
 
-    ec = carFunctionAdapter->functionInfo()->GetName(&name);
+    ec = const_cast<IFunctionInfo *>(carFunctionAdapter->functionInfo())->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     Off(carObject, carFunctionAdapter, ToValue(name).As<::v8::String>(), carFunctionAdapter->function());
 }
@@ -240,12 +231,12 @@ void CARObject::Off(Local<Object> object, Local<::v8::String> name, Local<Functi
 
     if (carObject->_mapNameToMapListenerToCARFunctionAdapter.count(name) == 0)
         return;
-
+#if 0 //?jw _mapNameToMapListenerToCARFunctionAdapter
     auto &mapListenerToCARFunctionAdapter = carObject->_mapNameToMapListenerToCARFunctionAdapter[name];
     if (mapListenerToCARFunctionAdapter.count(listener) == 0)
         return;
-
     Off(carObject, mapListenerToCARFunctionAdapter[listener].get(), name, listener);
+#endif
 }
 
 void CARObject::Off(Local<Object> object, Local<::v8::String> name)
@@ -256,7 +247,7 @@ void CARObject::Off(Local<Object> object, Local<::v8::String> name)
 
     if (carObject->_mapNameToMapListenerToCARFunctionAdapter.count(name) == 0)
         return;
-
+#if 0 //?jw _mapNameToMapListenerToCARFunctionAdapter
     auto &mapListenerToCARFunctionAdapter = carObject->_mapNameToMapListenerToCARFunctionAdapter[name];
     for (auto p = mapListenerToCARFunctionAdapter.begin(), end = mapListenerToCARFunctionAdapter.end();
             p != end;
@@ -267,11 +258,14 @@ void CARObject::Off(Local<Object> object, Local<::v8::String> name)
     }
 
     carObject->_mapNameToMapListenerToCARFunctionAdapter.erase(name);
+#endif
 }
 
 NAN_METHOD(CARObject::Off)
 {
+#if 0//?jw try
     try {
+#endif
         Local<Object> that = info.This();
 
         size_t argc;
@@ -280,7 +274,7 @@ NAN_METHOD(CARObject::Off)
 
         argc = info.Length();
         if (argc < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (_MaybeIsConnectionId(arg0))
@@ -295,6 +289,7 @@ NAN_METHOD(CARObject::Off)
         }
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -304,25 +299,27 @@ NAN_METHOD(CARObject::Off)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 NAN_METHOD(CARObject::OffAll)
 {
+#if 0//?jw try
     try {
+#endif
         CARObject *thatCARObject;
 
-        ECode ec;
-
         thatCARObject = Unwrap<CARObject>(info.This());
-
-        ec = thatCARObject->_classInfo->RemoveAllCallbackHandlers(thatCARObject->_carObject);
+#if 0//?jw try
+        ECode ec = thatCARObject->_classInfo->RemoveAllCallbackHandlers(thatCARObject->_carObject);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
-
+            LOG(Error::TYPE_ELASTOS, ec);
+#endif
         thatCARObject->_mapNameToMapListenerToCARFunctionAdapter.clear();
         thatCARObject->_connectionIds.clear();
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -332,35 +329,35 @@ NAN_METHOD(CARObject::OffAll)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
-
+#if 0//?car remove
 NAN_METHOD(CARObject::EnterRegime)
 {
+#if 0//?jw try
     try {
+#endif
         Local<Value> arg0;
-
         CARObject *thatCARObject;
-
         CARObject *regime;
 
-        ECode ec;
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!IsRegime(arg0))
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         thatCARObject = Unwrap<CARObject>(info.This());
 
         regime = Unwrap<CARObject>(arg0.As<Object>());
-
-        ec = CObject::EnterRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
+        ECode ec = CObject::EnterRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw try
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -370,35 +367,37 @@ NAN_METHOD(CARObject::EnterRegime)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif    
 }
 
 NAN_METHOD(CARObject::LeaveRegime)
 {
+#if 0 //?jw
     try {
+#endif
         Local<Value> arg0;
 
         CARObject *thatCARObject;
 
         CARObject *regime;
 
-        ECode ec;
-
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (IsRegime(arg0))
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         thatCARObject = Unwrap<CARObject>(info.This());
 
         regime = Unwrap<CARObject>(arg0.As<Object>());
 
-        ec = CObject::LeaveRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
+        ECode ec = CObject::LeaveRegime(thatCARObject->_carObject, static_cast<IRegime *>(regime->_carObject.Get()));
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0 //?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -408,11 +407,15 @@ NAN_METHOD(CARObject::LeaveRegime)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
+#endif
 
 NAN_METHOD(CARObject::Equal)
 {
+#if 0 //?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         Local<Value> arg0;
@@ -422,7 +425,7 @@ NAN_METHOD(CARObject::Equal)
         CARObject *carObject;
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!IsCARObject(arg0)) {
@@ -438,6 +441,7 @@ NAN_METHOD(CARObject::Equal)
         NAN_METHOD_RETURN_VALUE(
                 ToValueFromBoolean(CObject::Compare(thatCARObject->_carObject, carObject->_carObject))
                 );
+#if 0 //?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -447,6 +451,7 @@ NAN_METHOD(CARObject::Equal)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 void CARObject::Initialize(void)
@@ -578,7 +583,7 @@ exit:
     else
         _value = unique_ptr<struct _Value>(new(nothrow) struct _Value);
     if (_value == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _value->value.Reset(value);
     _value->data.Reset(data);
@@ -593,7 +598,7 @@ static struct _Value **_ParseValues(size_t argc, Array const &argv)
 {
     unique_ptr<unique_ptr<struct _Value> []> _argv(new(nothrow) unique_ptr<struct _Value>[argc]);
     if (_argv == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     for (size_t i = 0; i < argc; ++i)
         _argv[i] = unique_ptr<struct _Value>(_ParseValue(argv[i]));
@@ -601,33 +606,33 @@ static struct _Value **_ParseValues(size_t argc, Array const &argv)
     return reinterpret_cast<struct _Value **>(_argv.release());
 }
 
-static bool _CanBeUsedAsArgumentOf(IParamInfo const *paramInfo, struct _Value const *value, int *priority)
+static bool _CanBeUsedAsArgumentOf(IParamInfo const *pparamInfo, struct _Value const *value, int *priority)
 {
     ECode ec;
 
     ParamIOAttribute io;
 
-    AutoPtr<IDataTypeInfo const> dataTypeInfo;
+    AutoPtr<IDataTypeInfo > dataTypeInfo;
     IDataTypeInfo *_dataTypeInfo;
 
     _ELASTOS String fullName;
-
+    IParamInfo *paramInfo = const_cast<IParamInfo *>(pparamInfo);
     ec = paramInfo->GetIOAttribute(&io);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (io != value->io)
         return false;
 
     ec = paramInfo->GetTypeInfo(&_dataTypeInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     dataTypeInfo = _dataTypeInfo, _dataTypeInfo->Release();
 
     ec = GetFullName(dataTypeInfo, &fullName);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (value->type != nullptr && fullName != value->type)
         return false;
@@ -652,20 +657,20 @@ static bool _CanBeUsedAsArgumentOf(IParamInfo const *paramInfo, struct _Value co
 }
 
 template<class FunctionInfo>
-static AutoPtr<IFunctionInfo const> _GetMatchingFunctionForCall(
-        size_t nFunctionInfos, IFunctionInfo const *functionInfos[], size_t argc, struct _Value const *argv[])
+static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
+        size_t nFunctionInfos, IFunctionInfo *pfunctionInfos[], size_t argc, struct _Value const *argv[])
 {
     _ELASTOS String name;
 
-    vector<AutoPtr<IFunctionInfo const>> candidates;
+    vector<AutoPtr<IFunctionInfo >> candidates;
 
     int priority;
 
     size_t size;
-
+    IFunctionInfo** functionInfos = const_cast<IFunctionInfo**>(pfunctionInfos);
     priority = INT_MAX;
     for (size_t i = 0; i < nFunctionInfos; ++i) {
-        IFunctionInfo const *functionInfo;
+        IFunctionInfo *functionInfo;
 
         ECode ec;
 
@@ -673,7 +678,7 @@ static AutoPtr<IFunctionInfo const> _GetMatchingFunctionForCall(
 
         _ELASTOS Int32 nParams;
 
-        AutoPtr<ArrayOf<IParamInfo const *> > paramInfos;
+        AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
 
         int _priority;
 
@@ -683,29 +688,29 @@ static AutoPtr<IFunctionInfo const> _GetMatchingFunctionForCall(
 
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetName(&_name);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         if (name == nullptr)
             name = _name;
         else if (_name != name)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetParamCount(&nParams);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         if ((size_t)nParams > argc)
             continue;
 
-        paramInfos = ArrayOf<IParamInfo const *>::Alloc(nParams);
+        paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
         if (paramInfos == 0)
-            throw Error(Error::NO_MEMORY, "");
+            LOG(Error::NO_MEMORY, 0);
 
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetAllParamInfos(
                 reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get())
                 );
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         _priority = 0;
         for (j = 0; j < nParams; ++j) {
@@ -736,7 +741,7 @@ static AutoPtr<IFunctionInfo const> _GetMatchingFunctionForCall(
     size = candidates.size();
 
     if (size == 0)
-        throw Error(Error::NO_MATCHING_FUNCTION_FOR_CALL, "");
+        LOG(Error::NO_MATCHING_FUNCTION_FOR_CALL, 0);
 
     if (size > 1) {
         ostringstream oss;
@@ -745,25 +750,23 @@ static AutoPtr<IFunctionInfo const> _GetMatchingFunctionForCall(
         oss << "Candidates are:\n";
 
         for (size_t i = 0; i < size; ++i) {
-            IFunctionInfo const *candidate;
-
-            ECode ec;
-
+            IFunctionInfo *candidate;
             _ELASTOS String annotation;
 
             candidate = candidates[i];
-
-            ec = static_cast<FunctionInfo const *>(candidate)->GetAnnotation(&annotation);
+#if 0//?jw car remove
+            ECode ec = candidate->GetAnnotation(&annotation);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
-
+                LOG(Error::TYPE_ELASTOS, ec);
+#endif
             oss << annotation << "\n";
         }
-
-        throw Error(Error::AMBIGUOUS_CALL_OF_OVERLOADED_FUNCTION, "%s", oss.str().data());
+#if 0//?jw
+        //LOG(oss.str().data(),Error::AMBIGUOUS_CALL_OF_OVERLOADED_FUNCTION);
+#endif
     }
-
-    return candidates[0];
+    AutoPtr<IFunctionInfo > rcandidate = candidates[0];
+    return rcandidate;
 }
 
 static void _SetInputArgumentOfInt16(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -772,7 +775,7 @@ static void _SetInputArgumentOfInt16(IArgumentList *argumentList, size_t index, 
 
     ec = argumentList->SetInputArgumentOfInt16(index, ToInt16(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfInt32(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -781,7 +784,7 @@ static void _SetInputArgumentOfInt32(IArgumentList *argumentList, size_t index, 
 
     ec = argumentList->SetInputArgumentOfInt32(index, ToInt32(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfInt64(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -790,7 +793,7 @@ static void _SetInputArgumentOfInt64(IArgumentList *argumentList, size_t index, 
 
     ec = argumentList->SetInputArgumentOfInt64(index, ToInt64(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfByte(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -799,7 +802,7 @@ static void _SetInputArgumentOfByte(IArgumentList *argumentList, size_t index, s
 
     ec = argumentList->SetInputArgumentOfByte(index, ToByte(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfFloat(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -808,7 +811,7 @@ static void _SetInputArgumentOfFloat(IArgumentList *argumentList, size_t index, 
 
     ec = argumentList->SetInputArgumentOfFloat(index, ToFloat(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfDouble(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -817,7 +820,7 @@ static void _SetInputArgumentOfDouble(IArgumentList *argumentList, size_t index,
 
     ec = argumentList->SetInputArgumentOfDouble(index, ToDouble(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfChar32(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -826,7 +829,7 @@ static void _SetInputArgumentOfChar32(IArgumentList *argumentList, size_t index,
 
     ec = argumentList->SetInputArgumentOfChar(index, ToChar32(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 struct _String: CanDownDelete {
@@ -839,13 +842,13 @@ static void _SetInputArgumentOfString(IArgumentList *argumentList, size_t index,
 
     unique_ptr<struct _String> s(new(nothrow) struct _String);
     if (s == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToString(s->s, New(value->data));
 
     ec = argumentList->SetInputArgumentOfString(index, s->s);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     value->maybeCARData = move(s);
 }
@@ -856,7 +859,7 @@ static void _SetInputArgumentOfBoolean(IArgumentList *argumentList, size_t index
 
     ec = argumentList->SetInputArgumentOfBoolean(index, ToBoolean(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 struct _EMuid: CanDownDelete {
@@ -869,13 +872,13 @@ static void _SetInputArgumentOfEMuid(IArgumentList *argumentList, size_t index, 
 
     unique_ptr<struct _EMuid> id(new(nothrow) struct _EMuid);
     if (id == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToEMuid(&id->id, New(value->data));
 
     ec = argumentList->SetInputArgumentOfEMuid(index, &id->id);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     value->maybeCARData = move(id);
 }
@@ -883,7 +886,7 @@ static void _SetInputArgumentOfEMuid(IArgumentList *argumentList, size_t index, 
 struct _EGuid: CanDownDelete {
     EGuid id = {};
 
-    ~_EGuid()
+    ~_EGuid() final
     {
         delete [] id.mUunm;
     }
@@ -895,13 +898,13 @@ static void _SetInputArgumentOfEGuid(IArgumentList *argumentList, size_t index, 
 
     unique_ptr<struct _EGuid> id(new(nothrow) struct _EGuid);
     if (id == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToEGuid(&id->id, New(value->data));
 
     ec = argumentList->SetInputArgumentOfEGuid(index, &id->id);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     value->maybeCARData = move(id);
 }
@@ -912,7 +915,7 @@ static void _SetInputArgumentOfECode(IArgumentList *argumentList, size_t index, 
 
     ec = argumentList->SetInputArgumentOfECode(index, ToECode(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static void _SetInputArgumentOfLocalPtr(IArgumentList *argumentList, size_t index, struct _InputValue const *value)
@@ -921,7 +924,7 @@ static void _SetInputArgumentOfLocalPtr(IArgumentList *argumentList, size_t inde
 
     ec = argumentList->SetInputArgumentOfLocalPtr(index, ToLocalPtr(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 #if 0
@@ -940,21 +943,21 @@ static void _SetInputArgumentOfLocalType(IDataTypeInfo const *dataTypeInfo,
 
     ec = dataTypeInfo->GetSize(&size);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     unique_ptr<char []> localTypeObject(new(nothrow) char[size]);
     if (localTypeObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToLocalType(dataTypeInfo, localTypeObject, New(value->data));
 
     ec = argumentList->SetInputArgumentOfLocalType(index, localTypeObject);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     _localTypeObject = new(nothrow) struct _LocalType;
     if (_localTypeObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _localTypeObject->localTypeObject = move(localTypeObject);
 
@@ -968,14 +971,14 @@ static void _SetInputArgumentOfEnum(IArgumentList *argumentList, size_t index, s
 
     ec = argumentList->SetInputArgumentOfEnum(index, ToEnum(New(value->data)));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 struct _CARArray: CanDownDelete {
     AutoPtr<IVariableOfCarArray> variableOfCARArray;
 };
 
-static void _SetInputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo,
+static void _SetInputArgumentOfCARArray(ICarArrayInfo const *pcarArrayInfo,
         IArgumentList *argumentList, size_t index, struct _InputValue const *value)
 {
     Local<Value> data;
@@ -986,28 +989,29 @@ static void _SetInputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo,
     IVariableOfCarArray *_variableOfCARArray;
 
     CarQuintet *carQuintet;
+    ICarArrayInfo* carArrayInfo = const_cast<ICarArrayInfo*>(pcarArrayInfo);
 
     data = New(value->data);
 
     ec = carArrayInfo->CreateVariable(data.As<Array>()->Length(), &_variableOfCARArray);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
 
     ec = variableOfCARArray->GetPayload((void **)&carQuintet);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ToCARArray(carArrayInfo, carQuintet, data);
 
     ec = argumentList->SetInputArgumentOfCarArray(index, carQuintet);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     unique_ptr<struct _CARArray> carArray(new(nothrow) struct _CARArray);
     if (carArray == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     carArray->variableOfCARArray = variableOfCARArray;
 
@@ -1018,7 +1022,7 @@ struct _Struct: CanDownDelete {
     AutoPtr<IVariableOfStruct> variableOfStruct;
 };
 
-static void _SetInputArgumentOfStruct(IStructInfo const *structInfo,
+static void _SetInputArgumentOfStruct(IStructInfo const *pstructInfo,
         IArgumentList *argumentList, size_t index, struct _InputValue const *value)
 {
     ECode ec;
@@ -1027,26 +1031,26 @@ static void _SetInputArgumentOfStruct(IStructInfo const *structInfo,
     IVariableOfStruct *_variableOfStruct;
 
     void *struct_;
-
+    IStructInfo* structInfo = const_cast<IStructInfo*>(pstructInfo);
     ec = structInfo->CreateVariable(&_variableOfStruct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
 
     ec = variableOfStruct->GetPayload((void **)&struct_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ToStruct(structInfo, struct_, New(value->data));
 
     ec = argumentList->SetInputArgumentOfStructPtr(index, struct_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     unique_ptr<struct _Struct> _struct(new(nothrow) struct _Struct);
     if (_struct == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _struct->variableOfStruct = variableOfStruct;
 
@@ -1064,19 +1068,19 @@ static void _SetInputArgumentOfInterface(IInterfaceInfo const *interfaceInfo,
 
     ec = argumentList->SetInputArgumentOfObjectPtr(index, interface_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
-static void _SetInputArgumentOf(IDataTypeInfo const *dataTypeInfo,
+static void _SetInputArgumentOf(IDataTypeInfo const *pdataTypeInfo,
         IArgumentList *argumentList, size_t index, struct _InputValue const *value)
 {
     ECode ec;
-
     CarDataType dataType;
 
+    IDataTypeInfo *dataTypeInfo = const_cast<IDataTypeInfo *>(pdataTypeInfo);
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -1178,12 +1182,13 @@ static void _SetInputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
 static NAN_SETTER(_SetOutputArgument)
 {
+#if 0//?jw
     try {
+#endif
         struct CARArgumentBase *carArgument;
-
         carArgument = (struct CARArgumentBase *)info.Data().As<External>()->Value();
-
         carArgument->value.Reset(value);
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1193,6 +1198,7 @@ static NAN_SETTER(_SetOutputArgument)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 struct _PersistentData {
@@ -1206,17 +1212,20 @@ struct _PersistentData {
 
 struct _CalleeAllocCARArray: CalleeAllocCARArray, _PersistentData {
 private:
-    ~_CalleeAllocCARArray()
+    ~_CalleeAllocCARArray() final
     {
         _CarQuintet_Release(*carQuintet);
-
+#if 0
         delete carQuintet;
+#endif
     }
 };
 
 static NAN_GETTER(_GetCalleeAllocOutputArgumentOfCARArray)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct _CalleeAllocCARArray *carArray;
@@ -1231,6 +1240,7 @@ static NAN_GETTER(_GetCalleeAllocOutputArgumentOfCARArray)
         }
 
         NAN_GETTER_RETURN_VALUE(New(carArray->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1240,11 +1250,12 @@ static NAN_GETTER(_GetCalleeAllocOutputArgumentOfCARArray)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCalleeAllocOutputArgumentOfCARArray = _SetOutputArgument;
 
-static void __SetCalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo,
+static void __SetCalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *pcarArrayInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ::Nan::HandleScope scope;
@@ -1252,10 +1263,10 @@ static void __SetCalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArr
     CarQuintet **_carQuintet;
 
     ECode ec;
-
+    ICarArrayInfo* carArrayInfo = const_cast<ICarArrayInfo*>(pcarArrayInfo);
     unique_ptr<CarQuintet *> carQuintet(new(nothrow) (CarQuintet *));
     if (carQuintet == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     unique_ptr<struct _CalleeAllocCARArray, _CalleeAllocCARArray::Deleter> carArray(
             CalleeAllocCARArray_<struct _CalleeAllocCARArray>(carArrayInfo, carQuintet.get())
@@ -1271,12 +1282,12 @@ static void __SetCalleeAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArr
 
     ec = argumentList->SetOutputArgumentOfCarArrayPtrPtr(index, _carQuintet);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 struct _CalleeAllocStruct: CalleeAllocStruct, _PersistentData {
 private:
-    ~_CalleeAllocStruct()
+    ~_CalleeAllocStruct() final
     {
         operator delete(*struct_);
 
@@ -1286,7 +1297,9 @@ private:
 
 static NAN_GETTER(_GetCalleeAllocOutputArgumentOfStruct)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct _CalleeAllocStruct *struct_;
@@ -1301,6 +1314,7 @@ static NAN_GETTER(_GetCalleeAllocOutputArgumentOfStruct)
         }
 
         NAN_GETTER_RETURN_VALUE(New(struct_->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1310,11 +1324,12 @@ static NAN_GETTER(_GetCalleeAllocOutputArgumentOfStruct)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCalleeAllocOutputArgumentOfStruct = _SetOutputArgument;
 
-static void __SetCalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
+static void __SetCalleeAllocOutputArgumentOfStruct(IStructInfo  *structInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ::Nan::HandleScope scope;
@@ -1325,7 +1340,7 @@ static void __SetCalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo
 
     unique_ptr<void *> struct_(new(nothrow) (void *));
     if (struct_ == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     unique_ptr<struct _CalleeAllocStruct, _CalleeAllocStruct::Deleter> _struct(
             CalleeAllocStruct_<struct _CalleeAllocStruct>(structInfo, struct_.get())
@@ -1341,29 +1356,29 @@ static void __SetCalleeAllocOutputArgumentOfStruct(IStructInfo const *structInfo
 
     ec = argumentList->SetOutputArgumentOfStructPtrPtr(index, __struct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
-static void _SetCalleeAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
+static void _SetCalleeAllocOutputArgumentOf(IDataTypeInfo const *pdataTypeInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ECode ec;
 
     CarDataType dataType;
-
+    IDataTypeInfo* dataTypeInfo = const_cast<IDataTypeInfo*>(pdataTypeInfo);
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_ArrayOf:
-        __SetCalleeAllocOutputArgumentOfCARArray(static_cast<ICarArrayInfo const *>(dataTypeInfo),
+        __SetCalleeAllocOutputArgumentOfCARArray(static_cast<ICarArrayInfo *>(dataTypeInfo),
                 argumentList, index, value);
 
         break;
 
     case CarDataType_Struct:
-        __SetCalleeAllocOutputArgumentOfStruct(static_cast<IStructInfo const *>(dataTypeInfo),
+        __SetCalleeAllocOutputArgumentOfStruct(static_cast<IStructInfo *>(dataTypeInfo),
                 argumentList, index, value);
 
         break;
@@ -1375,7 +1390,9 @@ static void _SetCalleeAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt16)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocInt16 *i16;
@@ -1386,6 +1403,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt16)
             i16->value.Reset(ToValue(*i16->i16));
 
         NAN_GETTER_RETURN_VALUE(New(i16->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1395,13 +1413,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt16)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfInt16 = _SetOutputArgument;
 
 struct _CallerAllocInt16: CallerAllocInt16 {
 private:
-    ~_CallerAllocInt16()
+    ~_CallerAllocInt16() final
     {
         delete i16;
     }
@@ -1417,7 +1436,7 @@ static void __SetCallerAllocOutputArgumentOfInt16(IArgumentList *argumentList, s
 
     unique_ptr<Int16> i16(new(nothrow) Int16);
     if (i16 == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *i16 = ToInt16(New(value->data));
 
@@ -1434,12 +1453,14 @@ static void __SetCallerAllocOutputArgumentOfInt16(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfInt16Ptr(index, __i16);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt32)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocInt32 *i32;
@@ -1450,6 +1471,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt32)
             i32->value.Reset(ToValue(*i32->i32));
 
         NAN_GETTER_RETURN_VALUE(New(i32->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1459,13 +1481,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt32)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfInt32 = _SetOutputArgument;
 
 struct _CallerAllocInt32: CallerAllocInt32 {
 private:
-    ~_CallerAllocInt32()
+    ~_CallerAllocInt32() final
     {
         delete i32;
     }
@@ -1481,7 +1504,7 @@ static void __SetCallerAllocOutputArgumentOfInt32(IArgumentList *argumentList, s
 
     unique_ptr<_ELASTOS Int32> i32(new(nothrow) _ELASTOS Int32);
     if (i32 == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *i32 = ToInt32(New(value->data));
 
@@ -1498,12 +1521,14 @@ static void __SetCallerAllocOutputArgumentOfInt32(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfInt32Ptr(index, __i32);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt64)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocInt64 *i64;
@@ -1514,6 +1539,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt64)
             i64->value.Reset(ToValue(*i64->i64));
 
         NAN_GETTER_RETURN_VALUE(New(i64->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1523,13 +1549,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt64)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfInt64 = _SetOutputArgument;
 
 struct _CallerAllocInt64: CallerAllocInt64 {
 private:
-    ~_CallerAllocInt64()
+    ~_CallerAllocInt64() final
     {
         delete i64;
     }
@@ -1545,7 +1572,7 @@ static void __SetCallerAllocOutputArgumentOfInt64(IArgumentList *argumentList, s
 
     unique_ptr<Int64> i64(new(nothrow) Int64);
     if (i64 == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *i64 = ToInt64(New(value->data));
 
@@ -1562,12 +1589,14 @@ static void __SetCallerAllocOutputArgumentOfInt64(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfInt64Ptr(index, __i64);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfByte)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocByte *byte;
@@ -1578,6 +1607,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfByte)
             byte->value.Reset(ToValue(*byte->byte));
 
         NAN_GETTER_RETURN_VALUE(New(byte->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1587,13 +1617,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfByte)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfByte = _SetOutputArgument;
 
 struct _CallerAllocByte: CallerAllocByte {
 private:
-    ~_CallerAllocByte()
+    ~_CallerAllocByte() final
     {
         delete byte;
     }
@@ -1609,7 +1640,7 @@ static void __SetCallerAllocOutputArgumentOfByte(IArgumentList *argumentList, si
 
     unique_ptr<Byte> byte(new(nothrow) Byte);
     if (byte == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *byte = ToByte(New(value->data));
 
@@ -1626,12 +1657,14 @@ static void __SetCallerAllocOutputArgumentOfByte(IArgumentList *argumentList, si
 
     ec = argumentList->SetOutputArgumentOfBytePtr(index, __byte);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfFloat)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocFloat *f;
@@ -1642,6 +1675,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfFloat)
             f->value.Reset(ToValue(*f->f));
 
         NAN_GETTER_RETURN_VALUE(New(f->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1651,13 +1685,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfFloat)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfFloat = _SetOutputArgument;
 
 struct _CallerAllocFloat: CallerAllocFloat {
 private:
-    ~_CallerAllocFloat()
+    ~_CallerAllocFloat() final
     {
         delete f;
     }
@@ -1673,7 +1708,7 @@ static void __SetCallerAllocOutputArgumentOfFloat(IArgumentList *argumentList, s
 
     unique_ptr<Float> f(new(nothrow) Float);
     if (f == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *f = ToFloat(New(value->data));
 
@@ -1690,12 +1725,14 @@ static void __SetCallerAllocOutputArgumentOfFloat(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfFloatPtr(index, __f);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfDouble)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocDouble *d;
@@ -1706,6 +1743,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfDouble)
             d->value.Reset(ToValue(*d->d));
 
         NAN_GETTER_RETURN_VALUE(New(d->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1715,13 +1753,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfDouble)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfDouble = _SetOutputArgument;
 
 struct _CallerAllocDouble: CallerAllocDouble {
 private:
-    ~_CallerAllocDouble()
+    ~_CallerAllocDouble() final
     {
         delete d;
     }
@@ -1737,7 +1776,7 @@ static void __SetCallerAllocOutputArgumentOfDouble(IArgumentList *argumentList, 
 
     unique_ptr<Double> d(new(nothrow) Double);
     if (d == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *d = ToDouble(New(value->data));
 
@@ -1754,12 +1793,14 @@ static void __SetCallerAllocOutputArgumentOfDouble(IArgumentList *argumentList, 
 
     ec = argumentList->SetOutputArgumentOfDoublePtr(index, __d);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfChar32)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocChar32 *c32;
@@ -1770,6 +1811,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfChar32)
             c32->value.Reset(ToValue(*c32->c32));
 
         NAN_GETTER_RETURN_VALUE(New(c32->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1779,13 +1821,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfChar32)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfChar32 = _SetOutputArgument;
 
 struct _CallerAllocChar32: CallerAllocChar32 {
 private:
-    ~_CallerAllocChar32()
+    ~_CallerAllocChar32() final
     {
         delete c32;
     }
@@ -1801,7 +1844,7 @@ static void __SetCallerAllocOutputArgumentOfChar32(IArgumentList *argumentList, 
 
     unique_ptr<Char32> c32(new(nothrow) Char32);
     if (c32 == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *c32 = ToChar32(New(value->data));
 
@@ -1818,12 +1861,14 @@ static void __SetCallerAllocOutputArgumentOfChar32(IArgumentList *argumentList, 
 
     ec = argumentList->SetOutputArgumentOfCharPtr(index, __c32);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfString)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocString *s;
@@ -1834,6 +1879,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfString)
             s->value.Reset(ToValue(*s->s));
 
         NAN_GETTER_RETURN_VALUE(New(s->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1843,13 +1889,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfString)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfString = _SetOutputArgument;
 
 struct _CallerAllocString: CallerAllocString {
 private:
-    ~_CallerAllocString()
+    ~_CallerAllocString() final
     {
         delete s;
     }
@@ -1865,7 +1912,7 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
 
     unique_ptr<_ELASTOS String> s(new(nothrow) _ELASTOS String);
     if (s == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToString(*s, New(value->data));
 
@@ -1882,12 +1929,14 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
 
     ec = argumentList->SetOutputArgumentOfStringPtr(index, __s);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfBoolean)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocBoolean *b;
@@ -1898,6 +1947,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfBoolean)
             b->value.Reset(ToValueFromBoolean(*b->b));
 
         NAN_GETTER_RETURN_VALUE(New(b->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1907,13 +1957,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfBoolean)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfBoolean = _SetOutputArgument;
 
 struct _CallerAllocBoolean: CallerAllocBoolean {
 private:
-    ~_CallerAllocBoolean()
+    ~_CallerAllocBoolean() final
     {
         delete b;
     }
@@ -1929,7 +1980,7 @@ static void __SetCallerAllocOutputArgumentOfBoolean(IArgumentList *argumentList,
 
     unique_ptr<_ELASTOS Boolean> b(new(nothrow) _ELASTOS Boolean);
     if (b == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *b = ToBoolean(New(value->data));
 
@@ -1946,12 +1997,14 @@ static void __SetCallerAllocOutputArgumentOfBoolean(IArgumentList *argumentList,
 
     ec = argumentList->SetOutputArgumentOfBooleanPtr(index, __b);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfEMuid)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocEMuid *id;
@@ -1962,6 +2015,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEMuid)
             id->value.Reset(ToValue(id->id));
 
         NAN_GETTER_RETURN_VALUE(New(id->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -1971,13 +2025,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEMuid)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif    
 }
 
 static auto &_SetCallerAllocOutputArgumentOfEMuid = _SetOutputArgument;
 
 struct _CallerAllocEMuid: CallerAllocEMuid {
 private:
-    ~_CallerAllocEMuid()
+    ~_CallerAllocEMuid() final
     {
         delete id;
     }
@@ -1993,7 +2048,7 @@ static void __SetCallerAllocOutputArgumentOfEMuid(IArgumentList *argumentList, s
 
     unique_ptr<EMuid> id(new(nothrow) EMuid);
     if (id == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToEMuid(id.get(), New(value->data));
 
@@ -2010,12 +2065,14 @@ static void __SetCallerAllocOutputArgumentOfEMuid(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfEMuidPtr(index, __id);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfEGuid)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocEGuid *id;
@@ -2026,6 +2083,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEGuid)
             id->value.Reset(ToValue(id->id));
 
         NAN_GETTER_RETURN_VALUE(New(id->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2035,13 +2093,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEGuid)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfEGuid = _SetOutputArgument;
 
 struct _CallerAllocEGuid: CallerAllocEGuid {
 private:
-    ~_CallerAllocEGuid()
+    ~_CallerAllocEGuid() final
     {
         delete [] id->mUunm;
 
@@ -2059,7 +2118,7 @@ static void __SetCallerAllocOutputArgumentOfEGuid(IArgumentList *argumentList, s
 
     unique_ptr<EGuid> id(new(nothrow) EGuid);
     if (id == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToEGuid(id.get(), New(value->data));
 
@@ -2076,12 +2135,14 @@ static void __SetCallerAllocOutputArgumentOfEGuid(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfEGuidPtr(index, __id);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfECode)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocECode *ecode;
@@ -2092,6 +2153,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfECode)
             ecode->value.Reset(ToValueFromECode(*ecode->ecode));
 
         NAN_GETTER_RETURN_VALUE(New(ecode->value));
+#if 0//?jw        
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2101,13 +2163,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfECode)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfECode = _SetOutputArgument;
 
 struct _CallerAllocECode: CallerAllocECode {
 private:
-    ~_CallerAllocECode()
+    ~_CallerAllocECode() final
     {
         delete ecode;
     }
@@ -2123,7 +2186,7 @@ static void __SetCallerAllocOutputArgumentOfECode(IArgumentList *argumentList, s
 
     unique_ptr<ECode> ecode(new(nothrow) ECode);
     if (ecode == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *ecode = ToECode(New(value->data));
 
@@ -2140,12 +2203,14 @@ static void __SetCallerAllocOutputArgumentOfECode(IArgumentList *argumentList, s
 
     ec = argumentList->SetOutputArgumentOfECodePtr(index, __ecode);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfLocalPtr)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocLocalPtr *localPtr;
@@ -2156,6 +2221,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfLocalPtr)
             localPtr->value.Reset(ToValue(*localPtr->localPtr));
 
         NAN_GETTER_RETURN_VALUE(New(localPtr->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2165,13 +2231,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfLocalPtr)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfLocalPtr = _SetOutputArgument;
 
 struct _CallerAllocLocalPtr: CallerAllocLocalPtr {
 private:
-    ~_CallerAllocLocalPtr()
+    ~_CallerAllocLocalPtr() final
     {
         delete localPtr;
     }
@@ -2187,7 +2254,7 @@ static void __SetCallerAllocOutputArgumentOfLocalPtr(IArgumentList *argumentList
 
     unique_ptr<void *> localPtr(new(nothrow) (void *));
     if (localPtr == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *localPtr = ToLocalPtr(New(value->data));
 
@@ -2204,7 +2271,7 @@ static void __SetCallerAllocOutputArgumentOfLocalPtr(IArgumentList *argumentList
 
     ec = argumentList->SetOutputArgumentOfLocalPtrPtr(index, __localPtr);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 #if 0
@@ -2255,11 +2322,11 @@ static void __SetCallerAllocOutputArgumentOfLocalType(IDataTypeInfo const *dataT
 
     ec = dataTypeInfo->GetSize(&size);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     unique_ptr<char []> localTypeObject(new(nothrow) char[size]);
     if (localTypeObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ToLocalType(dataTypeInfo, localTypeObject, New(value->data));
 
@@ -2276,13 +2343,15 @@ static void __SetCallerAllocOutputArgumentOfLocalType(IDataTypeInfo const *dataT
 
     ec = argumentList->SetOutputArgumentOfLocalTypePtr(index, __localTypeObject);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 #endif
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfEnum)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocEnum *enum_;
@@ -2293,6 +2362,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEnum)
             enum_->value.Reset(ToValueFromEnum(*enum_->enum_));
 
         NAN_GETTER_RETURN_VALUE(New(enum_->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2302,13 +2372,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfEnum)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfEnum = _SetOutputArgument;
 
 struct _CallerAllocEnum: CallerAllocEnum {
 private:
-    ~_CallerAllocEnum()
+    ~_CallerAllocEnum() final
     {
         delete enum_;
     }
@@ -2324,7 +2395,7 @@ static void __SetCallerAllocOutputArgumentOfEnum(IArgumentList *argumentList, si
 
     unique_ptr<_ELASTOS Int32> enum_(new(nothrow) _ELASTOS Int32);
     if (enum_ == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     *enum_ = ToEnum(New(value->data));
 
@@ -2341,12 +2412,14 @@ static void __SetCallerAllocOutputArgumentOfEnum(IArgumentList *argumentList, si
 
     ec = argumentList->SetOutputArgumentOfEnumPtr(index, __enum);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocCARArray *carArray;
@@ -2356,12 +2429,12 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
         if (carArray->value.IsEmpty()) {
             ECode ec;
 
-            AutoPtr<ICarArrayGetter const> carArrayGetter;
+            AutoPtr<ICarArrayGetter> carArrayGetter;
             ICarArrayGetter *_carArrayGetter;
 
             ec = carArray->variableOfCARArray->GetGetter(&_carArrayGetter);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
+                LOG(Error::TYPE_ELASTOS, ec);
 
             carArrayGetter = _carArrayGetter, _carArrayGetter->Release();
 
@@ -2369,6 +2442,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
         }
 
         NAN_GETTER_RETURN_VALUE(New(carArray->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2378,11 +2452,12 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfCARArray)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfCARArray = _SetOutputArgument;
 
-static void __SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArrayInfo,
+static void __SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo * carArrayInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ::Nan::HandleScope scope;
@@ -2403,13 +2478,13 @@ static void __SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArr
 
     ec = carArrayInfo->CreateVariable(data.As<Array>()->Length(), &_variableOfCARArray);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
 
     ec = variableOfCARArray->GetSetter(&_carArraySetter);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     carArraySetter = _carArraySetter, _carArraySetter->Release();
 
@@ -2427,16 +2502,18 @@ static void __SetCallerAllocOutputArgumentOfCARArray(ICarArrayInfo const *carArr
 
     ec = variableOfCARArray->GetPayload((void **)&carQuintet);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ec = argumentList->SetOutputArgumentOfCarArrayPtr(index, carQuintet);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocStruct *struct_;
@@ -2446,12 +2523,12 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
         if (struct_->value.IsEmpty()) {
             ECode ec;
 
-            AutoPtr<IStructGetter const> structGetter;
+            AutoPtr<IStructGetter> structGetter;
             IStructGetter *_structGetter;
 
             ec = struct_->variableOfStruct->GetGetter(&_structGetter);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
+                LOG(Error::TYPE_ELASTOS, ec);
 
             structGetter = _structGetter, _structGetter->Release();
 
@@ -2459,6 +2536,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
         }
 
         NAN_GETTER_RETURN_VALUE(New(struct_->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2468,11 +2546,12 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfStruct)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 static auto &_SetCallerAllocOutputArgumentOfStruct = _SetOutputArgument;
 
-static void __SetCallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo,
+static void __SetCallerAllocOutputArgumentOfStruct(IStructInfo * structInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ::Nan::HandleScope scope;
@@ -2489,13 +2568,13 @@ static void __SetCallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo
 
     ec = structInfo->CreateVariable(&_variableOfStruct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
 
     ec = variableOfStruct->GetSetter(&_structSetter);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     structSetter = _structSetter, _structSetter->Release();
 
@@ -2513,16 +2592,18 @@ static void __SetCallerAllocOutputArgumentOfStruct(IStructInfo const *structInfo
 
     ec = variableOfStruct->GetPayload((void **)&_struct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ec = argumentList->SetOutputArgumentOfStructPtr(index, _struct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct CallerAllocInterface *interface_;
@@ -2532,20 +2613,20 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
         if (interface_->value.IsEmpty()) {
             ECode ec;
 
-            AutoPtr<IClassInfo const> classInfo;
+            AutoPtr<IClassInfo> classInfo;
             IClassInfo *_classInfo;
 
             _ELASTOS Boolean has;
 
             ec = CObject::ReflectClassInfo(*interface_->interface_, &_classInfo);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
+                LOG(Error::TYPE_ELASTOS, ec);
 
-            classInfo = _classInfo, _classInfo->Release();
+            classInfo = const_cast<IClassInfo *>(_classInfo), _classInfo->Release();
 
-            ec = classInfo->HasInterfaceInfo(interface_->interfaceInfo.Get(), &has);
+            ec = classInfo->HasInterfaceInfo(const_cast<IInterfaceInfo *>(interface_->interfaceInfo.Get()), &has);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
+                LOG(Error::TYPE_ELASTOS, ec);
 
             if (has != FALSE)
                 interface_->value.Reset(ToValue(*interface_->interface_));
@@ -2554,6 +2635,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
         }
 
         NAN_GETTER_RETURN_VALUE(New(interface_->value));
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2563,13 +2645,14 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif    
 }
 
 static auto &_SetCallerAllocOutputArgumentOfInterface = _SetOutputArgument;
 
 struct _CallerAllocInterface: CallerAllocInterface {
 private:
-    ~_CallerAllocInterface()
+    ~_CallerAllocInterface() final
     {
         (*interface_)->Release();
 
@@ -2577,7 +2660,7 @@ private:
     }
 };
 
-static void __SetCallerAllocOutputArgumentOfInterface(IInterfaceInfo const *interfaceInfo,
+static void __SetCallerAllocOutputArgumentOfInterface(IInterfaceInfo *interfaceInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ::Nan::HandleScope scope;
@@ -2590,7 +2673,7 @@ static void __SetCallerAllocOutputArgumentOfInterface(IInterfaceInfo const *inte
 
     unique_ptr<IInterface *> interface_(new(nothrow) (IInterface *));
     if (interface_ == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     interface__ = ToInterface(interfaceInfo, New(value->data));
     interface__->AddRef(), *interface_ = interface__;
@@ -2608,10 +2691,10 @@ static void __SetCallerAllocOutputArgumentOfInterface(IInterfaceInfo const *inte
 
     ec = argumentList->SetOutputArgumentOfObjectPtrPtr(index, __interface);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 }
 
-static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
+static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo *dataTypeInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ECode ec;
@@ -2620,7 +2703,7 @@ static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
 
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (dataType) {
     case CarDataType_Int16:
@@ -2701,19 +2784,19 @@ static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
         break;
 
     case CarDataType_ArrayOf:
-        __SetCallerAllocOutputArgumentOfCARArray(static_cast<ICarArrayInfo const *>(dataTypeInfo),
+        __SetCallerAllocOutputArgumentOfCARArray(static_cast<ICarArrayInfo *>(dataTypeInfo),
                 argumentList, index, value);
 
         break;
 
     case CarDataType_Struct:
-        __SetCallerAllocOutputArgumentOfStruct(static_cast<IStructInfo const *>(dataTypeInfo),
+        __SetCallerAllocOutputArgumentOfStruct(static_cast<IStructInfo *>(dataTypeInfo),
                 argumentList, index, value);
 
         break;
 
     case CarDataType_Interface:
-        __SetCallerAllocOutputArgumentOfInterface(static_cast<IInterfaceInfo const *>(dataTypeInfo),
+        __SetCallerAllocOutputArgumentOfInterface(static_cast<IInterfaceInfo *>(dataTypeInfo),
                 argumentList, index, value);
 
         break;
@@ -2723,23 +2806,23 @@ static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo const *dataTypeInfo,
     }
 }
 
-static void _SetArgumentOf(IParamInfo const *paramInfo,
+static void _SetArgumentOf(IParamInfo *paramInfo,
         IArgumentList *argumentList, size_t index, struct _Value *value)
 {
     ECode ec;
 
     ParamIOAttribute io;
 
-    AutoPtr<IDataTypeInfo const> dataTypeInfo;
+    AutoPtr<IDataTypeInfo> dataTypeInfo;
     IDataTypeInfo *_dataTypeInfo;
 
     ec = paramInfo->GetIOAttribute(&io);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     ec = paramInfo->GetTypeInfo(&_dataTypeInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     dataTypeInfo = _dataTypeInfo, _dataTypeInfo->Release();
 
@@ -2752,7 +2835,7 @@ static void _SetArgumentOf(IParamInfo const *paramInfo,
 }
 
 template<class FunctionInfo>
-static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo const *functionInfo, size_t argc, struct _Value *argv[])
+static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo *functionInfo, size_t argc, struct _Value *argv[])
 {
     ECode ec;
 
@@ -2761,25 +2844,25 @@ static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo const *functionIn
 
     _ELASTOS Int32 nParams;
 
-    AutoPtr<ArrayOf<IParamInfo const *> > paramInfos;
+    AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
 
     ec = functionInfo->CreateArgumentList(&_argumentList);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     argumentList = _argumentList, _argumentList->Release();
 
     ec = functionInfo->GetParamCount(&nParams);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    paramInfos = ArrayOf<IParamInfo const *>::Alloc(nParams);
+    paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = functionInfo->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nParams; ++i)
         _SetArgumentOf((*paramInfos)[i], argumentList, i, argv[i]);
@@ -2788,11 +2871,11 @@ static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo const *functionIn
 }
 
 struct _ClassInfo: WeakExternalBase {
-    AutoPtr<IClassInfo const> classInfo;
-    AutoPtr<ArrayOf<IConstructorInfo const *> const> constructorInfos;
+    AutoPtr<IClassInfo > classInfo;
+    AutoPtr<ArrayOf<IConstructorInfo *> > constructorInfos;
 
 private:
-    ~_ClassInfo() = default;
+    ~_ClassInfo() final = default;
 };
 
 struct _ClassId: WeakExternalBase {
@@ -2805,14 +2888,15 @@ struct _ClassId: WeakExternalBase {
         classId.mUunm = uunm;
     }
 
-    void Fill(IClassInfo const *classInfo)
+    void Fill(IClassInfo const *pclassInfo)
     {
+        IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
         if (!filled) {
             ECode ec;
 
             ec = classInfo->GetId(&classId);
             if (FAILED(ec))
-                throw Error(Error::TYPE_ELASTOS, ec, "");
+                LOG(Error::TYPE_ELASTOS, ec);
 
             filled = true;
         }
@@ -2821,17 +2905,19 @@ struct _ClassId: WeakExternalBase {
 private:
     char uunm[256];
 
-    ~_ClassId() = default;
+    ~_ClassId() final = default;
 };
 
 NAN_METHOD(CARObject::Attach)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct _ClassInfo const *classInfo;
 
-        struct _ClassId const *classId;
+        struct _ClassId *classId;
 
         Local<Value> arg0;
 
@@ -2839,20 +2925,21 @@ NAN_METHOD(CARObject::Attach)
             (struct _ClassInfo const *)
             Get(info.This(), ::Nan::New(".__class__").ToLocalChecked()).ToLocalChecked().As<External>()->Value();
 
-        classId = (struct _ClassId const *)info.Data().As<External>()->Value();
+        classId = (struct _ClassId *)info.Data().As<External>()->Value();
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!arg0->IsObject())
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         classId->Fill(classInfo->classInfo);
 
         AttachAspect(arg0.As<Object>(), classId->classId);
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2862,37 +2949,41 @@ NAN_METHOD(CARObject::Attach)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 NAN_METHOD(CARObject::Detach)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
-        struct _ClassInfo const *classInfo;
+        struct _ClassInfo *classInfo;
 
-        struct _ClassId const *classId;
+        struct _ClassId *classId;
 
         Local<Value> arg0;
 
         classInfo =
-            (struct _ClassInfo const *)
+            (struct _ClassInfo *)
             Get(info.This(), ::Nan::New(".__class__").ToLocalChecked()).ToLocalChecked().As<External>()->Value();
 
-        classId = (struct _ClassId const *)info.Data().As<External>()->Value();
+        classId = (struct _ClassId *)info.Data().As<External>()->Value();
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!arg0->IsObject())
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         classId->Fill(classInfo->classInfo);
 
         DetachAspect(arg0.As<Object>(), classId->classId);
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2902,16 +2993,19 @@ NAN_METHOD(CARObject::Detach)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 NAN_METHOD(CARObject::Probe)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         struct _ClassInfo const *classInfo;
 
-        struct _ClassId const *classId;
+        struct _ClassId *classId;
 
         Local<Value> arg0;
 
@@ -2919,20 +3013,21 @@ NAN_METHOD(CARObject::Probe)
             (struct _ClassInfo const *)
             Get(info.This(), ::Nan::New(".__class__").ToLocalChecked()).ToLocalChecked().As<External>()->Value();
 
-        classId = (struct _ClassId const *)info.Data().As<External>()->Value();
+        classId = (struct _ClassId *)info.Data().As<External>()->Value();
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!arg0->IsObject())
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         classId->Fill(classInfo->classInfo);
 
         NAN_METHOD_RETURN_VALUE(
                 New(CAR_BRIDGE::Probe(arg0.As<Object>(), reinterpret_cast<InterfaceID const &>(classId->classId)))
                 );
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -2942,68 +3037,65 @@ NAN_METHOD(CARObject::Probe)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
-CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const *> const &constructorInfos,
+CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo *>  &constructorInfos,
         IRegime *regime,
         size_t argc, Local<Value> argv[])
 {
-    ECode ec;
-
-    IInterface *carObject;
-
+    IInterface *carObject = nullptr;
     unique_ptr<unique_ptr<struct _Value> []> _argv;
-
-    AutoPtr<IConstructorInfo const> constructorInfo;
-
+    AutoPtr<IConstructorInfo> constructorInfo;
     AutoPtr<IArgumentList> argumentList;
+    AutoPtr<IFunctionInfo> functionInfo;
 
-    _classInfo = classInfo;
+    _classInfo = const_cast<IClassInfo*>(classInfo);
 
     if (argc == 0) {
-        ec = classInfo->CreateObjectInRegime(regime, &carObject);
+#if 0//?jw car remove
+        ECode ec = classInfo->CreateObjectInRegime(regime, &carObject);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
-
+            LOG(Error::TYPE_ELASTOS, ec);
+#endif
         goto done;
     }
-
+#if 0//?jw
     _argv = unique_ptr<unique_ptr<struct _Value> []>(
             reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
 
-    constructorInfo = static_cast<IConstructorInfo const *>(
-            _GetMatchingFunctionForCall<IConstructorInfo>(
-                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo const **>(constructorInfos.GetPayload()),
-                argc, reinterpret_cast<struct _Value const **>(_argv.get())).Get()
-            );
+    functionInfo = _GetMatchingFunctionForCall<IConstructorInfo>(
+                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo **>(constructorInfos.GetPayload()),
+                argc, reinterpret_cast<struct _Value const**>(_argv.get()));
+    constructorInfo = static_cast<IConstructorInfo*>(functionInfo.Get());
 
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
 
     ec = constructorInfo->CreateObjectInRegime(regime, argumentList, &carObject);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
-
+        LOG(Error::TYPE_ELASTOS, ec);
+#endif
 done:
     _carObject = carObject, carObject->Release();
 }
 
 struct _ClassInfoInRegime: WeakExternalBase {
-    AutoPtr<IClassInfo const> classInfo;
-    AutoPtr<ArrayOf<IConstructorInfo const *> const> constructorInfos;
+    AutoPtr<IClassInfo> classInfo;
+    AutoPtr<ArrayOf<IConstructorInfo *> > constructorInfos;
 
     AutoPtr<IRegime> regime;
 
 private:
-    ~_ClassInfoInRegime() = default;
+    ~_ClassInfoInRegime() final = default;
 };
 
 CARObject *CARObject::NewInRegimeConstructor(size_t argc, Local<Value> argv[], Local<Value> data)
 {
     struct _ClassInfoInRegime const *classInfoInRegime;
 
-    CARObject *carObject;
+    CARObject *carObject = nullptr;
 
     classInfoInRegime = (struct _ClassInfoInRegime const *)data.As<External>()->Value();
 
@@ -3011,15 +3103,18 @@ CARObject *CARObject::NewInRegimeConstructor(size_t argc, Local<Value> argv[], L
             classInfoInRegime->regime,
             argc, argv);
     if (carObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     return carObject;
 }
 
 NAN_METHOD(CARObject::NewInRegimeConstructor)
 {
+#if 0//?jw
     try {
+#endif
         ClassConstructor(info, NewInRegimeConstructor);
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -3029,14 +3124,17 @@ NAN_METHOD(CARObject::NewInRegimeConstructor)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 NAN_METHOD(CARObject::InRegime)
 {
+#if 0//?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
-        struct _ClassInfo const *classInfo;
+        struct _ClassInfo  *classInfo;
 
         Local<Value> arg0;
 
@@ -3045,15 +3143,15 @@ NAN_METHOD(CARObject::InRegime)
         Local<FunctionTemplate> classTemplate;
 
         classInfo =
-            (struct _ClassInfo const *)
+            (struct _ClassInfo *)
             Get(info.This(), ::Nan::New(".__class__").ToLocalChecked()).ToLocalChecked().As<External>()->Value();
 
         if (info.Length() < 1)
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         arg0 = info[0];
         if (!IsRegime(arg0))
-            throw Error(Error::INVALID_ARGUMENT, "");
+            LOG(Error::INVALID_ARGUMENT, 0);
 
         regime = Unwrap<CARObject>(arg0.As<Object>());
 
@@ -3061,7 +3159,7 @@ NAN_METHOD(CARObject::InRegime)
                 new(nothrow) struct _ClassInfoInRegime
                 );
         if (classInfoInRegime == nullptr)
-            throw Error(Error::NO_MEMORY, "");
+            LOG(Error::NO_MEMORY, 0);
 
         classInfoInRegime->classInfo = classInfo->classInfo;
         classInfoInRegime->constructorInfos = classInfo->constructorInfos;
@@ -3071,6 +3169,7 @@ NAN_METHOD(CARObject::InRegime)
                 NewInRegimeConstructor, classInfoInRegime->self()), classInfoInRegime.release();
 
         NAN_METHOD_RETURN_VALUE(GetFunction(classTemplate).ToLocalChecked());
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -3080,22 +3179,25 @@ NAN_METHOD(CARObject::InRegime)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 struct _MethodInfos: WeakExternalBase {
-    vector<AutoPtr<IMethodInfo const>> methodInfos;
+    vector<AutoPtr<IMethodInfo >> methodInfos;
 };
 
 NAN_METHOD(CARObject::InvokeMethod)
 {
+#if 0//?jw
     try {
+#endif
         CARObject *thatCARObject;
 
-        struct _MethodInfos const *methodInfos;
+        struct _MethodInfos *methodInfos;
 
         size_t argc;
 
-        AutoPtr<IMethodInfo const> methodInfo;
+        AutoPtr<IMethodInfo> methodInfo;
 
         AutoPtr<IArgumentList> argumentList;
 
@@ -3103,27 +3205,27 @@ NAN_METHOD(CARObject::InvokeMethod)
 
         thatCARObject = Unwrap<CARObject>(info.This());
 
-        methodInfos = (struct _MethodInfos const *)info.Data().As<External>()->Value();
+        methodInfos = (struct _MethodInfos *)info.Data().As<External>()->Value();
 
         argc = info.Length();
         unique_ptr<unique_ptr<struct _Value> []> argv(
                 reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
                 );
 
-        methodInfo = static_cast<IMethodInfo const *>(
-                _GetMatchingFunctionForCall<IMethodInfo>(
-                    methodInfos->methodInfos.size(), (IFunctionInfo const **)&methodInfos->methodInfos[0],
-                    argc, reinterpret_cast<struct _Value const **>(argv.get())).Get()
-                );
+        AutoPtr<IFunctionInfo> functionInfo = _GetMatchingFunctionForCall<IMethodInfo>(
+                    methodInfos->methodInfos.size(), (IFunctionInfo **)&methodInfos->methodInfos[0],
+                    argc, reinterpret_cast<struct _Value const **>(argv.get()));
+        methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
 
         argumentList =
             _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
 
         ec = methodInfo->Invoke(thatCARObject->_carObject, argumentList);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -3133,10 +3235,11 @@ NAN_METHOD(CARObject::InvokeMethod)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
-Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
-        ArrayOf<IConstructorInfo const *> const &constructorInfos,
+Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo,
+        ArrayOf<IConstructorInfo *> &constructorInfos,
         ::Nan::FunctionCallback constructor, Local<Value> data)
 {
     ::Nan::EscapableHandleScope scope;
@@ -3152,44 +3255,31 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
     char const *_category;
 
     _ELASTOS Boolean private_;
-
     _ELASTOS Boolean isSingleton;
-
     _ELASTOS Boolean isReturnValue;
-
     _ELASTOS Boolean isBaseClass;
-
     _ELASTOS String namespace_;
-
     _ELASTOS String name;
-
     _ELASTOS Boolean hasBaseClass;
-
     _ELASTOS Boolean hasGeneric;
 
     Local<ObjectTemplate> aspectTemplates;
-
     _ELASTOS Int32 nAspects;
-
-    AutoPtr<ArrayOf<IClassInfo const *> > aspectInfos;
-
+    AutoPtr<ArrayOf<IClassInfo *> > aspectInfos;
     Local<ObjectTemplate> aggregateeTemplates;
-
     _ELASTOS Int32 nAggregatees;
-
-    AutoPtr<ArrayOf<IClassInfo const *> > aggregateeInfos;
-
+    AutoPtr<ArrayOf<IClassInfo *> > aggregateeInfos;
     _ELASTOS Int32 nInterfaces;
+    AutoPtr<ArrayOf<IInterfaceInfo *> > interfaceInfos;
+    _ELASTOS Int32 nCallbackInterfaces = 0;
 
-    AutoPtr<ArrayOf<IInterfaceInfo const *> > interfaceInfos;
-
-    _ELASTOS Int32 nCallbackInterfaces;
-
-    AutoPtr<ArrayOf<ICallbackInterfaceInfo const *> > callbackInterfaceInfos;
+    AutoPtr<ArrayOf<ICallbackInterfaceInfo *> > callbackInterfaceInfos;
 
     _ELASTOS Int32 nMethods;
 
-    AutoPtr<ArrayOf<IMethodInfo const *> > methodInfos;
+    AutoPtr<ArrayOf<IMethodInfo *> > methodInfos;
+
+    IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
 
     map<_ELASTOS String, unique_ptr<struct _MethodInfos, _MethodInfos::Deleter>> mapNameToMethodInfos;
 
@@ -3199,7 +3289,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = &constructorInfos;
@@ -3213,7 +3303,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetThreadingModel(&threadingModel);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (threadingModel) {
     case ThreadingModel_Sequenced:
@@ -3247,7 +3337,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = GetCategory(classInfo, &category);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     switch (category) {
     case CLASS_CATEGORY_CLASS:
@@ -3281,7 +3371,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->IsPrivate(&private_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$private").ToLocalChecked(),
@@ -3290,7 +3380,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->IsSingleton(&isSingleton);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$isSingleton").ToLocalChecked(),
@@ -3299,7 +3389,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->IsReturnValue(&isReturnValue);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$isReturnValue").ToLocalChecked(),
@@ -3308,7 +3398,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->IsBaseClass(&isBaseClass);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$isBase").ToLocalChecked(),
@@ -3317,7 +3407,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$namespace").ToLocalChecked(),
@@ -3326,7 +3416,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     SetTemplate(classTemplate,
             ::Nan::New("$name").ToLocalChecked(),
@@ -3335,15 +3425,15 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->HasBaseClass(&hasBaseClass);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasBaseClass != FALSE) {
-        AutoPtr<IClassInfo const> baseClassInfo;
+        AutoPtr<IClassInfo > baseClassInfo;
         IClassInfo *_baseClassInfo;
 
         ec = classInfo->GetBaseClassInfo(&_baseClassInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         baseClassInfo = _baseClassInfo, _baseClassInfo->Release();
 
@@ -3355,15 +3445,15 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->HasGeneric(&hasGeneric);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasGeneric != FALSE) {
-        AutoPtr<IClassInfo const> genericInfo;
+        AutoPtr<IClassInfo> genericInfo;
         IClassInfo *_genericInfo;
 
         ec = classInfo->GetGenericInfo(&_genericInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         genericInfo = _genericInfo, _genericInfo->Release();
 
@@ -3377,20 +3467,20 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetAspectCount(&nAspects);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    aspectInfos = ArrayOf<IClassInfo const *>::Alloc(nAspects);
+    aspectInfos = ArrayOf<IClassInfo *>::Alloc(nAspects);
     if (aspectInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllAspectInfos(reinterpret_cast<ArrayOf<IClassInfo *> *>(aspectInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nAspects; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IClassInfo const *aspectInfo;
+        IClassInfo *aspectInfo;
 
         _ELASTOS String aspectName;
 
@@ -3398,7 +3488,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         ec = aspectInfo->GetName(&aspectName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         SetTemplate(aspectTemplates,
                 ToValue(aspectName).As<::v8::String>(),
@@ -3415,20 +3505,20 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetAggregateeCount(&nAggregatees);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    aggregateeInfos = ArrayOf<IClassInfo const *>::Alloc(nAggregatees);
+    aggregateeInfos = ArrayOf<IClassInfo *>::Alloc(nAggregatees);
     if (aggregateeInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllAggregateeInfos(reinterpret_cast<ArrayOf<IClassInfo *> *>(aggregateeInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nAggregatees; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IClassInfo const *aggregateeInfo;
+        IClassInfo *aggregateeInfo;
 
         _ELASTOS String aggregateeName;
 
@@ -3436,7 +3526,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         ec = aggregateeInfo->GetName(&aggregateeName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         SetTemplate(aggregateeTemplates,
                 ToValue(aggregateeName).As<::v8::String>(),
@@ -3456,20 +3546,20 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetInterfaceCount(&nInterfaces);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    interfaceInfos = ArrayOf<IInterfaceInfo const *>::Alloc(nInterfaces);
+    interfaceInfos = ArrayOf<IInterfaceInfo *>::Alloc(nInterfaces);
     if (interfaceInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllInterfaceInfos(reinterpret_cast<ArrayOf<IInterfaceInfo *> *>(interfaceInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nInterfaces; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        IInterfaceInfo const *interfaceInfo;
+        IInterfaceInfo *interfaceInfo;
 
         _ELASTOS String interfaceName;
 
@@ -3477,32 +3567,32 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         ec = interfaceInfo->GetName(&interfaceName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         SetTemplate(classTemplate,
                 ToValue(interfaceName).As<::v8::String>(),
                 CARInterface(interfaceInfo),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
     }
-
+#if 0//?jw callback
     ec = classInfo->GetCallbackInterfaceCount(&nCallbackInterfaces);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
-
-    callbackInterfaceInfos = ArrayOf<ICallbackInterfaceInfo const *>::Alloc(nCallbackInterfaces);
+        LOG(Error::TYPE_ELASTOS, ec);
+#endif
+    callbackInterfaceInfos = ArrayOf<ICallbackInterfaceInfo *>::Alloc(nCallbackInterfaces);
     if (callbackInterfaceInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
-
+        LOG(Error::NO_MEMORY, 0);
+#if 0//?jw callback
     ec = classInfo->GetAllCallbackInterfaceInfos(
             reinterpret_cast<ArrayOf<ICallbackInterfaceInfo *> *>(callbackInterfaceInfos.Get())
             );
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
-
+        LOG(Error::TYPE_ELASTOS, ec);
+#endif
     for (_ELASTOS Int32 i = 0; i < nCallbackInterfaces; ++i) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
-        ICallbackInterfaceInfo const *callbackInterfaceInfo;
+        ICallbackInterfaceInfo *callbackInterfaceInfo;
 
         _ELASTOS String callbackInterfaceName;
 
@@ -3510,7 +3600,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         ec = callbackInterfaceInfo->GetName(&callbackInterfaceName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         SetTemplate(classTemplate,
                 ToValue(callbackInterfaceName).As<::v8::String>(),
@@ -3523,7 +3613,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         unique_ptr<struct _ClassId, _ClassId::Deleter> classId(new(nothrow) struct _ClassId);
         if (classId == nullptr)
-            throw Error(Error::NO_MEMORY, "");
+            LOG(Error::NO_MEMORY, 0);
 
         SetMethod(classTemplate,
                 "$attach",
@@ -3546,18 +3636,18 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
     ec = classInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    methodInfos = ArrayOf<IMethodInfo const *>::Alloc(nMethods);
+    methodInfos = ArrayOf<IMethodInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     for (_ELASTOS Int32 i = 0; i < nMethods; ++i) {
-        IMethodInfo const *methodInfo;
+        IMethodInfo *methodInfo;
 
         _ELASTOS String methodName;
 
@@ -3565,20 +3655,19 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
 
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         auto &_methodInfos = mapNameToMethodInfos[methodName];
         if (_methodInfos == nullptr) {
             _methodInfos = unique_ptr<struct _MethodInfos, _MethodInfos::Deleter>(new(nothrow) struct _MethodInfos);
             if (_methodInfos == nullptr)
-                throw Error(Error::NO_MEMORY, "");
+                LOG(Error::NO_MEMORY, 0);
         }
-
         _methodInfos->methodInfos.push_back(methodInfo);
     }
 
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it) {
-        ::Nan::HandleScope scope;
+        ::Nan::HandleScope scope_;
 
         SetPrototypeMethod(classTemplate, it->first, InvokeMethod, it->second->self()), it->second.release();
     }
@@ -3588,28 +3677,28 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
     return escapedClassTemplate;
 }
 
-Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo,
+Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo,
         ::Nan::FunctionCallback constructor, Local<Value> data)
 {
     ECode ec;
 
     _ELASTOS Int32 nConstructors;
 
-    AutoPtr<ArrayOf<IConstructorInfo const *> > constructorInfos;
-
+    AutoPtr<ArrayOf<IConstructorInfo*> > constructorInfos;
+    IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
     ec = classInfo->GetConstructorCount(&nConstructors);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    constructorInfos = ArrayOf<IConstructorInfo const *>::Alloc(nConstructors);
+    constructorInfos = ArrayOf<IConstructorInfo *>::Alloc(nConstructors);
     if (constructorInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllConstructorInfos(reinterpret_cast<ArrayOf<IConstructorInfo *> *>(constructorInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    return NewClassTemplate(classInfo, *constructorInfos, constructor, data);
+    return NewClassTemplate(pclassInfo, *constructorInfos, constructor, data);
 }
 
 NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Constructor constructor)
@@ -3623,16 +3712,16 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
     argc = info.Length();
     unique_ptr<Local<Value> []> argv(new(nothrow) Local<Value>[argc]);
     if (argv == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     for (size_t i = 0; i < argc; ++i)
         argv[i] = info[i];
 
     if (!info.IsConstructCall()) {
         ::Nan::HandleScope scope;
-
+#if 0//?jw v8 remove
         NAN_METHOD_RETURN_VALUE(NewInstance(info.Callee(), argc, argv.get()).ToLocalChecked());
-
+#endif
         return;
     }
 
@@ -3643,25 +3732,22 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
     NAN_METHOD_RETURN_VALUE(that);
 }
 
-CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const *> const &constructorInfos,
+CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo *> &constructorInfos,
         size_t argc, Local<Value> argv[])
 {
     ECode ec;
-
-    IInterface *carObject;
-
+    IInterface *carObject = nullptr;
     unique_ptr<unique_ptr<struct _Value> []> _argv;
-
-    AutoPtr<IConstructorInfo const> constructorInfo;
-
+    AutoPtr<IConstructorInfo> constructorInfo;
     AutoPtr<IArgumentList> argumentList;
+    AutoPtr<IFunctionInfo> functionInfo;
 
-    _classInfo = classInfo;
-
+    _classInfo = const_cast<IClassInfo*>(pclassInfo);
+    IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
     if (argc == 0) {
         ec = classInfo->CreateObject(&carObject);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         goto done;
     }
@@ -3670,18 +3756,17 @@ CARObject::CARObject(IClassInfo const *classInfo, ArrayOf<IConstructorInfo const
             reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
 
-    constructorInfo = static_cast<IConstructorInfo const *>(
-            _GetMatchingFunctionForCall<IConstructorInfo>(
-                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo const **>(constructorInfos.GetPayload()),
-                argc, reinterpret_cast<struct _Value const **>(_argv.get())).Get()
-            );
+    functionInfo = _GetMatchingFunctionForCall<IConstructorInfo>(
+                constructorInfos.GetLength(), reinterpret_cast<IFunctionInfo **>(constructorInfos.GetPayload()),
+                argc, reinterpret_cast<struct _Value const **>(_argv.get()));
+    constructorInfo = static_cast<IConstructorInfo *>(functionInfo.Get());
 
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
 
     ec = constructorInfo->CreateObject(argumentList, &carObject);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
 done:
     _carObject = carObject, carObject->Release();
@@ -3689,23 +3774,24 @@ done:
 
 CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Value> data)
 {
-    struct _ClassInfo const *classInfo;
+    struct _ClassInfo *classInfo;
+    CARObject *carObject = nullptr;
 
-    CARObject *carObject;
-
-    classInfo = (struct _ClassInfo const *)data.As<External>()->Value();
-
+    classInfo = (struct _ClassInfo *)data.As<External>()->Value();
     carObject = new(nothrow) CARObject(classInfo->classInfo, *classInfo->constructorInfos, argc, argv);
     if (carObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     return carObject;
 }
 
 NAN_METHOD(CARObject::NewConstructor)
 {
+#if 0//?jw
     try {
+#endif
         ClassConstructor(info, NewConstructor);
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -3715,11 +3801,14 @@ NAN_METHOD(CARObject::NewConstructor)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
-
-static map<AutoPtr<IClassInfo const>, CopyablePersistent<FunctionTemplate>> _mapClassInfoToCARClass;
-
-Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+static map<AutoPtr<IClassInfo>, CopyablePersistent<FunctionTemplate>> _mapClassInfoToCARClass;
+#pragma clang diagnostic pop
+Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -3727,36 +3816,37 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo)
 
     _ELASTOS Int32 nConstructors;
 
-    AutoPtr<ArrayOf<IConstructorInfo const *> > constructorInfos;
+    AutoPtr<ArrayOf<IConstructorInfo *> > constructorInfos;
 
     Local<FunctionTemplate> classTemplate;
 
     Local<FunctionTemplate> escapedClassTemplate;
-
+    IClassInfo* classInfo = const_cast<IClassInfo*>(pclassInfo);
     auto &_classTemplate = _mapClassInfoToCARClass[classInfo];
     if (!_classTemplate.IsEmpty())
         return ::Nan::New(_classTemplate);
 
     ec = classInfo->GetConstructorCount(&nConstructors);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
-    constructorInfos = ArrayOf<IConstructorInfo const *>::Alloc(nConstructors);
+    constructorInfos = ArrayOf<IConstructorInfo *>::Alloc(nConstructors);
     if (constructorInfos == 0)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     ec = classInfo->GetAllConstructorInfos(reinterpret_cast<ArrayOf<IConstructorInfo *> *>(constructorInfos.Get()));
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = constructorInfos;
 
     classTemplate = NewClassTemplate(classInfo, *constructorInfos, NewConstructor, _classInfo->self());
+
     _classInfo.release();
 
     _classTemplate.Reset(classTemplate);
@@ -3768,7 +3858,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *classInfo)
 
 CARObject::CARObject(IClassInfo const *classInfo, IInterface *carObject) noexcept
 {
-    _classInfo = classInfo;
+    _classInfo = const_cast<IClassInfo*>(classInfo);
 
     _carObject = carObject;
 }
@@ -3789,15 +3879,18 @@ CARObject *CARObject::WrapConstructor(size_t argc, Local<Value> argv[], Local<Va
 
     _carObject = new(nothrow) CARObject(carObject->classInfo, carObject->carObject);
     if (_carObject == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     return _carObject;
 }
 
 NAN_METHOD(CARObject::WrapConstructor)
 {
+#if 0//?jw
     try {
+#endif
         ClassConstructor(info, WrapConstructor);
+#if 0//?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -3807,6 +3900,7 @@ NAN_METHOD(CARObject::WrapConstructor)
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
 Local<Object> CARObject::New(IInterface *carObject)
@@ -3815,7 +3909,7 @@ Local<Object> CARObject::New(IInterface *carObject)
 
     ECode ec;
 
-    AutoPtr<IClassInfo const> classInfo;
+    AutoPtr<IClassInfo> classInfo;
     IClassInfo *_classInfo;
 
     struct _CARObject _carObject;
@@ -3824,7 +3918,7 @@ Local<Object> CARObject::New(IInterface *carObject)
 
     ec = CObject::ReflectClassInfo(carObject, &_classInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     classInfo = _classInfo, _classInfo->Release();
 
@@ -3844,4 +3938,3 @@ bool CARObject::HasInstance(Local<Object> object)
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

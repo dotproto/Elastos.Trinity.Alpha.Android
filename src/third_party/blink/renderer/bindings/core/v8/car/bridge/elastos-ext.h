@@ -29,7 +29,7 @@ extern _ELASTOS ECode GetCategory(IClassInfo const *classInfo, enum ClassCategor
 extern _ELASTOS ECode GetImportedModuleCount(IModuleInfo const *moduleInfo, _ELASTOS Int32 *count) noexcept;
 
 extern _ELASTOS ECode GetAllImportedModuleInfos(IModuleInfo const *moduleInfo,
-        _ELASTOS ArrayOf<IModuleInfo const *> *importedModuleInfos) noexcept;
+        _ELASTOS ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept;
 
 extern _ELASTOS ECode HasImportedModule(IModuleInfo const *moduleInfo,
         _ELASTOS String const &path,
@@ -37,7 +37,7 @@ extern _ELASTOS ECode HasImportedModule(IModuleInfo const *moduleInfo,
 
 extern _ELASTOS ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
         _ELASTOS String const &path,
-        IModuleInfo const **importedModuleInfo) noexcept;
+        IModuleInfo **importedModuleInfo) noexcept;
 
 extern _ELASTOS ECode HasConstant(IModuleInfo const *moduleInfo,
         _ELASTOS String const &name,

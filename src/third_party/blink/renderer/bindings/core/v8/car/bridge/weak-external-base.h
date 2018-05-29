@@ -1,13 +1,8 @@
 #ifndef __CAR_BRIDGE_WEAK_EXTERNAL_BASE_H
 # define __CAR_BRIDGE_WEAK_EXTERNAL_BASE_H
 
-# include <node.h>
-
 # include <nan.h>
-
 # include "macros.h"
-
-
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 

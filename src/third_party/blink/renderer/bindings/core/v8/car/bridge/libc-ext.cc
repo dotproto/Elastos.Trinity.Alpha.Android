@@ -7,7 +7,6 @@
 #include "macros.h"
 
 
-
 using namespace std;
 
 CAR_BRIDGE_NAMESPACE_BEGIN

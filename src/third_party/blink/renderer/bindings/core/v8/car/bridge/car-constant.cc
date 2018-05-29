@@ -1,35 +1,25 @@
 
 #include <map>
-
-#include <node.h>
-
 #include <nan.h>
-
-#include <elastos.h>
-
-#include "macros.h"
-
-#include "nan-ext.h"
-
 #include "car-constantoid.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static map<AutoPtr<IConstantInfo const>, CopyablePersistent<NumberObject>> _mapConstantInfoToCARConstant;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
 
-Local<NumberObject> CARConstant(IConstantInfo const *constantInfo)
+static map<AutoPtr<IConstantInfo >, CopyablePersistent<NumberObject>> _mapConstantInfoToCARConstant;
+
+#pragma clang diagnostic pop
+
+Local<NumberObject> CARConstant(IConstantInfo * constantInfo)
 {
     Local<NumberObject> constant;
 

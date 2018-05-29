@@ -3,14 +3,9 @@
 #include <cstdint>
 #include <cstring>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "elastos-ext.h"
 
 #include "car-constant.h"
@@ -22,12 +17,7 @@
 #include "car-type-alias.h"
 #include "error.h"
 
-
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
@@ -41,31 +31,25 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
     ECode ec;
 
     _ELASTOS Boolean hasImportedModule;
-
     _ELASTOS Boolean hasEnum;
-
     _ELASTOS Boolean hasStruct;
-
     _ELASTOS Boolean hasTypeAlias;
-
     _ELASTOS Boolean hasInterface;
-
     _ELASTOS Boolean hasClass;
 
     ec = HasImportedModule(moduleInfo, _ELASTOS String(entryId), &hasImportedModule);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasImportedModule != FALSE) {
-        AutoPtr<IModuleInfo const> importedModuleInfo;
-        IModuleInfo const *_importedModuleInfo;
+        AutoPtr<IModuleInfo> importedModuleInfo;
 
+        IModuleInfo *_importedModuleInfo;
         ec = GetImportedModuleInfo(moduleInfo, _ELASTOS String(entryId), &_importedModuleInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
-
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
 
@@ -74,21 +58,21 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
         _ELASTOS Boolean hasConstant;
 
-        AutoPtr<IConstantInfo const> constantInfo;
+        AutoPtr<IConstantInfo> constantInfo;
         IConstantInfo *_constantInfo;
 
         _entryId = entryId + 7;
 
         ec = HasConstant(moduleInfo, _ELASTOS String(_entryId), &hasConstant);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         if (hasConstant == FALSE)
-            throw Error(Error::NONENTITY, "");
+            LOG(Error::NONENTITY, 0);
 
-        ec = moduleInfo->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         constantInfo = _constantInfo, _constantInfo->Release();
 
@@ -97,15 +81,15 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasEnum(moduleInfo, _ELASTOS String(entryId), &hasEnum);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasEnum != FALSE) {
-        AutoPtr<IEnumInfo const> enumInfo;
+        AutoPtr<IEnumInfo> enumInfo;
         IEnumInfo *_enumInfo;
 
-        ec = moduleInfo->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         enumInfo = _enumInfo, _enumInfo->Release();
 
@@ -114,15 +98,15 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasStruct(moduleInfo, _ELASTOS String(entryId), &hasStruct);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasStruct != FALSE) {
-        AutoPtr<IStructInfo const> structInfo;
+        AutoPtr<IStructInfo> structInfo;
         IStructInfo *_structInfo;
 
-        ec = moduleInfo->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         structInfo = _structInfo, _structInfo->Release();
 
@@ -131,15 +115,15 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasTypeAlias(moduleInfo, _ELASTOS String(entryId), &hasTypeAlias);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasTypeAlias != FALSE) {
-        AutoPtr<ITypeAliasInfo const> typeAliasInfo;
+        AutoPtr<ITypeAliasInfo> typeAliasInfo;
         ITypeAliasInfo *_typeAliasInfo;
 
-        ec = moduleInfo->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         typeAliasInfo = _typeAliasInfo, _typeAliasInfo->Release();
 
@@ -148,15 +132,15 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasInterface(moduleInfo, _ELASTOS String(entryId), &hasInterface);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasInterface != FALSE) {
-        AutoPtr<IInterfaceInfo const> interfaceInfo;
+        AutoPtr<IInterfaceInfo > interfaceInfo;
         IInterfaceInfo *_interfaceInfo;
 
-        ec = moduleInfo->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         interfaceInfo = _interfaceInfo, _interfaceInfo->Release();
 
@@ -165,15 +149,15 @@ static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
 
     ec = HasClass(moduleInfo, _ELASTOS String(entryId), &hasClass);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if (hasClass != FALSE) {
-        AutoPtr<IClassInfo const> classInfo;
+        AutoPtr<IClassInfo> classInfo;
         IClassInfo *_classInfo;
 
-        ec = moduleInfo->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
         if (FAILED(ec))
-            throw Error(Error::TYPE_ELASTOS, ec, "");
+            LOG(Error::TYPE_ELASTOS, ec);
 
         classInfo = _classInfo, _classInfo->Release();
 
@@ -189,7 +173,7 @@ Local<Value> Require(char const *ecoPath,
 {
     ECode ec;
 
-    AutoPtr<IModuleInfo const> moduleInfo;
+    AutoPtr<IModuleInfo> moduleInfo;
     IModuleInfo *_moduleInfo;
 
     _ELASTOS Int32 _major, _minor, _build, _revision;
@@ -198,26 +182,25 @@ Local<Value> Require(char const *ecoPath,
 
     ec = CReflector::AcquireModuleInfo(_ELASTOS String(ecoPath), &_moduleInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     moduleInfo = _moduleInfo, _moduleInfo->Release();
 
     ec = moduleInfo->GetVersion(&_major, &_minor, &_build, &_revision);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     if ((uint32_t)_major != major)
-        throw Error(Error::INCOMPATIBLE_VERSION, "");
+        LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor < minor)
-        throw Error(Error::INCOMPATIBLE_VERSION, "");
+        LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_build != build)
-        throw Error(Error::INCOMPATIBLE_VERSION, "");
+        LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor == minor && (uint32_t)_revision < revision)
-        throw Error(Error::INCOMPATIBLE_VERSION, "");
+        LOG(Error::INCOMPATIBLE_VERSION, 0);
 
     if (nEntryIds == 0) {
         ::Nan::EscapableHandleScope scope;
-
         return scope.Escape(NewInstance(CARModuleTemplate(moduleInfo)).ToLocalChecked());
     }
 

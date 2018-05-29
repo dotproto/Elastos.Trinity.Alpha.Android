@@ -3,28 +3,16 @@
 #include <memory>
 #include <new>
 
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
-
 #include "car-module.h"
 #include "error.h"
 #include "weak-external-base.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
@@ -32,17 +20,19 @@ _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 struct _ModuleInfo: WeakExternalBase {
-    AutoPtr<IModuleInfo const> moduleInfo;
+    AutoPtr<IModuleInfo> moduleInfo;
 
     bool unfolded = false;
 
 private:
-    ~_ModuleInfo() = default;
+    ~_ModuleInfo() override = default;
 };
 
 static NAN_METHOD(_Unfold)
 {
+#if 0 //?jw
     try {
+#endif
         ::Nan::HandleScope scope;
 
         Local<Object> that = info.This();
@@ -62,6 +52,7 @@ static NAN_METHOD(_Unfold)
 
 done:
         NAN_METHOD_RETURN_UNDEFINED();
+#if 0 //?jw
     } catch (Error const &error) {
         ::Nan::HandleScope scope;
 
@@ -71,14 +62,20 @@ done:
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }
+#endif
 }
 
-static map<AutoPtr<IModuleInfo const>, CopyablePersistent<ObjectTemplate>> _mapModuleInfoToCARImportedModule;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+static map<AutoPtr<IModuleInfo>, CopyablePersistent<ObjectTemplate>> _mapModuleInfoToCARImportedModule;
+#pragma clang diagnostic pop
 
-Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *moduleInfo)
+Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *imoduleInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
+    IModuleInfo *moduleInfo = const_cast<IModuleInfo *>(imoduleInfo);
     Local<FunctionTemplate> importedModuleClassTemplate;
 
     Local<ObjectTemplate> importedModuleTemplate;
@@ -93,7 +90,7 @@ Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *moduleInfo)
 
     unique_ptr<struct _ModuleInfo, _ModuleInfo::Deleter> _moduleInfo(new(nothrow) struct _ModuleInfo);
     if (_moduleInfo == nullptr)
-        throw Error(Error::NO_MEMORY, "");
+        LOG(Error::NO_MEMORY, 0);
 
     _moduleInfo->moduleInfo = moduleInfo;
 
@@ -117,4 +114,3 @@ Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *moduleInfo)
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

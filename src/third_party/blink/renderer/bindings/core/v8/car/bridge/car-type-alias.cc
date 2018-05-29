@@ -1,37 +1,27 @@
 
 #include <map>
-
-#include <node.h>
-
 #include <nan.h>
-
 #include <elastos.h>
-
 #include "macros.h"
-
 #include "nan-ext.h"
-
 #include "car-data-type.h"
 #include "error.h"
 #include "js-2-car.h"
 
-
-
 using namespace std;
-
-using namespace node;
-
 using namespace Nan;
-
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
-
-static map<AutoPtr<ITypeAliasInfo const>, CopyablePersistent<Object>> _mapTypeAliasInfoToCARTypeAlias;
-
-Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+static map<AutoPtr<IFunctionInfo>, CopyablePersistent<Object>> _mapFunctionInfoToCARFunction;
+static map<AutoPtr<ITypeAliasInfo>, CopyablePersistent<Object>> _mapTypeAliasInfoToCARTypeAlias;
+#pragma clang diagnostic pop
+Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -43,9 +33,9 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
 
     _ELASTOS Boolean isDummy;
 
-    AutoPtr<IDataTypeInfo const> typeInfo;
+    AutoPtr<IDataTypeInfo> typeInfo;
     IDataTypeInfo *_typeInfo;
-
+    ITypeAliasInfo * typeAliasInfo= const_cast<ITypeAliasInfo *>(ptypeAliasInfo);
     auto &_typeAlias = _mapTypeAliasInfoToCARTypeAlias[typeAliasInfo];
     if (!_typeAlias.IsEmpty())
         return scope.Escape(New(_typeAlias));
@@ -59,7 +49,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
 
     ec = typeAliasInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(typeAlias,
             New("$name").ToLocalChecked(),
@@ -68,7 +58,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
 
     ec = typeAliasInfo->IsDummy(&isDummy);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(typeAlias,
             New("isDummy").ToLocalChecked(),
@@ -77,7 +67,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
 
     ec = typeAliasInfo->GetTypeInfo(&_typeInfo);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     typeInfo = _typeInfo, _typeInfo->Release();
 
@@ -92,4 +82,3 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo)
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

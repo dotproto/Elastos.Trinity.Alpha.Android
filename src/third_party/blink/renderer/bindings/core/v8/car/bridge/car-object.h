@@ -1,25 +1,18 @@
 #ifndef __CAR_BRIDGE_CAR_OBJECT_H
-# define __CAR_BRIDGE_CAR_OBJECT_H
+#define __CAR_BRIDGE_CAR_OBJECT_H
 
-# include <cstddef>
-# include <cstdint>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <set>
 
-# include <functional>
-# include <map>
-# include <memory>
-# include <set>
-
-# include <nan.h>
-
-# include <elastos.h>
-
-# include "macros.h"
-
-# include "nan-ext.h"
-
-# include "car-function-adapter.h"
-
-
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
+#include "nan-ext.h"
+#include "car-function-adapter.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
@@ -72,7 +65,7 @@ private:
 
     static ::Nan::Persistent<::v8::FunctionTemplate> _classBaseTemplate;
 
-    _ELASTOS AutoPtr<IClassInfo const> _classInfo;
+    _ELASTOS AutoPtr<IClassInfo > _classInfo;
 
     _ELASTOS AutoPtr<IInterface> _carObject;
 
@@ -123,7 +116,7 @@ private:
     static NAN_METHOD(InRegime);
 
     static ::v8::Local<::v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
-            _ELASTOS ArrayOf<IConstructorInfo const *> const &constructorInfos,
+            _ELASTOS ArrayOf<IConstructorInfo *> &constructorInfos,
             ::Nan::FunctionCallback constructor, ::v8::Local<::v8::Value> data);
 
     static ::v8::Local<::v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
@@ -139,20 +132,20 @@ private:
 
     static NAN_METHOD(WrapConstructor);
 
-    CARObject(IClassInfo const *classInfo, _ELASTOS ArrayOf<IConstructorInfo const *> const &constructorInfos,
+    CARObject(IClassInfo const *classInfo, _ELASTOS ArrayOf<IConstructorInfo *> &constructorInfos,
             IRegime *regime,
             size_t argc, ::v8::Local<::v8::Value> argv[]);
 
-    CARObject(IClassInfo const *classInfo, _ELASTOS ArrayOf<IConstructorInfo const *> const &constructorInfos,
+    CARObject(IClassInfo const *classInfo, _ELASTOS ArrayOf<IConstructorInfo *> &constructorInfos,
             size_t argc, ::v8::Local<::v8::Value> argv[]);
 
     CARObject(IClassInfo const *classInfo, IInterface *carObject) noexcept;
 
-    CARObject(CARObject const &carObject) = delete;
+    CARObject(CARObject &carObject) = delete;
 
     CARObject(CARObject &&carObject) = delete;
 
-    CARObject &operator=(CARObject const &carObject) = delete;
+    CARObject &operator=(CARObject &carObject) = delete;
 
     CARObject &operator=(CARObject &&carObject) = delete;
 };

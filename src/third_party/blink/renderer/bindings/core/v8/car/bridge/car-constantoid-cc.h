@@ -1,23 +1,17 @@
 #ifndef __CAR_BRIDGE_CAR_CONSTANTOID_CC_H
-# define __CAR_BRIDGE_CAR_CONSTANTOID_CC_H
+#define __CAR_BRIDGE_CAR_CONSTANTOID_CC_H
 
-# include <nan.h>
-
-# include <elastos.h>
-
-# include "macros.h"
-
-# include "nan-ext.h"
-
-# include "error.h"
-# include "js-2-car.h"
-
-
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
+#include "nan-ext.h"
+#include "error.h"
+#include "js-2-car.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 template<class ConstantoidInfo>
-::v8::Local<::v8::NumberObject> CARConstantoid(ConstantoidInfo const *constantoidInfo, char const *what)
+::v8::Local<::v8::NumberObject> CARConstantoid(ConstantoidInfo  *constantoidInfo, char const *what)
 {
     ::Nan::EscapableHandleScope scope;
 
@@ -31,7 +25,7 @@ template<class ConstantoidInfo>
 
     ec = constantoidInfo->GetValue(&value);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     constantoid = ::Nan::New<::v8::NumberObject>(value);
 
@@ -42,7 +36,7 @@ template<class ConstantoidInfo>
 
     ec = constantoidInfo->GetName(&name);
     if (FAILED(ec))
-        throw Error(Error::TYPE_ELASTOS, ec, "");
+        LOG(Error::TYPE_ELASTOS, ec);
 
     DefineOwnProperty(constantoid,
             ::Nan::New("$name").ToLocalChecked(),
