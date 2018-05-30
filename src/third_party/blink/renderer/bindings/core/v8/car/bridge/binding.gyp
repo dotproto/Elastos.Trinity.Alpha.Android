@@ -40,7 +40,7 @@
 
       "cflags": [
         "-std=c++11",
-#       "-pedantic-errors",
+#      "-pedantic-errors",
         "-Wall",
         "-O0",
         "-fpermissive"

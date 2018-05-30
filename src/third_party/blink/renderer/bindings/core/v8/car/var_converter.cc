@@ -1664,6 +1664,7 @@ ERR:
     BufferOf<IFieldInfo *>::Free(pfieldInfos);
     return ec;
 }
+
 static ECode _struct2jsVal(IStructInfo *pIStructInfo,
                            IStructGetter *getter, Local<Value> jsv)
 {

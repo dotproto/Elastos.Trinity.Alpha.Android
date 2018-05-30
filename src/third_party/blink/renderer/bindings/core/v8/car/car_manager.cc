@@ -49,7 +49,7 @@ static NAN_METHOD(Require)
 #if 0 //?try
     try {
 #endif
-        ::Nan::HandleScope scope;
+        Nan::HandleScope scope;
 
         Local<Value> arg0;
 
@@ -70,11 +70,11 @@ static NAN_METHOD(Require)
                 );
 #if 0
     } catch (Error const &error) {
-        ::Nan::HandleScope scope;
+        Nan::HandleScope scope;
 
         ThrowError(ToValue(error));
     } catch (...) {
-        ::Nan::HandleScope scope;
+        Nan::HandleScope scope;
 
         ThrowError(ToValue(Error(Error::FAILED, "")));
     }

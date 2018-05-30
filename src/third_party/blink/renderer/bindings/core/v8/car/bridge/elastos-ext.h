@@ -1,68 +1,51 @@
 #ifndef __CAR_BRIDGE_ELASTOS_EXT_H
-# define __CAR_BRIDGE_ELASTOS_EXT_H
+#define __CAR_BRIDGE_ELASTOS_EXT_H
+#include <elastos.h>
+#include "macros.h"
 
-# include <elastos.h>
-
-# include "macros.h"
-
-
-
-# define NO_ERROR NOERROR
-
-# define E_FAILED E_FAIL
+#define NO_ERROR NOERROR
+#define E_FAILED E_FAIL
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-extern char const *GetEName(_ELASTOS ECode ecode) noexcept;
+extern char const *GetEName(Elastos::ECode ecode) noexcept;
+extern Elastos::ECode GetFullName(IDataTypeInfo *dataTypeInfo, Elastos::String *fullName) noexcept;
 
-extern _ELASTOS ECode GetFullName(IDataTypeInfo *dataTypeInfo, _ELASTOS String *fullName) noexcept;
-
-enum ClassCategory {
+enum ClassCategory
+{
     CLASS_CATEGORY_CLASS,
     CLASS_CATEGORY_GENERIC,
     CLASS_CATEGORY_REGIME,
     CLASS_CATEGORY_ASPECT
 };
 
-extern _ELASTOS ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept;
-
-extern _ELASTOS ECode GetImportedModuleCount(IModuleInfo *moduleInfo, _ELASTOS Int32 *count) noexcept;
-
-extern _ELASTOS ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
-        _ELASTOS ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept;
-
-extern _ELASTOS ECode HasImportedModule(IModuleInfo *moduleInfo,
-        _ELASTOS String const &path,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
-        _ELASTOS String const &path,
+extern Elastos::ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept;
+extern Elastos::ECode GetImportedModuleCount(IModuleInfo *moduleInfo, Elastos::Int32 *count) noexcept;
+extern Elastos::ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
+        Elastos::ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept;
+extern Elastos::ECode HasImportedModule(IModuleInfo *moduleInfo,
+                                        Elastos::String const &path,
+                                        Elastos::Boolean *has) noexcept;
+extern Elastos::ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
+        Elastos::String const &path,
         IModuleInfo **importedModuleInfo) noexcept;
-
-extern _ELASTOS ECode HasConstant(IModuleInfo *moduleInfo,
-        _ELASTOS String const &name,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode HasEnum(IModuleInfo *moduleInfo,
-        _ELASTOS String const &fullName,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode HasStruct(IModuleInfo *moduleInfo,
-        _ELASTOS String const &name,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode HasTypeAlias(IModuleInfo *moduleInfo,
-        _ELASTOS String const &name,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode HasInterface(IModuleInfo *moduleInfo,
-        _ELASTOS String const &fullName,
-        _ELASTOS Boolean *has) noexcept;
-
-extern _ELASTOS ECode HasClass(IModuleInfo *moduleInfo,
-        _ELASTOS String const &fullName,
-        _ELASTOS Boolean *has) noexcept;
-
+extern Elastos::ECode HasConstant(IModuleInfo *moduleInfo,
+                                  Elastos::String const &name,
+                                  Elastos::Boolean *has) noexcept;
+extern Elastos::ECode HasEnum(IModuleInfo *moduleInfo,
+                              Elastos::String const &fullName,
+                              Elastos::Boolean *has) noexcept;
+extern Elastos::ECode HasStruct(IModuleInfo *moduleInfo,
+                                Elastos::String const &name,
+                                Elastos::Boolean *has) noexcept;
+extern Elastos::ECode HasTypeAlias(IModuleInfo *moduleInfo,
+                                   Elastos::String const &name,
+                                   Elastos::Boolean *has) noexcept;
+extern Elastos::ECode HasInterface(IModuleInfo *moduleInfo,
+                                   Elastos::String const &fullName,
+                                   Elastos::Boolean *has) noexcept;
+extern Elastos::ECode HasClass(IModuleInfo *moduleInfo,
+                               Elastos::String const &fullName,
+                               Elastos::Boolean *has) noexcept;
 CAR_BRIDGE_NAMESPACE_END
-
 #endif

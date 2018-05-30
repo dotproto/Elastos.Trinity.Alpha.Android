@@ -1,8 +1,6 @@
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-
 #include <memory>
 #include <vector>
 #include "macros.h"
@@ -11,8 +9,8 @@
 #include "error.h"
 
 using namespace std;
-
 CAR_BRIDGE_NAMESPACE_BEGIN
+
 #if 0//?jw
 static char const *_Trim(char const *s)
 {
@@ -24,7 +22,6 @@ ParseURI::ParseURI(char const *uri)
     _buf = unique_ptr<char>(strdup(uri));
     if (_buf == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
-
 }
 
 char const *ParseURI::ecoPath() const noexcept
@@ -62,10 +59,9 @@ size_t ParseURI::nEntryIds() const noexcept
     return _entryIds.size();
 }
 
-char const * const *ParseURI::entryIds() const noexcept
+char const *const *ParseURI::entryIds() const noexcept
 {
     return _entryIds.data();
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

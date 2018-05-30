@@ -1,90 +1,62 @@
 #ifndef __CAR_BRIDGE_CAR_FUNCTION_ADAPTER_H
-# define __CAR_BRIDGE_CAR_FUNCTION_ADAPTER_H
-
-# include <cstdarg>
-# include <cstddef>
-# include <nan.h>
-# include <elastos.h>
-# include "macros.h"
-
-
+#define __CAR_BRIDGE_CAR_FUNCTION_ADAPTER_H
+#include <cstdarg>
+#include <cstddef>
+#include <nan.h>
+#include <elastos.h>
+#include "macros.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
-
-class CARFunctionAdapter {
+class CARFunctionAdapter
+{
 public:
-    static _ELASTOS ECode Call(::v8::Local<::v8::Function> function, ::v8::Local<::v8::Value> receiver,
-            IFunctionInfo const *functionInfo, ...) noexcept;
-
-    static _ELASTOS ECode Call(::v8::Local<::v8::Function> function, ::v8::Local<::v8::Value> receiver,
-            IFunctionInfo const *functionInfo, va_list ap) noexcept;
-
+    static Elastos::ECode Call(v8::Local<v8::Function> function, v8::Local<v8::Value> receiver,
+                               IFunctionInfo const *functionInfo, ...) noexcept;
+    static Elastos::ECode Call(v8::Local<v8::Function> function, v8::Local<v8::Value> receiver,
+                               IFunctionInfo const *functionInfo, va_list ap) noexcept;
     CARFunctionAdapter(IFunctionInfo const *functionInfo,
-            ::v8::Local<::v8::Function> function, ::v8::Local<::v8::Value> receiver = ::v8::Local<::v8::Value>());
-
+                       v8::Local<v8::Function> function, v8::Local<v8::Value> receiver = v8::Local<v8::Value>());
     ~CARFunctionAdapter();
-
-    _ELASTOS ECode operator()(void) noexcept;
-
+    Elastos::ECode operator()(void) noexcept;
     template<class T>
-    _ELASTOS ECode operator()(T firstArgument, ...) noexcept;
-
+    Elastos::ECode operator()(T firstArgument, ...) noexcept;
     IFunctionInfo const *functionInfo(void) const noexcept
     {
         return _functionInfo;
     }
-
-    ::v8::Local<::v8::Function> function(void) const
+    v8::Local<v8::Function> function(void) const
     {
         return *_function;
     }
-
-    ::v8::Local<::v8::Value> receiver(void) const
+    v8::Local<v8::Value> receiver(void) const
     {
-        return ::Nan::New(_receiver);
+        return Nan::New(_receiver);
     }
-
-    _ELASTOS ECode Call(void) noexcept;
-
+    Elastos::ECode Call(void) noexcept;
     template<class T>
-    _ELASTOS ECode Call(T firstArgument, ...) noexcept;
-
+    Elastos::ECode Call(T firstArgument, ...) noexcept;
     template<class T>
-    _ELASTOS ECode Call(T firstArgument, va_list ap) noexcept;
-
-    _ELASTOS ECode Call(va_list ap) noexcept;
-
+    Elastos::ECode Call(T firstArgument, va_list ap) noexcept;
+    Elastos::ECode Call(va_list ap) noexcept;
 private:
-    _ELASTOS AutoPtr<IFunctionInfo> _functionInfo;
-    _ELASTOS AutoPtr<_ELASTOS ArrayOf<IParamInfo *> > _paramInfos;
-
-    ::Nan::Callback _function;
-
-    ::Nan::Persistent<::v8::Value> _receiver;
-
+    Elastos::AutoPtr<IFunctionInfo> _functionInfo;
+    Elastos::AutoPtr<Elastos::ArrayOf<IParamInfo *> > _paramInfos;
+    Nan::Callback _function;
+    Nan::Persistent<v8::Value> _receiver;
     static void SetArgumentOf(IParamInfo const *paramInfo,
-            size_t argc, ::v8::Local<::v8::Value> argv[],
-            size_t index,
-            va_list ap);
-
+                              size_t argc, v8::Local<v8::Value> argv[],
+                              size_t index,
+                              va_list ap);
     static void SetArgumentOf(IParamInfo const *paramInfo,
-            size_t argc, ::v8::Local<::v8::Value> argv[],
-            size_t index,
-            void *ap);
-
+                              size_t argc, v8::Local<v8::Value> argv[],
+                              size_t index,
+                              void *ap);
     CARFunctionAdapter(CARFunctionAdapter const &carFunctionAdapter) = delete;
-
-    CARFunctionAdapter(CARFunctionAdapter &&carFunctionAdapter) = delete;
-
+    CARFunctionAdapter(CARFunctionAdapter && carFunctionAdapter) = delete;
     CARFunctionAdapter &operator=(CARFunctionAdapter const &carFunctionAdapter) = delete;
-
-    CARFunctionAdapter &operator=(CARFunctionAdapter &&carFunctionAdapter) = delete;
-
-    ::v8::Local<::v8::Value> CallFunction(size_t argc, ::v8::Local<::v8::Value> argv[]);
+    CARFunctionAdapter &operator=(CARFunctionAdapter && carFunctionAdapter) = delete;
+    v8::Local<v8::Value> CallFunction(size_t argc, v8::Local<v8::Value> argv[]);
 };
-
 CAR_BRIDGE_NAMESPACE_END
-
-# include "car-function-adapter-cc.h"
-
+#include "car-function-adapter-cc.h"
 #endif
