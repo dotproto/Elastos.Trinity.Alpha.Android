@@ -3300,7 +3300,6 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = &constructorInfos;
 LOG(INFO) << "CARObject::NewClassTemplate";
-LOG(INFO) << "CARObject::NewClassTemplate:" << _classInfo->self();
     SetTemplate(classTemplate,
             Nan::New(".__class__").ToLocalChecked(),
             _classInfo->self(),
