@@ -296,10 +296,10 @@ ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
 }
 
 ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
-        const String &path,
+        String const &path,
         IModuleInfo **importedModuleInfo) noexcept;
 
-ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noexcept
+ECode HasImportedModule(IModuleInfo *moduleInfo, String const &path, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -330,7 +330,7 @@ ECode HasImportedModule(IModuleInfo *moduleInfo, String &path, Boolean *has) noe
 }
 
 ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
-        const String &path,
+        String const &path,
         IModuleInfo **importedModuleInfo) noexcept
 {
     ECode ec;
@@ -380,7 +380,7 @@ ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
     return NOERROR;
 }
 
-ECode HasConstant(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
+ECode HasConstant(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -410,7 +410,7 @@ ECode HasConstant(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
     return ec;
 }
 
-ECode HasEnum(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
+ECode HasEnum(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -440,7 +440,7 @@ ECode HasEnum(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
     return ec;
 }
 
-ECode HasStruct(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
+ECode HasStruct(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -470,7 +470,7 @@ ECode HasStruct(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
     return ec;
 }
 
-ECode HasTypeAlias(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
+ECode HasTypeAlias(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -500,7 +500,7 @@ ECode HasTypeAlias(IModuleInfo *moduleInfo, String &name, Boolean *has) noexcept
     return ec;
 }
 
-ECode HasInterface(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
+ECode HasInterface(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
 
@@ -530,7 +530,7 @@ ECode HasInterface(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noex
     return ec;
 }
 
-ECode HasClass(IModuleInfo *moduleInfo, String &fullName, Boolean *has) noexcept
+ECode HasClass(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
 

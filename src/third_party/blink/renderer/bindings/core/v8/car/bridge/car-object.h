@@ -61,8 +61,6 @@ private:
 
     typedef CARObject *(*Constructor)(size_t argc, ::v8::Local<::v8::Value> argv[], ::v8::Local<::v8::Value> data);
 
-    static ::Nan::Persistent<::v8::FunctionTemplate> _classBaseTemplate;
-
     _ELASTOS AutoPtr<IClassInfo > _classInfo;
 
     _ELASTOS AutoPtr<IInterface> _carObject;
@@ -91,11 +89,10 @@ private:
     static NAN_METHOD(Off);
 
     static NAN_METHOD(OffAll);
-
+#if 0//?jw car remove
     static NAN_METHOD(EnterRegime);
-
     static NAN_METHOD(LeaveRegime);
-
+#endif
     static NAN_METHOD(Equal);
 
     static NAN_METHOD(InvokeMethod);

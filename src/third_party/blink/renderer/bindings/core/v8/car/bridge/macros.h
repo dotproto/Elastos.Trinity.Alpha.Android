@@ -14,6 +14,8 @@ namespace CARBridge {
 #define CAR_BRIDGE_NAMESPACE_USING \
 using namespace ::Elastos::CARBridge;
 
-#define Throw_LOG(TYPE, MSG) printf("%d %d", TYPE, MSG)
+void Carbridge_throw(const char* func, const char* file, int line);
+#define Throw_LOG(TYPE, MSG) Carbridge_throw(__FUNCTION__, __FILE__, __LINE__);
 
+//#define Throw_LOG(TYPE, MSG) LOG(INFO) << __FUNCTION__ << " at " << __FILE__  << ":" << __LINE__<< " ";
 #endif

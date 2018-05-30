@@ -15,7 +15,7 @@ CAR_BRIDGE_NAMESPACE_BEGIN
 
 extern char const *GetEName(_ELASTOS ECode ecode) noexcept;
 
-extern _ELASTOS ECode GetFullName(IDataTypeInfo const *dataTypeInfo, _ELASTOS String *fullName) noexcept;
+extern _ELASTOS ECode GetFullName(IDataTypeInfo *dataTypeInfo, _ELASTOS String *fullName) noexcept;
 
 enum ClassCategory {
     CLASS_CATEGORY_CLASS,
@@ -24,42 +24,42 @@ enum ClassCategory {
     CLASS_CATEGORY_ASPECT
 };
 
-extern _ELASTOS ECode GetCategory(IClassInfo const *classInfo, enum ClassCategory *category) noexcept;
+extern _ELASTOS ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept;
 
-extern _ELASTOS ECode GetImportedModuleCount(IModuleInfo const *moduleInfo, _ELASTOS Int32 *count) noexcept;
+extern _ELASTOS ECode GetImportedModuleCount(IModuleInfo *moduleInfo, _ELASTOS Int32 *count) noexcept;
 
-extern _ELASTOS ECode GetAllImportedModuleInfos(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
         _ELASTOS ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept;
 
-extern _ELASTOS ECode HasImportedModule(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasImportedModule(IModuleInfo *moduleInfo,
         _ELASTOS String const &path,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode GetImportedModuleInfo(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
         _ELASTOS String const &path,
         IModuleInfo **importedModuleInfo) noexcept;
 
-extern _ELASTOS ECode HasConstant(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasConstant(IModuleInfo *moduleInfo,
         _ELASTOS String const &name,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode HasEnum(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasEnum(IModuleInfo *moduleInfo,
         _ELASTOS String const &fullName,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode HasStruct(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasStruct(IModuleInfo *moduleInfo,
         _ELASTOS String const &name,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode HasTypeAlias(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasTypeAlias(IModuleInfo *moduleInfo,
         _ELASTOS String const &name,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode HasInterface(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasInterface(IModuleInfo *moduleInfo,
         _ELASTOS String const &fullName,
         _ELASTOS Boolean *has) noexcept;
 
-extern _ELASTOS ECode HasClass(IModuleInfo const *moduleInfo,
+extern _ELASTOS ECode HasClass(IModuleInfo *moduleInfo,
         _ELASTOS String const &fullName,
         _ELASTOS Boolean *has) noexcept;
 

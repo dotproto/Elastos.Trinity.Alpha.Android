@@ -17,6 +17,8 @@
 #include "car-type-alias.h"
 #include "error.h"
 
+#include "base/logging.h"
+
 using namespace Nan;
 using namespace v8;
 
@@ -24,9 +26,9 @@ _ELASTOS_NAMESPACE_USING
 
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
+static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
 {
-    ::Nan::EscapableHandleScope scope;
+    Nan::EscapableHandleScope scope;
 
     ECode ec;
 
@@ -172,24 +174,24 @@ Local<Value> Require(char const *ecoPath,
         size_t nEntryIds, char const * const entryIds[])
 {
     ECode ec;
-
-    AutoPtr<IModuleInfo> moduleInfo;
-    IModuleInfo *_moduleInfo;
-
+    Local<Array> entries;
+    AutoPtr<IModuleInfo> pMdlInfo;
     _ELASTOS Int32 _major, _minor, _build, _revision;
 
-    Local<Array> entries;
+    ec = CReflector::AcquireModuleInfo(Elastos::String(ecoPath), (IModuleInfo**)&pMdlInfo);
+    if (FAILED(ec)) {
+        LOG(ERROR) << "Require: AcquireModuleInfo" << ecoPath << "failed";
+        return entries;
+    }
 
-    ec = CReflector::AcquireModuleInfo(_ELASTOS String(ecoPath), &_moduleInfo);
-    if (FAILED(ec))
-        Throw_LOG(Error::TYPE_ELASTOS, ec);
-
-    moduleInfo = _moduleInfo, _moduleInfo->Release();
-
-    ec = moduleInfo->GetVersion(&_major, &_minor, &_build, &_revision);
-    if (FAILED(ec))
-        Throw_LOG(Error::TYPE_ELASTOS, ec);
-
+    ec = pMdlInfo->GetVersion(&_major, &_minor, &_build, &_revision);
+    if (FAILED(ec)) {
+        LOG(ERROR) << "Require: GetVersion failed";
+        return entries;
+    }
+	LOG(INFO) << "Require: GetVersion " << _major << "." << _minor << "." << _build << "_" << _revision;
+	LOG(INFO) << "nEntryIds " << nEntryIds << " " << entryIds;
+#if 0
     if ((uint32_t)_major != major)
         Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor < minor)
@@ -198,21 +200,20 @@ Local<Value> Require(char const *ecoPath,
         Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor == minor && (uint32_t)_revision < revision)
         Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
-
+#endif
     if (nEntryIds == 0) {
-        ::Nan::EscapableHandleScope scope;
-        return scope.Escape(NewInstance(CARModuleTemplate(moduleInfo)).ToLocalChecked());
+        Nan::EscapableHandleScope scope;
+        return scope.Escape(NewInstance(CARModuleTemplate(pMdlInfo)).ToLocalChecked());
     }
 
     if (nEntryIds == 1)
-        return _Require(moduleInfo, entryIds[0]);
+        return _Require(pMdlInfo, entryIds[0]);
 
     entries = New<Array>(nEntryIds);
 
     for (size_t i = 0; i < nEntryIds; ++i) {
-        ::Nan::HandleScope scope;
-
-        ::Nan::Set(entries, i, _Require(moduleInfo, entryIds[i]));
+        Nan::HandleScope scope;
+        Nan::Set(entries, i, _Require(pMdlInfo, entryIds[i]));
     }
 
     return entries;

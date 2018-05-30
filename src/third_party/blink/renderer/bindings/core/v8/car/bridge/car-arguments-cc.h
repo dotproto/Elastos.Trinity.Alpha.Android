@@ -27,7 +27,7 @@ _CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo const *carArrayInfo, _E
 }
 
 template<class _CalleeAllocStruct>
-_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo const* structInfo, void **struct_)
+_CalleeAllocStruct *CalleeAllocStruct_(IStructInfo * structInfo, void **struct_)
 {
     ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
     if (_struct == nullptr)
@@ -225,7 +225,7 @@ _CallerAllocEnum *CallerAllocEnum_(_ELASTOS Int32 *enum_)
 }
 
 template<class _CallerAllocCARArray>
-_CallerAllocCARArray *CallerAllocCARArray_(ICarArrayInfo const *carArrayInfo, IVariableOfCarArray *variableOfCARArray)
+_CallerAllocCARArray *CallerAllocCARArray_(ICarArrayInfo      * carArrayInfo, IVariableOfCarArray *variableOfCARArray)
 {
     ::std::unique_ptr<_CallerAllocCARArray, typename _CallerAllocCARArray::Deleter> carArray(
             new(::std::nothrow) _CallerAllocCARArray
@@ -240,7 +240,7 @@ _CallerAllocCARArray *CallerAllocCARArray_(ICarArrayInfo const *carArrayInfo, IV
 }
 
 template<class _CallerAllocStruct>
-_CallerAllocStruct *CallerAllocStruct_(IStructInfo const *structInfo, IVariableOfStruct *variableOfStruct)
+_CallerAllocStruct *CallerAllocStruct_(IStructInfo       * structInfo, IVariableOfStruct *variableOfStruct)
 {
     ::std::unique_ptr<_CallerAllocStruct, typename _CallerAllocStruct::Deleter> struct_(new(::std::nothrow) _CallerAllocStruct);
     if (struct_ == nullptr)
@@ -253,7 +253,7 @@ _CallerAllocStruct *CallerAllocStruct_(IStructInfo const *structInfo, IVariableO
 }
 
 template<class _CallerAllocInterface>
-_CallerAllocInterface *CallerAllocInterface_(IInterface **interface_)
+_CallerAllocInterface *CallerAllocInterface_(IInterfaceInfo *interfaceInfo, IInterface **interface_)
 {
     ::std::unique_ptr<_CallerAllocInterface, typename _CallerAllocInterface::Deleter> _interface(
             new(::std::nothrow) _CallerAllocInterface

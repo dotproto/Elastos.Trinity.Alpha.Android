@@ -11,6 +11,7 @@
 
 #include "car_manager.h"
 #include "args_converter.h"
+
 #include "base/logging.h"
 
 #include <stdlib.h>
@@ -60,9 +61,10 @@ static NAN_METHOD(Require)
             Throw_LOG(CAR_BRIDGE::Error::INVALID_ARGUMENT, 0);
 
         ParseURI uri(*Utf8String(arg0));
+		LOG(INFO) << "car uri: " << *Utf8String(arg0);
 
         NAN_METHOD_RETURN_VALUE(
-                Require(uri.ecoPath(),
+                Require(*Utf8String(arg0)/*uri.ecoPath()*/,
                     uri.major(), uri.minor(), uri.build(), uri.revision(),
                     uri.nEntryIds(), uri.entryIds())
                 );
@@ -79,7 +81,7 @@ static NAN_METHOD(Require)
 #endif
 }
 
-void Car_Initialize(v8::Local<v8::Object> target)
+void Carbridge_Initialize(v8::Local<v8::Object> target)
 {
     CARObject::Initialize();
     CARInterfaceAdapter::Initialize();
@@ -87,8 +89,18 @@ void Car_Initialize(v8::Local<v8::Object> target)
     Export(target, "version", New("0.0.0").ToLocalChecked());
     Export(target, "require", Require);
 }
+
+void Carbridge_throw(const char* func, const char* file, int line)
+{
+    LOG(ERROR) << "ThrowException " << func << " at "<< file << ":" << line;
+    v8::Isolate *isolate = v8::Isolate::GetCurrent();
+    isolate->ThrowException(
+        v8::String::NewFromUtf8(isolate, "", NewStringType::kNormal)
+        .ToLocalChecked());
+}
+
 #if 0
-static Local<Value> Throw(v8::Isolate *isolate, const char *message)
+Local<Value> Throw(v8::Isolate *isolate, const char *message)
 {
     return isolate->ThrowException(
                v8::String::NewFromUtf8(isolate, message, NewStringType::kNormal)
@@ -311,7 +323,7 @@ bool ela::CarManager::initialize(v8::Isolate* isolate)
                   .ToLocalChecked(),
               RequireTemplate->GetFunction());
 #endif
-	Car_Initialize(context->Global());
+	Carbridge_Initialize(context->Global());
 
     return 1;
 }
