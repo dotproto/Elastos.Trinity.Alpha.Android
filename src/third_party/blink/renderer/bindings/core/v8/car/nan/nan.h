@@ -19,24 +19,24 @@ namespace Nan {
 
 #if defined(__GNUC__) && \
     !(defined(V8_DISABLE_DEPRECATIONS) && V8_DISABLE_DEPRECATIONS)
-# define NAN_DEPRECATED __attribute__((deprecated))
+#define NAN_DEPRECATED __attribute__((deprecated))
 #elif defined(_MSC_VER) && \
     !(defined(V8_DISABLE_DEPRECATIONS) && V8_DISABLE_DEPRECATIONS)
-# define NAN_DEPRECATED __declspec(deprecated)
+#define NAN_DEPRECATED __declspec(deprecated)
 #else
-# define NAN_DEPRECATED
+#define NAN_DEPRECATED
 #endif
 
 #if NAN_HAS_CPLUSPLUS_11
-# define NAN_DISALLOW_ASSIGN(CLASS) void operator=(const CLASS&) = delete;
-# define NAN_DISALLOW_COPY(CLASS) CLASS(const CLASS&) = delete;
-# define NAN_DISALLOW_MOVE(CLASS)                                              \
+#define NAN_DISALLOW_ASSIGN(CLASS) void operator=(const CLASS&) = delete;
+#define NAN_DISALLOW_COPY(CLASS) CLASS(const CLASS&) = delete;
+#define NAN_DISALLOW_MOVE(CLASS)                                              \
     CLASS(CLASS&&) = delete;  /* NOLINT(build/c++11) */                        \
     void operator=(CLASS&&) = delete;
 #else
-# define NAN_DISALLOW_ASSIGN(CLASS) void operator=(const CLASS&);
-# define NAN_DISALLOW_COPY(CLASS) CLASS(const CLASS&);
-# define NAN_DISALLOW_MOVE(CLASS)
+#define NAN_DISALLOW_ASSIGN(CLASS) void operator=(const CLASS&);
+#define NAN_DISALLOW_COPY(CLASS) CLASS(const CLASS&);
+#define NAN_DISALLOW_MOVE(CLASS)
 #endif
 
 #define NAN_DISALLOW_ASSIGN_COPY(CLASS)                                        \
@@ -93,7 +93,7 @@ class PersistentBase :
 template<typename T, typename M = v8::NonCopyablePersistentTraits<T> >
 class Persistent;
 
-# include "nan_maybe_43_inl.h"  // NOLINT(build/include)
+#include "nan_maybe_43_inl.h"  // NOLINT(build/include)
 #include "nan_converters.h"  // NOLINT(build/include)
 #include "nan_new.h"  // NOLINT(build/include)
 
@@ -106,7 +106,7 @@ typedef v8::WeakCallbackType WeakCallbackType;
 template<typename P> class WeakCallbackInfo;
 
 
-# include "nan_persistent_12_inl.h"  // NOLINT(build/include)
+#include "nan_persistent_12_inl.h"  // NOLINT(build/include)
 
 namespace imp {
   static const size_t kMaxLength = 0x3fffffff;
@@ -356,7 +356,7 @@ class AsyncResource {
     object->SetAlignedPointerInInternalField(index, value);
   }
 
-# define NAN_GC_CALLBACK(name)                                                 \
+#define NAN_GC_CALLBACK(name)                                                 \
     void name(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags)
 
   typedef v8::Isolate::GCCallback GCEpilogueCallback;
@@ -389,7 +389,7 @@ class AsyncResource {
     v8::Isolate::GetCurrent()->GetHeapStatistics(heap_statistics);
   }
 
-# define X(NAME)                                                               \
+#define X(NAME)                                                               \
     inline v8::Local<v8::Value> NAME(const char *msg) {                        \
       EscapableHandleScope scope;                                              \
       return scope.Escape(v8::Exception::NAME(New(msg).ToLocalChecked()));     \
@@ -400,13 +400,13 @@ class AsyncResource {
       return v8::Exception::NAME(msg);                                         \
     }                                                                          \
                                                                                \
-    inline void Throw ## NAME(const char *msg) {                               \
+    inline void Throw ##NAME(const char *msg) {                               \
       HandleScope scope;                                                       \
       v8::Isolate::GetCurrent()->ThrowException(                               \
           v8::Exception::NAME(New(msg).ToLocalChecked()));                     \
     }                                                                          \
                                                                                \
-    inline void Throw ## NAME(v8::Local<v8::String> msg) {                     \
+    inline void Throw ##NAME(v8::Local<v8::String> msg) {                     \
       HandleScope scope;                                                       \
       v8::Isolate::GetCurrent()->ThrowException(                               \
           v8::Exception::NAME(msg));                                           \
@@ -418,7 +418,7 @@ class AsyncResource {
   X(SyntaxError)
   X(TypeError)
 
-# undef X
+#undef X
 
   inline void ThrowError(v8::Local<v8::Value> error) {
     v8::Isolate::GetCurrent()->ThrowException(error);
@@ -710,7 +710,7 @@ typedef void NAN_INDEX_QUERY_RETURN_TYPE;
     Nan::NAN_PROPERTY_QUERY_RETURN_TYPE name(                                  \
         v8::Local<v8::String> property                                         \
       , Nan::NAN_PROPERTY_QUERY_ARGS_TYPE info)
-# define NAN_INDEX_GETTER(name)                                                \
+#define NAN_INDEX_GETTER(name)                                                \
     Nan::NAN_INDEX_GETTER_RETURN_TYPE name(                                    \
         uint32_t index                                                         \
       , Nan::NAN_INDEX_GETTER_ARGS_TYPE info)

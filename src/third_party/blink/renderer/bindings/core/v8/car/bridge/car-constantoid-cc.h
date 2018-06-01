@@ -11,38 +11,28 @@
 CAR_BRIDGE_NAMESPACE_BEGIN
 
 template<class ConstantoidInfo>
-::v8::Local<::v8::NumberObject> CARConstantoid(ConstantoidInfo  *constantoidInfo, char const *what)
+v8::Local<v8::NumberObject> CARConstantoid(ConstantoidInfo  *constantoidInfo, char const *what)
 {
-    ::Nan::EscapableHandleScope scope;
-
-    _ELASTOS ECode ec;
-
-    _ELASTOS Int32 value;
-
-    ::v8::Local<::v8::NumberObject> constantoid;
-
-    _ELASTOS String name;
-
+    Nan::EscapableHandleScope scope;
+    Elastos::ECode ec;
+    Elastos::Int32 value;
+    v8::Local<v8::NumberObject> constantoid;
+    Elastos::String name;
     ec = constantoidInfo->GetValue(&value);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
-
-    constantoid = ::Nan::New<::v8::NumberObject>(value);
-
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
+    constantoid = Nan::New<v8::NumberObject>(value);
     DefineOwnProperty(constantoid,
-            ::Nan::New("$what").ToLocalChecked(),
-            ::Nan::New(what).ToLocalChecked(),
-            static_cast<enum ::v8::PropertyAttribute>(::v8::ReadOnly | ::v8::DontDelete | ::v8::DontEnum));
-
+                      Nan::New("$what").ToLocalChecked(),
+                      Nan::New(what).ToLocalChecked(),
+                      static_cast<enum v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete | v8::DontEnum));
     ec = constantoidInfo->GetName(&name);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
-
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
     DefineOwnProperty(constantoid,
-            ::Nan::New("$name").ToLocalChecked(),
-            ToValue(name),
-            static_cast<enum ::v8::PropertyAttribute>(::v8::ReadOnly | ::v8::DontDelete | ::v8::DontEnum));
-
+                      Nan::New("$name").ToLocalChecked(),
+                      ToValue(name),
+                      static_cast<enum v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete | v8::DontEnum));
     return scope.Escape(constantoid);
 }
 

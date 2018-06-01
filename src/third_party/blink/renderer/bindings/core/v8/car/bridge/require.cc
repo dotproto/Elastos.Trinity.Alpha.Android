@@ -1,13 +1,10 @@
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-
 #include <nan.h>
 #include <elastos.h>
 #include "macros.h"
 #include "elastos-ext.h"
-
 #include "car-constant.h"
 #include "car-data-type.h"
 #include "car-imported-module.h"
@@ -16,207 +13,192 @@
 #include "car-object.h"
 #include "car-type-alias.h"
 #include "error.h"
+#include "base/logging.h"
 
 using namespace Nan;
 using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
-
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-static Local<Value> _Require(IModuleInfo const *moduleInfo, char const *entryId)
+static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
 {
-    ::Nan::EscapableHandleScope scope;
+    Nan::EscapableHandleScope scope;
 
     ECode ec;
+    Elastos::Boolean hasImportedModule;
+    Elastos::Boolean hasEnum;
+    Elastos::Boolean hasStruct;
+    Elastos::Boolean hasTypeAlias;
+    Elastos::Boolean hasInterface;
+    Elastos::Boolean hasClass;
 
-    _ELASTOS Boolean hasImportedModule;
-    _ELASTOS Boolean hasEnum;
-    _ELASTOS Boolean hasStruct;
-    _ELASTOS Boolean hasTypeAlias;
-    _ELASTOS Boolean hasInterface;
-    _ELASTOS Boolean hasClass;
-
-    ec = HasImportedModule(moduleInfo, _ELASTOS String(entryId), &hasImportedModule);
+    ec = HasImportedModule(moduleInfo, Elastos::String(entryId), &hasImportedModule);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasImportedModule != FALSE) {
+    if (hasImportedModule != FALSE)
+    {
         AutoPtr<IModuleInfo> importedModuleInfo;
-
         IModuleInfo *_importedModuleInfo;
-        ec = GetImportedModuleInfo(moduleInfo, _ELASTOS String(entryId), &_importedModuleInfo);
+        ec = GetImportedModuleInfo(moduleInfo, Elastos::String(entryId), &_importedModuleInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
-
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
 
-    if (strncmp(entryId, "$const.", 7) == 0) {
+    if (strncmp(entryId, "$const.", 7) == 0)
+    {
         char const *_entryId;
-
-        _ELASTOS Boolean hasConstant;
-
+        Elastos::Boolean hasConstant;
         AutoPtr<IConstantInfo> constantInfo;
         IConstantInfo *_constantInfo;
-
         _entryId = entryId + 7;
 
-        ec = HasConstant(moduleInfo, _ELASTOS String(_entryId), &hasConstant);
+        ec = HasConstant(moduleInfo, Elastos::String(_entryId), &hasConstant);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         if (hasConstant == FALSE)
-            LOG(Error::NONENTITY, 0);
+            Throw_LOG(Error::NONENTITY, 0);
 
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetConstantInfo(_ELASTOS String(_entryId), &_constantInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetConstantInfo(Elastos::String(_entryId), &_constantInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         constantInfo = _constantInfo, _constantInfo->Release();
-
         return CARConstant(constantInfo);
     }
 
-    ec = HasEnum(moduleInfo, _ELASTOS String(entryId), &hasEnum);
+    ec = HasEnum(moduleInfo, Elastos::String(entryId), &hasEnum);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasEnum != FALSE) {
+    if (hasEnum != FALSE)
+    {
         AutoPtr<IEnumInfo> enumInfo;
         IEnumInfo *_enumInfo;
-
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetEnumInfo(_ELASTOS String(entryId), &_enumInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetEnumInfo(Elastos::String(entryId), &_enumInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         enumInfo = _enumInfo, _enumInfo->Release();
-
         return CAREnum(enumInfo);
     }
 
-    ec = HasStruct(moduleInfo, _ELASTOS String(entryId), &hasStruct);
+    ec = HasStruct(moduleInfo, Elastos::String(entryId), &hasStruct);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasStruct != FALSE) {
+    if (hasStruct != FALSE)
+    {
         AutoPtr<IStructInfo> structInfo;
         IStructInfo *_structInfo;
-
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetStructInfo(_ELASTOS String(entryId), &_structInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetStructInfo(Elastos::String(entryId), &_structInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
-
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
         structInfo = _structInfo, _structInfo->Release();
-
         return CARStruct(structInfo);
     }
 
-    ec = HasTypeAlias(moduleInfo, _ELASTOS String(entryId), &hasTypeAlias);
+    ec = HasTypeAlias(moduleInfo, Elastos::String(entryId), &hasTypeAlias);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasTypeAlias != FALSE) {
+    if (hasTypeAlias != FALSE)
+    {
         AutoPtr<ITypeAliasInfo> typeAliasInfo;
         ITypeAliasInfo *_typeAliasInfo;
-
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetTypeAliasInfo(_ELASTOS String(entryId), &_typeAliasInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetTypeAliasInfo(Elastos::String(entryId), &_typeAliasInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         typeAliasInfo = _typeAliasInfo, _typeAliasInfo->Release();
-
         return CARTypeAlias(typeAliasInfo);
     }
 
-    ec = HasInterface(moduleInfo, _ELASTOS String(entryId), &hasInterface);
+    ec = HasInterface(moduleInfo, Elastos::String(entryId), &hasInterface);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasInterface != FALSE) {
+    if (hasInterface != FALSE)
+    {
         AutoPtr<IInterfaceInfo > interfaceInfo;
         IInterfaceInfo *_interfaceInfo;
-
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetInterfaceInfo(_ELASTOS String(entryId), &_interfaceInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetInterfaceInfo(Elastos::String(entryId), &_interfaceInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
-
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
         interfaceInfo = _interfaceInfo, _interfaceInfo->Release();
-
         return CARInterface(interfaceInfo);
     }
 
-    ec = HasClass(moduleInfo, _ELASTOS String(entryId), &hasClass);
+    ec = HasClass(moduleInfo, Elastos::String(entryId), &hasClass);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    if (hasClass != FALSE) {
+    if (hasClass != FALSE)
+    {
         AutoPtr<IClassInfo> classInfo;
         IClassInfo *_classInfo;
-
-        ec = const_cast<IModuleInfo *>(moduleInfo)->GetClassInfo(_ELASTOS String(entryId), &_classInfo);
+        ec = const_cast<IModuleInfo *>(moduleInfo)->GetClassInfo(Elastos::String(entryId), &_classInfo);
         if (FAILED(ec))
-            LOG(Error::TYPE_ELASTOS, ec);
-
+            Throw_LOG(Error::TYPE_ELASTOS, ec);
         classInfo = _classInfo, _classInfo->Release();
-
         return scope.Escape(GetFunction(CARObject::NewClassTemplate(classInfo)).ToLocalChecked());
     }
-
     return scope.Escape(NewInstance(CARNamespaceTemplate(moduleInfo, entryId)).ToLocalChecked());
 }
 
 Local<Value> Require(char const *ecoPath,
-        uint32_t major, uint32_t minor, uint32_t build, uint32_t revision,
-        size_t nEntryIds, char const * const entryIds[])
+                     uint32_t major, uint32_t minor, uint32_t build, uint32_t revision,
+                     size_t nEntryIds, char const *const entryIds[])
 {
     ECode ec;
-
-    AutoPtr<IModuleInfo> moduleInfo;
-    IModuleInfo *_moduleInfo;
-
-    _ELASTOS Int32 _major, _minor, _build, _revision;
-
     Local<Array> entries;
-
-    ec = CReflector::AcquireModuleInfo(_ELASTOS String(ecoPath), &_moduleInfo);
+    AutoPtr<IModuleInfo> pMdlInfo;
+    Elastos::Int32 _major, _minor, _build, _revision;
+    ec = CReflector::AcquireModuleInfo(Elastos::String(ecoPath), (IModuleInfo **)&pMdlInfo);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
-
-    moduleInfo = _moduleInfo, _moduleInfo->Release();
-
-    ec = moduleInfo->GetVersion(&_major, &_minor, &_build, &_revision);
+    {
+        LOG(ERROR) << "Require: AcquireModuleInfo" << ecoPath << "failed";
+        return entries;
+    }
+    ec = pMdlInfo->GetVersion(&_major, &_minor, &_build, &_revision);
     if (FAILED(ec))
-        LOG(Error::TYPE_ELASTOS, ec);
-
+    {
+        LOG(ERROR) << "Require: GetVersion failed";
+        return entries;
+    }
+    LOG(INFO) << "Require: GetVersion " << _major << "." << _minor << "." << _build << "_" << _revision;
+    LOG(INFO) << "nEntryIds " << nEntryIds << " " << entryIds;
+#if 0
     if ((uint32_t)_major != major)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor < minor)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_build != build)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor == minor && (uint32_t)_revision < revision)
-        LOG(Error::INCOMPATIBLE_VERSION, 0);
-
-    if (nEntryIds == 0) {
-        ::Nan::EscapableHandleScope scope;
-        return scope.Escape(NewInstance(CARModuleTemplate(moduleInfo)).ToLocalChecked());
+        Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
+#endif
+    if (nEntryIds == 0)
+    {
+        Nan::EscapableHandleScope scope;
+        return scope.Escape(NewInstance(CARModuleTemplate(pMdlInfo)).ToLocalChecked());
     }
 
     if (nEntryIds == 1)
-        return _Require(moduleInfo, entryIds[0]);
+        return _Require(pMdlInfo, entryIds[0]);
 
     entries = New<Array>(nEntryIds);
 
-    for (size_t i = 0; i < nEntryIds; ++i) {
-        ::Nan::HandleScope scope;
-
-        ::Nan::Set(entries, i, _Require(moduleInfo, entryIds[i]));
+    for (size_t i = 0; i < nEntryIds; ++i)
+    {
+        Nan::HandleScope scope;
+        Nan::Set(entries, i, _Require(pMdlInfo, entryIds[i]));
     }
-
     return entries;
 }
 
 CAR_BRIDGE_NAMESPACE_END
-

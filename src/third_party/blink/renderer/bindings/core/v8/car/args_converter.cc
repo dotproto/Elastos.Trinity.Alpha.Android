@@ -21,7 +21,7 @@
         ec = E_OUT_OF_MEMORY;                                               \
         goto ERR;                                                           \
     }                                                                       \
-    argList->SetOutputArgumentOf##type##StringBufPtr(i, pstrBuf);     \
+    argList->SetOutputArgumentOf##type##StringBufPtr(i, pstrBuf);           \
     m_params[i] = (Int32)pstrBuf;                                           \
 } while(0)
 
