@@ -71,7 +71,7 @@ public class ShellWebViewEngine implements CordovaWebViewEngine {
         this.resourceApi = resourceApi;
         this.pluginManager = pluginManager;
         this.nativeToJsMessageQueue = nativeToJsMessageQueue;
-        //webView.init();
+        webView.init(this);
 
         initWebViewSettings();
 

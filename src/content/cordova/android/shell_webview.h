@@ -16,16 +16,18 @@
 #include "ipc/ipc_channel.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
+#include "content/cordova/android/cordova_contents_client_bridge.h"
+#include "content/shell/browser/shell_javascript_dialog_manager.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace content {
 
-class ShellWebView{
+class ShellWebView : public WebContentsDelegate{
 public:
   ShellWebView();
-  ~ShellWebView();
+  ~ShellWebView()override;
 
 	WebContents* web_contents() const { return web_contents_.get(); }
 
@@ -39,16 +41,21 @@ public:
 
   void SetJavaPeer(JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& shell_webview);
+      const base::android::JavaParamRef<jobject>& shell_webview,
+      const base::android::JavaParamRef<jobject>& contents_client_bridge);
 
   void CreateWebContent(JNIEnv* env,
                  const JavaParamRef<jobject>& obj);
 
+  // WebContentsDelegate
+  JavaScriptDialogManager* GetJavaScriptDialogManager(
+      WebContents* source) override;
+
 private:
     std::unique_ptr<WebContents> web_contents_;
     JavaObjectWeakGlobalRef java_ref_;
-    //base::android::ScopedJavaGlobalRef<jobject> java_object_;
-
+    std::unique_ptr<CordovaContentsClientBridge> contents_client_bridge_;
+    std::unique_ptr<ShellJavaScriptDialogManager> dialog_manager_;
 };
 
 
