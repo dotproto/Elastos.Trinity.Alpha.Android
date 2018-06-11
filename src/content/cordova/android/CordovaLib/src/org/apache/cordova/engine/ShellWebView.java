@@ -91,9 +91,7 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
 
     private JavascriptInjector mJavascriptInjector;
 
-    public ShellWebView(Context context) {
-        this(context, null);
-    }
+    private CordovaContentsClientBridge mBridge;
 
     public View getContainerView(){
         return mContentViewHolder;
@@ -104,12 +102,15 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
         return viewDelegate != null ? viewDelegate.getContainerView() : null;
     }
 
-    public ShellWebView(Context context, AttributeSet attrs) {
-        super(context, attrs);
+    public ShellWebView(Context context) {
+        super(context, null);
         mContentViewHolder = new FrameLayout(context);
+    }
 
+    public void init(ShellWebViewEngine parentEngine){
+        setupClient(parentEngine);
         mNativeShellWebView = nativeInit();
-        nativeSetJavaPeer(mNativeShellWebView, this);
+        nativeSetJavaPeer(mNativeShellWebView, this, mBridge);
         initView();
     }
 
@@ -118,6 +119,9 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
         return null;
     }
 
+    private void setupClient(ShellWebViewEngine parentEngine){
+        mBridge = new CordovaContentsClientBridge(getContext(), new ShellWebViewClient(parentEngine));
+    }
 
     private JavascriptInjector getJavascriptInjector() {
         if (mJavascriptInjector == null) {
@@ -292,6 +296,6 @@ class ShellWebView extends AbsoluteLayout implements CordovaWebViewEngine.Engine
     }
 
     private static native long nativeInit();
-    private native void nativeSetJavaPeer(long nativeShellWebView, ShellWebView sw);
+    private native void nativeSetJavaPeer(long nativeShellWebView, ShellWebView sw, CordovaContentsClientBridge bridge);
     private native void nativeCreateWebContent(long nativeShellWebView);
 }

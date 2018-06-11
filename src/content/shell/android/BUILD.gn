@@ -52,6 +52,32 @@ shared_library("libcontent_shell_content_view") {
   ]
 }
 
+static_library("libcontent_shell_content_view_static") {
+  testonly = true
+  deps = [
+    ":content_shell_jni_headers",
+    ":content_shell_jni_registration",
+    "//build/config:exe_and_shlib_deps",
+    "//components/crash/content/browser",
+    "//content/shell:content_shell_lib",
+    "//content/shell:pak",
+    "//media",
+    "//skia",
+  ]
+
+  # Explicit dependency required for JNI registration to be able to
+  # find the native side functions.
+  if (is_component_build) {
+    deps += [
+      "//device/gamepad",
+      "//media/midi",
+    ]
+  }
+  sources = [
+    "shell_library_loader.cc",
+  ]
+}
+
 android_resources("content_shell_java_resources") {
   testonly = true
   resource_dirs = [ "java/res" ]
@@ -80,6 +106,28 @@ android_library("content_shell_java") {
   ]
 
   android_manifest_for_lint = content_shell_manifest
+}
+
+android_library("content_shell_java_no_manifest") {
+  testonly = true
+  deps = [
+    ":content_shell_java_resources",
+    "//base:base_java",
+    "//components/content_view:content_view_java",
+    "//content/public/android:content_java",
+    "//device/geolocation:geolocation_java",
+    "//media/base/android:media_java",
+    "//media/capture/video/android:capture_java",
+    "//mojo/public/java:system_java",
+    "//net/android:net_java",
+    "//ui/android:ui_java",
+  ]
+  java_files = [
+    "java/src/org/chromium/content_shell/Shell.java",
+    "java/src/org/chromium/content_shell/ShellManager.java",
+    "java/src/org/chromium/content_shell/ShellViewAndroidDelegate.java",
+  ]
+
 }
 
 jinja_template("content_shell_manifest") {

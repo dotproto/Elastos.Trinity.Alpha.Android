@@ -26,6 +26,7 @@ generate_jni("cordova_shell_jni_headers") {
   jni_package = "content/cordova"
   sources = [
     "CordovaLib/src/org/apache/cordova/engine/ShellWebView.java",
+    "CordovaLib/src/org/apache/cordova/engine/CordovaContentsClientBridge.java"
   ]
 }
 
@@ -53,12 +54,18 @@ shared_library("cordova_shell_lib") {
   sources = [
     "shell_webview.cc",
     "shell_webview.h",
-#   "shell_webview_jni_registrar.cc",
-#   "shell_webview_jni_registrar.h",
     "shell_webview_library_loader.cc",
+    "cordova_contents_client_bridge.h",
+    "cordova_contents_client_bridge.cc",
   ]
 }
 
+webview_public_framework_ijar = "frameworks.public.interface.jar"
+
+generate_interface_jar("public_framework_ijar") {
+  input_jar = webview_public_framework_jar
+  output_jar = "$target_out_dir/$webview_public_framework_ijar"
+}
 
 android_library("cordova_lib_java") {
   deps = [
@@ -72,6 +79,14 @@ android_library("cordova_lib_java") {
     "//net/android:net_java",
     "//ui/android:ui_java", 
   ]
+
+  alternative_android_sdk_ijar_dep = ":public_framework_ijar"
+  _ijar = webview_public_framework_ijar
+  _ijar_dir = get_label_info(alternative_android_sdk_ijar_dep, "target_out_dir")
+  alternative_android_sdk_ijar = "$_ijar_dir/$_ijar"
+  alternative_android_sdk_jar = webview_public_framework_jar
+
+
   java_files = [
     "CordovaLib/src/org/apache/cordova/AuthenticationToken.java",
     "CordovaLib/src/org/apache/cordova/BuildHelper.java",
@@ -102,6 +117,8 @@ android_library("cordova_lib_java") {
     "CordovaLib/src/org/apache/cordova/engine/SystemWebView.java",
     "CordovaLib/src/org/apache/cordova/engine/ShellWebView.java",
     "CordovaLib/src/org/apache/cordova/engine/ShellWebViewEngine.java",
+    "CordovaLib/src/org/apache/cordova/engine/CordovaContentsClientBridge.java",
+    "CordovaLib/src/org/apache/cordova/engine/ShellWebViewClient.java",
     "CordovaLib/src/org/apache/cordova/ExposedJsApi.java",
     "CordovaLib/src/org/apache/cordova/ICordovaClientCertRequest.java",
     "CordovaLib/src/org/apache/cordova/ICordovaCookieManager.java",
@@ -179,7 +196,7 @@ android_apk("elastos_shell_apk") {
     "//content/shell/android:content_shell_assets",
     "//base:base_java",
     "//content/public/android:content_java",
-    "//content/shell/android:libcontent_shell_content_view",
+    "//content/shell/android:libcontent_shell_content_view_static",
     ":cordova_shell_lib",
     "//ui/android:ui_java",
     "//third_party/mesa:osmesa",

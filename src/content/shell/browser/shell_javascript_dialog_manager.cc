@@ -13,6 +13,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/shell/browser/shell_javascript_dialog.h"
 #include "content/shell/common/shell_switches.h"
+#include "content/cordova/android/cordova_contents_client_bridge.h"
+
+
+using content::CordovaContentsClientBridge;
 
 namespace content {
 
@@ -30,6 +34,7 @@ void ShellJavaScriptDialogManager::RunJavaScriptDialog(
     const base::string16& default_prompt_text,
     DialogClosedCallback callback,
     bool* did_suppress_message) {
+  LOG(ERROR) << "ShellJavaScriptDialogManager::RunJavaScriptDialog";
   if (!dialog_request_callback_.is_null()) {
     dialog_request_callback_.Run();
     std::move(callback).Run(true, base::string16());
@@ -56,7 +61,19 @@ void ShellJavaScriptDialogManager::RunJavaScriptDialog(
                                           std::move(callback)));
 #else
   // TODO: implement ShellJavaScriptDialog for other platforms, drop this #if
-  *did_suppress_message = true;
+  //callback to cordova client:
+  *did_suppress_message = false;
+
+  CordovaContentsClientBridge* bridge =
+      CordovaContentsClientBridge::FromWebContents(web_contents);
+  if (!bridge) {
+    std::move(callback).Run(false, base::string16());
+    return;
+  }
+
+  bridge->RunJavaScriptDialog(
+      dialog_type, render_frame_host->GetLastCommittedURL(), message_text,
+      default_prompt_text, std::move(callback));
   return;
 #endif
 }

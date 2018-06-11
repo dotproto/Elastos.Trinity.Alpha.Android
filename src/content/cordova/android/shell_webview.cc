@@ -42,8 +42,11 @@ static jlong JNI_ShellWebView_Init(JNIEnv* env,
 
 void ShellWebView::SetJavaPeer(JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& shell_webview){
+      const base::android::JavaParamRef<jobject>& shell_webview,
+      const base::android::JavaParamRef<jobject>& contents_client_bridge){
   java_ref_ = JavaObjectWeakGlobalRef(env, shell_webview);
+  contents_client_bridge_.reset(
+      new CordovaContentsClientBridge(env, contents_client_bridge));
 }
 
 void ShellWebView::CreateWebContent(JNIEnv* env,
@@ -54,8 +57,20 @@ void ShellWebView::CreateWebContent(JNIEnv* env,
       LOG(ERROR) << "ShellWebView::CreateWebContent2";
   SetWebContents(WebContents::Create(
       WebContents::CreateParams(browserContext)));
+  CordovaContentsClientBridge::Associate(web_contents(),
+                                    contents_client_bridge_.get());
+  web_contents()->SetDelegate(this);
   PlatformSetContents();
+
 }
 
+
+JavaScriptDialogManager* ShellWebView::GetJavaScriptDialogManager(
+    WebContents* source) {
+  if (!dialog_manager_) {
+    dialog_manager_.reset(new ShellJavaScriptDialogManager);
+  }
+  return dialog_manager_.get();
+}
 
 }  // namespace content
