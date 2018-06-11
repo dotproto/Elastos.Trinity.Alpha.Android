@@ -19,6 +19,7 @@ public:
     uint32_t revision() const noexcept;
     size_t nEntryIds() const noexcept;
     char const *const *entryIds() const noexcept;
+
 private:
     ::std::unique_ptr<char> _buf;
     char const *_ecoPath;
@@ -30,5 +31,7 @@ private:
     ParseURI &operator=(ParseURI const &parseURI) = delete;
     ParseURI &operator=(ParseURI && parseURI) = delete;
 };
+
 CAR_BRIDGE_NAMESPACE_END
-#endif
+#endif //__CAR_BRIDGE_PARSE_URI_H
+

@@ -349,7 +349,8 @@ void ToString(Elastos::String &s, Local<Value> value)
 
 Local<Value> ToValue(Elastos::String const &s)
 {
-    return New((char const *)s).ToLocalChecked();
+    //return New((char const *)s).ToLocalChecked();
+    return New((char const *)s, s.GetByteLength()).ToLocalChecked();
 }
 
 bool IsBoolean(Local<Value> value)

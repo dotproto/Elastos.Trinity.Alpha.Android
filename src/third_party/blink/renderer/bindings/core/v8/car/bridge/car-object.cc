@@ -2428,6 +2428,7 @@ struct _ClassInfo: WeakExternalBase
 {
     AutoPtr<IClassInfo > classInfo;
     AutoPtr<ArrayOf<IConstructorInfo *> > constructorInfos;
+
 private:
     ~_ClassInfo() final = default;
 };
@@ -2449,6 +2450,7 @@ struct _ClassId: WeakExternalBase
             ec = classInfo->GetId(&classId);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             filled = true;
         }
     }
@@ -2793,24 +2795,25 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     map<Elastos::String, unique_ptr<struct _MethodInfos, _MethodInfos::Deleter>> mapNameToMethodInfos;
     Local<FunctionTemplate> escapedClassTemplate;
 
-    LOG(INFO) << "CARObject::NewClassTemplate";
-    classTemplate = Nan::New<FunctionTemplate>(constructor, data);
+    //classTemplate = Nan::New<FunctionTemplate>(constructor, data);
+	classTemplate = v8::FunctionTemplate::New(v8::Isolate::GetCurrent(), 0, data);
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
 
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = &constructorInfos;
-    LOG(INFO) << "CARObject::NewClassTemplate";
+
     // .__class__
+#if 0//?jw SetTemplate 第三个参数必须是template类型的
     SetTemplate(classTemplate,
                 Nan::New(".__class__").ToLocalChecked(),
                 _classInfo->self(),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum)), _classInfo.release();
-
-    LOG(INFO) << "CARObject::NewClassTemplate";
+#endif
+    LOG(INFO) << "CARObject::NewClassTemplate set __class__ ok";
     classTemplate->Inherit(Nan::New(_classBaseTemplate));
-    LOG(INFO) << "CARObject::NewClassTemplate";
+    LOG(INFO) << "CARObject::NewClassTemplate Inherit ok";
     // $threadingModel
     ec = classInfo->GetThreadingModel(&threadingModel);
     if (FAILED(ec))
@@ -3036,11 +3039,12 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$aggregatees").ToLocalChecked(),
                 aggregateeTemplates,
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+#if 0//?jw SetTemplate 第三个参数必须是template类型的
     SetTemplate(classTemplate,
                 Nan::New("constructor").ToLocalChecked(),
                 CARConstructor(constructorInfos.GetLength(), constructorInfos.GetPayload()),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
-
+#endif
     //interfaces
     ec = classInfo->GetInterfaceCount(&nInterfaces);
     if (FAILED(ec))
@@ -3063,11 +3067,12 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         ec = interfaceInfo->GetName(&interfaceName);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
-
+#if 0//?jw SetTemplate 第三个参数必须是template类型的
         SetTemplate(classTemplate,
                     ToValue(interfaceName).As<v8::String>(),
                     CARInterface(interfaceInfo),
                     static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+#endif
     }
 #if 0//?jw car remove callback
     ec = classInfo->GetCallbackInterfaceCount(&nCallbackInterfaces);
@@ -3251,10 +3256,13 @@ CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Val
 {
     struct _ClassInfo *classInfo;
     CARObject *carObject = nullptr;
+
     classInfo = (struct _ClassInfo *)data.As<External>()->Value();
+
     carObject = new(nothrow) CARObject(classInfo->classInfo, *classInfo->constructorInfos, argc, argv);
     if (carObject == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     return carObject;
 }
 
@@ -3296,22 +3304,29 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     Local<FunctionTemplate> escapedClassTemplate;
     IClassInfo *classInfo = const_cast<IClassInfo *>(pclassInfo);
     auto &_classTemplate = _mapClassInfoToCARClass[classInfo];
+
     if (!_classTemplate.IsEmpty())
         return Nan::New(_classTemplate);
+
     ec = classInfo->GetConstructorCount(&nConstructors);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     constructorInfos = ArrayOf<IConstructorInfo *>::Alloc(nConstructors);
     if (constructorInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = classInfo->GetAllConstructorInfos(reinterpret_cast<ArrayOf<IConstructorInfo *> *>(constructorInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = constructorInfos;
+
     LOG(INFO) << "NewClassTemplate classInfo:" << classInfo << " constructorInfos:" << *constructorInfos ;
     classTemplate = NewClassTemplate(classInfo, *constructorInfos, NewConstructor, _classInfo->self());
     _classInfo.release();

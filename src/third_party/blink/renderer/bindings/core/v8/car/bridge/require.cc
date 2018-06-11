@@ -13,7 +13,6 @@
 #include "car-object.h"
 #include "car-type-alias.h"
 #include "error.h"
-#include "base/logging.h"
 
 using namespace Nan;
 using namespace v8;
@@ -34,16 +33,19 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
     Elastos::Boolean hasClass;
 
     ec = HasImportedModule(moduleInfo, Elastos::String(entryId), &hasImportedModule);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+   	}
 
     if (hasImportedModule != FALSE)
     {
         AutoPtr<IModuleInfo> importedModuleInfo;
         IModuleInfo *_importedModuleInfo;
         ec = GetImportedModuleInfo(moduleInfo, Elastos::String(entryId), &_importedModuleInfo);
-        if (FAILED(ec))
+        if (FAILED(ec)) {
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+        }
+
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
@@ -147,6 +149,7 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
         classInfo = _classInfo, _classInfo->Release();
         return scope.Escape(GetFunction(CARObject::NewClassTemplate(classInfo)).ToLocalChecked());
     }
+
     return scope.Escape(NewInstance(CARNamespaceTemplate(moduleInfo, entryId)).ToLocalChecked());
 }
 
@@ -157,22 +160,23 @@ Local<Value> Require(char const *ecoPath,
     ECode ec;
     Local<Array> entries;
     AutoPtr<IModuleInfo> pMdlInfo;
-    Elastos::Int32 _major, _minor, _build, _revision;
+    Elastos::Int32 _major = 0, _minor = 0, _build = 0, _revision = 0;
     ec = CReflector::AcquireModuleInfo(Elastos::String(ecoPath), (IModuleInfo **)&pMdlInfo);
     if (FAILED(ec))
     {
-        LOG(ERROR) << "Require: AcquireModuleInfo" << ecoPath << "failed";
+        Debug_LOG("Require: AcquireModuleInfo %s failed", ecoPath);
         return entries;
     }
+
     ec = pMdlInfo->GetVersion(&_major, &_minor, &_build, &_revision);
     if (FAILED(ec))
     {
-        LOG(ERROR) << "Require: GetVersion failed";
+		Debug_LOG("%s", "Require: GetVersion failed");
         return entries;
     }
-    LOG(INFO) << "Require: GetVersion " << _major << "." << _minor << "." << _build << "_" << _revision;
-    LOG(INFO) << "nEntryIds " << nEntryIds << " " << entryIds;
-#if 0
+
+    Debug_LOG("nEntryIds:%d", nEntryIds);
+#if 0//?jw
     if ((uint32_t)_major != major)
         Throw_LOG(Error::INCOMPATIBLE_VERSION, 0);
     if ((uint32_t)_minor < minor)
@@ -198,6 +202,7 @@ Local<Value> Require(char const *ecoPath,
         Nan::HandleScope scope;
         Nan::Set(entries, i, _Require(pMdlInfo, entryIds[i]));
     }
+
     return entries;
 }
 

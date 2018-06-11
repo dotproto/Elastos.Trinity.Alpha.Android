@@ -97,6 +97,7 @@ static Local<ObjectTemplate> _CARNamespaceTemplate(
     namespaceTemplate = New<ObjectTemplate>();
     offset = strlen(namespace_) + 1;
     range = mapFullNameToNamespacedEntryInfo->equal_range(namespace_);
+#if 0//?jw
     for (auto it = range.first; it != range.second; ++it)
     {
         Nan::HandleScope scope;
@@ -144,6 +145,7 @@ static Local<ObjectTemplate> _CARNamespaceTemplate(
             delete [] _namespace;
         }
     }
+#endif
     return namespaceTemplate;
 }
 

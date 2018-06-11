@@ -21,6 +21,7 @@ Local<NumberObject> CARConstant(IConstantInfo *constantInfo)
     auto &_constant = _mapConstantInfoToCARConstant[constantInfo];
     if (!_constant.IsEmpty())
         return New(_constant);
+
     constant = CARConstantoid(constantInfo, "CARConstant");
     _constant.Reset(constant);
     return constant;

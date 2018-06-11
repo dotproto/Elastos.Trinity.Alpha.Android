@@ -10,6 +10,9 @@
 #include "car-data-type.h"
 #include "error.h"
 #include "js-2-car.h"
+
+#include "base/logging.h"
+
 using namespace std;
 using namespace Nan;
 using namespace v8;
@@ -35,14 +38,17 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
     auto &_function = _mapFunctionInfoToCARFunction[functionInfo];
     if (!_function.IsEmpty())
         return scope.Escape(New(_function));
+
     function = New<Object>();
     DefineOwnProperty(function,
                       New("$what").ToLocalChecked(),
                       New(what).ToLocalChecked(),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
     ec = functionInfo->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     DefineOwnProperty(function,
                       New("$name").ToLocalChecked(),
                       ToValue(name),
@@ -62,9 +68,11 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
     paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = functionInfo->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     for (Elastos::Int32 i = 0; i < nParams; ++i)
     {
         Nan::HandleScope scope_;
@@ -76,31 +84,40 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
         const char *_io;
         Elastos::Boolean isReturnValue;
         AutoPtr<IDataTypeInfo> typeInfo;
+#if 0//?jw
         IDataTypeInfo *_typeInfo;
+#endif
         paramInfo = (*paramInfos)[i];
         param = New<Object>();
+
         DefineOwnProperty(param,
                           New("$what").ToLocalChecked(),
                           New("CARParameter").ToLocalChecked(),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
         ec = paramInfo->GetName(&paramName);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         DefineOwnProperty(param,
                           New("$name").ToLocalChecked(),
                           ToValue(paramName),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
         ec = paramInfo->GetIndex(&index);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         DefineOwnProperty(param,
                           New("$index").ToLocalChecked(),
                           ToValue(index),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
         ec = paramInfo->GetIOAttribute(&io);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
-        if (io == ParamIOAttribute_In)
+
+		if (io == ParamIOAttribute_In)
             _io = "Input";
         else if (io == ParamIOAttribute_CalleeAllocOut)
             _io = "CalleeAllocOutput";
@@ -108,6 +125,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
             _io = "CallerAllocOutput";
         else
             abort();
+
         DefineOwnProperty(param,
                           New("$io").ToLocalChecked(),
                           New(_io).ToLocalChecked(),
@@ -115,26 +133,32 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
         ec = paramInfo->IsReturnValue(&isReturnValue);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+#if 0//?jw
         DefineOwnProperty(param,
                           New("$isReturnValue").ToLocalChecked(),
                           ToValueFromBoolean(isReturnValue),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
         ec = paramInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         typeInfo = _typeInfo, _typeInfo->Release();
         DefineOwnProperty(param,
                           New("$type").ToLocalChecked(),
                           CARDataType(typeInfo),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
         DefineOwnProperty(function,
                           ToValue(index).As<v8::String>(),
                           param,
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+
         DefineOwnProperty(function,
                           ToValue(paramName).As<v8::String>(),
                           param,
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+#endif
     }
     _function.Reset(function);
     return scope.Escape(function);
@@ -148,11 +172,17 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *function
     Local<Object> functionCandidates;
     if (nFunctionInfos == 0)
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
+
+    LOG(INFO) << "debug";
+    LOG(INFO) << "what: " << what;
     if (nFunctionInfos == 1)
         return _CARFunction(functionInfos[0], what);
+
     ec = functionInfos[0]->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+    LOG(INFO) << "name: " << name;
+
     for (size_t i = 1; i < nFunctionInfos; ++i)
     {
         Elastos::String _name;
@@ -206,7 +236,7 @@ Local<Object> CARCallbackMethod(ICallbackMethodInfo *callbackMethodInfo)
     return _CARFunction(static_cast<IFunctionInfo *>(callbackMethodInfo), "CARCallbackMethod");
 }
 
-Local<Object> CARCallbackMethod(size_t nCallbackMethodInfos, ICallbackMethodInfo const *callbackMethodInfos[])
+Local<Object> CARCallbackMethod(size_t nCallbackMethodInfos, ICallbackMethodInfo *callbackMethodInfos[])
 {
     return _CARFunction(
                nCallbackMethodInfos, reinterpret_cast<IFunctionInfo **>(const_cast<ICallbackMethodInfo **>(callbackMethodInfos)),

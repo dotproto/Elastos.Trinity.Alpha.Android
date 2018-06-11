@@ -19,6 +19,7 @@ _CalleeAllocCARArray *CalleeAllocCARArray_(ICarArrayInfo const *carArrayInfo, El
     );
     if (carArray == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     carArray->carArrayInfo = const_cast<ICarArrayInfo *>(carArrayInfo);
     carArray->carQuintet = carQuintet;
     return carArray.release();
@@ -30,6 +31,7 @@ _CalleeAllocStruct *CalleeAllocStruct_(IStructInfo *structInfo, void **struct_)
     ::std::unique_ptr<_CalleeAllocStruct, typename _CalleeAllocStruct::Deleter> _struct(new(::std::nothrow) _CalleeAllocStruct);
     if (_struct == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _struct->structInfo = structInfo;
     _struct->struct_ = struct_;
     return _struct.release();
@@ -41,6 +43,7 @@ _CallerAllocInt16 *CallerAllocInt16_(Elastos::Int16 *i16)
     ::std::unique_ptr<_CallerAllocInt16, typename _CallerAllocInt16::Deleter> _i16(new(::std::nothrow) _CallerAllocInt16);
     if (_i16 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _i16->i16 = i16;
     return _i16.release();
 }
@@ -51,6 +54,7 @@ _CallerAllocInt32 *CallerAllocInt32_(Elastos::Int32 *i32)
     ::std::unique_ptr<_CallerAllocInt32, typename _CallerAllocInt32::Deleter> _i32(new(::std::nothrow) _CallerAllocInt32);
     if (_i32 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+	
     _i32->i32 = i32;
     return _i32.release();
 }

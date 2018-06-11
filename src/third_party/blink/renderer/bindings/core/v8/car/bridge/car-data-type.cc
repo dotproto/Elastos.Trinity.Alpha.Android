@@ -29,8 +29,11 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
     Local<Object> intrinsicType;
     Elastos::String name;
     ec = intrinsicTypeInfo->GetDataType(&dataType);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+        return scope.Escape(intrinsicType);
+    }
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -48,10 +51,12 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
         break;
     default:
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
+		return scope.Escape(intrinsicType);
     }
     auto &_intrinsicType = _mapIntrinsicTypeInfoToCARIntrinsicType[intrinsicTypeInfo];
     if (!_intrinsicType.IsEmpty())
         return scope.Escape(New(_intrinsicType));
+
     intrinsicType = New<Object>();
     DefineOwnProperty(intrinsicType,
                       New("$what").ToLocalChecked(),
@@ -59,7 +64,8 @@ static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
     ec = intrinsicTypeInfo->GetName(&name);
     if (FAILED(ec))
-        Throw_LOG(Error::TYPE_ELASTOS, ec);
+        Throw_LOG(Error::TYPE_ELASTOS, ec);    
+
     DefineOwnProperty(intrinsicType,
                       New("$name").ToLocalChecked(),
                       ToValue(name),
@@ -424,9 +430,11 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
         IFunctionInfo  *methodInfo;
         Elastos::String methodName;
         methodInfo = (*methodInfos)[i];
+
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         mapNameToMethodInfos[methodName].push_back(methodInfo);
     }
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it)
