@@ -49,24 +49,20 @@ CAR_BRIDGE_NAMESPACE_USING
 static NAN_METHOD(Require)
 {
     Nan::HandleScope scope;
-
     Local<Value> arg0;
+    Local<Value> arg1;
 
-    if (info.Length() < 1)
-        Throw_LOG(CAR_BRIDGE::Error::INVALID_ARGUMENT, 0);
+    if (info.Length() < 2)
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     arg0 = info[0];
-    if (!arg0->IsString())
-        Throw_LOG(CAR_BRIDGE::Error::INVALID_ARGUMENT, 0);
-
-    ParseURI uri(*Utf8String(arg0));
-	LOG(INFO) << "car uri: " << *Utf8String(arg0);
+    arg1 = info[1];
+    if (!arg0->IsString() || !arg1->IsString())
+        Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
     NAN_METHOD_RETURN_VALUE(
-            Require(*Utf8String(arg0)/*uri.ecoPath()*/,
-                uri.major(), uri.minor(), uri.build(), uri.revision(),
-                uri.nEntryIds(), uri.entryIds())
-            );
+        Require(*Utf8String(arg0), *Utf8String(arg1))
+    );
 }
 
 void Carbridge_Initialize(v8::Local<v8::Object> target)

@@ -110,16 +110,21 @@ static ECode _GetFullName(NamespacedDataTypeInfo *namespacedDataTypeInfo, String
     ECode ec;
     String namespace_;
     String name;
+
     if (namespacedDataTypeInfo == 0)
         return E_INVALID_ARGUMENT;
+
     if (fullName == 0)
         return NOERROR;
+
     ec = namespacedDataTypeInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
         return ec;
+
     ec = namespacedDataTypeInfo->GetName(&name);
     if (FAILED(ec))
         return ec;
+
     *fullName = namespace_ + "." + name;
     return NOERROR;
 }
@@ -128,13 +133,17 @@ ECode GetFullName(IDataTypeInfo *dataTypeInfo, String *fullName) noexcept
 {
     ECode ec;
     CarDataType dataType;
+
     if (dataTypeInfo == 0)
         return E_INVALID_ARGUMENT;
+
     if (fullName == 0)
         return NOERROR;
+
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         return ec;
+
     switch (dataType)
     {
     case CarDataType_Enum:
@@ -167,32 +176,38 @@ ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept
     return E_INVALID_ARGUMENT;
     if (category == 0)
         return NOERROR;
-        ec = classInfo->IsGeneric(&isGeneric);
-        if (FAILED(ec))
-            return ec;
-            if (isGeneric != FALSE)
-        {
-            *category = CLASS_CATEGORY_GENERIC;
-            return NOERROR;
-        }
-ec = classInfo->IsRegime(&isRegime);
-if (FAILED(ec))
-return ec;
-if (isRegime != FALSE)
-{
-    *category = CLASS_CATEGORY_REGIME;
+
+    ec = classInfo->IsGeneric(&isGeneric);
+    if (FAILED(ec))
+        return ec;
+        if (isGeneric != FALSE)
+    {
+        *category = CLASS_CATEGORY_GENERIC;
+        return NOERROR;
+    }
+
+    ec = classInfo->IsRegime(&isRegime);
+    if (FAILED(ec))
+        return ec;
+
+    if (isRegime != FALSE)
+    {
+        *category = CLASS_CATEGORY_REGIME;
+        return NOERROR;
+    }
+
+    ec = classInfo->IsAspect(&isAspect);
+    if (FAILED(ec))
+        return ec;
+
+    if (isAspect != FALSE)
+    {
+        *category = CLASS_CATEGORY_ASPECT;
+        return NOERROR;
+    }
+
+    *category = CLASS_CATEGORY_CLASS;
     return NOERROR;
-}
-ec = classInfo->IsAspect(&isAspect);
-if (FAILED(ec))
-return ec;
-if (isAspect != FALSE)
-{
-    *category = CLASS_CATEGORY_ASPECT;
-    return NOERROR;
-}
-*category = CLASS_CATEGORY_CLASS;
-return NOERROR;
 }
 
 ECode GetImportedModuleCount(IModuleInfo *moduleInfo, Int32 *count) noexcept
@@ -209,30 +224,37 @@ ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
 {
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
+
     if (importedModuleInfos == 0)
         return NOERROR;
+
     return moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos));
 }
 
 ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
                             String const &path,
                             IModuleInfo **importedModuleInfo) noexcept;
+
 ECode HasImportedModule(IModuleInfo *moduleInfo, String const &path, Boolean *has) noexcept
 {
     ECode ec;
     IModuleInfo *_moduleInfo;
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
+
     if (has == 0)
         return NOERROR;
+
     ec = GetImportedModuleInfo(moduleInfo, path, &_moduleInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
+
     if (FAILED(ec))
         return ec;
+
     *has = TRUE;
     _moduleInfo->Release();
     return ec;
@@ -245,33 +267,42 @@ ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
     ECode ec;
     Int32 nImportedModules;
     AutoPtr<ArrayOf<IModuleInfo *> > importedModuleInfos;
+Debug_LOG("debug path:%s", path.string() );
     if (moduleInfo == 0)
         return E_INVALID_ARGUMENT;
+
     if (importedModuleInfo == 0)
         return NOERROR;
+
     ec = moduleInfo->GetImportModuleInfoCount(&nImportedModules);
     if (FAILED(ec))
         return ec;
+Debug_LOG("debug");
     importedModuleInfos = ArrayOf<IModuleInfo *>::Alloc(nImportedModules);
     if (importedModuleInfos == 0)
         return E_OUT_OF_MEMORY;
+Debug_LOG("debug");
     ec = moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos.Get()));
     if (FAILED(ec))
         return ec;
+Debug_LOG("debug");
     for (Int32 i = 0; i < nImportedModules; ++i)
     {
         IModuleInfo *_importedModuleInfo;
         String _path;
+Debug_LOG("debug");
         _importedModuleInfo = (*importedModuleInfos)[i];
         ec = _importedModuleInfo->GetPath(&_path);
         if (FAILED(ec))
             return ec;
+
         if (_path == path)
         {
             *importedModuleInfo = _importedModuleInfo;
             return NOERROR;
         }
     }
+Debug_LOG("debug");
     *importedModuleInfo = 0;
     return NOERROR;
 }
