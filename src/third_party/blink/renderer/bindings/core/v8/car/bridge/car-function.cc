@@ -35,6 +35,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
     Elastos::String annotation;
     Elastos::Int32 nParams;
     AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
+
     auto &_function = _mapFunctionInfoToCARFunction[functionInfo];
     if (!_function.IsEmpty())
         return scope.Escape(New(_function));
@@ -65,6 +66,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
     ec = functionInfo->GetParamCount(&nParams);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
@@ -160,6 +162,7 @@ static Local<Object> _CARFunction(IFunctionInfo *functionInfo, const char *what)
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
 #endif
     }
+
     _function.Reset(function);
     return scope.Escape(function);
 }
@@ -170,28 +173,29 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *function
     ECode ec;
     Elastos::String name;
     Local<Object> functionCandidates;
+
     if (nFunctionInfos == 0)
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    LOG(INFO) << "debug";
-    LOG(INFO) << "what: " << what;
     if (nFunctionInfos == 1)
         return _CARFunction(functionInfos[0], what);
 
     ec = functionInfos[0]->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-    LOG(INFO) << "name: " << name;
 
     for (size_t i = 1; i < nFunctionInfos; ++i)
     {
         Elastos::String _name;
         ec = functionInfos[i]->GetName(&_name);
+
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         if (_name != name)
             Throw_LOG(Error::INVALID_ARGUMENT, 0);
     }
+
     functionCandidates = New<Object>();
     DefineOwnProperty(functionCandidates,
                       New("$what").ToLocalChecked(),
@@ -201,11 +205,13 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *function
                       New("$name").ToLocalChecked(),
                       ToValue(name),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
     for (size_t i = 0; i < nFunctionInfos; ++i)
         DefineOwnProperty(functionCandidates,
                           ToValue(i).As<v8::String>(),
                           _CARFunction(functionInfos[i], what),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+
     return scope.Escape(functionCandidates);
 }
 
@@ -242,4 +248,6 @@ Local<Object> CARCallbackMethod(size_t nCallbackMethodInfos, ICallbackMethodInfo
                nCallbackMethodInfos, reinterpret_cast<IFunctionInfo **>(const_cast<ICallbackMethodInfo **>(callbackMethodInfos)),
                "CARCallbackMethod");
 }
+
 CAR_BRIDGE_NAMESPACE_END
+

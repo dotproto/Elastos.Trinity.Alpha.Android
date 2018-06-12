@@ -31,12 +31,13 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
     Elastos::Boolean hasTypeAlias;
     Elastos::Boolean hasInterface;
     Elastos::Boolean hasClass;
-Debug_LOG("debug");
+
+    Debug_LOG("debug entryId: %s", entryId);
     ec = HasImportedModule(moduleInfo, Elastos::String(entryId), &hasImportedModule);
     if (FAILED(ec)) {
         Throw_LOG(Error::TYPE_ELASTOS, ec);
    	}
-Debug_LOG("debug");
+
     if (hasImportedModule != FALSE)
     {
         AutoPtr<IModuleInfo> importedModuleInfo;
@@ -49,7 +50,7 @@ Debug_LOG("debug");
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
-Debug_LOG("debug");
+
     if (strncmp(entryId, "$const.", 7) == 0)
     {
         char const *_entryId;
@@ -72,11 +73,11 @@ Debug_LOG("debug");
         constantInfo = _constantInfo, _constantInfo->Release();
         return CARConstant(constantInfo);
     }
-Debug_LOG("debug");
+
     ec = HasEnum(moduleInfo, Elastos::String(entryId), &hasEnum);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-Debug_LOG("debug");
+
     if (hasEnum != FALSE)
     {
         AutoPtr<IEnumInfo> enumInfo;
@@ -88,11 +89,11 @@ Debug_LOG("debug");
         enumInfo = _enumInfo, _enumInfo->Release();
         return CAREnum(enumInfo);
     }
-Debug_LOG("debug");
+
     ec = HasStruct(moduleInfo, Elastos::String(entryId), &hasStruct);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-Debug_LOG("debug");
+
     if (hasStruct != FALSE)
     {
         AutoPtr<IStructInfo> structInfo;
@@ -104,11 +105,11 @@ Debug_LOG("debug");
         structInfo = _structInfo, _structInfo->Release();
         return CARStruct(structInfo);
     }
-Debug_LOG("debug");
+
     ec = HasTypeAlias(moduleInfo, Elastos::String(entryId), &hasTypeAlias);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-Debug_LOG("debug");
+
     if (hasTypeAlias != FALSE)
     {
         AutoPtr<ITypeAliasInfo> typeAliasInfo;
@@ -120,11 +121,11 @@ Debug_LOG("debug");
         typeAliasInfo = _typeAliasInfo, _typeAliasInfo->Release();
         return CARTypeAlias(typeAliasInfo);
     }
-Debug_LOG("debug");
+
     ec = HasInterface(moduleInfo, Elastos::String(entryId), &hasInterface);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-Debug_LOG("debug");
+
     if (hasInterface != FALSE)
     {
         AutoPtr<IInterfaceInfo > interfaceInfo;
@@ -136,11 +137,11 @@ Debug_LOG("debug");
         interfaceInfo = _interfaceInfo, _interfaceInfo->Release();
         return CARInterface(interfaceInfo);
     }
-Debug_LOG("debug");
+
     ec = HasClass(moduleInfo, Elastos::String(entryId), &hasClass);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-Debug_LOG("debug");
+
     if (hasClass != FALSE)
     {
         AutoPtr<IClassInfo> classInfo;
@@ -152,7 +153,7 @@ Debug_LOG("debug");
         classInfo = _classInfo, _classInfo->Release();
         return scope.Escape(GetFunction(CARObject::NewClassTemplate(classInfo)).ToLocalChecked());
     }
-Debug_LOG("debug");
+
     return scope.Escape(NewInstance(CARNamespaceTemplate(moduleInfo, entryId)).ToLocalChecked());
 }
 

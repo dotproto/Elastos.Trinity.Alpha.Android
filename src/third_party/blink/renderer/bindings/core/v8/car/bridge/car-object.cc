@@ -2631,24 +2631,8 @@ CARObject *CARObject::NewInRegimeConstructor(size_t argc, Local<Value> argv[], L
 
 NAN_METHOD(CARObject::NewInRegimeConstructor)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        ClassConstructor(info, NewInRegimeConstructor);
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+    Debug_LOG("CARObject::NewInRegimeConstructor");
+    ClassConstructor(info, NewInRegimeConstructor);
 }
 
 NAN_METHOD(CARObject::InRegime)
@@ -2767,7 +2751,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
 
     Elastos::Boolean private_;
     Elastos::Boolean isSingleton;
-    Elastos::Boolean isReturnValue;
+    //Elastos::Boolean isReturnValue;
     Elastos::Boolean isBaseClass;
     Elastos::String namespace_;
     Elastos::String name;
@@ -2776,11 +2760,11 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     Elastos::Boolean hasGeneric;
 
     Local<ObjectTemplate>          aspectTemplates;
-    Elastos::Int32                 nAspects;
+    //Elastos::Int32                 nAspects;
     AutoPtr<ArrayOf<IClassInfo *>> aspectInfos;
     
     Local<ObjectTemplate>          aggregateeTemplates;
-    Elastos::Int32                 nAggregatees;
+    //Elastos::Int32                 nAggregatees;
     AutoPtr<ArrayOf<IClassInfo *>> aggregateeInfos;
 
     Elastos::Int32                     nInterfaces;
@@ -2795,8 +2779,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     map<Elastos::String, unique_ptr<struct _MethodInfos, _MethodInfos::Deleter>> mapNameToMethodInfos;
     Local<FunctionTemplate> escapedClassTemplate;
 
-    //classTemplate = Nan::New<FunctionTemplate>(constructor, data);
-	classTemplate = v8::FunctionTemplate::New(v8::Isolate::GetCurrent(), 0, data);
+    classTemplate = Nan::New<FunctionTemplate>(constructor, data);
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
@@ -2810,16 +2793,18 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New(".__class__").ToLocalChecked(),
                 _classInfo->self(),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum)), _classInfo.release();
+
+    Debug_LOG("set .__class__ ok");
 #endif
-    LOG(INFO) << "CARObject::NewClassTemplate set __class__ ok";
+
     classTemplate->Inherit(Nan::New(_classBaseTemplate));
-    LOG(INFO) << "CARObject::NewClassTemplate Inherit ok";
+	Debug_LOG("CARObject::NewClassTemplate Inherit ok");
+
     // $threadingModel
     ec = classInfo->GetThreadingModel(&threadingModel);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    LOG(INFO) << "CARObject::NewClassTemplate";
     switch (threadingModel)
     {
     case ThreadingModel_Sequenced:
@@ -2838,11 +2823,12 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         abort();
     }
 
-    LOG(INFO) << "CARObject::NewClassTemplate";
     SetTemplate(classTemplate,
                 Nan::New("$threadingModel").ToLocalChecked(),
                 ToValue(Elastos::String(_threadingModel)),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+	Debug_LOG("set $threadingModel ok");
+
     //$category
     ec = GetCategory(classInfo, &category);
     if (FAILED(ec))
@@ -2865,11 +2851,11 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         abort();
     }
 
-    LOG(INFO) << "CARObject::NewClassTemplate";
     SetTemplate(classTemplate,
                 Nan::New("$category").ToLocalChecked(),
                 ToValue(Elastos::String(_category)),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+	Debug_LOG("set $category ok");
 
     //$private
     ec = classInfo->IsPrivate(&private_);
@@ -2880,7 +2866,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$private").ToLocalChecked(),
                 ToValueFromBoolean(private_),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
-    LOG(INFO) << "CARObject::NewClassTemplate";
+	Debug_LOG("set $private ok");
 
     //$isSingleton
     ec = classInfo->IsSingleton(&isSingleton);
@@ -2891,7 +2877,9 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$isSingleton").ToLocalChecked(),
                 ToValueFromBoolean(isSingleton),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+	Debug_LOG("set $isSingleton ok");
 
+#if 0 //?jw
     //$isReturnValue
     ec = classInfo->IsReturnValue(&isReturnValue);
     if (FAILED(ec))
@@ -2901,7 +2889,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$isReturnValue").ToLocalChecked(),
                 ToValueFromBoolean(isReturnValue),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
-
+#endif
     //$isBase
     ec = classInfo->IsBaseClass(&isBaseClass);
     if (FAILED(ec))
@@ -2911,6 +2899,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$isBase").ToLocalChecked(),
                 ToValueFromBoolean(isBaseClass),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+	Debug_LOG("set $isBase ok");
 
     //$namespace
     ec = classInfo->GetNamespace(&namespace_);
@@ -2921,6 +2910,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$namespace").ToLocalChecked(),
                 ToValue(namespace_),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+	Debug_LOG("set $namespace ok");
 
     //$name = class name
     ec = classInfo->GetName(&name);
@@ -2931,6 +2921,10 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$name").ToLocalChecked(),
                 ToValue(name),
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
+	//classTemplate->SetClassName(Nan::New(name.string()).ToLocalChecked());
+
+	Debug_LOG("set $name(%s) ok", name.string());
 
     //$base
     ec = classInfo->HasBaseClass(&hasBaseClass);
@@ -2950,6 +2944,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                     Nan::New("$base").ToLocalChecked(),
                     NewClassTemplate(baseClassInfo),
                     static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+	    Debug_LOG("set $base ok");
     }
 
     //$generic
@@ -2970,8 +2965,10 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                     Nan::New("$generic").ToLocalChecked(),
                     NewClassTemplate(genericInfo),
                     static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+	    Debug_LOG("set $generic ok");
     }
 
+#if 0//?jw
     //$aspects
     aspectTemplates = Nan::New<ObjectTemplate>();
     ec = classInfo->GetAspectCount(&nAspects);
@@ -3039,7 +3036,9 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
                 Nan::New("$aggregatees").ToLocalChecked(),
                 aggregateeTemplates,
                 static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
-#if 0//?jw SetTemplate 第三个参数必须是template类型的
+#endif
+    // constructor
+#if 0
     SetTemplate(classTemplate,
                 Nan::New("constructor").ToLocalChecked(),
                 CARConstructor(constructorInfos.GetLength(), constructorInfos.GetPayload()),
@@ -3163,12 +3162,15 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         }
         _methodInfos->methodInfos.push_back(methodInfo);
     }
+
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it)
     {
         Nan::HandleScope scope_;
-        SetPrototypeMethod(classTemplate, it->first, InvokeMethod, it->second->self()), it->second.release();
+        SetPrototypeMethod(classTemplate, it->first.string(), InvokeMethod, it->second->self()), it->second.release();
+		Debug_LOG("set method %s", it->first.string());
     }
     escapedClassTemplate = scope.Escape(classTemplate);
+	Debug_LOG("finish.");
     return escapedClassTemplate;
 }
 
@@ -3229,6 +3231,7 @@ CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo *> &
     AutoPtr<IFunctionInfo> functionInfo;
     _classInfo = const_cast<IClassInfo *>(pclassInfo);
     IClassInfo *classInfo = const_cast<IClassInfo *>(pclassInfo);
+
     if (argc == 0)
     {
         ec = classInfo->CreateObject(&carObject);
@@ -3236,6 +3239,7 @@ CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo *> &
             Throw_LOG(Error::TYPE_ELASTOS, ec);
         goto done;
     }
+
     _argv = unique_ptr<unique_ptr<struct _Value> []>(
                 reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, argv))
             );
@@ -3246,6 +3250,7 @@ CARObject::CARObject(IClassInfo const *pclassInfo, ArrayOf<IConstructorInfo *> &
     argumentList =
         _CreateArgumentList<IConstructorInfo>(constructorInfo, argc, reinterpret_cast<struct _Value **>(_argv.get()));
     ec = constructorInfo->CreateObject(argumentList, &carObject);
+
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 done:
@@ -3257,6 +3262,7 @@ CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Val
     struct _ClassInfo *classInfo;
     CARObject *carObject = nullptr;
 
+    Debug_LOG("CARObject::NewConstructor");
     classInfo = (struct _ClassInfo *)data.As<External>()->Value();
 
     carObject = new(nothrow) CARObject(classInfo->classInfo, *classInfo->constructorInfos, argc, argv);
@@ -3268,24 +3274,8 @@ CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Val
 
 NAN_METHOD(CARObject::NewConstructor)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        ClassConstructor(info, NewConstructor);
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+	Debug_LOG("CARObject::NewConstructor");
+    ClassConstructor(info, NewConstructor);
 }
 
 #pragma clang diagnostic push
@@ -3327,11 +3317,12 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     _classInfo->classInfo = classInfo;
     _classInfo->constructorInfos = constructorInfos;
 
-    LOG(INFO) << "NewClassTemplate classInfo:" << classInfo << " constructorInfos:" << *constructorInfos ;
     classTemplate = NewClassTemplate(classInfo, *constructorInfos, NewConstructor, _classInfo->self());
+
     _classInfo.release();
     _classTemplate.Reset(classTemplate);
     escapedClassTemplate = scope.Escape(classTemplate);
+
     return escapedClassTemplate;
 }
 
@@ -3351,33 +3342,19 @@ CARObject *CARObject::WrapConstructor(size_t argc, Local<Value> argv[], Local<Va
 {
     struct _CARObject const *carObject;
     CARObject *_carObject;
+
     carObject = (struct _CARObject const *)data.As<External>()->Value();
     _carObject = new(nothrow) CARObject(carObject->classInfo, carObject->carObject);
     if (_carObject == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     return _carObject;
 }
 
 NAN_METHOD(CARObject::WrapConstructor)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        ClassConstructor(info, WrapConstructor);
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+	Debug_LOG("CARObject::WrapConstructor");
+    ClassConstructor(info, WrapConstructor);
 }
 
 Local<Object> CARObject::New(IInterface *carObject)
@@ -3388,9 +3365,11 @@ Local<Object> CARObject::New(IInterface *carObject)
     IClassInfo *_classInfo;
     struct _CARObject _carObject;
     Local<Function> class_;
+
     ec = CObject::ReflectClassInfo(carObject, &_classInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     classInfo = _classInfo, _classInfo->Release();
     _carObject.classInfo = classInfo;
     _carObject.carObject = carObject;

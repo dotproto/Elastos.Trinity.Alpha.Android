@@ -1,6 +1,7 @@
 #include <elastos.h>
 #include "macros.h"
 #include "elastos-ext.h"
+#include "error.h"
 
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
@@ -111,19 +112,27 @@ static ECode _GetFullName(NamespacedDataTypeInfo *namespacedDataTypeInfo, String
     String namespace_;
     String name;
 
-    if (namespacedDataTypeInfo == 0)
-        return E_INVALID_ARGUMENT;
+    if (namespacedDataTypeInfo == 0) {
+			Debug_LOG("E_INVALID_ARGUMENT");
+			return E_INVALID_ARGUMENT;
+    }
 
-    if (fullName == 0)
-        return NOERROR;
+    if (fullName == 0) {
+	    Debug_LOG("E_INVALID_ARGUMENT");
+	    return E_INVALID_ARGUMENT;
+    }
 
     ec = namespacedDataTypeInfo->GetNamespace(&namespace_);
-    if (FAILED(ec))
+    if (FAILED(ec)){
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     ec = namespacedDataTypeInfo->GetName(&name);
-    if (FAILED(ec))
+    if (FAILED(ec)){
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     *fullName = namespace_ + "." + name;
     return NOERROR;
@@ -134,34 +143,48 @@ ECode GetFullName(IDataTypeInfo *dataTypeInfo, String *fullName) noexcept
     ECode ec;
     CarDataType dataType;
 
-    if (dataTypeInfo == 0)
-        return E_INVALID_ARGUMENT;
+    if (dataTypeInfo == 0){
+	    Debug_LOG("E_INVALID_ARGUMENT");
+	    return E_INVALID_ARGUMENT;
+    }
 
-    if (fullName == 0)
-        return NOERROR;
+    if (fullName == 0){
+	    Debug_LOG("E_INVALID_ARGUMENT");
+	    return E_INVALID_ARGUMENT;
+    }
 
     ec = dataTypeInfo->GetDataType(&dataType);
-    if (FAILED(ec))
+    if (FAILED(ec)){
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     switch (dataType)
     {
     case CarDataType_Enum:
         ec = _GetFullName(static_cast<IEnumInfo *>(dataTypeInfo), fullName);
-        if (FAILED(ec))
+        if (FAILED(ec)){
+		    Throw_LOG(Error::FAILED, ec);
             return ec;
+        }
+
         break;
     case CarDataType_CppVector:
         break;
+
     case CarDataType_Interface:
         ec = _GetFullName(static_cast<IInterfaceInfo *>(dataTypeInfo), fullName);
-        if (FAILED(ec))
+        if (FAILED(ec)){
+		    Throw_LOG(Error::FAILED, ec);
             return ec;
+        }
         break;
     default:
         ec = dataTypeInfo->GetName(fullName);
-        if (FAILED(ec))
+        if (FAILED(ec)){
+		    Throw_LOG(Error::FAILED, ec);
             return ec;
+        }
     }
     return NOERROR;
 }
@@ -172,23 +195,34 @@ ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept
     Boolean isGeneric;
     Boolean isRegime;
     Boolean isAspect;
-    if (classInfo == 0)
-    return E_INVALID_ARGUMENT;
-    if (category == 0)
-        return NOERROR;
+
+    if (classInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    if (category == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
 
     ec = classInfo->IsGeneric(&isGeneric);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
-        if (isGeneric != FALSE)
+    }
+
+    if (isGeneric != FALSE)
     {
         *category = CLASS_CATEGORY_GENERIC;
         return NOERROR;
     }
 
     ec = classInfo->IsRegime(&isRegime);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     if (isRegime != FALSE)
     {
@@ -197,8 +231,10 @@ ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept
     }
 
     ec = classInfo->IsAspect(&isAspect);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     if (isAspect != FALSE)
     {
@@ -212,21 +248,31 @@ ECode GetCategory(IClassInfo *classInfo, enum ClassCategory *category) noexcept
 
 ECode GetImportedModuleCount(IModuleInfo *moduleInfo, Int32 *count) noexcept
 {
-    if (moduleInfo == 0)
+    if (moduleInfo == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (count == 0)
-        return NOERROR;
+    }
+
+    if (count == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
     return moduleInfo->GetImportModuleInfoCount(count);
 }
 
 ECode GetAllImportedModuleInfos(IModuleInfo *moduleInfo,
                                 ArrayOf<IModuleInfo *> *importedModuleInfos) noexcept
 {
-    if (moduleInfo == 0)
+    if (moduleInfo == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
+    }
 
-    if (importedModuleInfos == 0)
-        return NOERROR;
+    if (importedModuleInfos == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
 
     return moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos));
 }
@@ -238,25 +284,32 @@ ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
 ECode HasImportedModule(IModuleInfo *moduleInfo, String const &path, Boolean *has) noexcept
 {
     ECode ec;
-    IModuleInfo *_moduleInfo;
-    if (moduleInfo == 0)
-        return E_INVALID_ARGUMENT;
+    IModuleInfo* _moduleInfo;
 
-    if (has == 0)
-        return NOERROR;
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    if (has == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+	    return E_INVALID_ARGUMENT;
+    }
 
     ec = GetImportedModuleInfo(moduleInfo, path, &_moduleInfo);
+	Debug_LOG("ec:%d ?= %d", ec, E_DOES_NOT_EXIST);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-
-    if (FAILED(ec))
+	else if (FAILED(ec))
+	{
+	    Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
 
     *has = TRUE;
-    _moduleInfo->Release();
     return ec;
 }
 
@@ -267,34 +320,50 @@ ECode GetImportedModuleInfo(IModuleInfo *moduleInfo,
     ECode ec;
     Int32 nImportedModules;
     AutoPtr<ArrayOf<IModuleInfo *> > importedModuleInfos;
-Debug_LOG("debug path:%s", path.string() );
-    if (moduleInfo == 0)
-        return E_INVALID_ARGUMENT;
 
-    if (importedModuleInfo == 0)
-        return NOERROR;
+    Debug_LOG("debug path:%s", path.string() );
+
+    if (moduleInfo == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    if (importedModuleInfo == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
 
     ec = moduleInfo->GetImportModuleInfoCount(&nImportedModules);
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
-Debug_LOG("debug");
+    }
+
     importedModuleInfos = ArrayOf<IModuleInfo *>::Alloc(nImportedModules);
-    if (importedModuleInfos == 0)
-        return E_OUT_OF_MEMORY;
-Debug_LOG("debug");
-    ec = moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos.Get()));
-    if (FAILED(ec))
+    if (importedModuleInfos == 0){
+		Throw_LOG(Error::NO_MEMORY, ec);
         return ec;
-Debug_LOG("debug");
+    }
+
+    ec = moduleInfo->GetAllImportModuleInfos(reinterpret_cast<ArrayOf<IModuleInfo *> *>(importedModuleInfos.Get()));
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
+        return ec;
+    }
+
     for (Int32 i = 0; i < nImportedModules; ++i)
     {
         IModuleInfo *_importedModuleInfo;
         String _path;
-Debug_LOG("debug");
-        _importedModuleInfo = (*importedModuleInfos)[i];
+
+       _importedModuleInfo = (*importedModuleInfos)[i];
         ec = _importedModuleInfo->GetPath(&_path);
-        if (FAILED(ec))
+		Debug_LOG("importedModuleInfos[%d] path:%s", i, _path.string() );
+
+        if (FAILED(ec)) {
+			Throw_LOG(Error::FAILED, ec);
             return ec;
+        }
 
         if (_path == path)
         {
@@ -302,134 +371,195 @@ Debug_LOG("debug");
             return NOERROR;
         }
     }
-Debug_LOG("debug");
+
+	Debug_LOG("Not find ImportedModuleInfo for %s ", path.string() );
     *importedModuleInfo = 0;
-    return NOERROR;
+    return E_DOES_NOT_EXIST;
 }
 
 ECode HasConstant(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
-    IConstantInfo *_;
-    if (moduleInfo == 0)
+
+    IConstantInfo* constantInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (has == 0)
-        return NOERROR;
-    ec = moduleInfo->GetConstantInfo(name, &_);
+    }
+
+    if (has == 0){
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    ec = moduleInfo->GetConstantInfo(name, &constantInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
+
     if (FAILED(ec))
         return ec;
+
     *has = TRUE;
-    _->Release();
+
     return ec;
 }
 
 ECode HasEnum(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
-    IEnumInfo *_;
-    if (moduleInfo == 0)
+    IEnumInfo* enumInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (has == 0)
-        return NOERROR;
-    ec = moduleInfo->GetEnumInfo(fullName, &_);
+    }
+
+    if (has == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    ec = moduleInfo->GetEnumInfo(fullName, &enumInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-    if (FAILED(ec))
+
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
+
     *has = TRUE;
-    _->Release();
+
     return ec;
 }
 
 ECode HasStruct(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
-    IStructInfo *_;
-    if (moduleInfo == 0)
+
+    IStructInfo* structInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
+    }
+
     if (has == 0)
         return NOERROR;
-    ec = moduleInfo->GetStructInfo(name, &_);
+
+    ec = moduleInfo->GetStructInfo(name, &structInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-    if (FAILED(ec))
+
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
+
     *has = TRUE;
-    _->Release();
+ 
     return ec;
 }
 
 ECode HasTypeAlias(IModuleInfo *moduleInfo, String const &name, Boolean *has) noexcept
 {
     ECode ec;
-    ITypeAliasInfo *_;
-    if (moduleInfo == 0)
+    ITypeAliasInfo* typeAliasInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (has == 0)
-        return NOERROR;
-    ec = moduleInfo->GetTypeAliasInfo(name, &_);
+    }
+
+    if (has == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    ec = moduleInfo->GetTypeAliasInfo(name, &typeAliasInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
+
     *has = TRUE;
-    _->Release();
     return ec;
 }
 
 ECode HasInterface(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
-    IInterfaceInfo *_;
-    if (moduleInfo == 0)
+    IInterfaceInfo* interfaceInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (has == 0)
-        return NOERROR;
-    ec = moduleInfo->GetInterfaceInfo(fullName, &_);
+    }
+
+    if (has == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    ec = moduleInfo->GetInterfaceInfo(fullName, &interfaceInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-    if (FAILED(ec))
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
+
     *has = TRUE;
-    _->Release();
     return ec;
 }
 
 ECode HasClass(IModuleInfo *moduleInfo, String const &fullName, Boolean *has) noexcept
 {
     ECode ec;
-    IClassInfo *_;
-    if (moduleInfo == 0)
+    IClassInfo* classInfo;
+
+    if (moduleInfo == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
         return E_INVALID_ARGUMENT;
-    if (has == 0)
-        return NOERROR;
-    ec = moduleInfo->GetClassInfo(fullName, &_);
+    }
+
+    if (has == 0) {
+		Debug_LOG("E_INVALID_ARGUMENT");
+        return E_INVALID_ARGUMENT;
+    }
+
+    ec = moduleInfo->GetClassInfo(fullName, &classInfo);
     if (ec == E_DOES_NOT_EXIST)
     {
         *has = FALSE;
         return NOERROR;
     }
-    if (FAILED(ec))
+
+    if (FAILED(ec)) {
+		Throw_LOG(Error::FAILED, ec);
         return ec;
+    }
+
     *has = TRUE;
-    _->Release();
     return ec;
 }
 CAR_BRIDGE_NAMESPACE_END
+

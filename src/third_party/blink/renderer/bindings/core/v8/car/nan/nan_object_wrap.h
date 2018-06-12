@@ -52,7 +52,9 @@ class ObjectWrap {
  protected:
   inline void Wrap(v8::Local<v8::Object> object) {
     assert(persistent().IsEmpty());
+#if 0
     assert(object->InternalFieldCount() > 0);
+#endif
     SetInternalFieldPointer(object, 0, this);
     persistent().Reset(object);
     MakeWeak();
