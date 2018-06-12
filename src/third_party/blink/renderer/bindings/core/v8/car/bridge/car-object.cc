@@ -575,6 +575,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
     size_t size;
     IFunctionInfo **functionInfos = const_cast<IFunctionInfo **>(pfunctionInfos);
     priority = INT_MAX;
+    Debug_LOG("debug");
     for (size_t i = 0; i < nFunctionInfos; ++i)
     {
         IFunctionInfo *functionInfo;
@@ -588,23 +589,30 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetName(&_name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+        Debug_LOG("name:%s", _name.string());
         if (name == nullptr)
             name = _name;
         else if (_name != name)
             Throw_LOG(Error::INVALID_ARGUMENT, 0);
+
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetParamCount(&nParams);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         if ((size_t)nParams > argc)
             continue;
+
         paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
         if (paramInfos == 0)
             Throw_LOG(Error::NO_MEMORY, 0);
+
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetAllParamInfos(
                  reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get())
              );
+
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         _priority = 0;
         for (j = 0; j < nParams; ++j)
         {
@@ -626,6 +634,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
     size = candidates.size();
     if (size == 0)
         Throw_LOG(Error::NO_MATCHING_FUNCTION_FOR_CALL, 0);
+
     if (size > 1)
     {
         ostringstream oss;
@@ -2692,47 +2701,37 @@ struct _MethodInfos: WeakExternalBase
     vector<AutoPtr<IMethodInfo >> methodInfos;
 };
 
-NAN_METHOD(CARObject::InvokeMethod)
+//NAN_METHOD(CARObject::InvokeMethod)
+static void InvokeMethod(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        CARObject *thatCARObject;
-        struct _MethodInfos *methodInfos;
-        size_t argc;
-        AutoPtr<IMethodInfo> methodInfo;
-        AutoPtr<IArgumentList> argumentList;
-        ECode ec;
-        thatCARObject = Unwrap<CARObject>(info.This());
-        methodInfos = (struct _MethodInfos *)info.Data().As<External>()->Value();
-        argc = info.Length();
-        unique_ptr<unique_ptr<struct _Value> []> argv(
-            reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
-        );
-        AutoPtr<IFunctionInfo> functionInfo = _GetMatchingFunctionForCall<IMethodInfo>(
-                methodInfos->methodInfos.size(), (IFunctionInfo **)&methodInfos->methodInfos[0],
-                argc, reinterpret_cast<struct _Value const **>(argv.get()));
-        methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
-        argumentList =
-            _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
-        ec = methodInfo->Invoke(thatCARObject->_carObject, argumentList);
-        if (FAILED(ec))
-            Throw_LOG(Error::TYPE_ELASTOS, ec);
-        NAN_METHOD_RETURN_UNDEFINED();
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+    CARObject *thatCARObject;
+    struct _MethodInfos *methodInfos;
+    size_t argc;
+    AutoPtr<IMethodInfo> methodInfo;
+    AutoPtr<IArgumentList> argumentList;
+    ECode ec;
+    Debug_LOG("InvokeMethod");
+    thatCARObject = CARObject::Unwrap<CARObject>(info.This());
+    methodInfos = (struct _MethodInfos *)info.Data().As<External>()->Value();
+    Debug_LOG("methodInfos:%p", methodInfos);
+    argc = info.Length();
+    unique_ptr<unique_ptr<struct _Value> []> argv(
+        reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
+    );
+
+    AutoPtr<IFunctionInfo> functionInfo = _GetMatchingFunctionForCall<IMethodInfo>(
+            methodInfos->methodInfos.size(), (IFunctionInfo **)&methodInfos->methodInfos[0],
+            argc, reinterpret_cast<struct _Value const **>(argv.get()));
+    methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
+
+    argumentList =
+        _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
+
+    ec = methodInfo->Invoke(thatCARObject->carObject(), argumentList);
+    if (FAILED(ec))
+        Throw_LOG(Error::TYPE_ELASTOS, ec);
+
+    NAN_METHOD_RETURN_UNDEFINED();
 }
 
 Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo,
@@ -2780,6 +2779,8 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     Local<FunctionTemplate> escapedClassTemplate;
 
     classTemplate = Nan::New<FunctionTemplate>(constructor, data);
+    classTemplate->InstanceTemplate()->SetInternalFieldCount(1); //add by jw
+    Debug_LOG("FunctionTemplate data:%p", *data);
     unique_ptr<struct _ClassInfo, _ClassInfo::Deleter> _classInfo(new(nothrow) struct _ClassInfo);
     if (_classInfo == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
@@ -3166,8 +3167,17 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it)
     {
         Nan::HandleScope scope_;
-        SetPrototypeMethod(classTemplate, it->first.string(), InvokeMethod, it->second->self()), it->second.release();
+        v8::Isolate *isolate = v8::Isolate::GetCurrent();
+        //SetPrototypeMethod(classTemplate, it->first.string(), InvokeMethod, it->second->self()), it->second.release();
 		Debug_LOG("set method %s", it->first.string());
+
+        Local<v8::Signature> signature = v8::Signature::New(isolate, classTemplate);
+        classTemplate->PrototypeTemplate()->Set(
+            v8::String::NewFromUtf8(isolate, it->first.string(), NewStringType::kNormal)
+                .ToLocalChecked(),
+            FunctionTemplate::New(isolate, InvokeMethod, it->second->self(), signature));
+
+        it->second.release();
     }
     escapedClassTemplate = scope.Escape(classTemplate);
 	Debug_LOG("finish.");
@@ -3202,11 +3212,16 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
     size_t argc;
     CARObject *thatCARObject;
     argc = info.Length();
+  
+    Debug_LOG("%p", *that);
+
     unique_ptr<Local<Value> []> argv(new(nothrow) Local<Value>[argc]);
     if (argv == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     for (size_t i = 0; i < argc; ++i)
         argv[i] = info[i];
+
     if (!info.IsConstructCall())
     {
         Nan::HandleScope scope;
@@ -3215,7 +3230,10 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
 #endif
         return;
     }
+
     thatCARObject = constructor(argc, argv.get(), info.Data());
+    Debug_LOG("thatCARObject data:%p", *info.Data());
+
     thatCARObject->Wrap(that);
     NAN_METHOD_RETURN_VALUE(that);
 }
@@ -3274,7 +3292,7 @@ CARObject *CARObject::NewConstructor(size_t argc, Local<Value> argv[], Local<Val
 
 NAN_METHOD(CARObject::NewConstructor)
 {
-	Debug_LOG("CARObject::NewConstructor");
+	Debug_LOG("Call from js. data:%p", *info.Data());
     ClassConstructor(info, NewConstructor);
 }
 

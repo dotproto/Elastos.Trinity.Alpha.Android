@@ -163,6 +163,7 @@ void FunctionCallbackWrapper(const v8::FunctionCallbackInfo<v8::Value> &info) {
           obj->GetInternalField(kFunctionIndex).As<v8::External>()->Value()));
   FunctionCallbackInfo<v8::Value>
       cbinfo(info, obj->GetInternalField(kDataIndex));
+  NAN_LOG("cbinfo");
   callback(cbinfo);
 }
 

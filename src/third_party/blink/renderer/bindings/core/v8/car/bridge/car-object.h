@@ -73,7 +73,7 @@ private:
     static NAN_METHOD(LeaveRegime);
 #endif
     static NAN_METHOD(Equal);
-    static NAN_METHOD(InvokeMethod);
+    //static NAN_METHOD(InvokeMethod);
     static NAN_METHOD(Attach);
     static NAN_METHOD(Detach);
     static NAN_METHOD(Probe);

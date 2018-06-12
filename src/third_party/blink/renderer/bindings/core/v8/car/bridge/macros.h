@@ -21,7 +21,7 @@ void Carbridge_log(const char* file, int line, const char* format, ...);
 #define Throw_LOG(ERRNO, ECODE) Carbridge_throw(__FUNCTION__, __FILE__, __LINE__, Error::GetIntrinsicErrorName(ERRNO), ECODE)
 #define Debug_LOG(FORMAT, ...) \
     __android_log_print(ANDROID_LOG_INFO, "chromium", \
-                        "%s: " FORMAT, __FUNCTION__, ##__VA_ARGS__)
+                        "%s:%d " FORMAT, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 
 #endif

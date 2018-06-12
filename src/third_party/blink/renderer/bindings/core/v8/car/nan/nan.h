@@ -12,6 +12,10 @@
 #include <vector>
 
 #include <v8.h>
+#include <android/log.h>
+#define NAN_LOG(FORMAT, ...) \
+    __android_log_print(ANDROID_LOG_INFO, "chromium", \
+                        "%s:%d " FORMAT, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 namespace Nan {
 
