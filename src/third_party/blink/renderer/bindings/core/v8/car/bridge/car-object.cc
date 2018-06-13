@@ -433,14 +433,17 @@ struct _Value
 {
     Nan::Persistent<Value> value;
     Nan::Persistent<Value> data;
+
     Elastos::String type;
     ParamIOAttribute io;
+
     struct CanWithPriority
     {
         bool can;
         int priority;
     };
     mutable map<Elastos::String, struct CanWithPriority> canBeUsedAsArgumentOf;
+
     virtual ~_Value()
     {
         data.Reset();
@@ -457,64 +460,97 @@ static struct _Value *_ParseValue(Local<Value> value)
 {
     Local<Value> data = value;
     Elastos::String type(nullptr);
-    ParamIOAttribute io = ParamIOAttribute_In;
     Local<Object> object;
-    Local<Value> _io;
-    Elastos::String __io;
-    ParamIOAttribute ___io;
+    Local<Value> io_local;
+    Elastos::String io_str;
+    ParamIOAttribute _io;
     Local<Value> _data;
     Local<Value> _type;
-    Elastos::String __type;
+    Elastos::String type_str;
     unique_ptr<struct _Value> _value;
-    if (!value->IsObject())
+    ParamIOAttribute io = ParamIOAttribute_In;
+
+    if (!value->IsObject()) {
+		Debug_LOG("value not a object.");
         goto exit;
+    }
+
     object = value.As<Object>();
-    if (GetOwnPropertyNames(object).ToLocalChecked()->Length() < 2)
-        goto exit;
-    if (!HasOwnProperty(object, New(".io").ToLocalChecked()).FromJust())
-        goto exit;
-    _io = Get(object, New(".io").ToLocalChecked()).ToLocalChecked();
-    if (!_io->IsString())
-        goto exit;
-    ToString(__io, _io);
-    if (__io == "Input")
-        ___io = ParamIOAttribute_In;
-    else if (__io == "CalleeAllocOutput")
-        ___io = ParamIOAttribute_CalleeAllocOut;
-    else if (__io == "CallerAllocOutput")
-        ___io = ParamIOAttribute_CallerAllocOut;
-    else
-        goto exit;
-    if (!HasOwnProperty(object, New("data").ToLocalChecked()).FromJust())
-        goto exit;
+    if (GetOwnPropertyNames(object).ToLocalChecked()->Length() < 2) {
+		Debug_LOG("value is a invalid object.");
+		goto exit;
+    }
+
+    if (!HasOwnProperty(object, New(".io").ToLocalChecked()).FromJust()) {
+		Debug_LOG("value not havae .io property.");
+		goto exit;
+    }
+
+    io_local = Get(object, New(".io").ToLocalChecked()).ToLocalChecked();
+    if (!io_local->IsString()){
+		Debug_LOG("value .io property invalid.");
+		goto exit;
+    }
+
+    ToString(io_str, io_local);
+    if (io_str == "Input")
+        _io = ParamIOAttribute_In;
+    else if (io_str == "CalleeAllocOutput")
+        _io = ParamIOAttribute_CalleeAllocOut;
+    else if (io_str == "CallerAllocOutput")
+        _io = ParamIOAttribute_CallerAllocOut;
+    else {
+		Debug_LOG("value .io property value invalid.");
+		goto exit;
+    }
+
+    if (!HasOwnProperty(object, New("data").ToLocalChecked()).FromJust()) {
+		Debug_LOG("value not havae data property.");
+		goto exit;
+    }
+
     _data = Get(object, New("data").ToLocalChecked()).ToLocalChecked();
+
     if (HasOwnProperty(object, New(".type").ToLocalChecked()).FromJust())
     {
         _type = Get(object, New(".type").ToLocalChecked()).ToLocalChecked();
-        if (!_type->IsString())
-            goto exit;
-        ToString(__type, _type);
-        if (__type.IsEmpty())
+        if (!_type->IsString()) {
+			Debug_LOG("value .type property invalid.");
+		    goto exit;
+        }
+
+        ToString(type_str, _type);
+        if (type_str.IsEmpty())
             goto exit;
     }
-    else if (___io == ParamIOAttribute_CalleeAllocOut)
+    else if (_io == ParamIOAttribute_CalleeAllocOut) {
+        Debug_LOG("___io == ParamIOAttribute_CalleeAllocOut");
+		goto exit;
+    }
+    else if (_io == ParamIOAttribute_CallerAllocOut && _data->IsUndefined()) {
+		Debug_LOG("___io == ParamIOAttribute_CalleeAllocOut");
         goto exit;
-    else if (___io == ParamIOAttribute_CallerAllocOut && _data->IsUndefined())
-        goto exit;
+    }
+
     data = _data;
-    type = __type;
-    io = ___io;
+    type = type_str;
+    io   = _io;
+
 exit:
     if (io == ParamIOAttribute_In)
         _value = unique_ptr<struct _Value>(new(nothrow) struct _InputValue);
     else
         _value = unique_ptr<struct _Value>(new(nothrow) struct _Value);
+
     if (_value == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _value->value.Reset(value);
     _value->data.Reset(data);
     _value->type = type;
     _value->io = io;
+	Debug_LOG("value[%p] data:%p, type:%s, io:%d", *value, *data, type.string(), io);
+
     return _value.release();
 }
 
@@ -524,8 +560,10 @@ static struct _Value **_ParseValues(size_t argc, Array const &argv)
     unique_ptr<unique_ptr<struct _Value> []> _argv(new(nothrow) unique_ptr<struct _Value>[argc]);
     if (_argv == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     for (size_t i = 0; i < argc; ++i)
         _argv[i] = unique_ptr<struct _Value>(_ParseValue(argv[i]));
+
     return reinterpret_cast<struct _Value **>(_argv.release());
 }
 
@@ -537,31 +575,43 @@ static bool _CanBeUsedAsArgumentOf(IParamInfo const *pparamInfo, struct _Value c
     IDataTypeInfo *_dataTypeInfo;
     Elastos::String fullName;
     IParamInfo *paramInfo = const_cast<IParamInfo *>(pparamInfo);
+
     ec = paramInfo->GetIOAttribute(&io);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-    if (io != value->io)
-        return false;
+#if 0 //?jw
+    if (io != value->io) {
+        Debug_LOG("io expected: %d, actual: %d", io, value->io);
+		return false;
+    }
+#endif
     ec = paramInfo->GetTypeInfo(&_dataTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
+    Debug_LOG("expected parameter type: %s , actual type: %s", fullName.string(), value->type.string());
     dataTypeInfo = _dataTypeInfo, _dataTypeInfo->Release();
     ec = GetFullName(dataTypeInfo, &fullName);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     if (value->type != nullptr && fullName != value->type)
         return false;
+
     if (value->canBeUsedAsArgumentOf.count(fullName) > 0)
     {
         auto &canWithPriority = value->canBeUsedAsArgumentOf[fullName];
         if (priority != nullptr)
             *priority = canWithPriority.priority;
+	
         return canWithPriority.can;
     }
+
     auto &canWithPriority = value->canBeUsedAsArgumentOf[fullName];
     canWithPriority.can = CanBeUsedAs(dataTypeInfo, New(value->data), &canWithPriority.priority);
     if (priority != nullptr)
         *priority = canWithPriority.priority;
+
     return canWithPriority.can;
 }
 
@@ -571,24 +621,29 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
 {
     Elastos::String name;
     vector<AutoPtr<IFunctionInfo >> candidates;
-    int priority;
     size_t size;
+    int priority = INT_MAX;
+
     IFunctionInfo **functionInfos = const_cast<IFunctionInfo **>(pfunctionInfos);
-    priority = INT_MAX;
-    Debug_LOG("debug");
+
+    Debug_LOG("start ... ");
     for (size_t i = 0; i < nFunctionInfos; ++i)
     {
-        IFunctionInfo *functionInfo;
         ECode ec;
         Elastos::String _name;
         Elastos::Int32 nParams;
+
+        IFunctionInfo *functionInfo;
         AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
+
         int _priority;
         Elastos::Int32 j;
+
         functionInfo = functionInfos[i];
         ec = const_cast<IFunctionInfo *>(functionInfo)->GetName(&_name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         Debug_LOG("name:%s", _name.string());
         if (name == nullptr)
             name = _name;
@@ -599,6 +654,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
+		Debug_LOG("nParams:%d argc:%d", nParams, argc);
         if ((size_t)nParams > argc)
             continue;
 
@@ -619,43 +675,54 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
             IParamInfo const *paramInfo;
             int __priority;
             paramInfo = (*paramInfos)[j];
-            if (!_CanBeUsedAsArgumentOf(paramInfo, argv[j], &__priority))
+            if (!_CanBeUsedAsArgumentOf(paramInfo, argv[j], &__priority)) {
+				Debug_LOG("argv[%d] can't used as argument.", j);
                 break;
+            }
+
+            Debug_LOG("argv[%d] __priority:%d", j, __priority);
             _priority += __priority;
         }
-        if (j < nParams)
+
+        if (j < nParams) {
+			Debug_LOG("parameter does not match.");
             continue;
-        if (_priority > priority)
+        }
+
+        if (_priority > priority) {
+			Debug_LOG("_priority > %d.", priority);
             continue;
+        }
+
         if (_priority < priority)
             candidates.clear();
+
         candidates.push_back(functionInfo);
     }
+
     size = candidates.size();
     if (size == 0)
         Throw_LOG(Error::NO_MATCHING_FUNCTION_FOR_CALL, 0);
 
     if (size > 1)
     {
-        ostringstream oss;
-        oss << "Call of overloaded '" << name << "(...)' is ambiguous.\n";
-        oss << "Candidates are:\n";
+        Debug_LOG("Call of overloaded : %s (...)' is ambiguous.", name.string());
+        Debug_LOG("Candidates are:");
         for (size_t i = 0; i < size; ++i)
         {
-            IFunctionInfo *candidate;
+#if 0 //?jw
+            IMethodInfo *candidate;
             Elastos::String annotation;
-            candidate = candidates[i];
-#if 0//?jw car remove
-            ECode ec = candidate->GetAnnotation(&annotation);
+            candidate = (IMethodInfo *)(candidates[i]);
+            ECode ec = candidate->GetAnnotation(name, &annotation);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
+			Debug_LOG("%s", annotation.string());
 #endif
-            oss << annotation << "\n";
         }
-#if 0//?jw
-        //Throw_LOG(oss.str().data(),Error::AMBIGUOUS_CALL_OF_OVERLOADED_FUNCTION);
-#endif
     }
+
     AutoPtr<IFunctionInfo > rcandidate = candidates[0];
     return rcandidate;
 }
@@ -1637,9 +1704,11 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
     Nan::HandleScope scope;
     Elastos::String *__s;
     ECode ec;
+
     unique_ptr<Elastos::String> s(new(nothrow) Elastos::String);
     if (s == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ToString(*s, New(value->data));
     unique_ptr<struct _CallerAllocString, _CallerAllocString::Deleter> _s(
         CallerAllocString_<struct _CallerAllocString>(s.get())
@@ -1650,6 +1719,7 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
                 _GetCallerAllocOutputArgumentOfString,
                 _SetCallerAllocOutputArgumentOfString,
                 _s->self()), _s.release();
+
     ec = argumentList->SetOutputArgumentOfStringPtr(index, __s);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
@@ -2317,8 +2387,10 @@ static void _SetCallerAllocOutputArgumentOf(IDataTypeInfo *dataTypeInfo,
     ECode ec;
     CarDataType dataType;
     ec = dataTypeInfo->GetDataType(&dataType);
+
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -2392,17 +2464,22 @@ static void _SetArgumentOf(IParamInfo *paramInfo,
     ParamIOAttribute io;
     AutoPtr<IDataTypeInfo> dataTypeInfo;
     IDataTypeInfo *_dataTypeInfo;
+
     ec = paramInfo->GetIOAttribute(&io);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     ec = paramInfo->GetTypeInfo(&_dataTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     dataTypeInfo = _dataTypeInfo, _dataTypeInfo->Release();
     if (io == ParamIOAttribute_In)
         _SetInputArgumentOf(dataTypeInfo, argumentList, index, static_cast<struct _InputValue const *>(value));
+
     else if (io == ParamIOAttribute_CalleeAllocOut)
         _SetCalleeAllocOutputArgumentOf(dataTypeInfo, argumentList, index, value);
+
     else if (io == ParamIOAttribute_CallerAllocOut)
         _SetCallerAllocOutputArgumentOf(dataTypeInfo, argumentList, index, value);
 }
@@ -2415,21 +2492,27 @@ static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo *functionInfo, si
     IArgumentList *_argumentList;
     Elastos::Int32 nParams;
     AutoPtr<ArrayOf<IParamInfo *> > paramInfos;
+
     ec = functionInfo->CreateArgumentList(&_argumentList);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     argumentList = _argumentList, _argumentList->Release();
     ec = functionInfo->GetParamCount(&nParams);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     paramInfos = ArrayOf<IParamInfo *>::Alloc(nParams);
     if (paramInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = functionInfo->GetAllParamInfos(reinterpret_cast<ArrayOf<IParamInfo *> *>(paramInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     for (Elastos::Int32 i = 0; i < nParams; ++i)
         _SetArgumentOf((*paramInfos)[i], argumentList, i, argv[i]);
+
     return argumentList;
 }
 
@@ -2710,11 +2793,13 @@ static void InvokeMethod(const v8::FunctionCallbackInfo<v8::Value> &info)
     AutoPtr<IMethodInfo> methodInfo;
     AutoPtr<IArgumentList> argumentList;
     ECode ec;
+
     Debug_LOG("InvokeMethod");
     thatCARObject = CARObject::Unwrap<CARObject>(info.This());
     methodInfos = (struct _MethodInfos *)info.Data().As<External>()->Value();
-    Debug_LOG("methodInfos:%p", methodInfos);
+
     argc = info.Length();
+    Debug_LOG("methodInfos:%p argc:%d", methodInfos, argc);
     unique_ptr<unique_ptr<struct _Value> []> argv(
         reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
     );
@@ -2722,15 +2807,16 @@ static void InvokeMethod(const v8::FunctionCallbackInfo<v8::Value> &info)
     AutoPtr<IFunctionInfo> functionInfo = _GetMatchingFunctionForCall<IMethodInfo>(
             methodInfos->methodInfos.size(), (IFunctionInfo **)&methodInfos->methodInfos[0],
             argc, reinterpret_cast<struct _Value const **>(argv.get()));
+
     methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
 
     argumentList =
         _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
-
+    Debug_LOG("method invoke.");
     ec = methodInfo->Invoke(thatCARObject->carObject(), argumentList);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-
+    Debug_LOG("Method invoke finish.");
     NAN_METHOD_RETURN_UNDEFINED();
 }
 
@@ -2775,7 +2861,9 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     Elastos::Int32                   nMethods;
     AutoPtr<ArrayOf<IMethodInfo *> > methodInfos;
     IClassInfo *classInfo = const_cast<IClassInfo *>(pclassInfo);
+
     map<Elastos::String, unique_ptr<struct _MethodInfos, _MethodInfos::Deleter>> mapNameToMethodInfos;
+
     Local<FunctionTemplate> escapedClassTemplate;
 
     classTemplate = Nan::New<FunctionTemplate>(constructor, data);
@@ -3149,11 +3237,13 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
     {
         IMethodInfo *methodInfo;
         Elastos::String methodName;
+
         methodInfo = (*methodInfos)[i];
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
+        Debug_LOG("%d/%d methodName:%s", i, nMethods, methodName.string());
         auto &_methodInfos = mapNameToMethodInfos[methodName];
         if (_methodInfos == nullptr)
         {
@@ -3179,6 +3269,7 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
 
         it->second.release();
     }
+
     escapedClassTemplate = scope.Escape(classTemplate);
 	Debug_LOG("finish.");
     return escapedClassTemplate;
@@ -3233,7 +3324,6 @@ NAN_METHOD_RETURN_TYPE CARObject::ClassConstructor(NAN_METHOD_ARGS_TYPE info, Co
 
     thatCARObject = constructor(argc, argv.get(), info.Data());
     Debug_LOG("thatCARObject data:%p", *info.Data());
-
     thatCARObject->Wrap(that);
     NAN_METHOD_RETURN_VALUE(that);
 }

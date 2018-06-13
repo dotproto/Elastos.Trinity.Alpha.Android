@@ -59,5 +59,7 @@ private:
     WeakExternalBase &operator=(WeakExternalBase const &weakHeapExternal) = delete;
     WeakExternalBase &operator=(WeakExternalBase && weakHeapExternal) = delete;
 };
+
 CAR_BRIDGE_NAMESPACE_END
+
 #endif

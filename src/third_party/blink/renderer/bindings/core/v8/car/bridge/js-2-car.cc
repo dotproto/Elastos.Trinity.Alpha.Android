@@ -31,6 +31,7 @@ bool CanBeUsedAsInt16(Local<Value> value, int *priority)
 {
     Nan::HandleScope scope;
     Local<v8::Int32> i32;
+
     int _priority;
     if (!To<v8::Int32>(value).ToLocal(&i32))
         return false;
@@ -48,8 +49,10 @@ bool CanBeUsedAsInt16(Local<Value> value, int *priority)
         _priority = 4;
     else
         _priority = 5;
+
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -89,8 +92,10 @@ bool CanBeUsedAsInt32(Local<Value> value, int *priority)
         _priority = 4;
     else
         _priority = 5;
+
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -2249,9 +2254,11 @@ bool CanBeUsedAs(IDataTypeInfo *dataTypeInfo, Local<Value> value, int *priority)
 {
     ECode ec;
     CarDataType dataType;
+
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:

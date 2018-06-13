@@ -151,6 +151,7 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
         classInfo = _classInfo, _classInfo->Release();
+		Debug_LOG("NewClassTemplate %s", entryId);
         return scope.Escape(GetFunction(CARObject::NewClassTemplate(classInfo)).ToLocalChecked());
     }
 
