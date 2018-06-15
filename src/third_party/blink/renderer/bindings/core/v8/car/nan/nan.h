@@ -12,11 +12,15 @@
 #include <vector>
 
 #include <v8.h>
+#include "../logging.h"
+#if 0
 #include <android/log.h>
-#define NAN_LOG(FORMAT, ...) \
-    __android_log_print(ANDROID_LOG_INFO, "chromium", \
-                        "%s:%d " FORMAT, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
+#define basename(x) strrchr(x,'/')?strrchr(x,'/')+1:x
+#define Debug_LOG(FORMAT, ...) \
+    __android_log_print(ANDROID_LOG_INFO, "chromium", \
+                        "[%s:%d %s] " FORMAT, basename(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#endif
 namespace Nan {
 
 #define NAN_INLINE inline  // TODO(bnoordhuis) Remove in v3.0.0.

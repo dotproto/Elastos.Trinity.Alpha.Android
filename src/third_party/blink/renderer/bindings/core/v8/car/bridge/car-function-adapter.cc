@@ -1145,6 +1145,7 @@ static void _SetCallerAllocOutputArgumentOfString(size_t argc, Local<Value> argv
     Elastos::String *s;
     if (index >= argc)
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
+
     s = _To<Elastos::String *>(ap);
     argv[index] = _CallerAllocOutputArgumentOfString(s);
 }

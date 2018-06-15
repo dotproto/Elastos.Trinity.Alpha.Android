@@ -103,7 +103,7 @@ Factory<v8::FunctionTemplate>::New( FunctionCallback callback
   if (callback) {
     v8::EscapableHandleScope scope(isolate);
     v8::Local<v8::ObjectTemplate> tpl = v8::ObjectTemplate::New(isolate);
-    NAN_LOG("FunctionTemplate New SetInternalFieldCount(%d) data:%p", imp::kFunctionFieldCount, *data);
+    Debug_LOG("FunctionTemplate New SetInternalFieldCount(%d) data:%p", imp::kFunctionFieldCount, *data);
     tpl->SetInternalFieldCount(imp::kFunctionFieldCount);
     v8::Local<v8::Object> obj = NewInstance(tpl).ToLocalChecked();
 

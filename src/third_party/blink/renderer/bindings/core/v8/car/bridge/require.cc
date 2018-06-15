@@ -25,7 +25,7 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
     Nan::EscapableHandleScope scope;
 
     ECode ec;
-    Elastos::Boolean hasImportedModule;
+    //Elastos::Boolean hasImportedModule;
     Elastos::Boolean hasEnum;
     Elastos::Boolean hasStruct;
     Elastos::Boolean hasTypeAlias;
@@ -33,6 +33,7 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
     Elastos::Boolean hasClass;
 
     Debug_LOG("debug entryId: %s", entryId);
+#if 0//ignore ImportModule
     ec = HasImportedModule(moduleInfo, Elastos::String(entryId), &hasImportedModule);
     if (FAILED(ec)) {
         Throw_LOG(Error::TYPE_ELASTOS, ec);
@@ -50,7 +51,7 @@ static Local<Value> _Require(IModuleInfo *moduleInfo, char const *entryId)
         importedModuleInfo = _importedModuleInfo, _importedModuleInfo->Release();
         return scope.Escape(NewInstance(CARImportedModuleTemplate(importedModuleInfo)).ToLocalChecked());
     }
-
+#endif
     if (strncmp(entryId, "$const.", 7) == 0)
     {
         char const *_entryId;

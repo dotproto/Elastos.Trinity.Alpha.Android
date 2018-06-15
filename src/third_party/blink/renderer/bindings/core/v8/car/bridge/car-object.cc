@@ -626,7 +626,7 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
 
     IFunctionInfo **functionInfos = const_cast<IFunctionInfo **>(pfunctionInfos);
 
-    Debug_LOG("start ... ");
+    Debug_LOG("start nFunctionInfos:%d ", nFunctionInfos);
     for (size_t i = 0; i < nFunctionInfos; ++i)
     {
         ECode ec;
@@ -655,6 +655,13 @@ static AutoPtr<IFunctionInfo> _GetMatchingFunctionForCall(
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
 		Debug_LOG("nParams:%d argc:%d", nParams, argc);
+        // add by jw begin
+        if(0 == (size_t)nParams ) {
+            candidates.push_back(functionInfo);
+            break;
+        }
+        //add by jw end.
+
         if ((size_t)nParams > argc)
             continue;
 
@@ -1050,26 +1057,10 @@ static void _SetInputArgumentOf(IDataTypeInfo const *pdataTypeInfo,
 
 static NAN_SETTER(_SetOutputArgument)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        struct CARArgumentBase *carArgument;
-        carArgument = (struct CARArgumentBase *)info.Data().As<External>()->Value();
-        carArgument->value.Reset(value);
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+    Debug_LOG("debug");
+    struct CARArgumentBase *carArgument;
+    carArgument = (struct CARArgumentBase *)info.Data().As<External>()->Value();
+    carArgument->value.Reset(value);
 }
 
 struct _PersistentData
@@ -1227,6 +1218,7 @@ static void _SetCalleeAllocOutputArgumentOf(IDataTypeInfo const *pdataTypeInfo,
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_ArrayOf:
@@ -1287,16 +1279,19 @@ static void __SetCallerAllocOutputArgumentOfInt16(IArgumentList *argumentList, s
     unique_ptr<Int16> i16(new(nothrow) Int16);
     if (i16 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     *i16 = ToInt16(New(value->data));
     unique_ptr<struct _CallerAllocInt16, _CallerAllocInt16::Deleter> _i16(
         CallerAllocInt16_<struct _CallerAllocInt16>(i16.get())
     );
+
     __i16 = i16.release();
     SetAccessor(New(value->value).As<Object>(),
                 New("data").ToLocalChecked(),
                 _GetCallerAllocOutputArgumentOfInt16,
                 _SetCallerAllocOutputArgumentOfInt16,
                 _i16->self()), _i16.release();
+
     ec = argumentList->SetOutputArgumentOfInt16Ptr(index, __i16);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
@@ -1304,29 +1299,13 @@ static void __SetCallerAllocOutputArgumentOfInt16(IArgumentList *argumentList, s
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfInt32)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        Nan::HandleScope scope;
-        struct CallerAllocInt32 *i32;
-        i32 = (struct CallerAllocInt32 *)info.Data().As<External>()->Value();
-        if (i32->value.IsEmpty())
-            i32->value.Reset(ToValue(*i32->i32));
-        NAN_GETTER_RETURN_VALUE(New(i32->value));
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+    Nan::HandleScope scope;
+    struct CallerAllocInt32 *i32;
+    i32 = (struct CallerAllocInt32 *)info.Data().As<External>()->Value();
+    if (i32->value.IsEmpty())
+        i32->value.Reset(ToValue(*i32->i32));
+
+    NAN_GETTER_RETURN_VALUE(New(i32->value));
 }
 
 static auto &_SetCallerAllocOutputArgumentOfInt32 = _SetOutputArgument;
@@ -1344,19 +1323,23 @@ static void __SetCallerAllocOutputArgumentOfInt32(IArgumentList *argumentList, s
     Nan::HandleScope scope;
     Elastos::Int32 *__i32;
     ECode ec;
+
     unique_ptr<Elastos::Int32> i32(new(nothrow) Elastos::Int32);
     if (i32 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     *i32 = ToInt32(New(value->data));
     unique_ptr<struct _CallerAllocInt32, _CallerAllocInt32::Deleter> _i32(
         CallerAllocInt32_<struct _CallerAllocInt32>(i32.get())
     );
     __i32 = i32.release();
+
     SetAccessor(New(value->value).As<Object>(),
                 New("data").ToLocalChecked(),
                 _GetCallerAllocOutputArgumentOfInt32,
                 _SetCallerAllocOutputArgumentOfInt32,
                 _i32->self()), _i32.release();
+
     ec = argumentList->SetOutputArgumentOfInt32Ptr(index, __i32);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
@@ -1664,29 +1647,13 @@ static void __SetCallerAllocOutputArgumentOfChar32(IArgumentList *argumentList, 
 
 static NAN_GETTER(_GetCallerAllocOutputArgumentOfString)
 {
-#if 0//?jw
-    try
-    {
-#endif
-        Nan::HandleScope scope;
-        struct CallerAllocString *s;
-        s = (struct CallerAllocString *)info.Data().As<External>()->Value();
-        if (s->value.IsEmpty())
-            s->value.Reset(ToValue(*s->s));
-        NAN_GETTER_RETURN_VALUE(New(s->value));
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(error));
-    }
-    catch (...)
-    {
-        Nan::HandleScope scope;
-        ThrowError(ToValue(Error(Error::FAILED, "")));
-    }
-#endif
+    Nan::HandleScope scope;
+    struct CallerAllocString *s;
+    s = (struct CallerAllocString *)info.Data().As<External>()->Value();
+    if (s->value.IsEmpty())
+        s->value.Reset(ToValue(*s->s));
+
+    NAN_GETTER_RETURN_VALUE(New(s->value));
 }
 
 static auto &_SetCallerAllocOutputArgumentOfString = _SetOutputArgument;
@@ -1705,6 +1672,7 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
     Elastos::String *__s;
     ECode ec;
 
+    Debug_LOG("debug");
     unique_ptr<Elastos::String> s(new(nothrow) Elastos::String);
     if (s == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
@@ -1713,6 +1681,7 @@ static void __SetCallerAllocOutputArgumentOfString(IArgumentList *argumentList, 
     unique_ptr<struct _CallerAllocString, _CallerAllocString::Deleter> _s(
         CallerAllocString_<struct _CallerAllocString>(s.get())
     );
+
     __s = s.release();
     SetAccessor(New(value->value).As<Object>(),
                 New("data").ToLocalChecked(),
@@ -2510,8 +2479,10 @@ static AutoPtr<IArgumentList> _CreateArgumentList(FunctionInfo *functionInfo, si
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    for (Elastos::Int32 i = 0; i < nParams; ++i)
+    for (Elastos::Int32 i = 0; i < nParams; ++i) {
+        Debug_LOG("argment[%d/%d]", i, nParams);
         _SetArgumentOf((*paramInfos)[i], argumentList, i, argv[i]);
+    }
 
     return argumentList;
 }
@@ -2799,7 +2770,7 @@ static void InvokeMethod(const v8::FunctionCallbackInfo<v8::Value> &info)
     methodInfos = (struct _MethodInfos *)info.Data().As<External>()->Value();
 
     argc = info.Length();
-    Debug_LOG("methodInfos:%p argc:%d", methodInfos, argc);
+    Debug_LOG("methodInfos:%p size:%d, argc:%d", methodInfos, methodInfos->methodInfos.size(), argc);
     unique_ptr<unique_ptr<struct _Value> []> argv(
         reinterpret_cast<unique_ptr<struct _Value> *>(_ParseValues(argc, info))
     );
@@ -2809,13 +2780,21 @@ static void InvokeMethod(const v8::FunctionCallbackInfo<v8::Value> &info)
             argc, reinterpret_cast<struct _Value const **>(argv.get()));
 
     methodInfo = static_cast<IMethodInfo *>(functionInfo.Get());
+    if(0 == argc) {
+        Debug_LOG("method invoke.");
+        ec = methodInfo->Invoke(thatCARObject->carObject(), nullptr);
+    }
+    else {
+        Debug_LOG("create argument list.");
+        argumentList =
+            _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
+        Debug_LOG("method invoke.");
+        ec = methodInfo->Invoke(thatCARObject->carObject(), argumentList);
+    }
 
-    argumentList =
-        _CreateArgumentList<IMethodInfo>(methodInfo, argc, reinterpret_cast<struct _Value **>(argv.get()));
-    Debug_LOG("method invoke.");
-    ec = methodInfo->Invoke(thatCARObject->carObject(), argumentList);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     Debug_LOG("Method invoke finish.");
     NAN_METHOD_RETURN_UNDEFINED();
 }
@@ -3243,7 +3222,6 @@ Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-        Debug_LOG("%d/%d methodName:%s", i, nMethods, methodName.string());
         auto &_methodInfos = mapNameToMethodInfos[methodName];
         if (_methodInfos == nullptr)
         {
