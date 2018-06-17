@@ -30,18 +30,23 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
     Elastos::Boolean isDummy;
     AutoPtr<IDataTypeInfo> typeInfo;
     IDataTypeInfo *_typeInfo;
+
     ITypeAliasInfo *typeAliasInfo = const_cast<ITypeAliasInfo *>(ptypeAliasInfo);
+
     auto &_typeAlias = _mapTypeAliasInfoToCARTypeAlias[typeAliasInfo];
     if (!_typeAlias.IsEmpty())
         return scope.Escape(New(_typeAlias));
+
     typeAlias = New<Object>();
     DefineOwnProperty(typeAlias,
                       New("$what").ToLocalChecked(),
                       New("CARTypeAlias").ToLocalChecked(),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
     ec = typeAliasInfo->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     DefineOwnProperty(typeAlias,
                       New("$name").ToLocalChecked(),
                       ToValue(name),
@@ -49,6 +54,7 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
     ec = typeAliasInfo->IsDummy(&isDummy);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     DefineOwnProperty(typeAlias,
                       New("isDummy").ToLocalChecked(),
                       ToValueFromBoolean(isDummy),
@@ -56,12 +62,16 @@ Local<Object> CARTypeAlias(ITypeAliasInfo const *ptypeAliasInfo)
     ec = typeAliasInfo->GetTypeInfo(&_typeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     typeInfo = _typeInfo, _typeInfo->Release();
     DefineOwnProperty(typeAlias,
                       New("realType").ToLocalChecked(),
                       CARDataType(typeInfo),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+
     _typeAlias.Reset(typeAlias);
+
     return scope.Escape(typeAlias);
 }
+
 CAR_BRIDGE_NAMESPACE_END

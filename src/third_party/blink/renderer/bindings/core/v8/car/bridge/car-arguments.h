@@ -11,6 +11,7 @@ CAR_BRIDGE_NAMESPACE_BEGIN
 struct CARArgumentBase : WeakExternalBase
 {
     Nan::Persistent<v8::Value> value;
+
 protected:
     ~CARArgumentBase() override
     {
@@ -21,6 +22,7 @@ struct CalleeAllocCARArray: CARArgumentBase
 {
     Elastos::AutoPtr<ICarArrayInfo> carArrayInfo;
     Elastos::CarQuintet **carQuintet = nullptr;
+
 protected:
     ~CalleeAllocCARArray() override = default;
 };
@@ -31,6 +33,7 @@ struct CalleeAllocStruct: CARArgumentBase
 {
     Elastos::AutoPtr<IStructInfo> structInfo;
     void **struct_ = nullptr;
+
 protected:
     ~CalleeAllocStruct() override = default;
 };
@@ -40,6 +43,7 @@ _CalleeAllocStruct * CalleeAllocStruct_(IStructInfo *structInfo, void **struct_)
 struct CallerAllocInt16: CARArgumentBase
 {
     Elastos::Int16 *i16 = nullptr;
+
 protected:
     ~CallerAllocInt16() override = default;
 };
@@ -49,6 +53,7 @@ _CallerAllocInt16 * CallerAllocInt16_(Elastos::Int16 *i16);
 struct CallerAllocInt32: CARArgumentBase
 {
     Elastos::Int32 *i32 = nullptr;
+
 protected:
     ~CallerAllocInt32() override = default;
 };
@@ -58,6 +63,7 @@ _CallerAllocInt32 * CallerAllocInt32_(Elastos::Int32 *i32);
 struct CallerAllocInt64: CARArgumentBase
 {
     Elastos::Int64 *i64 = nullptr;
+
 protected:
     ~CallerAllocInt64() override = default;
 };
@@ -67,6 +73,7 @@ _CallerAllocInt64 * CallerAllocInt64_(Elastos::Int64 *i64);
 struct CallerAllocByte: CARArgumentBase
 {
     Elastos::Byte *byte = nullptr;
+
 protected:
     ~CallerAllocByte() override = default;
 };
@@ -76,6 +83,7 @@ _CallerAllocByte * CallerAllocByte_(Elastos::Byte *byte);
 struct CallerAllocFloat: CARArgumentBase
 {
     Elastos::Float *f = nullptr;
+
 protected:
     ~CallerAllocFloat() override = default;
 };
@@ -85,6 +93,7 @@ _CallerAllocFloat * CallerAllocFloat_(Elastos::Float *f);
 struct CallerAllocDouble: CARArgumentBase
 {
     Elastos::Double *d = nullptr;
+
 protected:
     ~CallerAllocDouble() override = default;
 };
@@ -94,6 +103,7 @@ _CallerAllocDouble * CallerAllocDouble_(Elastos::Double *d);
 struct CallerAllocChar32: CARArgumentBase
 {
     Elastos::Char32 *c32 = nullptr;
+
 protected:
     ~CallerAllocChar32() override = default;
 };
@@ -103,6 +113,7 @@ _CallerAllocChar32 * CallerAllocChar32_(Elastos::Char32 *c32);
 struct CallerAllocString: CARArgumentBase
 {
     Elastos::String *s = nullptr;
+
 protected:
     ~CallerAllocString() override = default;
 };
@@ -112,6 +123,7 @@ _CallerAllocString * CallerAllocString_(Elastos::String *s);
 struct CallerAllocBoolean: CARArgumentBase
 {
     Elastos::Boolean *b = nullptr;
+
 protected:
     ~CallerAllocBoolean() override = default;
 };
@@ -121,6 +133,7 @@ _CallerAllocBoolean * CallerAllocBoolean_(Elastos::Boolean *b);
 struct CallerAllocEMuid: CARArgumentBase
 {
     Elastos::EMuid *id = nullptr;
+
 protected:
     ~CallerAllocEMuid() override = default;
 };
@@ -130,6 +143,7 @@ _CallerAllocEMuid * CallerAllocEMuid_(Elastos::EMuid *id);
 struct CallerAllocEGuid: CARArgumentBase
 {
     Elastos::EGuid *id = nullptr;
+
 protected:
     ~CallerAllocEGuid()           override = default;
 };
@@ -139,6 +153,7 @@ _CallerAllocEGuid * CallerAllocEGuid_(Elastos::EGuid *id);
 struct CallerAllocECode: CARArgumentBase
 {
     Elastos::ECode *ecode = nullptr;
+
 protected:
     ~CallerAllocECode() override = default;
 };
@@ -148,6 +163,7 @@ _CallerAllocECode * CallerAllocECode_(Elastos::ECode *ecode);
 struct CallerAllocLocalPtr: CARArgumentBase
 {
     void **localPtr = nullptr;
+
 protected:
     ~CallerAllocLocalPtr() override = default;
 };
@@ -158,6 +174,7 @@ struct CallerAllocLocalType: CARArgumentBase
 {
     Elastos::AutoPtr<IDataTypeInfo> dataTypeInfo;
     void *localTypeObject = nullptr;
+
 protected:
     ~CallerAllocLocalType() override = default;
 };
@@ -167,6 +184,7 @@ _CallerAllocLocalType * CallerAllocLocalType_(IDataTypeInfo *dataTypeInfo, void 
 struct CallerAllocEnum: CARArgumentBase
 {
     Elastos::Int32 *enum_ = nullptr;
+
 protected:
     ~CallerAllocEnum() override = default;
 };
@@ -177,6 +195,7 @@ struct CallerAllocCARArray: CARArgumentBase
 {
     Elastos::AutoPtr<ICarArrayInfo > carArrayInfo;
     Elastos::AutoPtr<IVariableOfCarArray> variableOfCARArray;
+
 protected:
     ~CallerAllocCARArray() override = default;
 };
@@ -187,6 +206,7 @@ struct CallerAllocStruct: CARArgumentBase
 {
     Elastos::AutoPtr<IStructInfo> structInfo;
     Elastos::AutoPtr<IVariableOfStruct> variableOfStruct;
+
 protected:
     ~CallerAllocStruct() override = default;
 };
@@ -197,6 +217,7 @@ struct CallerAllocInterface: CARArgumentBase
 {
     Elastos::AutoPtr<IInterfaceInfo> interfaceInfo;
     IInterface **interface_ = nullptr;
+
 protected:
     ~CallerAllocInterface() override = default;
 };

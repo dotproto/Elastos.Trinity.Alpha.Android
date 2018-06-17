@@ -4,6 +4,7 @@
 #include <nan.h>
 #include <elastos.h>
 #include "macros.h"
+
 CAR_BRIDGE_NAMESPACE_BEGIN
 extern v8::Local<v8::Object> CARConstructor(IConstructorInfo const *constructorInfo);
 extern v8::Local<v8::Object> CARConstructor(size_t nConstructorInfos, IConstructorInfo *constructorInfos[]);
@@ -13,4 +14,5 @@ extern v8::Local<v8::Object> CARCallbackMethod(ICallbackMethodInfo const *callba
 extern v8::Local<v8::Object> CARCallbackMethod(
     size_t nCallbackMethodInfos, ICallbackMethodInfo *callbackMethodInfos[]);
 CAR_BRIDGE_NAMESPACE_END
+
 #endif

@@ -140,6 +140,7 @@ Local<Value> ToValue(Error const &error)
     _error = New<Object>();
     type = error.type();
     code = error.code();
+ 
     switch (type)
     {
     case Error::TYPE_INTRINSIC:
@@ -153,10 +154,12 @@ Local<Value> ToValue(Error const &error)
     default:
         abort();
     }
+ 
     Nan::Set(_error, New("type").ToLocalChecked(), New(_type).ToLocalChecked());
     Nan::Set(_error, New("name").ToLocalChecked(), New(name).ToLocalChecked());
     Nan::Set(_error, New("code").ToLocalChecked(), New<v8::Int32>(code));
     Nan::Set(_error, New("message").ToLocalChecked(), New(error.message()).ToLocalChecked());
+ 
     return scope.Escape(_error);
 }
 

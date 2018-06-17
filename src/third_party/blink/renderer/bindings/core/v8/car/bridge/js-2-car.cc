@@ -350,11 +350,13 @@ bool CanBeUsedAsString(Local<Value> value, int *priority)
 void ToString(Elastos::String &s, Local<Value> value)
 {
     s = *Utf8String(value);
+    Debug_LOG("%s", s.string());
 }
 
 Local<Value> ToValue(Elastos::String const &s)
 {
     //return New((char const *)s).ToLocalChecked();
+    Debug_LOG("%s", s.string());
     return New((char const *)s, s.GetByteLength()).ToLocalChecked();
 }
 
@@ -392,16 +394,20 @@ Local<Value> ToValueFromBoolean(Elastos::Boolean b)
     _b = b != FALSE ? true : false;
     return New(_b);
 }
+
 inline bool _IsUInt16(Local<Value> value)
 {
     if (!value->IsUint32())
         return false;
+
     return To<uint32_t>(value).FromJust() <= UINT16_MAX;
 }
+
 inline bool _IsUInt8(Local<Value> value)
 {
     if (!value->IsUint32())
         return false;
+
     return To<uint32_t>(value).FromJust() <= UINT8_MAX;
 }
 
@@ -469,10 +475,11 @@ void ToEMuid(EMuid *id, Local<Value> value)
     Local<v8::Object> _id;
     Local<Array> data4;
     _id = value.As<v8::Object>();
-    id->mData1 = To<uint32_t>(Get(_id, New(".mData1").ToLocalChecked()).ToLocalChecked()).FromJust();
-    id->mData2 = To<uint32_t>(Get(_id, New(".mData2").ToLocalChecked()).ToLocalChecked()).FromJust();
-    id->mData3 = To<uint32_t>(Get(_id, New(".mData3").ToLocalChecked()).ToLocalChecked()).FromJust();
-    data4 = Get(_id, New(".mData4").ToLocalChecked()).ToLocalChecked().As<Array>();
+
+    id->mData1 = To<uint32_t>(Get(_id, New("mData1").ToLocalChecked()).ToLocalChecked()).FromJust();
+    id->mData2 = To<uint32_t>(Get(_id, New("mData2").ToLocalChecked()).ToLocalChecked()).FromJust();
+    id->mData3 = To<uint32_t>(Get(_id, New("mData3").ToLocalChecked()).ToLocalChecked()).FromJust();
+    data4 = Get(_id, New("mData4").ToLocalChecked()).ToLocalChecked().As<Array>();
     for (size_t i = 0; i < 8; ++i)
     {
         Nan::HandleScope scope_;
@@ -485,17 +492,22 @@ Local<Value> ToValue(EMuid  *id)
     Nan::EscapableHandleScope scope;
     Local<v8::Object> _id;
     Local<Array> data4;
+
     _id = New<v8::Object>();
+
     Nan::Set(_id, New(".mData1").ToLocalChecked(), New<Uint32>(id->mData1));
     Nan::Set(_id, New(".mData2").ToLocalChecked(), New<Uint32>(id->mData2));
     Nan::Set(_id, New(".mData3").ToLocalChecked(), New<Uint32>(id->mData3));
     data4 = New<Array>(8);
+
     for (size_t i = 0; i < 8; ++i)
     {
         Nan::HandleScope scope_;
         Nan::Set(data4, i, New<Uint32>(id->mData4[i]));
     }
+
     Nan::Set(_id, New(".mData4").ToLocalChecked(), data4);
+
     return scope.Escape(_id);
 }
 
@@ -503,8 +515,10 @@ bool IsEGuid(Local<Value> value)
 {
     Nan::HandleScope scope;
     Local<v8::Object> object;
+
     if (!value->IsObject())
         return false;
+
     object = value.As<v8::Object>();
     if (GetOwnPropertyNames(object).ToLocalChecked()->Length() != 3)
         return false;
@@ -520,6 +534,7 @@ bool IsEGuid(Local<Value> value)
         return false;
     if (!Get(object, New(".mCarcode").ToLocalChecked()).ToLocalChecked()->IsUint32())
         return false;
+
     return true;
 }
 
@@ -528,16 +543,21 @@ bool CanBeUsedAsEGuid(Local<Value> value, int *priority)
     Nan::HandleScope scope;
     Local<v8::Object> object;
     int _priority;
+
     if (!To<v8::Object>(value).ToLocal(&object))
         return false;
+
     if (!IsEGuid(object))
         return false;
+
     if (value->IsObject())
         _priority = 0;
     else
         _priority = 1;
+
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -546,10 +566,12 @@ void ToEGuid(EGuid *id, Local<Value> value)
     Nan::HandleScope scope;
     Local<v8::Object> _id;
     _id = value.As<v8::Object>();
+
     ToEMuid(&id->mClsid, Get(_id, New(".mClsid").ToLocalChecked()).ToLocalChecked());
     id->mUunm = strdup(*Utf8String(Get(_id, New(".mUunm").ToLocalChecked()).ToLocalChecked()));
     if (id->mUunm == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     id->mCarcode = To<uint32_t>(Get(_id, New(".mCarcode").ToLocalChecked()).ToLocalChecked()).FromJust();
 }
 
@@ -557,10 +579,13 @@ Local<Value> ToValue(EGuid  *id)
 {
     Nan::EscapableHandleScope scope;
     Local<v8::Object> _id;
+
     _id = New<v8::Object>();
+
     Nan::Set(_id, New(".mClsid").ToLocalChecked(), ToValue(&id->mClsid));
     Nan::Set(_id, New(".mUunm").ToLocalChecked(), New(id->mUunm).ToLocalChecked());
     Nan::Set(_id, New(".mCarcode").ToLocalChecked(), New<Uint32>(id->mCarcode));
+
     return scope.Escape(_id);
 }
 
@@ -574,8 +599,10 @@ bool CanBeUsedAsECode(Local<Value> value, int *priority)
     Nan::HandleScope scope;
     Local<v8::Int32> i32;
     int _priority;
+
     if (!To<v8::Int32>(value).ToLocal(&i32))
         return false;
+
     if (!IsECode(i32))
         return false;
     if (value->IsInt32())
@@ -592,6 +619,7 @@ bool CanBeUsedAsECode(Local<Value> value, int *priority)
         _priority = 5;
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -616,11 +644,13 @@ bool CanBeUsedAsLocalPtr(Local<Value> value, int *priority)
     int _priority;
     Local<Number> number;
     double integer;
+
     if (IsLocalPtr(value))
     {
         _priority = 0;
         goto exit;
     }
+
     if (!To<Number>(value).ToLocal(&number))
         return false;
     if (!_IsInteger(number, &integer))
@@ -637,6 +667,7 @@ bool CanBeUsedAsLocalPtr(Local<Value> value, int *priority)
         _priority = 4;
     else
         _priority = 5;
+
 exit:
     if (priority != nullptr)
         *priority = _priority;
@@ -656,26 +687,7 @@ Local<Value> ToValue(void *localPtr)
 {
     return New<External>(localPtr);
 }
-#if 0
-bool IsLocalType(IDataTypeInfo  *dataTypeInfo, Local<Value> value)
-{
-    return false;
-}
 
-bool CanBeUsedAsLocalType(IDataTypeInfo  *dataTypeInfo, Local<Value> value, int *priority)
-{
-    return false;
-}
-
-void ToLocalType(IDataTypeInfo  *dataTypeInfo, void *localTypeObject, Local<Value> value)
-{
-}
-
-Local<Value> ToValue(IDataTypeInfo  *dataTypeInfo, void  *localTypeObject)
-{
-    return Local<Value>();
-}
-#endif
 bool IsEnum(Local<Value> value)
 {
     return value->IsInt32();
@@ -686,10 +698,13 @@ bool CanBeUsedAsEnum(Local<Value> value, int *priority)
     Nan::HandleScope scope;
     Local<v8::Int32> i32;
     int _priority;
+
     if (!To<v8::Int32>(value).ToLocal(&i32))
         return false;
+
     if (!IsEnum(i32))
         return false;
+
     if (value->IsInt32())
         _priority = 0;
     else if (value->IsNumber())
@@ -704,6 +719,7 @@ bool CanBeUsedAsEnum(Local<Value> value, int *priority)
         _priority = 5;
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -722,13 +738,16 @@ bool IsCARArray(ICarArrayInfo *carArrayInfo, Local<Value> value)
     Local<Array> array;
     ECode ec;
     AutoPtr<IDataTypeInfo> elementTypeInfo;
+
     IDataTypeInfo *_elementTypeInfo;
     if (!value->IsArray())
         return false;
+
     array = value.As<Array>();
     ec = carArrayInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     for (size_t i = 0, length = array->Length(); i < length; ++i)
     {
@@ -736,6 +755,7 @@ bool IsCARArray(ICarArrayInfo *carArrayInfo, Local<Value> value)
         if (!Is(elementTypeInfo, Get(array, i).ToLocalChecked()))
             return false;
     }
+
     return true;
 }
 
@@ -744,6 +764,7 @@ bool CanBeUsedAsCARArray(ICarArrayInfo  *carArrayInfo, Local<Value> value, int *
     Nan::HandleScope scope;
     Local<v8::Object> object;
     int _priority;
+
     if (!To<v8::Object>(value).ToLocal(&object))
         return false;
     if (!IsCARArray(carArrayInfo, object))
@@ -881,15 +902,7 @@ inline void _SetLocalPtrElement(ArraySetter *arraySetter, Elastos::Int32 index, 
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 }
-#if 0
-template<class ArraySetter>
-inline void _SetLocalTypeElement(ArraySetter *arraySetter,
-                                 Elastos::Int32 index,
-                                 Local<Value> value,
-                                 IDataTypeInfo  *dataTypeInfo)
-{
-}
-#endif
+
 template<class ArraySetter>
 inline void _SetEnumElement(ArraySetter *arraySetter, Elastos::Int32 index, Local<Value> value)
 {
@@ -898,15 +911,7 @@ inline void _SetEnumElement(ArraySetter *arraySetter, Elastos::Int32 index, Loca
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 }
-#if 0
-template<class ArraySetter>
-inline void _SetCARArrayElement(ArraySetter *arraySetter,
-                                Elastos::Int32 index,
-                                Local<Value> value,
-                                IDataTypeInfo  *dataTypeInfo)
-{
-}
-#endif
+
 void ToCPPVector(ICppVectorInfo  *cppVectorInfo, ICppVectorSetter *cppVectorSetter, Local<Value> value);
 template<class ArraySetter>
 inline void _SetCPPVectorElement(ArraySetter *arraySetter,
@@ -917,9 +922,11 @@ inline void _SetCPPVectorElement(ArraySetter *arraySetter,
     ECode ec;
     AutoPtr<ICppVectorSetter> cppVectorSetter;
     ICppVectorSetter *_cppVectorSetter;
+
     ec = arraySetter->GetCppVectorElementSetter(index, &_cppVectorSetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     cppVectorSetter = _cppVectorSetter, _cppVectorSetter->Release();
     ToCPPVector(static_cast<ICppVectorInfo *>(dataTypeInfo), cppVectorSetter, value);
 }
@@ -934,9 +941,11 @@ inline void _SetStructElement(ArraySetter *arraySetter,
     ECode ec;
     AutoPtr<IStructSetter> structSetter;
     IStructSetter *_structSetter;
+
     ec = arraySetter->GetStructElementSetter(index, &_structSetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     structSetter = _structSetter, _structSetter->Release();
     ToStruct(static_cast<IStructInfo *>(dataTypeInfo), structSetter, value);
 }
@@ -962,13 +971,16 @@ void ToCARArray(ICarArrayInfo *carArrayInfo, ICarArraySetter *carArraySetter, Lo
     CarDataType dataType;
     SetElement setElement;
     Local<Array> array;
+
     ec = carArrayInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     ec = elementTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -1007,16 +1019,6 @@ void ToCARArray(ICarArrayInfo *carArrayInfo, ICarArraySetter *carArraySetter, Lo
     case CarDataType_ECode:
         setElement = (SetElement)&_SetECodeElement<ICarArraySetter>;
         break;
-#if 0
-    case CarDataType_LocalPtr:
-        setElement = (SetElement)&_SetLocalPtrElement<ICarArraySetter>;
-        break;
-#endif
-#if 0
-    case CarDataType_LocalType:
-        setElement = (SetElement)&_SetLocalTypeElement<ICarArraySetter>;
-        break;
-#endif
     case CarDataType_Enum:
         setElement = (SetElement)&_SetEnumElement<ICarArraySetter>;
         break;
@@ -1054,13 +1056,17 @@ void ToCARArray(ICarArrayInfo *carArrayInfo, CarQuintet *carQuintet, Local<Value
     IVariableOfCarArray *_variableOfCARArray;
     AutoPtr<ICarArraySetter> carArraySetter;
     ICarArraySetter *_carArraySetter;
+
     ec = carArrayInfo->CreateVariableBox(carQuintet, &_variableOfCARArray);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
+
     ec = variableOfCARArray->GetSetter(&_carArraySetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     carArraySetter = _carArraySetter, _carArraySetter->Release();
     ToCARArray(carArrayInfo, carArraySetter, value);
 }
@@ -1207,15 +1213,7 @@ inline Local<Value> _GetLocalPtrElement(ArrayGetter *arrayGetter, Elastos::Int32
         Throw_LOG(Error::TYPE_ELASTOS, ec);
     return ToValue(localPtr);
 }
-#if 0
-template<class ArrayGetter>
-inline Local<Value> _GetLocalTypeElement(ArrayGetter  *arrayGetter,
-        Elastos::Int32 index,
-        IDataTypeInfo  *dataTypeInfo)
-{
-    return Local<Value>();
-}
-#endif
+
 template<class ArrayGetter>
 inline Local<Value> _GetEnumElement(ArrayGetter *arrayGetter, Elastos::Int32 index)
 {
@@ -1235,6 +1233,7 @@ inline Local<Value> _GetCARArrayElement(ArrayGetter  *arrayGetter,
     return Local<Value>();
 }
 #endif
+
 Local<Value> ToValue(ICppVectorInfo  *cppVectorInfo, ICppVectorGetter  *cppVectorGetter);
 template<class ArrayGetter>
 inline Local<Value> _GetCPPVectorElement(ArrayGetter  *arrayGetter,
@@ -1244,10 +1243,13 @@ inline Local<Value> _GetCPPVectorElement(ArrayGetter  *arrayGetter,
     ECode ec;
     AutoPtr<ICppVectorGetter > cppVectorGetter;
     ICppVectorGetter *_cppVectorGetter;
+
     ec = arrayGetter->GetCppVectorElementGetter(index, &_cppVectorGetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     cppVectorGetter = _cppVectorGetter, _cppVectorGetter->Release();
+
     return ToValue(static_cast<ICppVectorInfo *>(dataTypeInfo), cppVectorGetter);
 }
 
@@ -1260,10 +1262,13 @@ inline Local<Value> _GetStructElement(ArrayGetter  *arrayGetter,
     ECode ec;
     AutoPtr<IStructGetter > structGetter;
     IStructGetter *_structGetter;
+
     ec = arrayGetter->GetStructElementGetter(index, &_structGetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     structGetter = _structGetter, _structGetter->Release();
+
     return ToValue(static_cast<IStructInfo *>(dataTypeInfo), structGetter);
 }
 
@@ -1272,9 +1277,11 @@ inline Local<Value> _GetCARObjectElement(ArrayGetter  *arrayGetter, Elastos::Int
 {
     ECode ec;
     IInterface *carObject;
+
     ec = arrayGetter->GetObjectPtrElement(index, &carObject);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     return ToValue(carObject);
 }
 
@@ -1288,13 +1295,16 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, ICarArrayGetter *carArrayGette
     GetElement getElement;
     Elastos::Int32 used;
     Local<Array> array;
+
     ec = carArrayInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     ec = elementTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -1333,16 +1343,7 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, ICarArrayGetter *carArrayGette
     case CarDataType_ECode:
         getElement = (GetElement)&_GetECodeElement<ICarArrayGetter>;
         break;
-#if 0
-    case CarDataType_LocalPtr:
-        getElement = (GetElement)&_GetLocalPtrElement<ICarArrayGetter>;
-        break;
-#endif
-#if 0
-    case CarDataType_LocalType:
-        getElement = (GetElement)&_GetLocalTypeElement<ICarArrayGetter>;
-        break;
-#endif
+
     case CarDataType_Enum:
         getElement = (GetElement)&_GetEnumElement<ICarArrayGetter>;
         break;
@@ -1365,15 +1366,18 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, ICarArrayGetter *carArrayGette
     default:
         abort();
     }
+
     ec = carArrayGetter->GetUsed(&used);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     array = New<Array>(used);
     for (Elastos::Int32 i = 0; i < used; ++i)
     {
         Nan::HandleScope scope;
         Nan::Set(array, i, (*getElement)(carArrayGetter, i, elementTypeInfo.Get()));
     }
+
     return array;
 }
 
@@ -1384,13 +1388,16 @@ Local<Value> ToValue(ICarArrayInfo *carArrayInfo, CarQuintet  *carQuintet)
     IVariableOfCarArray *_variableOfCARArray;
     AutoPtr<ICarArrayGetter > carArrayGetter;
     ICarArrayGetter *_carArrayGetter;
+
     ec = carArrayInfo->CreateVariableBox(const_cast<CarQuintet *>(carQuintet), &_variableOfCARArray);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     variableOfCARArray = _variableOfCARArray, _variableOfCARArray->Release();
     ec = variableOfCARArray->GetGetter(&_carArrayGetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     carArrayGetter = _carArrayGetter, _carArrayGetter->Release();
     return ToValue(carArrayInfo, carArrayGetter);
 }
@@ -1402,17 +1409,22 @@ bool IsCPPVector(ICppVectorInfo *cppVectorInfo, Local<Value> value)
     Elastos::Int32 length;
     AutoPtr<IDataTypeInfo > elementTypeInfo;
     IDataTypeInfo *_elementTypeInfo;
+
     if (!value->IsArray())
         return false;
+
     array = value.As<Array>();
     ec = cppVectorInfo->GetLength(&length);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     if (array->Length() != (uint32_t)length)
         return false;
+
     ec = cppVectorInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     for (Elastos::Int32 i = 0; i < length; ++i)
     {
@@ -1420,6 +1432,7 @@ bool IsCPPVector(ICppVectorInfo *cppVectorInfo, Local<Value> value)
         if (!Is(elementTypeInfo, Get(array, i).ToLocalChecked()))
             return false;
     }
+
     return true;
 }
 
@@ -1428,6 +1441,7 @@ bool CanBeUsedAsCPPVector(ICppVectorInfo  *cppVectorInfo, Local<Value> value, in
     Nan::HandleScope scope;
     Local<v8::Object> object;
     int _priority;
+
     if (!To<v8::Object>(value).ToLocal(&object))
         return false;
     if (!IsCPPVector(cppVectorInfo, object))
@@ -1440,6 +1454,7 @@ bool CanBeUsedAsCPPVector(ICppVectorInfo  *cppVectorInfo, Local<Value> value, in
         _priority = 2;
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -1452,13 +1467,16 @@ void ToCPPVector(ICppVectorInfo *cppVectorInfo, ICppVectorSetter *cppVectorSette
     CarDataType dataType;
     SetElement setElement;
     Local<Array> array;
+
     ec = cppVectorInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     ec = elementTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -1502,11 +1520,6 @@ void ToCPPVector(ICppVectorInfo *cppVectorInfo, ICppVectorSetter *cppVectorSette
     case CarDataType_LocalPtr:
         setElement = (SetElement)&_SetLocalPtrElement<ICppVectorSetter>;
         break;
-#if 0
-    case CarDataType_LocalType:
-        setElement = (SetElement)&_SetLocalTypeElement<ICppVectorSetter>;
-        break;
-#endif
     case CarDataType_Enum:
         setElement = (SetElement)&_SetEnumElement<ICppVectorSetter>;
         break;
@@ -1541,6 +1554,7 @@ void ToCPPVector(ICppVectorInfo  *cppVectorInfo, void *cppVector, Local<Value> v
 {
 }
 #endif
+
 Local<Value> ToValue(ICppVectorInfo *cppVectorInfo, ICppVectorGetter *cppVectorGetter)
 {
     typedef Local<Value> (*GetElement)(ICppVectorGetter * cppVectorGetter, Elastos::Int32 index, ...);
@@ -1551,13 +1565,16 @@ Local<Value> ToValue(ICppVectorInfo *cppVectorInfo, ICppVectorGetter *cppVectorG
     GetElement getElement;
     Elastos::Int32 length;
     Local<Array> array;
+
     ec = cppVectorInfo->GetElementTypeInfo(&_elementTypeInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     elementTypeInfo = _elementTypeInfo, _elementTypeInfo->Release();
     ec = elementTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -1601,11 +1618,6 @@ Local<Value> ToValue(ICppVectorInfo *cppVectorInfo, ICppVectorGetter *cppVectorG
     case CarDataType_LocalPtr:
         getElement = (GetElement)&_GetLocalPtrElement<ICppVectorGetter>;
         break;
-#if 0
-    case CarDataType_LocalType:
-        getElement = (GetElement)&_GetLocalTypeElement<ICppVectorGetter>;
-        break;
-#endif
     case CarDataType_Enum:
         getElement = (GetElement)&_GetEnumElement<ICppVectorGetter>;
         break;
@@ -1645,6 +1657,7 @@ Local<Value> ToValue(ICppVectorInfo  *cppVectorInfo, void  *cppVector)
     return Local<Value>();
 }
 #endif
+
 bool IsStruct(IStructInfo *structInfo, Local<Value> value)
 {
     Nan::HandleScope scope;
@@ -1652,20 +1665,26 @@ bool IsStruct(IStructInfo *structInfo, Local<Value> value)
     ECode ec;
     Elastos::Int32 nFields;
     AutoPtr<ArrayOf<IFieldInfo *> > fieldInfos;
+
     if (!value->IsObject())
         return false;
+
     object = value.As<v8::Object>();
     ec = structInfo->GetFieldCount(&nFields);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     if (GetOwnPropertyNames(object).ToLocalChecked()->Length() != (uint32_t)nFields)
         return false;
+
     fieldInfos = ArrayOf<IFieldInfo *>::Alloc(nFields);
     if (fieldInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = structInfo->GetAllFieldInfos(reinterpret_cast<ArrayOf<IFieldInfo *> *>(fieldInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     for (Elastos::Int32 i = 0; i < nFields; ++i)
     {
         Nan::HandleScope scope_;
@@ -1674,18 +1693,23 @@ bool IsStruct(IStructInfo *structInfo, Local<Value> value)
         AutoPtr<IDataTypeInfo > typeInfo;
         IDataTypeInfo *_typeInfo;
         fieldInfo = (*fieldInfos)[i];
+
         ec = fieldInfo->GetName(&name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         if (!HasOwnProperty(object, ToValue(name).As<v8::String>()).FromJust())
             return false;
+
         ec = fieldInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         typeInfo = _typeInfo, _typeInfo->Release();
         if (!Is(typeInfo, Get(object, ToValue(name)).ToLocalChecked()))
             return false;
     }
+
     return true;
 }
 
@@ -1694,16 +1718,20 @@ bool CanBeUsedAsStruct(IStructInfo *structInfo, Local<Value> value, int *priorit
     Nan::HandleScope scope;
     Local<v8::Object> object;
     int _priority;
+
     if (!To<v8::Object>(value).ToLocal(&object))
         return false;
+
     if (!IsStruct(structInfo, object))
         return false;
+
     if (value->IsObject())
         _priority = 0;
     else
         _priority = 1;
     if (priority != nullptr)
         *priority = _priority;
+
     return true;
 }
 
@@ -1713,15 +1741,19 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
     Elastos::Int32 nFields;
     AutoPtr<ArrayOf<IFieldInfo *> > fieldInfos;
     Local<v8::Object> object;
+
     ec = structInfo->GetFieldCount(&nFields);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     fieldInfos = ArrayOf<IFieldInfo *>::Alloc(nFields);
     if (fieldInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = structInfo->GetAllFieldInfos(reinterpret_cast<ArrayOf<IFieldInfo *> *>(fieldInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     object = value_.As<v8::Object>();
     for (Elastos::Int32 i = 0; i < nFields; ++i)
     {
@@ -1733,17 +1765,21 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
         IDataTypeInfo *_typeInfo;
         CarDataType dataType;
         fieldInfo = (*fieldInfos)[i];
+
         ec = fieldInfo->GetName(&name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         value = Get(object, ToValue(name)).ToLocalChecked();
         ec = fieldInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         typeInfo = _typeInfo, _typeInfo->Release();
         ec = typeInfo->GetDataType(&dataType);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         switch (dataType)
         {
         case CarDataType_Int16:
@@ -1835,9 +1871,11 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
         {
             AutoPtr<ICppVectorSetter> cppVectorSetter;
             ICppVectorSetter *_cppVectorSetter;
+
             ec = structSetter->GetCppVectorFieldSetter(name, &_cppVectorSetter);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             cppVectorSetter = _cppVectorSetter, _cppVectorSetter->Release();
             ToCPPVector(static_cast<ICppVectorInfo *>(typeInfo.Get()), cppVectorSetter, value);
         }
@@ -1846,9 +1884,11 @@ void ToStruct(IStructInfo *structInfo, IStructSetter *structSetter, Local<Value>
         {
             AutoPtr<IStructSetter> _structSetter;
             IStructSetter *__structSetter;
+
             ec = structSetter->GetStructFieldSetter(name, &__structSetter);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             _structSetter = __structSetter, __structSetter->Release();
             ToStruct(static_cast<IStructInfo *>(typeInfo.Get()), _structSetter, value);
         }
@@ -1870,13 +1910,16 @@ void ToStruct(IStructInfo *structInfo, void *struct_, Local<Value> value)
     IVariableOfStruct *_variableOfStruct;
     AutoPtr<IStructSetter> structSetter;
     IStructSetter *_structSetter;
+
     ec = structInfo->CreateVariableBox(struct_, &_variableOfStruct);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
     ec = variableOfStruct->GetSetter(&_structSetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     structSetter = _structSetter, _structSetter->Release();
     ToStruct(structInfo, structSetter, value);
 }
@@ -1890,12 +1933,15 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
     ec = structInfo->GetFieldCount(&nFields);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+ 
     fieldInfos = ArrayOf<IFieldInfo *>::Alloc(nFields);
     if (fieldInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+ 
     ec = structInfo->GetAllFieldInfos(reinterpret_cast<ArrayOf<IFieldInfo *> *>(fieldInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+ 
     object = New<v8::Object>();
     for (Elastos::Int32 i = 0; i < nFields; ++i)
     {
@@ -1907,16 +1953,20 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
         CarDataType dataType;
         Local<Value> value;
         fieldInfo = (*fieldInfos)[i];
+
         ec = fieldInfo->GetName(&name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         ec = fieldInfo->GetTypeInfo(&_typeInfo);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
         typeInfo = _typeInfo, _typeInfo->Release();
+
         ec = typeInfo->GetDataType(&dataType);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         switch (dataType)
         {
         case CarDataType_Int16:
@@ -1925,6 +1975,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetInt16Field(name, &i16);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(i16);
         }
         break;
@@ -1934,6 +1985,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetInt32Field(name, &i32);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(i32);
         }
         break;
@@ -1943,6 +1995,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetInt64Field(name, &i64);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(i64);
         }
         break;
@@ -1952,6 +2005,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetByteField(name, &byte);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(byte);
         }
         break;
@@ -1961,6 +2015,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetFloatField(name, &f);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(f);
         }
         break;
@@ -1970,6 +2025,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetDoubleField(name, &d);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(d);
         }
         break;
@@ -1979,6 +2035,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetCharField(name, &c32);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(c32);
         }
         break;
@@ -1992,6 +2049,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetBooleanField(name, &b);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValueFromBoolean(b);
         }
         break;
@@ -2001,6 +2059,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetEMuidField(name, &id);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(&id);
         }
         break;
@@ -2010,6 +2069,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetEGuidField(name, &id);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(&id);
         }
         break;
@@ -2019,6 +2079,7 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetECodeField(name, &ecode);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValueFromECode(ecode);
         }
         break;
@@ -2028,13 +2089,10 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
             ec = structGetter->GetLocalPtrField(name, &localPtr);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             value = ToValue(localPtr);
         }
         break;
-#if 0
-        case CarDataType_LocalType:
-            break;
-#endif
         case CarDataType_Enum:
         {
             Elastos::Int32 enum_;
@@ -2052,9 +2110,11 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
         {
             AutoPtr<ICppVectorGetter > cppVectorGetter;
             ICppVectorGetter *_cppVectorGetter;
+
             ec = structGetter->GetCppVectorFieldGetter(name, &_cppVectorGetter);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             cppVectorGetter = _cppVectorGetter, _cppVectorGetter->Release();
             value = ToValue(static_cast<ICppVectorInfo *>(typeInfo.Get()), cppVectorGetter);
         }
@@ -2063,9 +2123,11 @@ Local<Value> ToValue(IStructInfo *structInfo, IStructGetter *structGetter)
         {
             AutoPtr<IStructGetter > _structGetter;
             IStructGetter *__structGetter;
+
             ec = structGetter->GetStructFieldGetter(name, &__structGetter);
             if (FAILED(ec))
                 Throw_LOG(Error::TYPE_ELASTOS, ec);
+
             _structGetter = __structGetter, __structGetter->Release();
             value = ToValue(static_cast<IStructInfo *>(typeInfo.Get()), _structGetter);
         }
@@ -2089,13 +2151,17 @@ Local<Value> ToValue(IStructInfo *structInfo, void  *struct_)
     IVariableOfStruct *_variableOfStruct;
     AutoPtr<IStructGetter > structGetter;
     IStructGetter *_structGetter;
+
     ec = structInfo->CreateVariableBox((void *)struct_, &_variableOfStruct);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     variableOfStruct = _variableOfStruct, _variableOfStruct->Release();
+
     ec = variableOfStruct->GetGetter(&_structGetter);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     structGetter = _structGetter, _structGetter->Release();
     return ToValue(structInfo, structGetter);
 }
@@ -2109,18 +2175,23 @@ bool IsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
     AutoPtr<IClassInfo> classInfo;
     IClassInfo *_classInfo;
     Elastos::Boolean has;
+
     if (!IsCARObject(value))
         return false;
+
     carObject = CARObject::Unwrap<CARObject>(value.As<v8::Object>());
     if (carObject == nullptr)
         return false;
+
     ec = CObject::ReflectClassInfo(carObject->carObject(), &_classInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     classInfo = _classInfo, _classInfo->Release();
     ec = classInfo->HasInterfaceInfo(interfaceInfo, &has);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     return has != FALSE ? true : false;
 }
 
@@ -2132,21 +2203,26 @@ bool CanBeUsedAsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value, int
     Local<v8::Object> object;
     if (!value->IsObject())
         return false;
+
     if (IsInterface(interfaceInfo, value))
     {
         if (priority != nullptr)
             *priority = 0;
         return true;
     }
+
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     methodInfos = ArrayOf<IMethodInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     object = value.As<v8::Object>();
     for (Elastos::Int32 i = 0; i < nMethods; ++i)
     {
@@ -2156,11 +2232,14 @@ bool CanBeUsedAsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value, int
         ec = methodInfo->GetName(&methodName);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         if (!Has(object, ToValue(methodName).As<v8::String>()).FromJust())
             return false;
     }
+
     if (priority != nullptr)
         *priority = 1;
+
     return true;
 }
 
@@ -2172,21 +2251,27 @@ AutoPtr<IInterface> ToInterface(IInterfaceInfo *interfaceInfo, Local<Value> valu
     InterfaceID interfaceId;
     AutoPtr<IInterface> interface_;
     IInterface *_interface;
+
     if (!CanBeUsedAsInterface(interfaceInfo, value, &priority))
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
+
     object = value.As<v8::Object>();
     ec = interfaceInfo->GetId(&interfaceId);
+
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     if (priority == 0)
     {
         CARObject *carObject;
         carObject = CARObject::Unwrap<CARObject>(object);
         return carObject->carObject()->Probe(interfaceId);
     }
+
     ec = CARInterfaceAdapter::New(&_interface, interfaceInfo, object);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     interface_ = _interface, _interface->Release();
     return interface_;
 }
@@ -2200,9 +2285,11 @@ bool Is(IDataTypeInfo *dataTypeInfo, Local<Value> value)
 {
     ECode ec;
     CarDataType dataType;
+
     ec = dataTypeInfo->GetDataType(&dataType);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     switch (dataType)
     {
     case CarDataType_Int16:
@@ -2231,10 +2318,6 @@ bool Is(IDataTypeInfo *dataTypeInfo, Local<Value> value)
         return IsECode(value);
     case CarDataType_LocalPtr:
         return IsLocalPtr(value);
-#if 0
-    case CarDataType_LocalType:
-        return IsLocalType(value);
-#endif
     case CarDataType_Enum:
         return IsEnum(value);
     case CarDataType_ArrayOf:
@@ -2287,10 +2370,6 @@ bool CanBeUsedAs(IDataTypeInfo *dataTypeInfo, Local<Value> value, int *priority)
         return CanBeUsedAsECode(value, priority);
     case CarDataType_LocalPtr:
         return CanBeUsedAsLocalPtr(value, priority);
-#if 0
-    case CarDataType_LocalType:
-        return CanBeUsedAsLocalType(value, priority);
-#endif
     case CarDataType_Enum:
         return CanBeUsedAsEnum(value, priority);
     case CarDataType_ArrayOf:
@@ -2331,16 +2410,20 @@ bool IsGeneric(Local<Value> value)
     Elastos::Boolean isGeneric;
     if (!IsCARObject(value))
         return false;
+
     carObject = CARObject::Unwrap<CARObject>(value.As<v8::Object>());
     if (carObject == nullptr)
         return false;
+
     ec = CObject::ReflectClassInfo(carObject->carObject(), &_classInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     classInfo = _classInfo, _classInfo->Release();
     ec = classInfo->IsGeneric(&isGeneric);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     return isGeneric != FALSE ? true : false;
 }
 
@@ -2351,20 +2434,26 @@ bool IsRegime(Local<Value> value)
     AutoPtr<IClassInfo> classInfo;
     IClassInfo *_classInfo;
     Elastos::Boolean isRegime;
+
     if (!IsCARObject(value))
         return false;
+
     carObject = CARObject::Unwrap<CARObject>(value.As<v8::Object>());
     if (carObject == nullptr)
         return false;
+
     ec = CObject::ReflectClassInfo(carObject->carObject(), &_classInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     classInfo = _classInfo, _classInfo->Release();
     ec = classInfo->IsRegime(&isRegime);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     return isRegime != FALSE ? true : false;
 }
+
 IRegime *AsRegime(Local<Value> value)
 {
     return static_cast<IRegime *>(AsCARObject(value));
@@ -2377,18 +2466,23 @@ bool IsAspect(Local<Value> value)
     AutoPtr<IClassInfo> classInfo;
     IClassInfo *_classInfo;
     Elastos::Boolean isAspect;
+
     if (!IsCARObject(value))
         return false;
+
     carObject = CARObject::Unwrap<CARObject>(value.As<v8::Object>());
     if (carObject == nullptr)
         return false;
+
     ec = CObject::ReflectClassInfo(carObject->carObject(), &_classInfo);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     classInfo = _classInfo, _classInfo->Release();
     ec = classInfo->IsAspect(&isAspect);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     return isAspect != FALSE ? true : false;
 }
 

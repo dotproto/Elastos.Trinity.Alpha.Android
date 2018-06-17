@@ -18,21 +18,26 @@ v8::Local<v8::NumberObject> CARConstantoid(ConstantoidInfo  *constantoidInfo, ch
     Elastos::Int32 value;
     v8::Local<v8::NumberObject> constantoid;
     Elastos::String name;
+
     ec = constantoidInfo->GetValue(&value);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     constantoid = Nan::New<v8::NumberObject>(value);
     DefineOwnProperty(constantoid,
                       Nan::New("$what").ToLocalChecked(),
                       Nan::New(what).ToLocalChecked(),
                       static_cast<enum v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete | v8::DontEnum));
+
     ec = constantoidInfo->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     DefineOwnProperty(constantoid,
                       Nan::New("$name").ToLocalChecked(),
                       ToValue(name),
                       static_cast<enum v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete | v8::DontEnum));
+
     return scope.Escape(constantoid);
 }
 

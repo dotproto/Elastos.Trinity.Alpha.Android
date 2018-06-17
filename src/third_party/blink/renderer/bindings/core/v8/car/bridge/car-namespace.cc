@@ -187,12 +187,15 @@ static void _AddNamespacedEntryInfos(_MS2NEI *mapFullNameToNamespacedEntryInfo,
         Elastos::String name;
         Elastos::String fullName;
         namespacedEntryInfo = namespacedEntryInfos[i];
+
         ec = namespacedEntryInfo->GetNamespace(&namespace_);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         ec = namespacedEntryInfo->GetName(&name);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         fullName = namespace_ + "." + name;
         mapFullNameToNamespacedEntryInfo->insert(
             pair<_string, struct _NamespacedEntryInfo>((char const *)fullName,
@@ -241,9 +244,11 @@ Local<ObjectTemplate> CARNamespaceTemplate(IModuleInfo const *pmoduleInfo, char 
         enumInfos = ArrayOf<IEnumInfo *>::Alloc(nEnums);
         if (enumInfos == 0)
             Throw_LOG(Error::NO_MEMORY, 0);
+
         ec = moduleInfo->GetAllEnumInfos(reinterpret_cast<ArrayOf<IEnumInfo *> *>(enumInfos.Get()));
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         _AddNamespacedEntryInfos(mapFullNameToNamespacedEntryInfo.get(), *enumInfos);
     }
 
@@ -264,6 +269,7 @@ Local<ObjectTemplate> CARNamespaceTemplate(IModuleInfo const *pmoduleInfo, char 
 
         _AddNamespacedEntryInfos(mapFullNameToNamespacedEntryInfo.get(), *interfaceInfos);
     }
+
     ec = moduleInfo->GetClassCount(&nClasses);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);

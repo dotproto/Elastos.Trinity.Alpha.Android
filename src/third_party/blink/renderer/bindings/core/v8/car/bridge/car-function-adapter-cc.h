@@ -38,33 +38,24 @@ Elastos::ECode CARFunctionAdapter::Call(T firstArgument, ...) noexcept
 template<class T>
 Elastos::ECode CARFunctionAdapter::Call(T firstArgument, va_list ap) noexcept
 {
-#if 0//?try
-    try {
-#endif
-        Nan::HandleScope scope;
-        size_t argc;
-        argc = _paramInfos->GetLength();
-        ::std::unique_ptr<v8::Local<v8::Value> []> argv(new(::std::nothrow) v8::Local<v8::Value>[argc]);
-        if (argv == nullptr) {
-            Throw_LOG(Error::NO_MEMORY, 0);
-        }
+    Nan::HandleScope scope;
+    size_t argc;
+    argc = _paramInfos->GetLength();
 
-        SetArgumentOf((*_paramInfos)[0], argc, argv.get(), 0, &firstArgument);
-        for (size_t i = 1; i < argc; ++i)
-            SetArgumentOf((*_paramInfos)[i], argc, argv.get(), i, ap);
-        CallFunction(argc, argv.get());
-#if 0//?try
+    ::std::unique_ptr<v8::Local<v8::Value> []> argv(new(::std::nothrow) v8::Local<v8::Value>[argc]);
+    if (argv == nullptr) {
+        Throw_LOG(Error::NO_MEMORY, 0);
     }
-    catch (Error const &error)
-    {
-        return ToECode(error);
-    }
-    catch (...)
-    {
-        return E_FAILED;
-    }
-#endif
+
+    SetArgumentOf((*_paramInfos)[0], argc, argv.get(), 0, &firstArgument);
+    for (size_t i = 1; i < argc; ++i)
+        SetArgumentOf((*_paramInfos)[i], argc, argv.get(), i, ap);
+
+    CallFunction(argc, argv.get());
+
     return NO_ERROR;
 }
+
 CAR_BRIDGE_NAMESPACE_END
+
 #endif

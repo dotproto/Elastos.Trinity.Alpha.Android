@@ -13,14 +13,7 @@
 
 #include <v8.h>
 #include "../logging.h"
-#if 0
-#include <android/log.h>
 
-#define basename(x) strrchr(x,'/')?strrchr(x,'/')+1:x
-#define Debug_LOG(FORMAT, ...) \
-    __android_log_print(ANDROID_LOG_INFO, "chromium", \
-                        "[%s:%d %s] " FORMAT, basename(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__)
-#endif
 namespace Nan {
 
 #define NAN_INLINE inline  // TODO(bnoordhuis) Remove in v3.0.0.
@@ -1121,11 +1114,10 @@ inline bool SetAccessor(
   , v8::AccessControl settings = v8::DEFAULT
   , v8::PropertyAttribute attribute = v8::None) {
   HandleScope scope;
-#if 0//?jw
-  imp::NativeGetter getter_ =
-      imp::GetterCallbackWrapper;
-  imp::NativeSetter setter_ =
-      setter ? imp::SetterCallbackWrapper : 0;
+//  imp::NativeGetter getter_ =
+//      imp::GetterCallbackWrapper;
+//  imp::NativeSetter setter_ =
+//      setter ? imp::SetterCallbackWrapper : 0;
 
   v8::Local<v8::ObjectTemplate> otpl = New<v8::ObjectTemplate>();
   otpl->SetInternalFieldCount(imp::kAccessorFieldCount);
@@ -1145,16 +1137,15 @@ inline bool SetAccessor(
       , New<v8::External>(reinterpret_cast<void *>(setter)));
   }
 
-  return obj->SetAccessor(
-      name
-    , getter_
-    , setter_
+  obj->SetAccessor(
+      GetCurrentContext()
+    , name
+    , imp::GetterCallbackWrapper1
+    , imp::SetterCallbackWrapper1
     , dataobj
     , settings
     , attribute);
-#else
-    return false;
-#endif
+  return true;
 }
 
 inline void SetNamedPropertyHandler(

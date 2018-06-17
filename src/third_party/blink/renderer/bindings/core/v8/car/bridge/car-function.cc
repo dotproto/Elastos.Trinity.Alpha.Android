@@ -201,6 +201,7 @@ static Local<Object> _CARFunction(size_t nFunctionInfos, IFunctionInfo *function
                       New("$what").ToLocalChecked(),
                       New(string(what) + "+").ToLocalChecked(),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+
     DefineOwnProperty(functionCandidates,
                       New("$name").ToLocalChecked(),
                       ToValue(name),

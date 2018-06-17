@@ -5,7 +5,9 @@
 #include <nan.h>
 #include <elastos.h>
 #include "macros.h"
+
 CAR_BRIDGE_NAMESPACE_BEGIN
+
 class CARInterfaceAdapter final
 {
 public:
@@ -13,14 +15,17 @@ public:
     static CARAPI New(
         IInterface **interface_,
         IInterfaceInfo const *interfaceInfo, v8::Local<v8::Object> object) noexcept;
+
     IInterfaceInfo const *interfaceInfo() const noexcept
     {
         return _interfaceInfo;
     }
+ 
     v8::Local<v8::Object> object() const
     {
         return Nan::New(_object);
     }
+
 private:
     void *_vtptr; // It must be the FIRST non-static data member.
     Elastos::Int32 _referenceCount;
@@ -29,6 +34,7 @@ private:
     Elastos::AutoPtr<Elastos::ArrayOf<IMethodInfo *>> _methodInfos;
     Nan::Persistent<v8::Object> _object;
     template<size_t end>
+
     static void InitializeVTableFrom4To(void) noexcept;
     static CARAPI_(IInterface *) Probe(CARInterfaceAdapter *self, Elastos::REIID riid);
     static CARAPI_(Elastos::UInt32) AddRef(CARInterfaceAdapter *self);
@@ -43,8 +49,10 @@ private:
     CARInterfaceAdapter(CARInterfaceAdapter const &carInterfaceAdapter) = delete;
     CARInterfaceAdapter(CARInterfaceAdapter && carInterfaceAdapter) = delete;
     virtual ~CARInterfaceAdapter();
+
     CARInterfaceAdapter &operator=(CARInterfaceAdapter const &carInterfaceAdapter) = delete;
     CARInterfaceAdapter &operator=(CARInterfaceAdapter && carInterfaceAdapter) = delete;
 };
+
 CAR_BRIDGE_NAMESPACE_END
 #endif

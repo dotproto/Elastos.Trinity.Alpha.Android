@@ -6,6 +6,9 @@
 #include "macros.h"
 
 CAR_BRIDGE_NAMESPACE_BEGIN
+
 extern v8::Local<v8::Object> CARTypeAlias(ITypeAliasInfo const *typeAliasInfo);
+
 CAR_BRIDGE_NAMESPACE_END
+
 #endif

@@ -41,20 +41,26 @@ private:
             v8::internal::Object **_y;
             _x = reinterpret_cast<v8::internal::Object **>(*Nan::New(x));
             _y = reinterpret_cast<v8::internal::Object **>(*Nan::New(y));
+
             if (_x == nullptr)
                 return true;
+
             if (_y == nullptr)
                 return false;
+
             return *_x < *_y;
         }
     };
+
     typedef ::std::map<CopyablePersistent<v8::Function>, ::std::unique_ptr<CARFunctionAdapter>, Less<v8::Function>> MF2CARFA;
     typedef ::std::map<CopyablePersistent<v8::String>, MF2CARFA, Less<v8::String>> MS2MF2CARFA;
     typedef CARObject *(*Constructor)(size_t argc, v8::Local<v8::Value> argv[], v8::Local<v8::Value> data);
+
     Elastos::AutoPtr<IClassInfo > _classInfo;
     Elastos::AutoPtr<IInterface> _carObject;
     MS2MF2CARFA _mapNameToMapListenerToCARFunctionAdapter;
     ::std::set<uintptr_t> _connectionIds;
+
     static NAN_METHOD(On);
     static void Off(CARObject *carObject,
                     CARFunctionAdapter *carEventDelegate,
@@ -77,20 +83,24 @@ private:
     static NAN_METHOD(Attach);
     static NAN_METHOD(Detach);
     static NAN_METHOD(Probe);
+
     static CARObject *NewInRegimeConstructor(size_t argc, v8::Local<v8::Value> argv[],
             v8::Local<v8::Value> data);
     static NAN_METHOD(NewInRegimeConstructor);
     static NAN_METHOD(InRegime);
+
     static v8::Local<v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
             Elastos::ArrayOf<IConstructorInfo *> &constructorInfos,
             Nan::FunctionCallback constructor, v8::Local<v8::Value> data);
     static v8::Local<v8::FunctionTemplate> NewClassTemplate(IClassInfo const *classInfo,
             Nan::FunctionCallback constructor, v8::Local<v8::Value> data);
+
     static Nan::NAN_METHOD_RETURN_TYPE ClassConstructor(Nan::NAN_METHOD_ARGS_TYPE info, Constructor constructor);
     static CARObject *NewConstructor(size_t argc, v8::Local<v8::Value> argv[], v8::Local<v8::Value> data);
     static NAN_METHOD(NewConstructor);
     static CARObject *WrapConstructor(size_t argc, v8::Local<v8::Value> argv[], v8::Local<v8::Value> data);
     static NAN_METHOD(WrapConstructor);
+
     CARObject(IClassInfo const *classInfo, Elastos::ArrayOf<IConstructorInfo *> &constructorInfos,
               IRegime *regime,
               size_t argc, v8::Local<v8::Value> argv[]);

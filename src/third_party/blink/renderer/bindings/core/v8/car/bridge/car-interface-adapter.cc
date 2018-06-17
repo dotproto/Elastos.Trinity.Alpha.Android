@@ -21,6 +21,7 @@ static int const _MAX_NUM_OF_METHODS = 0XE4;
 typedef void (*VMethod)(void);
 static VMethod _vtable[_MAX_NUM_OF_METHODS];
 template<size_t end>
+
 void CARInterfaceAdapter::InitializeVTableFrom4To(void) noexcept
 {
     InitializeVTableFrom4To < end - 1 > ();
@@ -61,32 +62,22 @@ void CARInterfaceAdapter::Initialize(void) noexcept
     _vtable[3] = reinterpret_cast<VMethod>(&CARInterfaceAdapter::GetInterfaceID);
     InitializeVTableFrom4To<_MAX_NUM_OF_METHODS>();
 }
+
 CARAPI CARInterfaceAdapter::New(
     IInterface **interface_,
     IInterfaceInfo const *interfaceInfo, Local<v8::Object> object) noexcept
 {
-#if 0//?jw
-    try {
-#endif
-        CARInterfaceAdapter *carInterfaceAdapter;
-        AutoPtr<IInterface> _interface;
-        carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(const_cast<IInterfaceInfo *>(interfaceInfo), object);
-        if (carInterfaceAdapter == nullptr)
-            Throw_LOG(Error::NO_MEMORY, 0);
-        _interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
-        if (interface_ != nullptr)
-            _interface->AddRef(), *interface_ = _interface;
-#if 0//?jw
-    }
-    catch (Error const &error)
-    {
-        return ToECode(error);
-    }
-    catch (...)
-    {
-        return E_FAILED;
-    }
-#endif
+    CARInterfaceAdapter *carInterfaceAdapter;
+    AutoPtr<IInterface> _interface;
+
+    carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(const_cast<IInterfaceInfo *>(interfaceInfo), object);
+    if (carInterfaceAdapter == nullptr)
+        Throw_LOG(Error::NO_MEMORY, 0);
+
+    _interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
+    if (interface_ != nullptr)
+        _interface->AddRef(), *interface_ = _interface;
+
     return NO_ERROR;
 }
 CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo *pinterfaceInfo, Local<v8::Object> object)
@@ -115,10 +106,12 @@ CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo *pinterfaceInfo, Local<v
         Throw_LOG(Error::TYPE_ELASTOS, ec);
     _methodInfos = methodInfos;
 }
+
 CARInterfaceAdapter::~CARInterfaceAdapter()
 {
     _object.Reset();
 }
+
 CARAPI_(IInterface *) CARInterfaceAdapter::Probe(CARInterfaceAdapter *self, REIID riid)
 {
     if (riid == EIID_IInterface)
@@ -128,10 +121,12 @@ CARAPI_(IInterface *) CARInterfaceAdapter::Probe(CARInterfaceAdapter *self, REII
     else
         return 0;
 }
+
 CARAPI_(UInt32) CARInterfaceAdapter::AddRef(CARInterfaceAdapter *self)
 {
     return atomic_inc(&self->_referenceCount);
 }
+
 CARAPI_(UInt32) CARInterfaceAdapter::Release(CARInterfaceAdapter *self)
 {
     Int32 referenceCount;
@@ -141,6 +136,7 @@ CARAPI_(UInt32) CARInterfaceAdapter::Release(CARInterfaceAdapter *self)
         delete self;
     return referenceCount;
 }
+
 CARAPI CARInterfaceAdapter::GetInterfaceID(CARInterfaceAdapter *self,
         IInterface *object,
         InterfaceID *interfaceId) noexcept
@@ -166,6 +162,7 @@ CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(CARInterfaceAdapter *self, ..
     va_end(ap);
     return ec;
 }
+
 CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(size_t index, CARInterfaceAdapter *self, va_list ap) noexcept
 {
     Nan::HandleScope scope;
@@ -174,16 +171,21 @@ CARAPI CARInterfaceAdapter::CallOtherMethodIndexed(size_t index, CARInterfaceAda
     Elastos::String methodName;
     Local<v8::String> _methodName;
     Local<Value> value;
+
     methodInfo = const_cast<IMethodInfo *>((*self->_methodInfos)[index]);
     ec = methodInfo->GetName(&methodName);
     if (FAILED(ec))
         return ec;
+
     _methodName = ToValue(methodName).As<v8::String>();
     if (!Has(Nan::New(self->_object), _methodName).FromJust())
         return E_NOT_IMPLEMENTED;
+
     value = Get(Nan::New(self->_object), _methodName).ToLocalChecked();
     if (!value->IsFunction())
         return E_NOT_IMPLEMENTED;
+
     return CARFunctionAdapter::Call(value.As<Function>(), Nan::New(self->_object), methodInfo, ap);
 }
+
 CAR_BRIDGE_NAMESPACE_END

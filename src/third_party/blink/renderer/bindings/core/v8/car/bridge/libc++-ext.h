@@ -14,6 +14,7 @@ namespace std
             operator delete(p);
         }
     };
+
     template<>
     struct default_delete<void const>
     {

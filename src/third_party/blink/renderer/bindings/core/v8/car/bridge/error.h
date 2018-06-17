@@ -72,9 +72,12 @@ private:
     int _code;
     char _message[MAX_MESSAGE_LENGTH];
 };
+
 extern bool CanBeUsedAsError(v8::Local<v8::Value> value);
 extern void ToError(Error *error, v8::Local<v8::Value> value);
 extern v8::Local<v8::Value> ToValue(Error &error);
 extern Elastos::ECode ToECode(Error const &error) noexcept;
+
 CAR_BRIDGE_NAMESPACE_END
+
 #endif

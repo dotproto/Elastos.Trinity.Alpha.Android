@@ -65,6 +65,7 @@ _CallerAllocInt64 *CallerAllocInt64_(Elastos::Int64 *i64)
     ::std::unique_ptr<_CallerAllocInt64, typename _CallerAllocInt64::Deleter> _i64(new(::std::nothrow) _CallerAllocInt64);
     if (_i64 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _i64->i64 = i64;
     return _i64.release();
 }
@@ -75,6 +76,7 @@ _CallerAllocByte *CallerAllocByte_(Elastos::Byte *byte)
     ::std::unique_ptr<_CallerAllocByte, typename _CallerAllocByte::Deleter> _byte(new(::std::nothrow) _CallerAllocByte);
     if (_byte == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _byte->byte = byte;
     return _byte.release();
 }
@@ -85,6 +87,7 @@ _CallerAllocFloat *CallerAllocFloat_(Elastos::Float *f)
     ::std::unique_ptr<_CallerAllocFloat, typename _CallerAllocFloat::Deleter> _f(new(::std::nothrow) _CallerAllocFloat);
     if (_f == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _f->f = f;
     return _f.release();
 }
@@ -95,6 +98,7 @@ _CallerAllocDouble *CallerAllocDouble_(Elastos::Double *d)
     ::std::unique_ptr<_CallerAllocDouble, typename _CallerAllocDouble::Deleter> _d(new(::std::nothrow) _CallerAllocDouble);
     if (_d == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _d->d = d;
     return _d.release();
 }
@@ -105,6 +109,7 @@ _CallerAllocChar32 *CallerAllocChar32_(Elastos::Char32 *c32)
     ::std::unique_ptr<_CallerAllocChar32, typename _CallerAllocChar32::Deleter> _c32(new(::std::nothrow) _CallerAllocChar32);
     if (_c32 == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _c32->c32 = c32;
     return _c32.release();
 }
@@ -115,6 +120,7 @@ _CallerAllocString *CallerAllocString_(Elastos::String *s)
     ::std::unique_ptr<_CallerAllocString, typename _CallerAllocString::Deleter> _s(new(::std::nothrow) _CallerAllocString);
     if (_s == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _s->s = s;
     return _s.release();
 }
@@ -125,6 +131,7 @@ _CallerAllocBoolean *CallerAllocBoolean_(Elastos::Boolean *b)
     ::std::unique_ptr<_CallerAllocBoolean, typename _CallerAllocBoolean::Deleter> _b(new(::std::nothrow) _CallerAllocBoolean);
     if (_b == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _b->b = b;
     return _b.release();
 }
@@ -135,6 +142,7 @@ _CallerAllocEMuid *CallerAllocEMuid_(Elastos::EMuid *id)
     ::std::unique_ptr<_CallerAllocEMuid, typename _CallerAllocEMuid::Deleter> _id(new(::std::nothrow) _CallerAllocEMuid);
     if (_id == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _id->id = id;
     return _id.release();
 }
@@ -145,6 +153,7 @@ _CallerAllocEGuid *CallerAllocEGuid_(Elastos::EGuid *id)
     ::std::unique_ptr<_CallerAllocEGuid, typename _CallerAllocEGuid::Deleter> _id(new(::std::nothrow) _CallerAllocEGuid);
     if (_id == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _id->id = id;
     return _id.release();
 }
@@ -155,6 +164,7 @@ _CallerAllocECode *CallerAllocECode_(Elastos::ECode *ecode)
     ::std::unique_ptr<_CallerAllocECode, typename _CallerAllocECode::Deleter> _ecode(new(::std::nothrow) _CallerAllocECode);
     if (_ecode == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _ecode->ecode = ecode;
     return _ecode.release();
 }
@@ -167,6 +177,7 @@ _CallerAllocLocalPtr *CallerAllocLocalPtr_(void **localPtr)
     );
     if (_localPtr == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _localPtr->localPtr = localPtr;
     return _localPtr.release();
 }
@@ -177,8 +188,10 @@ _CallerAllocLocalType *CallerAllocLocalType_(IDataTypeInfo const *dataTypeInfo, 
     ::std::unique_ptr<_CallerAllocLocalType, typename _CallerAllocLocalType::Deleter> _localTypeObject(
         new(::std::nothrow) _CallerAllocLocalType
     );
+
     if (_localTypeObject == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _localTypeObject->dataTypeInfo = dataTypeInfo;
     _localTypeObject->localTypeObject = localTypeObject;
     return _localTypeObject.release();
@@ -190,6 +203,7 @@ _CallerAllocEnum *CallerAllocEnum_(Elastos::Int32 *enum_)
     ::std::unique_ptr<_CallerAllocEnum, typename _CallerAllocEnum::Deleter> _enum(new(::std::nothrow) _CallerAllocEnum);
     if (_enum == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _enum->enum_ = enum_;
     return _enum.release();
 }
@@ -202,8 +216,10 @@ _CallerAllocCARArray *CallerAllocCARArray_(ICarArrayInfo       *carArrayInfo, IV
     );
     if (carArray == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     carArray->carArrayInfo = carArrayInfo;
     carArray->variableOfCARArray = variableOfCARArray;
+
     return carArray.release();
 }
 
@@ -213,8 +229,10 @@ _CallerAllocStruct *CallerAllocStruct_(IStructInfo        *structInfo, IVariable
     ::std::unique_ptr<_CallerAllocStruct, typename _CallerAllocStruct::Deleter> struct_(new(::std::nothrow) _CallerAllocStruct);
     if (struct_ == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     struct_->structInfo = structInfo;
     struct_->variableOfStruct = variableOfStruct;
+
     return struct_.release();
 }
 
@@ -224,9 +242,12 @@ _CallerAllocInterface *CallerAllocInterface_(IInterfaceInfo *interfaceInfo, IInt
     ::std::unique_ptr<_CallerAllocInterface, typename _CallerAllocInterface::Deleter> _interface(
         new(::std::nothrow) _CallerAllocInterface
     );
+
     if (_interface == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     _interface->interface_ = interface_;
+
     return _interface.release();
 }
 

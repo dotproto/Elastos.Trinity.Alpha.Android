@@ -85,15 +85,20 @@ inline void SetMethod(v8::Local<T> receiver,
                       char const *name,
                       Nan::FunctionCallback callback,
                       v8::PropertyAttribute attributes);
+
 inline void SetPrototypeMethod(v8::Local<v8::FunctionTemplate> functionTemplate,
                                char const *name,
                                Nan::FunctionCallback callback, v8::Local<v8::Value> data = v8::Local<v8::Value>(),
                                v8::PropertyAttribute attributes = v8::None);
+
 inline void SetPrototypeMethod(v8::Local<v8::FunctionTemplate> functionTemplate,
                                char const *name,
                                Nan::FunctionCallback callback,
                                v8::PropertyAttribute attributes);
+
 inline void Export(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE target, char const *name, v8::Local<v8::Value> value);
+
 CAR_BRIDGE_NAMESPACE_END
 #include "nan-ext-cc.h"
+
 #endif
