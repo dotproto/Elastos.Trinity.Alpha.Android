@@ -187,23 +187,44 @@ android_assets("cordova_app_assets") {
   disable_compression = true
 }
 
+
+dist_jar("elastos_sdk_lib") {
+  testonly = true
+  requires_android = true
+  use_unprocessed_jars = true
+  deps = [
+    "//base:base_java",
+    "//components/content_view:content_view_java",
+    "//content/public/android:content_java",
+    "//device/geolocation:geolocation_java",
+    "//media/base/android:media_java",
+    "//media/capture/video/android:capture_java",
+    "//mojo/public/java:system_java",
+    "//net/android:net_java",
+    "//ui/android:ui_java",
+  ]
+  output = "$root_build_dir/elastosLib.jar"
+#  loadable_modules = [ "$root_out_dir/libosmesa.so" ]
+}
+
+
 android_apk("elastos_shell_apk") {
   testonly = true
-  enable_multidex = true
+  enable_multidex = false
   deps = [
     ":cordova_app_java",
     ":cordova_app_assets",
     "//content/shell/android:content_shell_assets",
-    "//base:base_java",
-    "//content/public/android:content_java",
+#    "//base:base_java",
+#    "//content/public/android:content_java",
     "//content/shell/android:libcontent_shell_content_view_static",
     ":cordova_shell_lib",
-    "//ui/android:ui_java",
-    "//third_party/mesa:osmesa",
+#    "//ui/android:ui_java",
+#   "//third_party/mesa:osmesa",
   ]
   apk_name = "ElastosApp"
   android_manifest = cordova_app_manifest
   android_manifest_dep = ":cordova_app_manifest"
   shared_libraries = [ ":cordova_shell_lib" ]
-  loadable_modules = [ "$root_out_dir/libosmesa.so" ]
+#  loadable_modules = [ "$root_out_dir/libosmesa.so" ]
 }
