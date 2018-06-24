@@ -41,11 +41,9 @@ done:
     NAN_METHOD_RETURN_UNDEFINED();
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wglobal-constructors"
+
 static map<AutoPtr<IModuleInfo>, CopyablePersistent<ObjectTemplate>> _mapModuleInfoToCARImportedModule;
-#pragma clang diagnostic pop
+
 Local<ObjectTemplate> CARImportedModuleTemplate(IModuleInfo const *imoduleInfo)
 {
     Nan::EscapableHandleScope scope;

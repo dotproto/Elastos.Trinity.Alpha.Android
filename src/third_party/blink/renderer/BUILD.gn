@@ -161,6 +161,9 @@ config("non_test_config") {
   cflags = []
 
   if (is_clang) {
-    cflags += [ "-Wglobal-constructors" ]
+    cflags += [ 
+                  "-Wno-exit-time-destructors",
+                  "-Wno-global-constructors",
+              ]
   }
 }
