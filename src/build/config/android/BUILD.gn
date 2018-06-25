@@ -214,3 +214,4 @@ config("default_cygprofile_instrumentation") {
     cflags = [ "-finstrument-function-entry-bare" ]
   }
 }
+

@@ -203,14 +203,11 @@ static void _AddNamespacedEntryInfos(_MS2NEI *mapFullNameToNamespacedEntryInfo,
         );
     }
 }
+
 typedef map<Elastos::String, CopyablePersistent<ObjectTemplate>> _MS2OT;
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wglobal-constructors"
 static map<AutoPtr<IModuleInfo>, _MS2OT> _mapModuleInfoToMapNamespaceToCARNamespace;
 static map<AutoPtr<IModuleInfo>, unique_ptr<_MS2NEI>> _mapModuleInfoToMapFullNameToNamespacedEntryInfo;
-#pragma clang diagnostic pop
 
 Local<ObjectTemplate> CARNamespaceTemplate(IModuleInfo const *pmoduleInfo, char const *namespace_)
 {

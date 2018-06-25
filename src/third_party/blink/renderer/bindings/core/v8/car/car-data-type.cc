@@ -16,9 +16,6 @@ using namespace v8;
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wglobal-constructors"
 static map<AutoPtr<IDataTypeInfo >, CopyablePersistent<Object>> _mapIntrinsicTypeInfoToCARIntrinsicType;
 
 static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
@@ -602,7 +599,6 @@ Local<Object> CARDataType(IDataTypeInfo  *dataTypeInfo)
     }
 }
 
-#pragma clang diagnostic pop
 
 CAR_BRIDGE_NAMESPACE_END
 

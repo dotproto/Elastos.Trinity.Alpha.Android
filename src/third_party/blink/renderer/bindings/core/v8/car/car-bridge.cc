@@ -1,19 +1,17 @@
 #include <nan.h>
 
-#include "bridge/macros.h"
-#include "bridge/nan-ext.h"
+#include "macros.h"
+#include "nan-ext.h"
 
-#include "bridge/car-interface-adapter.h"
-#include "bridge/car-object.h"
-#include "bridge/error.h"
-#include "bridge/parse-uri.h"
-#include "bridge/require.h"
+#include "car-interface-adapter.h"
+#include "car-object.h"
+#include "error.h"
+#include "parse-uri.h"
+#include "require.h"
 
-#include "car_manager.h"
-#include "args_converter.h"
+#include "car-bridge.h"
 
-#include "base/logging.h"
-#include <android/log.h>
+#include "logging.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -76,8 +74,7 @@ void Carbridge_Initialize(v8::Local<v8::Object> target)
 
 void Carbridge_throw(const char* func, const char* file, int line, char const * info, int const ecode)
 {
-    __android_log_print(ANDROID_LOG_INFO, "chromium", \
-                        "[%s at %s:%d] %s %d" , func, file, line, info, ecode);
+	Debug_LOG("%s %d", info, ecode);
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
     isolate->ThrowException(
@@ -90,7 +87,7 @@ void Carbridge_throw(const char* func, const char* file, int line, char const * 
 bool ela::CarManager::initialize(v8::Isolate* isolate)
 {
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    LOG(INFO) << "CarManager initialize.";
+    Debug_LOG("CarManager initialize.");
 
 	Carbridge_Initialize(context->Global());
 

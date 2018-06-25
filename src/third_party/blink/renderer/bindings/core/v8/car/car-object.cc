@@ -24,11 +24,8 @@ using namespace v8;
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wglobal-constructors"
+
 static Nan::Persistent<v8::FunctionTemplate> _classBaseTemplate;
-#pragma clang diagnostic pop
 
 NAN_METHOD(CARObject::On)
 {
@@ -3052,11 +3049,7 @@ NAN_METHOD(CARObject::NewConstructor)
     ClassConstructor(info, NewConstructor);
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-#pragma clang diagnostic ignored "-Wglobal-constructors"
 static map<AutoPtr<IClassInfo>, CopyablePersistent<FunctionTemplate>> _mapClassInfoToCARClass;
-#pragma clang diagnostic pop
 
 Local<FunctionTemplate> CARObject::NewClassTemplate(IClassInfo const *pclassInfo)
 {
