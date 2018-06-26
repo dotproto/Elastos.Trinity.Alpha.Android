@@ -199,7 +199,7 @@ int g_next_javascript_callback_id = 1;
 #if defined(OS_ANDROID)
 // Whether to allow injecting javascript into any kind of frame (for Android
 // WebView).
-bool g_allow_injecting_javascript = false;
+bool g_allow_injecting_javascript = true;
 #endif
 
 // The (process id, routing id) pair that identifies one RenderFrame.
