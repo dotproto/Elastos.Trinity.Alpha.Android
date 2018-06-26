@@ -1,0 +1,72 @@
+
+module {
+    importlib("Elastos.CoreLibrary");
+
+    const OUTPUT_FILE = "output";
+
+    enum ETest {
+        ETest_0,
+        ETest_1
+    }
+
+    [local]
+    interface ITest {
+        TestSelf();
+
+        TestVoid();
+
+        TestInt16(
+                [in] Int16 i16);
+
+        TestInt32(
+                [in] Int32 i32);
+
+        TestInt64(
+                [in] Int64 i64);
+
+        TestByte(
+                [in] Byte byte);
+
+        TestFloat(
+                [in] Float f);
+
+        TestDouble(
+                [in] Double d);
+
+        TestChar32(
+                [in] Char32 c32);
+
+        TestString(
+                [in] String s);
+
+        TestBoolean(
+                [in] Boolean b);
+
+        TestEMuid(
+                [in] EMuid id);
+
+        TestEGuid(
+                [in] EGuid id);
+
+        TestECode(
+                [in] ECode ecode);
+
+        TestLocalPtr(
+                [in] PVoid ptr);
+
+        TestEnum(
+                [in] ETest etest);
+
+        TestStringOut(
+                [out] String* name);
+    }
+
+    class CTest {
+        constructor();
+
+        interface ITest;
+    }
+}
+
+
+

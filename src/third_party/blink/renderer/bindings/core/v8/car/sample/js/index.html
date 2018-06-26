@@ -1,0 +1,70 @@
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<script>
+
+function require_test()
+{
+    path = document.getElementById("path_id").value;
+    let CTest = require(path, "CTest")
+    let test = new CTest()
+
+    test.TestInt32(3245);
+
+    test.TestInt64(372036);
+
+    test.TestByte(56);
+
+    test.TestFloat(363762.76);
+
+    test.TestDouble(10246440);
+
+    test.TestChar32('h');
+
+    test.TestString('hello elastos.');
+
+    test.TestBoolean(1);
+
+    let emuid = function() {
+      this.io="Input"
+      this.type="EMuid"
+      this.data= new function() {
+          this.mData1=10;
+          this.mData2=20;
+          this.mData3=30;
+          this.mData4=[
+            6,
+            43,
+            12,
+            15,
+            32,
+            12,
+            34,
+            66
+          ]
+      }
+    }
+    
+    let _emuid = new emuid();
+    alert('io:'+_emuid.io + ' type: ' + _emuid.type + ' data: ' + _emuid.data.mData1)
+    test.TestEMuid(_emuid);
+
+    let Result=function() {
+      this.io="CallerAllocOutput"
+      this.type="String"
+    }
+    result = new Result()
+    test.TestStringOut(result);
+    alert(result.data);
+}
+
+</script>
+
+</head>
+<body>
+    <input type="input" id="path_id"  value="/data/app/org.chromium.chrome-1/lib/arm/libElastos.HelloCarDemo.so"></input>   <br/>
+    <input type="button" onclick="require_test()"  value="require_test"></input>  <br/>
+</body>
+
+</html>
