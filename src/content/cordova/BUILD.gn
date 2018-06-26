@@ -22,7 +22,7 @@ if (is_android) {
   group("content_cordova") {
     testonly = true
     deps = [
-      "//content/cordova/android:elastos_shell_apk",
+      "//content/cordova/android:elastos_webrt_apk",
     ]
   }
 }
