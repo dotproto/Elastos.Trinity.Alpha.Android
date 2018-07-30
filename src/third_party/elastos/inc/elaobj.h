@@ -58,6 +58,7 @@ EXTERN_C const _ELASTOS InterfaceID EIID_IProxy;
 EXTERN_C const _ELASTOS InterfaceID EIID_IProxyDeathRecipient;
 EXTERN_C const _ELASTOS InterfaceID EIID_IWeakReference;
 EXTERN_C const _ELASTOS InterfaceID EIID_IWeakReferenceSource;
+EXTERN_C const _ELASTOS InterfaceID EIID_IJavaInterface;
 
 #define BASE_INTERFACE_METHOD_COUNT 4
 
@@ -253,6 +254,22 @@ IWeakReferenceSource : public IInterface
 
     virtual CARAPI GetWeakReference(
         /* [out] */ IWeakReference** weakReference) = 0;
+};
+
+CAR_INTERFACE("00010004-0000-0000-C000-000000000066")
+IJavaInterface : public IInterface
+{
+    using IInterface::Probe;
+
+    static CARAPI_(IJavaInterface*) Probe(
+        /* [in] */ PInterface object)
+    {
+        if (object == NULL) return NULL;
+        return (IJavaInterface*)object->Probe(EIID_IJavaInterface);
+    }
+
+    virtual CARAPI JavaInit(
+        /* [in] */ _ELASTOS Handle64 jvm) = 0;
 };
 
 }   // extern "C"

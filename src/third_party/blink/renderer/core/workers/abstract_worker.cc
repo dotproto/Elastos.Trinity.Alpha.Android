@@ -58,6 +58,7 @@ KURL AbstractWorker::ResolveURL(ExecutionContext* execution_context,
   // We can safely expose the URL in the following exceptions, as these checks
   // happen synchronously before redirection. JavaScript receives no new
   // information.
+#if 0 //enable worker in local
   if (!script_url.ProtocolIsData() &&
       !execution_context->GetSecurityOrigin()->CanRequest(script_url)) {
     exception_state.ThrowSecurityError(
@@ -66,7 +67,7 @@ KURL AbstractWorker::ResolveURL(ExecutionContext* execution_context,
         execution_context->GetSecurityOrigin()->ToString() + "'.");
     return KURL();
   }
-
+#endif
   if (ContentSecurityPolicy* csp =
           execution_context->GetContentSecurityPolicy()) {
     if (!csp->AllowRequestWithoutIntegrity(request_context, script_url) ||

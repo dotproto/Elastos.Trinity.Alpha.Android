@@ -13,7 +13,9 @@
 #include "content/shell/app/shell_main_delegate.h"
 
 // This is called by the VM when the shared library is first loaded.
+extern "C" bool ela_session_jni_onload(void *vm, void *reserved);
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+  LOG(INFO) << "JNI_OnLoad Entering";
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
   if (!RegisterMainDexNatives(env))
@@ -29,5 +31,7 @@ JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 
   content::Compositor::Initialize();
   content::SetContentMainDelegate(new content::ShellMainDelegate());
+  ela_session_jni_onload(vm, reserved);
+  LOG(INFO) << "JNI_OnLoad Done.";
   return JNI_VERSION_1_4;
 }

@@ -46,7 +46,7 @@ CAR_BRIDGE_NAMESPACE_USING
 
 static NAN_METHOD(Require)
 {
-    Nan::HandleScope scope;
+    Nan::EscapableHandleScope scope;
     Local<Value> arg0;
     Local<Value> arg1;
 
@@ -58,9 +58,10 @@ static NAN_METHOD(Require)
     if (!arg0->IsString() || !arg1->IsString())
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
-    NAN_METHOD_RETURN_VALUE(
-        Require(*Utf8String(arg0), *Utf8String(arg1))
-    );
+    Local<Value> result = Require(*Utf8String(arg0), *Utf8String(arg1));
+    Debug_LOG("Require finished.");
+
+    NAN_METHOD_RETURN_VALUE(scope.Escape(result));
 }
 
 void Carbridge_Initialize(v8::Local<v8::Object> target)
@@ -74,7 +75,7 @@ void Carbridge_Initialize(v8::Local<v8::Object> target)
 
 void Carbridge_throw(const char* func, const char* file, int line, char const * info, int const ecode)
 {
-	Debug_LOG("%s %d", info, ecode);
+	Debug_LOG("%s %d at [%s %s:%d]", info, ecode, func, file, line);
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
     isolate->ThrowException(
@@ -90,6 +91,7 @@ bool ela::CarManager::initialize(v8::Isolate* isolate)
     Debug_LOG("CarManager initialize.");
 
 	Carbridge_Initialize(context->Global());
+	Carrier::initialize(isolate);
 
     return 1;
 }

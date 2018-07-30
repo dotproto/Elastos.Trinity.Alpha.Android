@@ -17,6 +17,7 @@ using namespace v8;
 
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
+
 static int const _MAX_NUM_OF_METHODS = 0XE4;
 typedef void (*VMethod)(void);
 static VMethod _vtable[_MAX_NUM_OF_METHODS];
@@ -68,47 +69,55 @@ CARAPI CARInterfaceAdapter::New(
     IInterfaceInfo const *interfaceInfo, Local<v8::Object> object) noexcept
 {
     CARInterfaceAdapter *carInterfaceAdapter;
-    AutoPtr<IInterface> _interface;
+    //AutoPtr<IInterface> car_interface;
+	IInterface * car_interface;
 
     carInterfaceAdapter = new(nothrow) CARInterfaceAdapter(const_cast<IInterfaceInfo *>(interfaceInfo), object);
     if (carInterfaceAdapter == nullptr)
         Throw_LOG(Error::NO_MEMORY, 0);
 
-    _interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
-    if (interface_ != nullptr)
-        _interface->AddRef(), *interface_ = _interface;
+    car_interface = reinterpret_cast<IInterface *>(carInterfaceAdapter);
+	//Debug_LOG("car_interface:%p, interface_:%p", car_interface.Get(), interface_);
+    if (interface_ != nullptr) {
+		Debug_LOG("");
+        //car_interface->AddRef(),
+        *interface_ = car_interface;
+    }
 
     return NO_ERROR;
 }
-CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo *pinterfaceInfo, Local<v8::Object> object)
+
+CARInterfaceAdapter::CARInterfaceAdapter(IInterfaceInfo *interfaceInfo, Local<v8::Object> object)
 {
     ECode ec;
     Elastos::Int32 nMethods;
     AutoPtr<ArrayOf<IMethodInfo *> > methodInfos;
     _vtptr = _vtable;
     _referenceCount = 0;
-    _interfaceInfo = pinterfaceInfo;
-#if 0//?jw
-    //_object = object;
-#endif
-    IInterfaceInfo *interfaceInfo = const_cast<IInterfaceInfo *>(pinterfaceInfo);
+
+	Debug_LOG("");
     ec = interfaceInfo->GetId(&_interfaceId);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     methodInfos = ArrayOf<IMethodInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
         Throw_LOG(Error::NO_MEMORY, 0);
+
     ec = interfaceInfo->GetAllMethodInfos(reinterpret_cast<ArrayOf<IMethodInfo *> *>(methodInfos.Get()));
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+
     _methodInfos = methodInfos;
 }
 
 CARInterfaceAdapter::~CARInterfaceAdapter()
 {
+    Debug_LOG("");
     _object.Reset();
 }
 
@@ -129,6 +138,7 @@ CARAPI_(UInt32) CARInterfaceAdapter::AddRef(CARInterfaceAdapter *self)
 
 CARAPI_(UInt32) CARInterfaceAdapter::Release(CARInterfaceAdapter *self)
 {
+    Debug_LOG("");
     Int32 referenceCount;
     referenceCount = atomic_dec(&self->_referenceCount);
     assert(referenceCount >= 0);

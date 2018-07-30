@@ -35,7 +35,7 @@
 #define _NO_INCLIST
 #endif
 #include <elstring.h>
-#include <_ElastosCore.h>
+#include <ElastosCore.h>
 #include <carapi.h>
 
 ELAPI ECO_PUBLIC _CReflector_AcquireModuleInfo(
@@ -125,6 +125,12 @@ ELAPI ECO_PUBLIC _CObject_UnmarshalInterface(
 
 ELAPI ECO_PUBLIC _CCarrier_GetInstance(
     /* [out] */ ICarrier** carrier);
+
+ELAPI ECO_PUBLIC _CServiceManager_AcquireInstance(
+    /* [out] */ IServiceManager** manager);
+
+ELAPI ECO_PUBLIC _CJavaCarManager_AcquireInstance(
+    /* [out] */ IJavaCarManager** manager);
 
 #endif // __ELAPI_H__
 /** @} */

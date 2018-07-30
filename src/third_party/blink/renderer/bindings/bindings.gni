@@ -198,7 +198,9 @@ bindings_car_bridge_files =
                     "core/v8/car/libc-ext.cc",
                     "core/v8/car/parse-uri.cc",
                     "core/v8/car/require.cc",
-                    "core/v8/car/util.cc"
+                    "core/v8/car/util.cc",
+                    "core/v8/car/carrier.cc",
+                    "core/v8/car/carrier-listener.cc"
                   ],
                   "abspath")
 bindings_core_v8_files += bindings_car_bridge_files

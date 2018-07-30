@@ -11,6 +11,11 @@ public:
 
 };
 
+class Carrier {
+public:
+	static bool initialize(v8::Isolate* isolate);
+};
+
 } // namespace ela
 
 #endif // __CARMANAGER_H__

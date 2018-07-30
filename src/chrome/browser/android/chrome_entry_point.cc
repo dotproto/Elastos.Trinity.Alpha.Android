@@ -16,7 +16,7 @@ bool NativeInit() {
 }
 
 }  // namespace
-
+extern "C" bool ela_session_jni_onload(void *vm, void *reserved);
 // This is called by the VM when the shared library is first loaded.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   // By default, all JNI methods are registered. However, since render processes
@@ -24,7 +24,7 @@ JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   // Java side and only register a subset of JNI methods.
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
-
+  LOG(INFO) << "JNI_OnLoad Entering";
   if (!base::android::IsSelectiveJniRegistrationEnabled(env) &&
       !RegisterNonMainDexNatives(env)) {
     return -1;
@@ -36,5 +36,7 @@ JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     return -1;
   }
   base::android::SetNativeInitializationHook(NativeInit);
+  ela_session_jni_onload(vm, reserved);
+  LOG(INFO) << "JNI_OnLoad Done";
   return JNI_VERSION_1_4;
 }

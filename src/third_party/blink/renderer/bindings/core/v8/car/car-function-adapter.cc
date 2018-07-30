@@ -1292,7 +1292,7 @@ static NAN_GETTER(_GetCallerAllocOutputArgumentOfInterface)
     Nan::HandleScope scope;
     struct CallerAllocInterface *interface_;
     interface_ = (struct CallerAllocInterface *)info.Data().As<External>()->Value();
-
+    Debug_LOG("debug");
     if (interface_->value.IsEmpty())
         interface_->value.Reset(ToValue(*interface_->interface_));
 
@@ -1318,7 +1318,7 @@ static Local<Value> _CallerAllocOutputArgumentOfInterface(IInterfaceInfo const *
 {
     Nan::EscapableHandleScope scope;
     Local<Value> argument;
-
+    Debug_LOG("debug");
     ::std::unique_ptr<CallerAllocInterface, typename CallerAllocInterface::Deleter> _interface(
         new(::std::nothrow) CallerAllocInterface
     );
@@ -1467,12 +1467,14 @@ static void _ToError(Error *error, Local<Value> value)
 #endif
 static Local<Value> _CallFunction(Local<Function> function, Local<Value> receiver, size_t argc, Local<Value> argv[])
 {
+    Debug_LOG("");
 #if 0//?try
     Nan::TryCatch tryCatch;
 #endif
     Local<Value> returnValue;
 #if 0//?callback
     returnValue = Nan::MakeCallback(receiver, function, argc, argv);
+
     if (tryCatch.HasCaught())
     {
         Error error;
@@ -1558,6 +1560,7 @@ CARFunctionAdapter::~CARFunctionAdapter()
 
 ECode CARFunctionAdapter::operator()(void) noexcept
 {
+    Debug_LOG("");
     return Call();
 }
 
@@ -1565,18 +1568,9 @@ Local<Value> CARFunctionAdapter::CallFunction(size_t argc, Local<Value> argv[])
 {
     Nan::EscapableHandleScope scope;
     Local<Value> returnValue;
-
-#if 0//?jw
-    Nan::TryCatch tryCatch;
-
+    Debug_LOG("");
+#if 0
     returnValue = _function(New(_receiver), argc, argv);
-
-    if (tryCatch.HasCaught())
-    {
-        Error error;
-        _ToError(&error, tryCatch.Exception());
-        throw error;
-    }
 #endif
     return scope.Escape(returnValue);
 }
@@ -1591,7 +1585,7 @@ ECode CARFunctionAdapter::Call(va_list ap) noexcept
 {
     Nan::HandleScope scope;
     size_t argc;
- 
+    Debug_LOG("");
     argc = _paramInfos->GetLength();
     unique_ptr<Local<Value> []> argv(new(nothrow) Local<Value>[argc]);
     if (argv == nullptr)

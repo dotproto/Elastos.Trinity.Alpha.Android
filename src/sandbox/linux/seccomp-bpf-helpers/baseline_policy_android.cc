@@ -66,8 +66,15 @@ BaselinePolicyAndroid::BaselinePolicyAndroid()
 BaselinePolicyAndroid::~BaselinePolicyAndroid() {}
 
 ResultExpr BaselinePolicyAndroid::EvaluateSyscall(int sysno) const {
-  bool override_and_allow = false;
+#if 1
+  const Arg<int> domain(0);
+  const Arg<int> type(1);
+  const Arg<int> protocol(2);
 
+  RestrictSocketArguments(domain, type, protocol);
+  return Allow();
+#else
+  bool override_and_allow = false;
   switch (sysno) {
     // TODO(rsesek): restrict clone parameters.
     case __NR_clone:
@@ -233,6 +240,7 @@ ResultExpr BaselinePolicyAndroid::EvaluateSyscall(int sysno) const {
     return Allow();
 
   return BaselinePolicy::EvaluateSyscall(sysno);
+#endif // #if 1
 }
 
 }  // namespace sandbox

@@ -116,7 +116,9 @@ extern bool IsInterface(IInterfaceInfo  *interfaceInfo, v8::Local<v8::Value> val
 extern bool CanBeUsedAsInterface(IInterfaceInfo  *interfaceInfo,
                                  v8::Local<v8::Value> value,
                                  int *priority = nullptr);
-extern Elastos::AutoPtr<IInterface> ToInterface(IInterfaceInfo  *interfaceInfo, v8::Local<v8::Value> value);
+//extern Elastos::AutoPtr<IInterface> ToInterface(IInterfaceInfo  *interfaceInfo, v8::Local<v8::Value> value);
+extern IInterface* ToInterface(IInterfaceInfo *interfaceInfo, v8::Local<v8::Value> value);
+
 extern v8::Local<v8::Value> ToValue(IInterface *interface_);
 
 extern bool Is(IDataTypeInfo  *dataTypeInfo, v8::Local<v8::Value> value);

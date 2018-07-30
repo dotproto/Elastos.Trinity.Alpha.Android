@@ -6,6 +6,9 @@
 #include "car-constantoid.h"
 #include "car-data-type.h"
 #include "car-function.h"
+#include "car-object.h"
+#include "can-down-delete.h"
+#include "car-arguments.h"
 #include "error.h"
 #include "js-2-car.h"
 
@@ -16,6 +19,9 @@ using namespace v8;
 _ELASTOS_NAMESPACE_USING
 CAR_BRIDGE_NAMESPACE_BEGIN
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
 static map<AutoPtr<IDataTypeInfo >, CopyablePersistent<Object>> _mapIntrinsicTypeInfoToCARIntrinsicType;
 
 static Local<Object> _CARIntrinsicType(IDataTypeInfo  *intrinsicTypeInfo)
@@ -410,44 +416,56 @@ typedef Local<Object> (*NewMethod)(size_t nMethodInfos, IFunctionInfo  *methodIn
 static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *what, NewMethod newMethod)
 {
     Nan::EscapableHandleScope scope;
-    Local<Object> interface_;
-    ECode ec;
+    Local<Object> interface_v8;
+
     Elastos::String namespace_;
     Elastos::String name;
+
+    ECode ec;
+#if 0
     InterfaceID id;
     Elastos::Boolean local;
     Elastos::Boolean hasBase;
+#endif
+
     Elastos::Int32 nMethods;
     AutoPtr<ArrayOf<IFunctionInfo *> > methodInfos;
     map<Elastos::String, vector<IFunctionInfo *>> mapNameToMethodInfos;
 
-    interface_ = New<Object>();
-    DefineOwnProperty(interface_,
+	Debug_LOG("%s", what);
+
+    interface_v8 = New<Object>();
+
+    DefineOwnProperty(interface_v8,
                       New("$what").ToLocalChecked(),
                       New(what).ToLocalChecked(),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
-
+#if 0
     ec = interfaceInfo->GetNamespace(&namespace_);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    DefineOwnProperty(interface_,
+    DefineOwnProperty(interface_v8,
                       New("$namespace").ToLocalChecked(),
                       ToValue(namespace_),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+#endif
+
     ec = interfaceInfo->GetName(&name);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    DefineOwnProperty(interface_,
-                      New("$name").ToLocalChecked(),
+	Debug_LOG("Interface Name: %s", name.string());
+    DefineOwnProperty(interface_v8,
+                      New("name").ToLocalChecked(),
                       ToValue(name),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
+#if 0
     ec = interfaceInfo->GetId(&id);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    DefineOwnProperty(interface_,
+    DefineOwnProperty(interface_v8,
                       New("$id").ToLocalChecked(),
                       ToValue(&id),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
@@ -455,7 +473,8 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
     ec = interfaceInfo->IsLocal(&local);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
-    DefineOwnProperty(interface_,
+
+    DefineOwnProperty(interface_v8,
                       New("$local").ToLocalChecked(),
                       ToValueFromBoolean(local),
                       static_cast<enum PropertyAttribute>(ReadOnly | DontDelete | DontEnum));
@@ -471,16 +490,18 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
         ec = interfaceInfo->GetBaseInfo(&_baseInfo);
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
+
         baseInfo = _baseInfo, _baseInfo->Release();
-        DefineOwnProperty(interface_,
+        DefineOwnProperty(interface_v8,
                           New("$base").ToLocalChecked(),
                           CARInterface(baseInfo),
                           static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
     }
-
+#endif
     ec = interfaceInfo->GetMethodCount(&nMethods);
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
+	Debug_LOG("debug method count: %d", nMethods);
 
     methodInfos = ArrayOf<IFunctionInfo *>::Alloc(nMethods);
     if (methodInfos == 0)
@@ -490,29 +511,38 @@ static Local<Object> _CARInterface(IInterfaceInfo  *interfaceInfo, const char  *
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    for (Elastos::Int32 i = 0; i < nMethods; ++i)
-    {
-        IFunctionInfo  *methodInfo;
-        Elastos::String methodName;
-        methodInfo = (*methodInfos)[i];
+	Debug_LOG("");
 
-        ec = methodInfo->GetName(&methodName);
-        if (FAILED(ec))
-            Throw_LOG(Error::TYPE_ELASTOS, ec);
+	for (Elastos::Int32 i = 0; i < nMethods; ++i)
+	{
+		IFunctionInfo  *methodInfo;
+		Elastos::String methodName;
+		methodInfo = (*methodInfos)[i];
 
-        mapNameToMethodInfos[methodName].push_back(methodInfo);
-    }
+		ec = methodInfo->GetName(&methodName);
+		if (FAILED(ec))
+			Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it)
-    {
-        Nan::HandleScope scope_;
-        DefineOwnProperty(interface_,
-                          ToValue(it->first).As<v8::String>(),
-                          (*newMethod)(it->second.size(), &it->second[0]),
-                          static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
-    }
+		mapNameToMethodInfos[methodName].push_back(methodInfo);
+		Debug_LOG(" define : %s", methodName.string());
+	}
 
-    return scope.Escape(interface_);
+#if 0 //?jw
+	for (auto it = mapNameToMethodInfos.begin(), end = mapNameToMethodInfos.end(); it != end; ++it)
+	{
+		Nan::HandleScope scope_;
+		Debug_LOG("[%p] define : %s", interface_v8, it->first);
+		DefineOwnProperty(interface_v8,
+						  ToValue(it->first).As<v8::String>(),
+						  (*newMethod)(it->second.size(), &it->second[0]),
+						  static_cast<enum PropertyAttribute>(ReadOnly | DontDelete));
+	}
+#endif
+
+	Debug_LOG("");
+
+	return scope.Escape(interface_v8);
+
 }
 
 inline Local<Object> _CARMethod(size_t nMethodInfos, IFunctionInfo  *methodInfos[])
@@ -523,16 +553,18 @@ inline Local<Object> _CARMethod(size_t nMethodInfos, IFunctionInfo  *methodInfos
 static map<AutoPtr<IInterfaceInfo >, CopyablePersistent<Object>> _mapInterfaceInfoToCARInterface;
 Local<Object> CARInterface(IInterfaceInfo  *interfaceInfo)
 {
-    Local<Object> interface_;
+    Nan::EscapableHandleScope scope;
+    Local<Object> interface_v8;
 
-    auto &_interface = _mapInterfaceInfoToCARInterface[interfaceInfo];
-    if (!_interface.IsEmpty())
-        return New(_interface);
+    auto &interface_car = _mapInterfaceInfoToCARInterface[interfaceInfo];
+    if (!interface_car.IsEmpty())
+        return New(interface_car);
 
-    interface_ = _CARInterface(interfaceInfo, "CARInterface", &_CARMethod);
-    _interface.Reset(interface_);
+    interface_v8 = _CARInterface(interfaceInfo, "CARInterface", &_CARMethod);
+    interface_car.Reset(interface_v8);
 
-    return interface_;
+	Debug_LOG("");
+    return scope.Escape(interface_v8);
 }
 
 inline Local<Object> _CARCallbackMethod(size_t nCallbackMethodInfos, IFunctionInfo  *callbackMethodInfos[])
@@ -599,6 +631,7 @@ Local<Object> CARDataType(IDataTypeInfo  *dataTypeInfo)
     }
 }
 
+#pragma clang diagnostic pop
 
 CAR_BRIDGE_NAMESPACE_END
 

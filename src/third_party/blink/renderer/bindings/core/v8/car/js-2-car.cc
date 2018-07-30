@@ -2176,12 +2176,16 @@ bool IsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
     IClassInfo *_classInfo;
     Elastos::Boolean has;
 
-    if (!IsCARObject(value))
+    if (!IsCARObject(value)) {
+	    Debug_LOG("IsCARObject false.");
         return false;
+    }
 
     carObject = CARObject::Unwrap<CARObject>(value.As<v8::Object>());
-    if (carObject == nullptr)
+    if (carObject == nullptr) {
+	    Debug_LOG("carObject is null.");
         return false;
+    }
 
     ec = CObject::ReflectClassInfo(carObject->carObject(), &_classInfo);
     if (FAILED(ec))
@@ -2192,6 +2196,7 @@ bool IsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
+	Debug_LOG("HasInterfaceInfo :%d.", has);
     return has != FALSE ? true : false;
 }
 
@@ -2201,8 +2206,12 @@ bool CanBeUsedAsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value, int
     Elastos::Int32 nMethods;
     AutoPtr<ArrayOf<IMethodInfo *> > methodInfos;
     Local<v8::Object> object;
-    if (!value->IsObject())
+
+	Debug_LOG("CanBeUsedAsInterface start.");
+    if (!value->IsObject()) {
+		Debug_LOG("value isn't a object");
         return false;
+    }
 
     if (IsInterface(interfaceInfo, value))
     {
@@ -2233,25 +2242,35 @@ bool CanBeUsedAsInterface(IInterfaceInfo *interfaceInfo, Local<Value> value, int
         if (FAILED(ec))
             Throw_LOG(Error::TYPE_ELASTOS, ec);
 
+		Debug_LOG("  method: %s", methodName.string());
+#if 0//jw temp
         if (!Has(object, ToValue(methodName).As<v8::String>()).FromJust())
             return false;
+#endif
     }
 
     if (priority != nullptr)
         *priority = 1;
 
+	Debug_LOG("CanBeUsedAsInterface finish.");
     return true;
 }
 
-AutoPtr<IInterface> ToInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
+//AutoPtr<IInterface> ToInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
+IInterface* ToInterface(IInterfaceInfo *interfaceInfo, Local<Value> value)
 {
     int priority;
     Local<v8::Object> object;
     ECode ec;
     InterfaceID interfaceId;
+#if 0
     AutoPtr<IInterface> interface_;
+#else
+    IInterface* interface_;
+#endif
     IInterface *_interface;
 
+    Debug_LOG("v8 value to interface.");
     if (!CanBeUsedAsInterface(interfaceInfo, value, &priority))
         Throw_LOG(Error::INVALID_ARGUMENT, 0);
 
@@ -2272,12 +2291,13 @@ AutoPtr<IInterface> ToInterface(IInterfaceInfo *interfaceInfo, Local<Value> valu
     if (FAILED(ec))
         Throw_LOG(Error::TYPE_ELASTOS, ec);
 
-    interface_ = _interface, _interface->Release();
+    interface_ = _interface;//, _interface->Release();
     return interface_;
 }
 
 Local<Value> ToValue(IInterface *interface_)
 {
+    Debug_LOG("interface[%p] to value.", interface_);
     return CARObject::New(interface_);
 }
 
@@ -2387,8 +2407,10 @@ bool CanBeUsedAs(IDataTypeInfo *dataTypeInfo, Local<Value> value, int *priority)
 
 bool IsCARObject(Local<Value> value)
 {
-    if (!value->IsObject())
+    if (!value->IsObject()) {
+		Debug_LOG("value not a object.");
         return false;
+    }
     return CARObject::HasInstance(value.As<v8::Object>());
 }
 

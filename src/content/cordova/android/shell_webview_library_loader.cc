@@ -25,10 +25,10 @@ bool NativeInit() {
 
 }  // namespace
 
-
+extern "C" bool ela_session_jni_onload(void *vm, void *reserved);
 // This is called by the VM when the shared library is first loaded.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  LOG(ERROR) << "shell_webview_library:JNI_OnLoad";
+  LOG(INFO) << "JNI_OnLoad Entering";
 
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -44,5 +44,7 @@ JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   if (!NativeInit()) {
     return -1;
   }
+  ela_session_jni_onload(vm, reserved);
+  LOG(INFO) << "JNI_OnLoad Done";
   return JNI_VERSION_1_4;
 }
