@@ -13,7 +13,7 @@ public:
 
 class Carrier {
 public:
-	static bool initialize(v8::Isolate* isolate);
+	static bool initialize(v8::Isolate* isolate, v8::Local<v8::Context> context);
 };
 
 } // namespace ela

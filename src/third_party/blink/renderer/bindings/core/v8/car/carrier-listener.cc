@@ -2,6 +2,8 @@
 #include <Elastos.CoreLibrary.h>
 #include "logging.h"
 #include <nan.h>
+#include <string.h>
+#include <stdio.h>
 
 using namespace v8;
 
@@ -16,6 +18,7 @@ _ELASTOS ECode CCarrierListener::OnConnectionChanged(
     /* [in] */ _ELASTOS Boolean online)
 {
     Debug_LOG("==== OnConnectionChanged: %d", online);
+#if 0
     // v8::Locker lock(isolate_);
     v8::Isolate::Scope isolate_scope(isolate_);
     v8::HandleScope handle_scope(isolate_);
@@ -28,6 +31,10 @@ _ELASTOS ECode CCarrierListener::OnConnectionChanged(
     v8::Local<Value> argv[1] = {Nan::New(online)};
     func->Call(context->Global(), 1, argv);
     // isolate_->Dispose();
+#endif
+    base::AutoLock lock(msg_buf_lock_);
+    memset(event_, MAX_EVENT_LEN, 0);
+    sprintf(event_, "{\"callback\":\"OnConnectionChanged\", \"para1\":\"%d\" }", online);
     Debug_LOG("==== OnConnectionChanged end");
     return NOERROR;
 }
@@ -35,6 +42,9 @@ _ELASTOS ECode CCarrierListener::OnConnectionChanged(
 _ELASTOS ECode CCarrierListener::OnReady()
 {
     Debug_LOG("==== OnReady");
+    memset(event_, MAX_EVENT_LEN, 0);
+    sprintf(event_, "{\"callback\":\"OnReady\" }");
+    Debug_LOG("==== OnReady end");
     return NOERROR;
 }
 
@@ -44,11 +54,9 @@ _ELASTOS ECode CCarrierListener::OnFriendRequest(
 {
     Debug_LOG("==== OnFriendRequest: %s", uid.string());
 
-    v8::Local<v8::Context> context = v8::Isolate::GetCurrent()->GetCurrentContext();
-
-    v8::Local<Function> func = v8::Local<Function>::Cast(context->Global()->Get(Nan::New("OnFriendRequest").ToLocalChecked()));
-    v8::Local<Value> argv[2] = {Nan::New(uid.string()).ToLocalChecked(), Nan::New(hello.string()).ToLocalChecked()};
-    func->Call(context->Global(), 1, argv);
+    base::AutoLock lock(msg_buf_lock_);
+    memset(event_, MAX_EVENT_LEN, 0);
+    sprintf(event_, "{\"callback\":\"OnFriendRequest\", \"para1\":\"%s\", \"para2\":\"%s\" }", uid.string(), hello.string());
 
     Debug_LOG("==== OnFriendRequest end");
     return NOERROR;
@@ -59,12 +67,8 @@ _ELASTOS ECode CCarrierListener::OnFriendConnetionChanged(
     /* [in] */ _ELASTOS Boolean online)
 {
     Debug_LOG("==== OnFriendConnetionChanged: %s", uid.string());
-    v8::Local<v8::Context> context = isolate_->GetCurrentContext();
-
-    v8::Local<Function> func = v8::Local<Function>::Cast(context->Global()->Get(Nan::New("OnFriendConnetionChanged").ToLocalChecked()));
-    v8::Local<Value> argv[2] = {Nan::New(uid.string()).ToLocalChecked(), Nan::New(online)};
-    func->Call(context->Global(), 1, argv);
-
+    memset(event_, MAX_EVENT_LEN, 0);
+    sprintf(event_, "{\"callback\":\"OnFriendConnetionChanged\", \"para1\":\"%s\", \"para2\":\"%d\" }", uid.string(), online);
     Debug_LOG("==== OnFriendConnetionChanged end");
     return NOERROR;
 }
@@ -90,6 +94,24 @@ _ELASTOS ECode CCarrierListener::OnMessageReceived(
     /* [in] */ const _ELASTOS String& uid,
     /* [in] */ const _ELASTOS ArrayOf<_ELASTOS Byte> & message)
 {
+    memset(event_, MAX_EVENT_LEN, 0);
+    Elastos::String msg(message);
+
+    sprintf(event_, "{\"callback\":\"OnMessageReceived\", \"para1\":\"%s\", \"para2\":\"%s\" }", uid.string(), msg.string());
+    Debug_LOG("==== OnMessageReceived end");
     return NOERROR;
 }
 
+unsigned CCarrierListener::GetEvent(char** event)
+{
+    base::AutoLock lock(msg_buf_lock_);
+    if(NULL == event) {
+        Debug_LOG("invalid arguments.");
+        return 0;
+    }
+
+    unsigned len = strlen(event_);
+    memcpy(*event, event_, len);
+    memset(event_, 0, MAX_EVENT_LEN);
+    return len;
+}

@@ -414,8 +414,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.flash_stage3d_baseline_enabled =
       !command_line.HasSwitch(switches::kDisableFlashStage3d);
 
-  prefs.allow_file_access_from_file_urls =
-      command_line.HasSwitch(switches::kAllowFileAccessFromFiles);
+  prefs.allow_file_access_from_file_urls = true;
+      //command_line.HasSwitch(switches::kAllowFileAccessFromFiles);
 
   prefs.accelerated_2d_canvas_enabled =
       !command_line.HasSwitch(switches::kDisableAccelerated2dCanvas);

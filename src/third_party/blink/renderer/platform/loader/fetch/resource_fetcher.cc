@@ -700,6 +700,19 @@ Resource* ResourceFetcher::RequestResource(
   return resource;
 }
 
+bool ShouldBlocked(const KURL& url)
+{
+     if (url.Host() == "localhost" || url.Host() == "127.0.0.1")
+        return false;
+
+     if(url.GetString().StartsWith("file:///")
+        || url.GetString().StartsWith("https://fun-web.elastos.org")
+        || url.GetString().StartsWith("https://39.106.96.168:8446/api") )
+        return false;
+
+    return true;
+}
+
 Resource* ResourceFetcher::RequestResourceInternal(
     FetchParameters& params,
     const ResourceFactory& factory,
@@ -714,6 +727,9 @@ Resource* ResourceFetcher::RequestResourceInternal(
   TRACE_EVENT1("blink", "ResourceFetcher::requestResource", "url",
                UrlForTraceEvent(params.Url()));
 
+  if (ShouldBlocked(params.Url()))
+      return ResourceForBlockedRequest(params, factory,
+                                   ResourceRequestBlockedReason::kOther);
   // TODO(crbug.com/123004): Remove once we have enough stats on data URIs that
   // contain fragments ('#' characters).
   //

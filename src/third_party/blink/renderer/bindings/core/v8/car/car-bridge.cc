@@ -75,7 +75,7 @@ void Carbridge_Initialize(v8::Local<v8::Object> target)
 
 void Carbridge_throw(const char* func, const char* file, int line, char const * info, int const ecode)
 {
-	Debug_LOG("%s %d at [%s %s:%d]", info, ecode, func, file, line);
+    Debug_LOG("%s %d at [%s %s:%d]", info, ecode, func, file, line);
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
     isolate->ThrowException(
@@ -90,8 +90,8 @@ bool ela::CarManager::initialize(v8::Isolate* isolate)
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     Debug_LOG("CarManager initialize.");
 
-	Carbridge_Initialize(context->Global());
-	Carrier::initialize(isolate);
+    Carbridge_Initialize(context->Global());
+    Carrier::initialize(isolate, context);
 
     return 1;
 }

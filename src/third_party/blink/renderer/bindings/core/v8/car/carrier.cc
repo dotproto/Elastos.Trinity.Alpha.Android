@@ -3,28 +3,19 @@
 #include "elapi.h"
 #include "ElastosCore.h"
 #include "carrier-listener.h"
-//#include "switch-listener.h"
 #include "elastos/utility/etl/HashMap.h"
-//#include "Switch.h"
-
-#include <climits>
-#include <cstdlib>
-#include <cmath>
-#include <new>
-#include <sstream>
-#include <string>
-#include <vector>
+//#include <new>
+//#include <sstream>
+//#include <string>
+//#include <vector>
 #include "car-bridge.h"
-#include "libc++-ext.h"
 #include "elastos-ext.h"
-#include "car-object.h"
 #include "can-down-delete.h"
 #include "car-arguments.h"
 #include "car-data-type.h"
 #include "car-function.h"
 #include "error.h"
 #include "js-2-car.h"
-#include "util.h"
 #include "weak-external-base.h"
 #include "logging.h"
 
@@ -33,8 +24,8 @@ using namespace v8;
 
 CAR_BRIDGE_NAMESPACE_USING
 
-ICarrier* gCarrier = NULL;
-IServiceManager* gServiceManager = NULL;
+ICarrier*         gCarrier = NULL;
+CCarrierListener* gListener = NULL;
 
 static v8::Local<v8::Value> Throw(const char *message)
 {
@@ -47,10 +38,18 @@ static void Start(const v8::FunctionCallbackInfo<v8::Value> &info)
     Elastos::String path;
     Debug_LOG("");
     ECode ec = (ECode) _CCarrier_GetInstance(&gCarrier);
-    if (FAILED(ec)) return;
+    if (FAILED(ec)) {
+        Debug_LOG("carrier start error [%x].", ec);
+        return;
+    }
 
-    CCarrierListener* listener = new CCarrierListener(info.GetIsolate(), info.GetIsolate()->GetCurrentContext());
-    gCarrier->AddCarrierNodeListener(ICarrierListener::Probe(listener));
+    Debug_LOG("");
+    gListener = new CCarrierListener(info.GetIsolate(), info.GetIsolate()->GetCurrentContext());
+    if(NULL == gListener) {
+        Debug_LOG("no memeory");
+        return;
+    }
+    gCarrier->AddCarrierNodeListener(ICarrierListener::Probe(gListener));
 
     if (!info[0]->IsString()) {
         Debug_LOG("arg0 not String");
@@ -60,6 +59,7 @@ static void Start(const v8::FunctionCallbackInfo<v8::Value> &info)
 
     ToString(path, _path);
     gCarrier->Start(path);
+    Debug_LOG("start at %s", path.string());
 }
 
 static void Stop(const v8::FunctionCallbackInfo<v8::Value> &info)
@@ -70,7 +70,7 @@ static void Stop(const v8::FunctionCallbackInfo<v8::Value> &info)
     gCarrier = NULL;
 }
 
-static void addFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void AddFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
     if (gCarrier == NULL) Throw("carrier uninitialized");
 
@@ -78,6 +78,7 @@ static void addFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
     Elastos::String friendAddress;
     Elastos::String friendId;
 
+    Debug_LOG("");
     if (!info[0]->IsString()) {
         Debug_LOG("arg0 not String");
     }
@@ -88,12 +89,14 @@ static void addFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
     gCarrier->AddFriend(friendAddress, Elastos::String("hello"), &friendId);
     
     info.GetReturnValue().Set(ToValue(friendId));
+    Debug_LOG("add friend %s", friendId.string());
 }
 
-static void deleteFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void RemoveFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
     if (gCarrier == NULL) Throw("carrier uninitialized");
     Debug_LOG("");
+
     v8::Local<v8::String> _uid;
     Elastos::String uid;
 
@@ -106,48 +109,74 @@ static void deleteFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
     IFriend* pFriend;
     ECode ec = gCarrier->GetFriend(uid, &pFriend);
     if (FAILED(ec)) {
-        Debug_LOG("GetFriend faild");
+        Debug_LOG("GetFriend faild[%x].", ec);
     }
 
     gCarrier->RemoveFriend(pFriend);
     pFriend->Release();
 }
 
-static void getFriendList(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void GetFriends(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
-#if 0
     if (gCarrier == NULL) Throw("carrier uninitialized");
 
+    Local<Array> array = v8::Array::New(info.GetIsolate());
     ArrayOf<IFriend*>* friends = NULL;
+ 
+    Debug_LOG("");
     ECode ec = gCarrier->GetFriends(&friends);
-    if (FAILED(ec) || friends == NULL) return NULL;
-
-    jclass cls_ArrayList = env->FindClass("java/util/ArrayList");
-    jmethodID construct = env->GetMethodID(cls_ArrayList, "<init>", "()V");
-    jobject obj_ArrayList = env->NewObject(cls_ArrayList, construct,"");
-    jmethodID arrayList_add = env->GetMethodID(cls_ArrayList, "add", "(Ljava/lang/Object;)Z");
-
-    jclass cls_friend = env->FindClass("Friend");
-    //none argument construct function
-    jmethodID construct_user = env->GetMethodID(cls_friend, "<init>", "(Ljava/lang/String;Z)V");
-
-    for (int i = 0; i < friends->GetLength(); i++) {
-        IFriend* iFriend = (*friends)[i];
-
-        String uid;
-        iFriend->GetUid(&uid);
-        Boolean online;
-        iFriend->IsOnline(&online);
-        jobject obj_friend = env->NewObject(cls_friend, construct_user, env->NewStringUTF(uid.string()), online);
-        env->CallObjectMethod(obj_ArrayList, arrayList_add, obj_friend);
+    if (FAILED(ec) || friends == NULL) {
+        Debug_LOG("get frined list from carrier error [%x].", ec);
+        info.GetReturnValue().Set(array);
+        return;
     }
 
-    friends->Release();
+    Local<v8::Object> element;
+    Debug_LOG("have %d friends.", friends->GetLength());
+    for (int i = 0; i < friends->GetLength(); i++) {
+        Elastos::String  uid;
+        Elastos::String  name;
+        Elastos::String  label;
+        Elastos::Boolean online;
+ 
+        IFriend* iFriend = (*friends)[i];
+        iFriend->GetUid(&uid);
+        iFriend->GetName(&name);
+        iFriend->GetLabel(&label);
+        iFriend->IsOnline(&online);
 
-#endif
+        DefineOwnProperty(element,
+                          New("uid").ToLocalChecked(),
+                          New(uid).ToLocalChecked(),
+                         static_cast<enum PropertyAttribute>(DontDelete | DontEnum));
+        DefineOwnProperty(element,
+                          New("online").ToLocalChecked(),
+                          New(online),
+                         static_cast<enum PropertyAttribute>(DontDelete | DontEnum));
+        if(label.GetLength() > 0) {
+            DefineOwnProperty(element,
+                              New("label").ToLocalChecked(),
+                              New(label).ToLocalChecked(),
+                              static_cast<enum PropertyAttribute>(DontDelete | DontEnum));
+        }
+        if(name.GetLength() > 0) {
+            DefineOwnProperty(element,
+                              New("name").ToLocalChecked(),
+                              New(name).ToLocalChecked(),
+                              static_cast<enum PropertyAttribute>(DontDelete | DontEnum));
+        }
+
+        Debug_LOG("friend: %s, label:%s", uid.string(), label.string());
+
+        array->Set(i, element);
+    }
+ 
+    friends->Release();
+    info.GetReturnValue().Set(array);
+    Debug_LOG("");
 }
 
-static void acceptFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void AccpetFriendRequest(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
     if (gCarrier == NULL) Throw("carrier uninitialized");
     Debug_LOG("");
@@ -162,9 +191,10 @@ static void acceptFriend(const v8::FunctionCallbackInfo<v8::Value> &info)
 
     Debug_LOG("accept friend %s", uid.string());
     gCarrier->AccpetFriendRequest(uid);
+    Debug_LOG("");
 }
 
-static void getAddress(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void GetAddress(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
     if (gCarrier == NULL) Throw("carrier uninitialized");
     Debug_LOG("");
@@ -172,95 +202,145 @@ static void getAddress(const v8::FunctionCallbackInfo<v8::Value> &info)
     gCarrier->GetAddress(&address);
 
     info.GetReturnValue().Set(ToValue(address));
+    Debug_LOG("address:%s", address.string());
 }
 
-static void startServiceManager(const v8::FunctionCallbackInfo<v8::Value> &info)
+static void GetUserid(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
+     if (gCarrier == NULL) Throw("carrier uninitialized");
+     Debug_LOG("");
+
+    Elastos::String uid;
+    gCarrier->GetUserid(&uid);
+
+    info.GetReturnValue().Set(ToValue(uid));
+    Debug_LOG("user id:%s", uid.string());
+}
+
+static void SendMessage(const v8::FunctionCallbackInfo<v8::Value> &info)
+ {
     if (gCarrier == NULL) Throw("carrier uninitialized");
-    if (gServiceManager != NULL) {
-        Debug_LOG("service manager already started");
-    }
+
     Debug_LOG("");
-    _CServiceManager_AcquireInstance(&gServiceManager);
-}
+    v8::Local<v8::String> _uid;
+    Elastos::String uid;
 
-static void stopServiceManager(const v8::FunctionCallbackInfo<v8::Value> &info)
-{
-    Debug_LOG("");
-    if (gServiceManager) {
-        gServiceManager->Release();
-        gServiceManager = NULL;
-    }
-}
-
-static void addService(const v8::FunctionCallbackInfo<v8::Value> &info)
-{
-    if (gServiceManager == NULL) {
-        Throw("service manager not init.");
-    }
-#if 0
-    ISwitch* pSwitch;
-    ECode ec = CSwitch::New(&pSwitch);
-    if (FAILED(ec)) return ec;
-
-    v8::Local<v8::String> _name;
-    Elastos::String name;
-
+    v8::Local<v8::String> _msg;
+    Elastos::String msg;
     if (!info[0]->IsString()) {
         Debug_LOG("arg0 not String");
+        return;
     }
-    _name = v8::Local<v8::String>::Cast(info[0]);
-    ToString(name, _name);
+    if (!info[1]->IsString()) {
+        Debug_LOG("arg1 not String");
+        return;
+    }
 
-    CSwitchListener* listener = new CSwitchListener(info.GetIsolate());
-    pSwitch->SetSwitchListener(ISwitchListener::Probe(listener));
+    _uid = v8::Local<v8::String>::Cast(info[0]);
+    ToString(uid, _uid);
 
-    Debug_LOG("add service %s", name.string());
-    ec = gServiceManager->AddService(name, pSwitch);
+    _msg = v8::Local<v8::String>::Cast(info[1]);
+    ToString(msg, _msg);
 
-    pSwitch->Release();
-#endif
+    Debug_LOG("SendMessage %s to %s", msg.string(), uid.string());
+
+    gCarrier->SendMessage(uid, *msg.GetBytes().Get());
+    Debug_LOG("");
 }
+
+static void SetFriendLabel(const v8::FunctionCallbackInfo<v8::Value> &info)
+{
+    if (gCarrier == NULL) Throw("carrier uninitialized");
+
+    Debug_LOG("");
+    v8::Local<v8::String> _uid;
+    Elastos::String uid;
+
+    v8::Local<v8::String> _label;
+    Elastos::String label;
+    if (!info[0]->IsString()) {
+        Debug_LOG("arg0 not String");
+        return;
+    }
+    if (!info[1]->IsString()) {
+        Debug_LOG("arg1 not String");
+        return;
+    }
+
+    _uid = v8::Local<v8::String>::Cast(info[0]);
+    ToString(uid, _uid);
+
+    _label = v8::Local<v8::String>::Cast(info[1]);
+    ToString(label, _label);
+
+    Debug_LOG("SetFriendLabel %s to %s", label.string(), uid.string());
+
+    IFriend* pFriend;
+    ECode ec = gCarrier->GetFriend(uid, &pFriend);
+    if (FAILED(ec)) {
+        Debug_LOG("GetFriend faild[%x].", ec);
+    }
+
+    pFriend->SetLabel(label);
+    pFriend->Release();
+    Debug_LOG("");
+}
+
 
 static void New(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
     Debug_LOG("new Carrier, call from js.");
 }
 
-bool ela::Carrier::initialize(v8::Isolate* isolate)
+static void recevMessage(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
-    Debug_LOG("");
+    char* event = (char*)malloc(MAX_EVENT_LEN+1);
+    memset(event, 0, MAX_EVENT_LEN);
+    unsigned len = gListener->GetEvent(&event);
+    if(len > 0) {
+        Debug_LOG("%s", event);
+        info.GetReturnValue().Set(Nan::New(event).ToLocalChecked());
+    }
 
-    Nan::EscapableHandleScope scope;
-    v8::Local<FunctionTemplate> classTemplate;
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    classTemplate = FunctionTemplate::New(isolate, New);
-
-    classTemplate->SetClassName(Nan::New("Carrier").ToLocalChecked());
-
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("Start").ToLocalChecked(), FunctionTemplate::New(isolate, Start));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("Stop").ToLocalChecked(), FunctionTemplate::New(isolate, Stop));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("addFriend").ToLocalChecked(), FunctionTemplate::New(isolate, addFriend));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("deleteFriend").ToLocalChecked(), FunctionTemplate::New(isolate, deleteFriend));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("getFriendList").ToLocalChecked(), FunctionTemplate::New(isolate, getFriendList));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("acceptFriend").ToLocalChecked(), FunctionTemplate::New(isolate, acceptFriend));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("getAddress").ToLocalChecked(), FunctionTemplate::New(isolate, getAddress));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("startServiceManager").ToLocalChecked(), FunctionTemplate::New(isolate, startServiceManager));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("stopServiceManager").ToLocalChecked(), FunctionTemplate::New(isolate, stopServiceManager));
-    classTemplate->PrototypeTemplate()->Set(
-        Nan::New("addService").ToLocalChecked(), FunctionTemplate::New(isolate, addService));
-
-    context->Global()->Set(
-        Nan::New("Carrier").ToLocalChecked(), classTemplate->GetFunction());
-
-    return 1;
+    free(event);
 }
+
+bool ela::Carrier::initialize(v8::Isolate* isolate, v8::Local<v8::Context> context)
+ {
+     Debug_LOG("");
+ 
+     Nan::EscapableHandleScope scope;
+     v8::Local<FunctionTemplate> classTemplate;
+     classTemplate = FunctionTemplate::New(isolate, New);
+ 
+     classTemplate->SetClassName(Nan::New("Carrier").ToLocalChecked());
+
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("Start").ToLocalChecked(), FunctionTemplate::New(isolate, Start));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("Stop").ToLocalChecked(), FunctionTemplate::New(isolate, Stop));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("AddFriend").ToLocalChecked(), FunctionTemplate::New(isolate, AddFriend));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("RemoveFriend").ToLocalChecked(), FunctionTemplate::New(isolate, RemoveFriend));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("GetFriends").ToLocalChecked(), FunctionTemplate::New(isolate, GetFriends));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("AccpetFriendRequest").ToLocalChecked(), FunctionTemplate::New(isolate, AccpetFriendRequest));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("GetAddress").ToLocalChecked(), FunctionTemplate::New(isolate, GetAddress));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("GetUserid").ToLocalChecked(), FunctionTemplate::New(isolate, GetUserid));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("SendMessage").ToLocalChecked(), FunctionTemplate::New(isolate, SendMessage));
+     classTemplate->PrototypeTemplate()->Set(
+         Nan::New("recevMessage").ToLocalChecked(), FunctionTemplate::New(isolate, recevMessage));
+    classTemplate->PrototypeTemplate()->Set(
+         Nan::New("SetFriendLabel").ToLocalChecked(), FunctionTemplate::New(isolate, SetFriendLabel));
+
+     context->Global()->Set(
+         Nan::New("Carrier").ToLocalChecked(), classTemplate->GetFunction());
+
+     Debug_LOG("");
+     return 1;
+ }
