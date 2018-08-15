@@ -14,7 +14,7 @@
 namespace content {
 
 void ShellWebView::PlatformSetContents() {
-  LOG(ERROR) << "ShellWebView::PlatformSetContents";
+  LOG(INFO) << "ShellWebView::PlatformSetContents";
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())return;
@@ -51,10 +51,10 @@ void ShellWebView::SetJavaPeer(JNIEnv* env,
 
 void ShellWebView::CreateWebContent(JNIEnv* env,
                  const JavaParamRef<jobject>& obj) {
-  LOG(ERROR) << "ShellWebView::CreateWebContent";
+  LOG(INFO) << "ShellWebView::CreateWebContent";
   ShellBrowserContext* browserContext =
       ShellContentBrowserClient::Get()->browser_context();
-      LOG(ERROR) << "ShellWebView::CreateWebContent2";
+      LOG(INFO) << "ShellWebView::CreateWebContent2";
   SetWebContents(WebContents::Create(
       WebContents::CreateParams(browserContext)));
   CordovaContentsClientBridge::Associate(web_contents(),
