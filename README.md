@@ -1,5 +1,5 @@
 # Elastos.Trinity.Android
-# 提交google chromium代码到github
+# [初始版本] 提交google chromium代码到github
 - 需要先删除各个第三方的.git仓库
 - 删除.gitignore
 - 将从google拉取的chromium代码提交到git@github.com:elastos/Elastos.Trinity.Android.git
@@ -8,13 +8,13 @@
 # 编译github上的代码
 
 # elastos_web_rt 说明
-## 下载代码
+## 【1】 下载代码
 
 ```
 $git clone https://github.com/elastos/Elastos.Trinity.android trinty
 ```
 
-## 配置参数
+## 【2】 配置参数
 
 ```
 $gn args out/arm
@@ -36,7 +36,7 @@ proprietary_codecs=true
 enable_remoting=true
 ```
 
-## 编译
+## 【3】 编译
 
 ```
 $ninja -C out/arm elastos_webrt_apk
@@ -45,7 +45,7 @@ $ninja -C out/arm elastos_webrt_apk
 生成的文件，我们需要两个：
 Elastos.Trinity.android/src/out/arm/apks/ElastosWebRT.apk和Elastos.Trinity.android/src/out/arm/lib.java/elastos_webrt_java.jar
 
-## 处理目标文件
+## 【4】 处理目标文件
 由于我们需要把jar包和so提供给studio环境使用，而chromium构建中有部分代码是在生成apk时才自动填充，所以我们分离出的jar包目前需要手动替换，请按下面的步骤进行操作：
 
     a. 手动替换elastos_webrt_java.jar中nativelibrary，buildconfig目录下的class文件。
@@ -61,6 +61,7 @@ Elastos.Trinity.android/src/out/arm/apks/ElastosWebRT.apk和Elastos.Trinity.andr
     Build.gradle(diff)
     manifest.xml(diff)
     android.jar
+    libcordova_shell_lib.so
 使用方式有点复杂，但如果是基于Elastos.ORG.Wallet开发并不需要做这些复杂的操作，只需要clone 下来，替换一下sdk里的android.jar包就可以了。只有开发web engine的人员才需要处理。
 
 由于代码量巨大，git clone经常会失败，所以请使用git fetch下载代码：
